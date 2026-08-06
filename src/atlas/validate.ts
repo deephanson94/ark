@@ -310,8 +310,8 @@ function validateHistory(value: unknown, at: string, nodeCount: number): History
     const prev = commits[i - 1];
     const cur = commits[i];
     if (prev === undefined || cur === undefined) fail(`${at}.commits`, 'holes are not allowed');
-    if (byteCompare(prev.date, cur.date) < 0) {
-      fail(`${at}.commits`, 'must be ordered newest first');
+    if (commitOrder(prev, cur) >= 0) {
+      fail(`${at}.commits`, 'must be ordered by date descending, then sha ascending');
     }
   }
 
@@ -328,6 +328,21 @@ function validateHistory(value: unknown, at: string, nodeCount: number): History
   }
 
   return { present, commitsWalked, commitsRetained, window, coChange, commits };
+}
+
+/**
+ * Sort key for `history.commits`: date descending, then sha ascending.
+ *
+ * Not "git log order" — that is reverse chronological by *commit* time, while
+ * the date we keep is the *author* date, and a rebase or a mailed patch can put
+ * an older authorship after a newer one. The sha tiebreak makes this a total
+ * order, so the array is checkable rather than merely conventional.
+ */
+export function commitOrder(
+  x: { readonly date: IsoDate; readonly sha: string },
+  y: { readonly date: IsoDate; readonly sha: string },
+): number {
+  return byteCompare(y.date, x.date) || byteCompare(x.sha, y.sha);
 }
 
 /** Sort key for `history.coChange`: count desc, then a asc, then b asc. */

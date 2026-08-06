@@ -161,6 +161,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - **Dynamic imports and string-built paths are unresolvable.** Detect and mark; don't guess.
 - **A file with zero dependents is not necessarily dead** — it may be an entry point. Check the
   manifest before implying anything.
+- **`git log --date=short` renders each commit in its *own* recorded timezone.** So a repo with
+  contributors in two zones produces dates that do not decrease along the log, and two commits made
+  at the same instant get different dates. Use `--date=short-local` with `TZ` pinned.
+- **`git log` orders by *commit* date; `%ad` is the *author* date.** Even in one timezone they
+  disagree after a rebase or a mailed patch, so "the log is newest-first" is not a claim you can
+  make about the dates you kept. Sort explicitly and tiebreak on sha.
+- **Dates are not the only thing git renders per-commit.** If a field comes from `--format`, ask
+  what it depends on besides the commit.
 
 ---
 
@@ -214,7 +222,7 @@ npm run test:e2e           # slow — ask before running
 
 **M0 delivered.** `docs/atlas-format.md` (schema v1), `src/atlas/` (types, validation, graph
 queries), `src/indexer/` (walk, scan, resolve, git, history, layout, regions), `src/verbs/`
-(contracts + F1 scoring). `npx ark index .` produces a valid 25.6 KiB atlas for this repo in ~90 ms.
+(contracts + F1 scoring). `npx ark index .` produces a valid 27.5 KiB atlas for this repo in ~110 ms.
 `challenges` is `[]` — generation lands with the Blast Radius verb at M2.
 
 Next action: `npm run budget` as a real script, then M1 — every node already carries `layout` and

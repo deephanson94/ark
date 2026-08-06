@@ -108,6 +108,40 @@ describe('buildHistory — churn', () => {
   });
 });
 
+describe('buildHistory — dates that do not decrease along the log', () => {
+  // `git log` orders by commit time, but the date we keep is the *author* date.
+  // A rebase or a mailed patch lands an older authorship after a newer one, and
+  // `--date=short` used to render each commit in its own timezone, which did the
+  // same thing to a repo with contributors in two zones. Both showed up as an
+  // atlas the validator rejected.
+  const jumbled = history([
+    commit({ sha: 'c3', date: '2026-01-05', files: ['a.ts'] }),
+    commit({ sha: 'c2', date: '2026-03-09', files: ['a.ts'] }),
+    commit({ sha: 'c1', date: '2026-02-07', files: ['a.ts'] }),
+  ]);
+
+  it('emits commits in a total order the validator can check', () => {
+    const result = buildHistory(jumbled, ['a.ts'], DEFAULT_HISTORY_LIMITS);
+    expect(result.commits.map((entry) => entry.date)).toEqual(['2026-03-09', '2026-02-07', '2026-01-05']);
+  });
+
+  it('breaks ties on sha so the order is total, not merely conventional', () => {
+    const sameDay = history([
+      commit({ sha: 'zz', date: '2026-01-01', files: ['a.ts'] }),
+      commit({ sha: 'aa', date: '2026-01-01', files: ['a.ts'] }),
+      commit({ sha: 'mm', date: '2026-01-01', files: ['a.ts'] }),
+    ]);
+    const result = buildHistory(sameDay, ['a.ts'], DEFAULT_HISTORY_LIMITS);
+    expect(result.commits.map((entry) => entry.sha)).toEqual(['aa', 'mm', 'zz']);
+  });
+
+  it('takes first and last seen as the min and max date, not the log ends', () => {
+    const result = buildHistory(jumbled, ['a.ts'], DEFAULT_HISTORY_LIMITS);
+    expect(result.perFile.get('a.ts')?.firstSeen).toBe('2026-01-05');
+    expect(result.perFile.get('a.ts')?.lastSeen).toBe('2026-03-09');
+  });
+});
+
 describe('buildHistory — rename lineage', () => {
   it('follows a file back through a rename', () => {
     const result = buildHistory(

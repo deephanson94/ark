@@ -33,7 +33,14 @@ export type {
 
 export { isNodeId, nodeIdFor } from './identity.js';
 export { byKey, byteCompare, isStrictlySorted, round2, sortedUnique } from './order.js';
-export { AtlasValidationError, coChangeOrder, edgeOrder, parseAtlas, validateAtlas } from './validate.js';
+export {
+  AtlasValidationError,
+  coChangeOrder,
+  commitOrder,
+  edgeOrder,
+  parseAtlas,
+  validateAtlas,
+} from './validate.js';
 export { serializeAtlas } from './serialize.js';
 export type { Challengeability, Direction, Graph } from './graph.js';
 export {

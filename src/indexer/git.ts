@@ -111,7 +111,11 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
     '-z',
     '-M',
     '--numstat',
-    '--date=short',
+    // `short` renders each commit in *its own* recorded timezone, so a repo
+    // with contributors in two zones produces dates that do not decrease along
+    // the log, and two commits made at the same instant get different dates.
+    // `short-local` renders them all in TZ, which we pin to UTC above.
+    '--date=short-local',
     `--format=${RECORD}%H${UNIT}%ad${UNIT}%an${UNIT}%s`,
     '-n',
     String(maxCommits),

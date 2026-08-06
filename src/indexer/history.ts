@@ -13,6 +13,7 @@
 
 import { byteCompare } from '../atlas/index.js';
 import type { IsoDate, Truncation } from '../atlas/index.js';
+import { commitOrder } from '../atlas/validate.js';
 import type { GitCommit, GitHistory } from './git.js';
 
 export interface HistoryLimits {
@@ -135,9 +136,15 @@ export function buildHistory(
       }
       accumulator.churn++;
       accumulator.authors.add(commit.author);
-      // The log runs newest first, so the last date we see is the earliest.
-      if (accumulator.lastSeen === null) accumulator.lastSeen = commit.date;
-      accumulator.firstSeen = commit.date;
+      // Min and max rather than first-and-last-seen: author dates are not
+      // guaranteed to decrease monotonically along the log (a rebase or a
+      // mailed patch can land an older authorship after a newer one).
+      if (accumulator.firstSeen === null || byteCompare(commit.date, accumulator.firstSeen) < 0) {
+        accumulator.firstSeen = commit.date;
+      }
+      if (accumulator.lastSeen === null || byteCompare(commit.date, accumulator.lastSeen) > 0) {
+        accumulator.lastSeen = commit.date;
+      }
     }
 
     const wide = touched.size > limits.wideCommitFiles;
@@ -190,6 +197,11 @@ export function buildHistory(
     .filter(([, , count]) => count >= limits.minCoChangeCount)
     .sort((x, y) => y[2] - x[2] || byteCompare(x[0], y[0]) || byteCompare(x[1], y[1]));
   const coChange = allPairs.slice(0, limits.maxCoChangePairs);
+
+  // Retention picks the newest commits in log order; the emitted array is then
+  // put in a total order the validator can check, since the log's own order is
+  // not recoverable from the fields we keep.
+  retained.sort(commitOrder);
 
   const truncations: Truncation[] = [];
   const commitsDropped = git.totalCommits - retained.length;
