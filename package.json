@@ -10,7 +10,7 @@
     "index": "tsx src/indexer/cli.ts .",
     "build": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run tests/unit",
     "test:atlas": "vitest run tests/atlas",
     "test:determinism": "tsx scripts/determinism.ts"
   },

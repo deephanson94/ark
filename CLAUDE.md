@@ -212,8 +212,13 @@ npm run test:e2e           # slow — ask before running
 
 ## Current state
 
-**Pre-M0.** Nothing built yet. Next action: define `docs/atlas-format.md` and write the ES-module
-indexer for this repo, per `NORTH-STAR.md` §7.1 and §13.
+**M0 delivered.** `docs/atlas-format.md` (schema v1), `src/atlas/` (types, validation, graph
+queries), `src/indexer/` (walk, scan, resolve, git, history, layout, regions), `src/verbs/`
+(contracts + F1 scoring). `npx ark index .` produces a valid 25.6 KiB atlas for this repo in ~90 ms.
+`challenges` is `[]` — generation lands with the Blast Radius verb at M2.
+
+Next action: `npm run budget` as a real script, then M1 — every node already carries `layout` and
+`region`, and nothing renders them.
 
 Roadmap kill point is **M2** — if the Blast Radius verb isn't engaging on a repo we wrote ourselves,
 stop and rethink the verb rather than adding a second one.
