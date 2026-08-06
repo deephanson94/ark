@@ -1,0 +1,4 @@
+node_modules
+dist
+atlas.json
+.claude/settings.local.json
