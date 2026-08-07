@@ -1,35 +1,34 @@
 /**
  * Which question to offer next.
  *
- * ADR-0011 decision 4 fixes the rule and the measurements behind it: ascending
- * `(tier, difficulty, id)`, skipping a challenge whose `truth` is byte-equal to
- * the previously served one's, then one whose subject shares the previous
- * subject's region. The first constraint fixes a measured defect — identical
- * answer keys share a difficulty *by construction*, because difficulty is a
- * pure function of the cone, so any ascending sort places them adjacent. The
- * second buys the tour: §4's loop is "pick the next landmark", which should
- * mean movement across the map.
+ * ADR-0011 decision 4 fixes the rule, and this is its **second amendment**: the
+ * rank is a single ascending minimum over
+ * `(attempts, sameRegion, tier, difficulty, overlap, id)`.
+ *
+ * The original rule's first constraint — skip a challenge whose `truth` is
+ * byte-equal to the one just served — is **gone, because the generator now makes
+ * it impossible**. `dedupe()` refuses to issue an answer key twice, so a flag
+ * testing for that could never fire again. Keeping a symptom fix alive after its
+ * cause is removed is the never-executing path `CLAUDE.md` warns about; the ADR
+ * records the reasoning and the numbers. What replaces it is not the same
+ * constraint relaxed but a different, continuous one — see `overlapWith` — and
+ * it sits *below* difficulty, which the measurements forced.
+ *
+ * The region constraint is untouched, and it buys the tour: §4's loop is "pick
+ * the next landmark", which should mean movement across the map.
  *
  * **Suggested-next is an affordance, not a mode.** Clicking a disc stays the
  * primary path; this feeds the same state. Otherwise M3 quietly turns a
  * cartography game into a quiz deck, which nothing in the spec licenses.
  *
- * ## Why one lexicographic key instead of four ordered scans
+ * ## Why one lexicographic key instead of ordered scans with fallbacks
  *
- * The ADR describes the rule as a scan that relaxes: try both constraints, drop
- * the region one, then drop the truth one. Written that way it is four loops,
- * three of them fallbacks — and the landmine about machinery that never fires
- * applies directly. Measured on this repo and on vite, the "drop the truth
- * constraint" loop **never executed**, under any player model, until the
- * attempted set was folded in.
- *
- * So the rule is expressed as a single minimum over
- * `(attempts, sameTruth, sameRegion, tier, difficulty, id)`. That is provably
- * the same function for the attempts-0 case — minimising `(sameTruth,
- * sameRegion, base…)` yields the first base-order candidate satisfying both when
- * one exists, the first satisfying the truth constraint when none does, and the
- * first overall otherwise — but it has no fallback branches to leave untaken,
- * and it cannot fail to serve something.
+ * The ADR describes the rule as a scan that relaxes: try both constraints, then
+ * drop one, then the other. Written that way it is several loops, most of them
+ * fallbacks — and the landmine about machinery that never fires applies
+ * directly. Measured on this repo and on vite, the "drop the truth constraint"
+ * loop **never executed** under any player model. As one total ranking there are
+ * no fallback branches to leave untaken, and it cannot fail to serve something.
  *
  * ## Why `attempts` is the outermost key
  *
@@ -94,47 +93,52 @@ export const NO_HISTORY: SelectorState = {
 };
 
 /**
- * Two answer keys are the same question wearing two subjects when their truth
- * sets are equal.
+ * How much of the previous answer key this one repeats, 0..1.
  *
- * Joining is a faithful set comparison **only because `truth` is sorted**, which
- * the atlas contract requires and `validateAtlas` enforces. If that ever
- * relaxed, this would silently become an order-sensitive comparison and the
- * constraint would stop firing — so the dependency is stated rather than
- * assumed. `NodeId` is `n:` + hex, so no id can contain the separator.
+ * This replaced a `sameTruth` byte-equality flag, and the reason is the whole
+ * story of this rung. That flag guarded against two challenges whose `truth`
+ * sets were *identical* — which the generator now refuses to emit at all
+ * (`dedupe()`), so the flag became a branch that can no longer be taken. A
+ * downstream mitigation for a defect that has been fixed upstream is exactly the
+ * never-executing path `CLAUDE.md` warns about, and keeping it would also have
+ * left the *measured* residual unaddressed: after dedupe, this repo still serves
+ * consecutive questions sharing half their answer key.
  *
- * Byte-equality needs no threshold, which is the point: a Jaccard cutoff or a
- * longer look-back window would be a magic number with no objective function —
- * the class of patch `CLAUDE.md`'s landmines warn about. It does not get added
- * until repetition at a window of one is *measured* as still felt.
+ * The old comment here argued a Jaccard cutoff would be "a magic number with no
+ * objective function" and deferred it until repetition at a window of one was
+ * measured as still felt. Both halves of that have now happened. It is measured
+ * (mean served overlap 0.115 on this repo, 0.129 on svelte), and there is **no
+ * cutoff**: overlap enters the rank as a continuous quantity, so nothing has to
+ * decide how much sharing is too much. Byte-identical keys score 1.0 and remain
+ * the worst possible pick, which is the old flag's behaviour as a limiting case.
+ *
+ * Correct as a set comparison **only because `truth` is sorted and unique**,
+ * which the atlas contract requires and `validateAtlas` enforces.
  */
-function truthKey(challenge: Challenge): string {
-  return challenge.truth.join('\n');
+function overlapWith(previous: Challenge | null, challenge: Challenge): number {
+  if (previous === null) return 0;
+  const before = new Set(previous.truth);
+  let shared = 0;
+  for (const id of challenge.truth) if (before.has(id)) shared++;
+  const union = before.size + challenge.truth.length - shared;
+  return union === 0 ? 0 : shared / union;
 }
 
 interface Rank {
   readonly attempts: number;
-  readonly sameTruth: number;
   readonly sameRegion: number;
   readonly tier: number;
   readonly difficulty: number;
+  readonly overlap: number;
   readonly id: string;
 }
 
 function rankLess(a: Rank, b: Rank): boolean {
-  // `attempts` outranks both constraints, and that is load-bearing: below them,
-  // the selector will re-serve a question the player has already failed in order
-  // to move to a fresh region — spending a *fresh* question to buy variety it
-  // could have had for free. A unit test pins that.
-  //
-  // Its order relative to `sameTruth` alone, however, is **measured to change
-  // nothing**: swapping just those two produced 0 divergent choices across full
-  // playthroughs of this repo and of vite at two failure rates. So there is no
-  // test for it, deliberately — a test asserting a distinction the product never
-  // exhibits is the same mistake as a fallback that never fires, and it would
-  // freeze an arbitrary choice as if it were a decision.
+  // `attempts` outranks the region constraint, and that is load-bearing: below
+  // it, the selector will re-serve a question the player has already failed in
+  // order to move to a fresh region — spending a *fresh* question to buy variety
+  // it could have had for free. A unit test pins that.
   if (a.attempts !== b.attempts) return a.attempts < b.attempts;
-  if (a.sameTruth !== b.sameTruth) return a.sameTruth < b.sameTruth;
   if (a.sameRegion !== b.sameRegion) return a.sameRegion < b.sameRegion;
   // `(tier, difficulty)` rather than bare difficulty because §5's tiers *are*
   // the progression. Every challenge is tier 3 today, so this reduces to
@@ -142,6 +146,18 @@ function rankLess(a: Rank, b: Rank): boolean {
   // ordering when the git verbs land.
   if (a.tier !== b.tier) return a.tier < b.tier;
   if (a.difficulty !== b.difficulty) return a.difficulty < b.difficulty;
+  // **Below difficulty, and that placement was measured rather than argued.**
+  // Ranked above it, a continuous overlap swamps the progression: it always
+  // picks the furthest question away, and the served difficulty falls as often
+  // as it rises — 39 descending steps in 152 on svelte against 4, and 15 in 38
+  // here against 7. §5's tiers are the curriculum, so a tour that ignores them
+  // is not an improvement. Ranked here it costs the progression nothing (the
+  // descending-step counts are unchanged) and still fires, because `difficulty`
+  // is rounded to two decimals and ties constantly: it changed the pick 41 times
+  // in 153 on svelte, 3 in 122 on vite and 2 in 39 here, cutting mean served
+  // overlap on svelte from 0.129 to 0.083 and consecutive half-shared keys from
+  // 16 to 6.
+  if (a.overlap !== b.overlap) return a.overlap < b.overlap;
   return byteCompare(a.id, b.id) < 0;
 }
 
@@ -158,7 +174,6 @@ export function suggestNext(
   regionOf: (subject: NodeId) => string,
   state: SelectorState,
 ): Challenge | null {
-  const previousTruth = state.previous === null ? null : truthKey(state.previous);
   const previousRegion = state.previous === null ? null : regionOf(state.previous.subject);
 
   let best: Challenge | null = null;
@@ -167,10 +182,10 @@ export function suggestNext(
     if (state.answered.has(challenge.subject)) continue;
     const rank: Rank = {
       attempts: state.attempts.get(challenge.subject) ?? 0,
-      sameTruth: previousTruth !== null && truthKey(challenge) === previousTruth ? 1 : 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
       difficulty: challenge.difficulty,
+      overlap: overlapWith(state.previous, challenge),
       id: challenge.id,
     };
     if (bestRank === null || rankLess(rank, bestRank)) {

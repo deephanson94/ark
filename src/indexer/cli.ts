@@ -83,6 +83,17 @@ function summarise(
     if (reason === 'noDependents') continue; // not a refusal — nothing imports it
     lines.push(`declined    ${count} subject(s): ${reason}`);
   }
+  if (generation.report.reasked > 0) {
+    lines.push(
+      `re-asked    ${generation.report.reasked} subject(s) with a second, disjoint answer key`,
+    );
+  }
+  // The cost of every refusal above, in the currency the player feels: how much
+  // of the map can never come out of the fog, because `progress.ts` promotes a
+  // node only as a subject or as a picked answer.
+  lines.push(
+    `unprovable  ${generation.report.unprovableNodes} of ${atlas.nodes.length} node(s) no question can reveal`,
+  );
   const mix = generation.report.distractorMix
     .filter(([, count]) => count > 0)
     .map(([strategy, count]) => `${strategy} ${count}`)

@@ -476,3 +476,75 @@ One line per iteration: what changed, and what to do next.
   worth more; labels drawing underneath the overlay panels is more visible. Ahead of both, if this
   is to be a world you walk: **re-measure `npm run raster` on real hardware**, because every renderer
   decision after this one leans on that number.
+
+- **Generator-side dedupe — an answer key is issued once, and the deck stops asking the same
+  question twice.** M3's selector kept byte-identical answer keys apart; this removes them at the
+  source, where they are made. `ADR-0012` records it.
+  **Measured on four repos before deciding anything, and the numbers moved the decision twice.**
+  ark 40 challenges / 35 distinct keys; vite 163/122; **svelte 350/138 — 61% of the deck was
+  repeats**; vue/core 7/7. The causes were separated first, because they want opposite treatment:
+  *identical cones* (one question wearing two subjects) versus *different cones whose six-file
+  sample collided*. Every duplicate on ark, vite and vue is the first; svelte has 6 of the second in
+  23 groups. So diversifying the sampling — one of the three options on the table — could not have
+  fixed 41 of the 46 redundant challenges on ark+vite, and skipping alone would have thrown away
+  real content where the cone has room to spare. Both, then: **a colliding subject is re-asked with
+  the next disjoint window of its own ranked dependents; if the cone is entirely inside the key
+  there is no second question to ask and it is refused as `duplicateKey`.** Windows tile rather than
+  slide, because a key differing by one file is the same thing taught twice and byte-equality would
+  not even see it. Result: **no repo loses a distinct question.** ark 35 → 39 distinct, vite 122 →
+  122, svelte 138 → 153; redundant keys 5/41/212 → **0/0/0**. Re-asking fires 3 times here, 15 on
+  svelte, 0 on vite, and `report.reasked` prints the count on every run so the branch cannot quietly
+  die.
+  **I supplied Fable a wrong number and it built a whole objection on it, which is worth recording.**
+  The first reading measured *raw* cones and found svelte classes of 63 subjects sharing a
+  2,745-file cone — vast spare supply. The generator may only sample **certain** dependents, and
+  those classes have cones of **3, 19 and 115**. The review's sharpest point ("62 disjoint windows of
+  one cone rebuilds the defect one level up") was answering a repo that does not exist. `generate.ts`
+  and the ADR both carry the correction in-line rather than quietly using the right number.
+  **Three things the review got right that measurement then decided.** (1) *The representative was
+  picked on `difficulty`, which is normalised by repo-wide maxima* — so an edit anywhere could swap
+  which twin survives, and since the save is keyed by `(verb, subject)` a swap re-serves a question
+  the player already answered wearing the other name. It is now an unnormalised local count: how many
+  answer-key files are **not** direct importers, i.e. how many answers the map's hover has not already
+  given away. The flip is derivable but **not observed** — the two rules agree on ark and svelte and
+  differ on one vite group — so a test pins the rule's direction and nothing pins the choice of
+  quantity, deliberately. (2) *Refusing a duplicate costs coverage, silently.* `progress.ts` promotes
+  a node only as a subject or a picked answer, so a dropped twin in nobody else's key can never leave
+  the fog: **ark 69 → 68 provable nodes, vite 245 → 213, svelte 391 → 282**. `report.unprovableNodes`
+  now carries it and the CLI prints it. (3) *Exact dedupe fixes the metric, not the whole defect* —
+  true, and only on this repo: pairwise J ≥ 0.5 falls 14.6% → 2.6% on svelte and 1.5% → 0.45% on
+  vite, but barely moves here, 12.6% → 11.2%.
+  **So ADR-0011 decision 4 loses its first constraint and gains a better one.** `sameTruth` was a
+  byte-equality flag guarding against something the generator now cannot emit — a branch that can
+  never be taken, arriving by the usual route of fixing a cause and leaving the symptom fix behind.
+  It is replaced by a **continuous overlap term with no threshold**, which is why this is not the
+  Jaccard cutoff that ADR refused: nothing has to decide how much sharing is too much, and identical
+  keys score 1.0 as the limiting case. **Its placement was measured, not argued.** Above `difficulty`
+  it wins its own metric and loses the product — mean served overlap 0.001 on svelte, but the served
+  difficulty *falls* 39 times in 152 against 4, a tour rather than a curriculum. Below it, the
+  progression is untouched and it still fires constantly, because difficulty is rounded to two
+  decimals: it changed the actual pick 2 times in 39 here, 3 in 122 on vite, 41 in 153 on svelte.
+  **Mutation testing found four assertions that proved nothing, and two of them were mine from this
+  session.** The stability test I wrote for the representative rule passed with the rule reversed *and*
+  with it replaced by difficulty, because both twins in its fixture tied — it is now a gadget where
+  two subjects are reached by the same six files at different distances, and it catches the reversal.
+  Two selector tests picked the right challenge by **alphabetical id order** rather than by overlap,
+  passing with the whole overlap term deleted and with it collapsed back to a boolean; the fixtures
+  now name the most repetitive option so it sorts *first*. Two mutations survive and are reported
+  rather than papered over: pre-reserving every canonical key instead of only the uncontested ones
+  changes **zero** keys across three repos, and the representative quantity is unpinned as above.
+  Both say so in the code, neither has a test.
+  Also, one existing test was pinning the wrong thing: `gate.test.ts` named `a12` as its chain middle,
+  and in a chain every subject shares the same tail, so dedupe now re-asks all but three of them out
+  of existence. It asserts over *whichever* middles survive — and the synthetic chain that used to
+  generate sixteen near-identical questions now generates three with disjoint keys.
+  Verified: 354 unit + 82 atlas tests, byte-identical atlas across two runs, build clean, all hard
+  budgets inside ceiling (vite indexes in 5.2 s of 10 s), e2e clean with first paint 244 ms.
+  **Next**: the twin that gets dropped is never mentioned to the player, and `cone(A) = cone(B)` is a
+  true, derived, non-obvious fact — on vite's fixture clusters, arguably worth more than the nine
+  questions it replaces, since each of those has a depth-1 answer the map hover already gives away.
+  It would be a *shown* fact: named in the reveal, no field note, no `understood` promotion, and it is
+  the natural mitigation for the coverage cost above. Still open and more visible: node labels near
+  the top edge draw underneath the inspector and HUD panels — `placeLabels` already takes `occupied`
+  boxes, so the work is feeding it the overlay rects from `main.ts`. Ahead of both, if this is to be
+  a world you walk: **re-measure `npm run raster` on real hardware.**

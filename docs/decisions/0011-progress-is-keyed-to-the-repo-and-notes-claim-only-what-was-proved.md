@@ -208,6 +208,55 @@ chooses. Clicking a disc on the map stays the primary path; the suggestion is a 
 same state. Otherwise M3 quietly turns a cartography game into a quiz deck, which nothing in the spec
 licenses.
 
+### Amended again — constraint (a) is deleted, because its cause was fixed upstream
+
+> **Added 2026-08-07, when the generator learned to dedupe.** Constraint **(a)** — skip a challenge
+> whose `truth` is byte-equal to the previous one's — **is removed**, and a continuous *overlap* term
+> is added below `difficulty`. The rank is now
+> `(attempts, sameRegion, tier, difficulty, overlap, id)`, ascending.
+
+**Why (a) goes.** It was a downstream mitigation for a generation defect, and the generator now
+refuses to emit the same answer key twice (`dedupe()` in `src/verbs/blastRadius/generate.ts`). A flag
+testing for byte-equal keys therefore cannot fire on any deck this product can produce — the
+never-executing path `CLAUDE.md` warns about, arriving by the usual route: the cause was fixed and
+the symptom fix was left behind. Keeping it would also have been *two implementations of one rule*,
+which the rung-3 field-notes work already ruled against; the layer that owns key uniqueness is the
+generator, and this ADR now says so.
+
+Uniqueness is a **within-verb** property and is deliberately not promoted to an atlas invariant. Two
+*different* verbs can share an answer set honestly — "which files depend on X" and "which files
+change alongside X" may name the same two files and are not the same question — so a validator rule
+forbidding it would couple verbs to each other for no gain.
+
+**What replaces it, and why it is not the threshold this ADR previously refused.** The original text
+above says a Jaccard cutoff "does not get added until repetition at a window of one is *measured* as
+still felt." Both halves have now happened. It is measured: after generator-side dedupe, this repo
+still serves consecutive questions sharing **half** their answer key — 13 such adjacent pairs in the
+plain order. And there is **no cutoff**. Overlap enters the rank as a continuous quantity in 0..1, so
+nothing has to decide how much sharing is too much; byte-identical keys score 1.0 and remain the
+worst possible pick, which is old constraint (a) as a limiting case rather than as a special case.
+
+**It sits below `difficulty`, and that placement was measured rather than argued.** Ranked *above*
+difficulty it is strictly better at what it measures and much worse at what the product is for:
+
+| rank | mean served overlap | adjacent pairs ≥ 0.5 | steps where difficulty *fell* |
+|---|---:|---:|---:|
+| plain sort, ark | 0.276 | 13 | 0 |
+| overlap above difficulty, ark | 0.000 | 0 | 15 of 38 |
+| overlap below difficulty, ark | 0.113 | 4 | 7 of 38 |
+| plain sort, svelte | 0.141 | 20 | 0 |
+| overlap above difficulty, svelte | 0.001 | 0 | 39 of 152 |
+| overlap below difficulty, svelte | 0.083 | 6 | 4 of 152 |
+
+Above difficulty it always jumps as far away as it can and the served difficulty falls almost as
+often as it rises — a tour, not a curriculum, and §5's tiers are the curriculum. Below it, the
+progression is untouched (the descending-step counts match the region-only rule exactly) and it still
+fires constantly, because `difficulty` is rounded to two decimals and ties are common: it **changed
+the actual pick** 2 times in 39 here, 3 in 122 on vite and 41 in 153 on svelte.
+
+**The old constraint (a)'s table above still stands as a record of what was true then.** It is no
+longer the rule.
+
 ## Consequences
 
 - `ATLAS_VERSION` → 3 for `repo.root`. The validator already reports "reindex required"; there is no

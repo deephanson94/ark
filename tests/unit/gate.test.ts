@@ -127,31 +127,40 @@ describe('the generator refuses what it cannot repair', () => {
     expect(result.report.skipped).toContainEqual(['ctrlF', expect.any(Number)]);
   });
 
-  it('repairs a chain middle using the subject\'s own dependencies', () => {
-    // The other half, and the reason the gate repairs before it refuses: a
-    // subject in the *middle* of the chain has files on both sides of it, and
-    // the ones it imports are same-directory **non**-dependents — ADR-0008's
-    // flagship distractor. The board is fixable, so it is fixed rather than
-    // thrown away.
+  it('keeps chain middles, whose own dependencies are same-directory non-dependents', () => {
+    // The other half, and the reason the endpoint alone is refused: a subject in
+    // the *middle* of the chain has files on both sides of it, and the ones it
+    // imports are same-directory **non**-dependents — ADR-0008's flagship
+    // distractor. The board is defensible, so it survives.
+    //
+    // Deliberately "some middle" rather than a named one. Every subject in a
+    // chain has the same *tail*, so deepest-first sampling gives them all the
+    // same top six and `dedupe` re-asks all but three of them out of existence.
+    // Pinning `a12` pinned which subject won that draw, which is a fact about
+    // the dedupe order and not about the gate.
     const atlas = synthChain(25, 24);
     const graph = buildGraph(atlas);
-    const middle = generateBlastRadius(atlas).find(
-      (c) => atlas.nodes.find((n) => n.id === c.subject)?.path === 'demo/entrypoints/a12.js',
-    );
-    expect(middle).toBeDefined();
-    if (middle === undefined) return;
-    const inDirectory = middle.candidates.filter((id) =>
-      (atlas.nodes.find((n) => n.id === id)?.path ?? '').startsWith('demo/entrypoints/'),
-    );
-    const truth = new Set(middle.truth);
-    expect(inDirectory.some((id) => !truth.has(id))).toBe(true);
-    const verdict = gradeHeuristics(
-      graph,
-      atlas.nodes.findIndex((n) => n.id === middle.subject),
-      middle.candidates.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
-      middle.truth.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
-    );
-    expect(verdict.passed).toBe(true);
+    const pathOf = (id: string): string => atlas.nodes.find((n) => n.id === id)?.path ?? '';
+    const middles = generateBlastRadius(atlas).filter((c) => {
+      const path = pathOf(c.subject);
+      const index = Number(path.replace('demo/entrypoints/a', '').replace('.js', ''));
+      return path.startsWith('demo/entrypoints/') && index > 0 && index < 19;
+    });
+    expect(middles.length).toBeGreaterThan(0);
+    for (const middle of middles) {
+      const inDirectory = middle.candidates.filter((id) =>
+        pathOf(id).startsWith('demo/entrypoints/'),
+      );
+      const truth = new Set(middle.truth);
+      expect(inDirectory.some((id) => !truth.has(id))).toBe(true);
+      const verdict = gradeHeuristics(
+        graph,
+        atlas.nodes.findIndex((n) => n.id === middle.subject),
+        middle.candidates.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
+        middle.truth.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
+      );
+      expect(verdict.passed).toBe(true);
+    }
   });
 
   it('keeps a question whose answer crosses directories', () => {

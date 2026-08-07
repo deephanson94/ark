@@ -38,6 +38,15 @@ beforeAll(async () => {
 
 const truthKey = (challenge: Challenge): string => challenge.truth.join('\n');
 
+/** Jaccard over two answer keys — the quantity the selector now ranks on. */
+function overlap(a: Challenge, b: Challenge): number {
+  const before = new Set(b.truth);
+  let shared = 0;
+  for (const id of a.truth) if (before.has(id)) shared++;
+  const union = before.size + a.truth.length - shared;
+  return union === 0 ? 0 : shared / union;
+}
+
 /** The order the selector would produce with every constraint switched off. */
 function plainOrder(deck: readonly Challenge[]): Challenge[] {
   return [...deck].sort(
@@ -89,27 +98,36 @@ function consecutive(order: readonly Challenge[], same: (a: Challenge, b: Challe
 }
 
 describe('the defect the selector exists to fix is present in this atlas', () => {
-  it('has identical answer keys, and they share a difficulty', () => {
-    // The mechanism: difficulty is a pure function of the cone, so two subjects
-    // with identical cones score identically *by construction*.
+  it('has no duplicate answer keys at all — the generator removed the old one', () => {
+    // This assertion used to be its own inverse. Until `dedupe()` it read
+    // "there ARE identical answer keys here", because there were five pairs and
+    // the selector's job was to keep them apart. The cause is fixed upstream
+    // now, so the instrument flips: the atlas this repo ships must contain no
+    // two challenges with the same key, and if that ever regresses the failure
+    // lands here rather than in a player who notices the repetition.
     const byKey = new Map<string, Challenge[]>();
     for (const challenge of atlas.challenges) {
       const key = truthKey(challenge);
       byKey.set(key, [...(byKey.get(key) ?? []), challenge]);
     }
-    const groups = [...byKey.values()].filter((group) => group.length > 1);
-    expect(groups.length).toBeGreaterThan(0);
-    const sharingDifficulty = groups.filter((group) =>
-      group.every((c) => c.difficulty === group[0]?.difficulty),
-    );
-    expect(sharingDifficulty.length).toBeGreaterThan(0);
+    expect([...byKey.values()].filter((group) => group.length > 1)).toEqual([]);
   });
 
-  it('serves them back to back without the constraint', () => {
-    // If this ever hits 0, the truth constraint is guarding nothing on this repo
-    // and the assertion below becomes vacuous. Fail loudly rather than quietly.
-    const adjacent = consecutive(plainOrder(atlas.challenges), (a, b) => truthKey(a) === truthKey(b));
-    expect(adjacent).toBeGreaterThan(0);
+  it('still serves half-shared answer keys back to back without the overlap rank', () => {
+    // The anti-vacuity check for what replaced the byte-equality flag. Exact
+    // duplicates are gone; *partial* repetition is not, and it is what the
+    // continuous overlap term exists for. If this ever hits 0, the term is
+    // guarding nothing on this repo and the assertions below stop meaning
+    // anything — so fail loudly rather than quietly, exactly as the old test did
+    // for its own constraint.
+    const plain = plainOrder(atlas.challenges);
+    const shared = consecutive(plain, (a, b) => overlap(a, b) >= 0.5);
+    expect(shared).toBeGreaterThan(0);
+    // ...and the selector has to actually reduce it, or the rank component is
+    // decoration. Measured on this repo: 13 such pairs in the plain order, 4
+    // under the selector.
+    const served = challenges(playthrough(() => 'pass'));
+    expect(consecutive(served, (a, b) => overlap(a, b) >= 0.5)).toBeLessThan(shared);
   });
 });
 
@@ -166,28 +184,54 @@ describe('a full playthrough of this repo', () => {
 
 describe('every rank component earns its place on real data', () => {
   /** How many times a component's value differed from the winner's rivals. */
-  function relaxations(order: readonly Challenge[]): { truth: number; region: number } {
-    let truth = 0;
+  function relaxations(order: readonly Challenge[]): { region: number } {
     let region = 0;
     for (let i = 1; i < order.length; i++) {
       const previous = order[i - 1];
       const served = order[i];
       if (previous === undefined || served === undefined) continue;
-      if (truthKey(served) === truthKey(previous)) truth++;
       if (regionOf(served.subject) === regionOf(previous.subject)) region++;
     }
-    return { truth, region };
+    return { region };
   }
 
-  it('the region constraint has to be relaxed at least once, and the truth one rarely', () => {
-    // Measured, and recorded here so a future change that makes either branch
-    // dead shows up as a failing test rather than as code nobody notices.
+  it('the region constraint has to be relaxed at least once', () => {
+    // Measured, and recorded here so a future change that makes the branch dead
+    // shows up as a failing test rather than as code nobody notices.
     const perfect = relaxations(challenges(playthrough(() => 'pass')));
     const mixed = relaxations(challenges(playthrough((step) => (step % 2 === 0 ? 'pass' : 'fail'))));
     expect(perfect.region + mixed.region).toBeGreaterThan(0);
-    // The truth relaxation is the rare one: it needs the whole remaining pool to
-    // share the previous key. It does not fire for a perfect player on this repo.
-    expect(perfect.truth).toBe(0);
+  });
+
+  it('the overlap tiebreak changes a real choice on this deck', () => {
+    // The landmine bar, counted rather than assumed: `overlap` sits below
+    // `difficulty`, so it only decides when two open questions are equally hard.
+    // That happens constantly (difficulty is rounded to two decimals), but it
+    // has to change an actual *pick* to be worth its code. Measured: 2 here, 3
+    // on vite, 41 on svelte. Run both rules against one shared history, so a
+    // divergence is a disagreement and not two trajectories drifting apart.
+    const answered = new Set<NodeId>();
+    let previous: Challenge | null = null;
+    let diverged = 0;
+    for (let step = 0; step < atlas.challenges.length; step++) {
+      const withOverlap = suggestNext(atlas.challenges, regionOf, {
+        answered,
+        attempts: new Map(),
+        previous,
+      });
+      // The same rank with the overlap term neutralised: every candidate is
+      // handed a `previous` it shares nothing with.
+      const without = suggestNext(atlas.challenges, regionOf, {
+        answered,
+        attempts: new Map(),
+        previous: previous === null ? null : { ...previous, truth: [] },
+      });
+      if (withOverlap === null) break;
+      if (withOverlap.id !== without?.id) diverged++;
+      previous = withOverlap;
+      answered.add(withOverlap.subject);
+    }
+    expect(diverged).toBeGreaterThan(0);
   });
 
   it('answered subjects are excluded — the deck shrinks', () => {

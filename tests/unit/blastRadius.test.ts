@@ -404,3 +404,133 @@ describe('the verb object', () => {
     expect(blastRadius.grade(challenge, { picked: [] }).score).toBe(0);
   });
 });
+
+describe('dedupe — no answer key is issued twice', () => {
+  /**
+   * Two files behind one barrel: nothing outside the pair can tell them apart,
+   * so their cones are equal to the byte and the sampler gives them the same
+   * answer key. `depth` sets how much cone there is beyond the barrel, which is
+   * what decides whether a twin can be re-asked or has to be dropped.
+   */
+  function twins(followers: number, spare: number): Atlas {
+    const paths = ['src/twin-a.ts', 'src/twin-b.ts', 'src/barrel.ts'];
+    const links: [string, string][] = [
+      ['src/barrel.ts', 'src/twin-a.ts'],
+      ['src/barrel.ts', 'src/twin-b.ts'],
+    ];
+    for (let i = 0; i < followers; i++) {
+      const path = `src/use/u${String(i).padStart(2, '0')}.ts`;
+      paths.push(path);
+      links.push([path, 'src/barrel.ts']);
+    }
+    for (let i = 0; i < spare; i++) paths.push(`src/spare/s${String(i).padStart(2, '0')}.ts`);
+    return atlasWith(paths, links);
+  }
+
+  const keysOf = (challenges: readonly Challenge[]): string[] =>
+    challenges.map((c) => [...c.truth].sort().join('|'));
+
+  it('ships no two challenges with the same answer key, on every fixture', () => {
+    for (const atlas of [chain(6, 20), chain(12, 24), hub(9, 16), twins(14, 20), twins(0, 20)]) {
+      const keys = keysOf(generateBlastRadius(atlas));
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it('re-asks a twin with a disjoint key rather than dropping it, when the cone allows', () => {
+    // 14 followers plus the barrel is a 15-file cone against a 6-file key, so
+    // there are two whole windows and both twins can be asked something real.
+    const atlas = twins(14, 20);
+    const result = generateWithReport(atlas);
+    const asked = result.challenges.filter((c) =>
+      pathOf(atlas, c.subject).startsWith('src/twin-'),
+    );
+    expect(asked).toHaveLength(2);
+    expect(result.report.reasked).toBe(1);
+    const [first, second] = asked;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    if (first === undefined || second === undefined) return;
+    // Disjoint, not merely different: a key that differs by one file is the same
+    // question twice, which is what this whole mechanism exists to stop.
+    const shared = first.truth.filter((id) => second.truth.includes(id));
+    expect(shared).toEqual([]);
+    // And the second key is a real answer, not a fabricated one.
+    const truthful = trueDependentIds(atlas, second.subject);
+    expect(second.truth.every((id) => truthful.has(id))).toBe(true);
+    expect(second.candidates.filter((id) => truthful.has(id))).toEqual([...second.truth]);
+  });
+
+  it('drops a twin whose cone is entirely inside the key, and says so', () => {
+    // No followers: both twins reach exactly `barrel.ts` and nothing else, so
+    // there is no second question to ask and one of them must go.
+    const atlas = twins(0, 20);
+    const result = generateWithReport(atlas);
+    const asked = result.challenges.filter((c) =>
+      pathOf(atlas, c.subject).startsWith('src/twin-'),
+    );
+    expect(asked).toHaveLength(1);
+    expect(result.report.reasked).toBe(0);
+    expect(result.report.skipped).toContainEqual(['duplicateKey', 1]);
+  });
+
+  it('counts the nodes no question can ever reveal', () => {
+    // The price of a refusal, in the currency the player feels. `progress.ts`
+    // promotes a node only as the subject of a passed challenge or as a picked
+    // member of some answer key, so the dropped twin's fog can never lift — and
+    // the report has to say so rather than let the deck count imply coverage.
+    const atlas = twins(0, 20);
+    const result = generateWithReport(atlas);
+    const provable = new Set<NodeId>();
+    for (const challenge of result.challenges) {
+      provable.add(challenge.subject);
+      for (const id of challenge.truth) provable.add(id);
+    }
+    const twinIds = atlas.nodes.filter((n) => n.path.startsWith('src/twin-')).map((n) => n.id);
+    expect(twinIds).toHaveLength(2);
+    // Exactly one twin survives, and the other is in nobody else's key either.
+    expect(twinIds.filter((id) => !provable.has(id))).toHaveLength(1);
+    // The count is over the *shipped* deck, so it moves when dedupe does — a
+    // figure taken before the cap or before dedupe would understate it.
+    expect(result.report.unprovableNodes).toBe(atlas.nodes.length - provable.size);
+  });
+
+  it('keeps the least obvious member of a group', () => {
+    // Two subjects reached by the *same six files* at different distances.
+    // `far.ts` is imported directly by u1 and u2 only; `near.ts` by u1, u2 and
+    // u3. So the map's hover — which gives away depth 1 by design (ADR-0008) —
+    // pre-answers three of `near`'s six and only two of `far`'s, and `far` is
+    // the question with more left to work out. The group keeps that one.
+    const paths = [
+      'src/near.ts',
+      'src/far.ts',
+      ...Array.from({ length: 6 }, (_, i) => `src/use/u${i + 1}.ts`),
+      ...Array.from({ length: 20 }, (_, i) => `src/spare/s${String(i).padStart(2, '0')}.ts`),
+    ];
+    const links: [string, string][] = [
+      ['src/use/u1.ts', 'src/near.ts'],
+      ['src/use/u1.ts', 'src/far.ts'],
+      ['src/use/u2.ts', 'src/near.ts'],
+      ['src/use/u2.ts', 'src/far.ts'],
+      // u3 reaches `far` only through u2, so it is a direct importer of one and
+      // a two-hop dependent of the other. That is the whole gadget.
+      ['src/use/u3.ts', 'src/near.ts'],
+      ['src/use/u3.ts', 'src/use/u2.ts'],
+      ['src/use/u4.ts', 'src/use/u3.ts'],
+      ['src/use/u5.ts', 'src/use/u4.ts'],
+      ['src/use/u6.ts', 'src/use/u5.ts'],
+    ];
+    const atlas = atlasWith(paths, links);
+    // The premise: identical answer keys, or there is no group to choose from.
+    const cone = (path: string): string =>
+      [...trueDependentIds(atlas, atlas.nodes.find((n) => n.path === path)?.id ?? 'n:0')]
+        .sort()
+        .join('|');
+    expect(cone('src/near.ts')).toBe(cone('src/far.ts'));
+
+    const asked = generateBlastRadius(atlas)
+      .map((c) => pathOf(atlas, c.subject))
+      .filter((path) => path === 'src/near.ts' || path === 'src/far.ts');
+    expect(asked).toEqual(['src/far.ts']);
+  });
+});

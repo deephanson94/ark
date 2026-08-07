@@ -103,26 +103,53 @@ describe('the base order', () => {
   });
 });
 
-describe('the truth constraint — the measured defect', () => {
-  it('does not serve an identical answer key twice in a row', () => {
-    // Identical cones ⇒ identical difficulty, so the plain sort puts these
-    // adjacent. 5 of 6 identical-key groups on this repo share a difficulty to
-    // the byte; 21 of 22 on vite.
-    const twin = challenge({ name: 'twin', subject: 2, truth: [10, 11], difficulty: 0.2 });
+describe('the overlap rank — how much of the last answer this one repeats', () => {
+  // The names below are chosen so that the **id tiebreak is adversarial**: the
+  // most repetitive option always sorts first. Without that, `blast-fresh` wins
+  // on alphabetical order alone and the assertions pass with the overlap rank
+  // deleted entirely — which is exactly what a mutation run found them doing.
+  it('prefers the least-overlapping question among equally hard ones', () => {
+    // The replacement for a byte-equality "is this the same key" flag, which the
+    // generator's `dedupe()` made unreachable. All are difficulty 0.2, so the
+    // base order cannot separate them and overlap decides: `c-fresh` shares
+    // nothing, `b-partial` shares one file, `a-twin` shares both.
     const first = challenge({ name: 'first', subject: 1, truth: [10, 11], difficulty: 0.2 });
-    const other = challenge({ name: 'other', subject: 3, truth: [12], difficulty: 0.8 });
-    const next = suggestNext([first, twin, other], regionOf, { ...NO_HISTORY, previous: first });
-    expect(next?.id).toBe('blast-other');
+    const twin = challenge({ name: 'a-twin', subject: 2, truth: [10, 11], difficulty: 0.2 });
+    const partial = challenge({ name: 'b-partial', subject: 3, truth: [10, 12], difficulty: 0.2 });
+    const fresh = challenge({ name: 'c-fresh', subject: 4, truth: [13, 14], difficulty: 0.2 });
+    const state = { ...NO_HISTORY, previous: first };
+    expect(suggestNext([first, twin, partial, fresh], regionOf, state)?.id).toBe('blast-c-fresh');
+    // And it is a **gradient, not a flag**: with `c-fresh` gone, sharing one file
+    // still beats sharing two. A boolean "same key or not" scores both of these
+    // 1, calls them equal, and falls through to the id tiebreak — which picks
+    // `blast-a-twin`, the worst of the two.
+    expect(suggestNext([first, twin, partial], regionOf, state)?.id).toBe('blast-b-partial');
   });
 
   it('compares the whole key, not its size', () => {
     // A same-sized but different answer is a different question and must be
-    // served — 32 of this repo's 40 keys are exactly 6 files.
+    // served — 33 of this repo's 39 keys are exactly 6 files. `a-twin` sorts
+    // first by id and is the same difficulty, so only the key comparison saves it.
     const first = challenge({ name: 'first', subject: 1, truth: [10, 11], difficulty: 0.2 });
-    const sameSize = challenge({ name: 'same-size', subject: 2, truth: [12, 13], difficulty: 0.3 });
-    const easier = challenge({ name: 'twin', subject: 3, truth: [10, 11], difficulty: 0.25 });
-    const next = suggestNext([first, easier, sameSize], regionOf, { ...NO_HISTORY, previous: first });
-    expect(next?.id).toBe('blast-same-size');
+    const twin = challenge({ name: 'a-twin', subject: 3, truth: [10, 11], difficulty: 0.3 });
+    const sameSize = challenge({ name: 'b-same-size', subject: 2, truth: [12, 13], difficulty: 0.3 });
+    const next = suggestNext([first, twin, sameSize], regionOf, { ...NO_HISTORY, previous: first });
+    expect(next?.id).toBe('blast-b-same-size');
+  });
+
+  it('is outranked by difficulty, deliberately — the curriculum wins', () => {
+    // The one trade-off this rung made, pinned so nobody reverses it by accident.
+    // `twin` repeats the whole answer key and is still served, because it is the
+    // easier question and §5's tiers are the progression. Ranked *above*
+    // difficulty the overlap term measured 39 descending-difficulty steps in 152
+    // on svelte against 4 — a tour rather than a curriculum. This costs nothing
+    // in practice because `dedupe()` guarantees no two blastRadius challenges
+    // share a key at all; the ordering only decides *partial* repeats.
+    const first = challenge({ name: 'first', subject: 1, truth: [10, 11], difficulty: 0.5 });
+    const twin = challenge({ name: 'twin', subject: 2, truth: [10, 11], difficulty: 0.2 });
+    const fresh = challenge({ name: 'fresh', subject: 3, truth: [12, 13], difficulty: 0.8 });
+    const next = suggestNext([first, twin, fresh], regionOf, { ...NO_HISTORY, previous: first });
+    expect(next?.id).toBe('blast-twin');
   });
 
   it('serves the twin anyway rather than blocking, when it is all that is left', () => {
@@ -153,21 +180,25 @@ describe('the region constraint — the tour', () => {
     regions.clear();
   });
 
-  it('yields to the truth constraint — region is dropped first', () => {
-    // The one case that distinguishes the two constraints' priority. The
-    // same-region option has a different key; the cross-region one is a twin.
+  it('outranks the overlap term — moving on beats a fresh answer key', () => {
+    // The case that fixes the two constraints' priority relative to each other.
+    // Staying put would buy a completely fresh answer key; crossing the map
+    // repeats the whole previous one. The tour wins, because §4's loop is "pick
+    // the next landmark" and a landmark you can see from where you are standing
+    // is not one. (Under the old rule this test read the other way round, when
+    // an identical key was blocked outright.)
     regions.clear();
     regions.set(1, 'atlas');
     regions.set(2, 'atlas');
     regions.set(3, 'player');
     const first = challenge({ name: 'first', subject: 1, truth: [10, 11], difficulty: 0.1 });
-    const sameRegion = challenge({ name: 'same-region', subject: 2, truth: [12], difficulty: 0.5 });
+    const sameRegion = challenge({ name: 'same-region', subject: 2, truth: [12], difficulty: 0.2 });
     const twinAcross = challenge({ name: 'twin-across', subject: 3, truth: [10, 11], difficulty: 0.2 });
     const next = suggestNext([first, sameRegion, twinAcross], regionOf, {
       ...NO_HISTORY,
       previous: first,
     });
-    expect(next?.id).toBe('blast-same-region');
+    expect(next?.id).toBe('blast-twin-across');
     regions.clear();
   });
 

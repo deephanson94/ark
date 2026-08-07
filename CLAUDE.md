@@ -270,14 +270,13 @@ CI installs its own Chromium and needs no variable.
 ## Current state
 
 **M2 and M3 delivered.** M0's atlas format and verb contracts, M1's
-map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 40 challenges for this repo, the four
-§8.3 distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player
-has a challenge console over the map with partial credit, a derived per-file reveal, and fog that
-lifts on what you prove. **Progress survives a reload**, keyed on the repo's root commit, and a
-**"Where next?" panel** walks you through the deck without ever serving the same answer key twice
-running. **Field notes** record what you proved — never what you were shown. 47 KiB of JS, zero
-runtime dependencies, first paint ~150 ms. `npx ark index .` produces a
-valid ~98 KiB atlas in ~290 ms.
+map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 39 challenges for this repo — **all
+39 with a distinct answer key** — the four §8.3 distractor strategies pick the wrong answers,
+difficulty is computed per §8.4, and the player has a challenge console over the map with partial
+credit, a derived per-file reveal, and fog that lifts on what you prove. **Progress survives a
+reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
+**Field notes** record what you proved — never what you were shown. 49 KiB of JS, zero runtime
+dependencies, first paint ~240 ms. `npx ark index .` produces a valid ~101 KiB atlas in ~270 ms.
 
 The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
 and are not open: truth is the unbounded transitive dependent set, the generator maintains
@@ -294,16 +293,19 @@ CI runs every suite on push and PR, including a three-platform check that the sa
 byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page, and
 fails on any console error.
 
-The kill point passed on the strength of the reveal, **with a caveat recorded in `CHANGELOG.md`**:
-most answer keys are exactly 6 files and several pairs of subjects have identical ones. The selector
-now stops those being served back to back, and the co-change distractor strategy has started firing
-now that the repo has 24 commits — but the underlying sameness is a *generation* artifact and the
-deeper fix is a generator-side dedupe, which belongs to its own session.
+The M2 kill-point caveat — several pairs of subjects with identical answer keys — is **closed at the
+source**. **[ADR-0012](./docs/decisions/0012-an-answer-key-is-issued-once.md)**: the generator issues
+each answer key once, re-asking a colliding subject with a disjoint window of its own dependents
+where the cone allows and refusing it as `duplicateKey` where it does not. Measured on four repos, no
+repo loses a *distinct* question — svelte's deck was 61% repeats and is now 153 distinct questions
+where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
+nodes no question can ever lift the fog from.
 
-Next action: **choose between two, and say which in the CHANGELOG.** (a) A **generator-side dedupe**
-— identical answer keys are a generation artifact and those pairs are arguably one question wearing
-two subjects; the selector only stops them being adjacent. (b) **Labels versus the overlay panels** —
+Next action: **the twins are never mentioned to the player.** `cone(A) = cone(B)` is a true, derived,
+non-obvious fact, and on a fixture-heavy repo it is arguably worth more than the questions it
+replaces. It must be a *shown* fact — named in the reveal, no field note, no `understood` promotion —
+because `(verb, subject)` is the unit of proof (ADR-0011 decision 3). More visible but worth less:
 node labels near the top edge draw underneath the inspector and HUD, which is a legibility defect on
-the pillar the map exists for. (a) is worth more; (b) is more visible. If Blast Radius stops being
-interesting, stop and rethink the verb rather than adding a second one — M4's git verbs are not a
-way to avoid that question.
+the pillar the map exists for; `placeLabels` already takes `occupied` boxes. If Blast Radius stops
+being interesting, stop and rethink the verb rather than adding a second one — M4's git verbs are not
+a way to avoid that question.

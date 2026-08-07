@@ -311,9 +311,22 @@ every candidate in the subject's directory", or "select every candidate sharing 
 is pillar 3's *"answerable by Ctrl+F"* made computable, scored with the same `scoreSet` the player is
 graded by. [ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
 
-> **Status at M2**: `blastRadius` generates. On this repo that is one challenge per subject with a
-> non-empty radius. The CLI prints how many it declined and why, and how much of each choice set
-> came from a principled distractor strategy rather than from `distant` padding.
+**No two `blastRadius` challenges in one atlas have the same `truth` set.** Subjects whose certain
+dependent sets are equal would otherwise produce byte-identical answer keys — one question wearing
+two subjects, and 61% of `sveltejs/svelte`'s deck before this rule. A colliding subject is re-asked
+with a disjoint window of its own dependents where the cone allows one, and refused as
+`duplicateKey` where it does not.
+[ADR-0012](decisions/0012-an-answer-key-is-issued-once.md).
+
+This is a **within-verb** property, deliberately not a schema rule the validator enforces: two
+different verbs may honestly share an answer set, because they are asking different questions about
+the same files.
+
+> **Status at M3**: `blastRadius` generates. On this repo that is one challenge per subject with a
+> non-empty radius, minus what the guardrails refuse. The CLI prints how many it declined and why,
+> how many subjects it re-asked with a second key, how much of each choice set came from a
+> principled distractor strategy rather than from `distant` padding, and **how many nodes no
+> question can ever reveal** — the coverage a refusal costs, which a deck count alone hides.
 
 ### 3.7 `report`
 
