@@ -61,18 +61,31 @@
 
 import type { Challenge, NodeId } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
+import { answerKey } from './progress.js';
 
 export interface SelectorState {
   /**
-   * Subjects with a surviving pass. **Pass `answeredSubjects()`'s result — the
-   * same set the HUD counter and the map's question rings read.** If the
-   * selector derived its own notion of "answered", the three could disagree,
-   * and "3 questions left" beside a button that offers a fourth is risk #4
-   * verbatim.
+   * `(verb, subject)` keys with a surviving pass. **Pass `answeredKeys()`'s
+   * result — the same set the HUD counter and the map's question rings read.**
+   * If the selector derived its own notion of "answered", the three could
+   * disagree, and "3 questions left" beside a button that offers a fourth is
+   * risk #4 verbatim.
+   *
+   * Keyed per verb since M4. Held as subjects, a Companion pass retired the
+   * Blast Radius question about the same file: measured on this repo, a
+   * full playthrough served **60 of 71 questions** and called the deck finished.
    */
-  readonly answered: ReadonlySet<NodeId>;
-  /** How many times each subject has been served and not passed, this session. */
-  readonly attempts: ReadonlyMap<NodeId, number>;
+  readonly answered: ReadonlySet<string>;
+  /**
+   * How many times each `(verb, subject)` has been served and not passed, this
+   * session.
+   *
+   * Keyed like `answered`, and for the same reason: held as subjects, failing
+   * the Blast Radius question about a file made the *Companion* question about
+   * it look already-tried, so an all-failing player stopped cycling evenly and
+   * one half of every doubled subject was served twice as often as the other.
+   */
+  readonly attempts: ReadonlyMap<string, number>;
   /**
    * The last challenge the player was **graded** on, by either path — the
    * suggestion or a map click.
@@ -179,9 +192,9 @@ export function suggestNext(
   let best: Challenge | null = null;
   let bestRank: Rank | null = null;
   for (const challenge of deck) {
-    if (state.answered.has(challenge.subject)) continue;
+    if (state.answered.has(answerKey(challenge.verb, challenge.subject))) continue;
     const rank: Rank = {
-      attempts: state.attempts.get(challenge.subject) ?? 0,
+      attempts: state.attempts.get(answerKey(challenge.verb, challenge.subject)) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
       difficulty: challenge.difficulty,
@@ -198,10 +211,10 @@ export function suggestNext(
 
 /** Record that a challenge was served and not passed. Session-scoped. */
 export function noteAttempt(
-  attempts: ReadonlyMap<NodeId, number>,
-  subject: NodeId,
-): Map<NodeId, number> {
+  attempts: ReadonlyMap<string, number>,
+  key: string,
+): Map<string, number> {
   const next = new Map(attempts);
-  next.set(subject, (next.get(subject) ?? 0) + 1);
+  next.set(key, (next.get(key) ?? 0) + 1);
   return next;
 }

@@ -14,6 +14,7 @@ import type { Atlas, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { revealOf } from '../../src/verbs/blastRadius/index.js';
 import { gradeSet } from '../../src/verbs/index.js';
+import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 const PATHS = [
@@ -55,6 +56,7 @@ function withCoChange(atlas: Atlas, a: string, b: string, count: number): Atlas 
       commitsWalked: 0,
       commitsRetained: 0,
       window: null,
+      wideLimit: 25,
       coChange: [pair],
       commits: [],
     },
@@ -77,7 +79,7 @@ function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
     truth,
     evidence: { kind: 'importGraph' as const, depth: 2 },
   };
-  const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) });
+  const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
   const reveal = revealOf(atlas, buildGraph(atlas), challenge, grade);
   return { reveal, note: reveal.notes.find((entry) => entry.path === path) };
 }

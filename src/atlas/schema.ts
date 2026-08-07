@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 4;
+export const ATLAS_VERSION = 5;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -63,6 +63,28 @@ export type NodeKind = 'file';
  * `unresolved` list instead. An edge in the atlas always points somewhere real.
  */
 export type Confidence = 'certain' | 'probable';
+
+/**
+ * How much we trust this node's *history*, as opposed to its edges.
+ *
+ * - `certain`   — the rename walk followed this file's lineage without a
+ *                 contested claim.
+ * - `contested` — two live files claimed the same historical path, so
+ *                 `applyRenames` resolved it arbitrarily (deterministically,
+ *                 but arbitrarily) and some of this node's `churn`, dates and
+ *                 co-change counts may belong to a different file.
+ *
+ * This is `Confidence`'s counterpart for the git side, and it exists for the
+ * same reason: a verb graded against history may not ask about a file whose
+ * history we know is a guess (guardrail 4). Blast Radius never needed it —
+ * co-change only ranks its distractors — but Companion puts these counts in an
+ * answer key, at which point "arbitrary but deterministic" stops being enough.
+ *
+ * Measured: 0 contested nodes on this repo and on `sveltejs/svelte`, **10 on
+ * `honojs/hono`** — where a pair of files was renamed to each other's paths and
+ * back, so both paths are live and each claims the other's history.
+ */
+export type Lineage = 'certain' | 'contested';
 
 export type EdgeKind =
   /** `import x from 'y'` / `import 'y'` */
@@ -121,6 +143,13 @@ export interface AtlasNode {
   readonly unresolved: readonly string[];
   /** Bare specifiers resolved to a declared dependency or node builtin. Sorted. */
   readonly externals: readonly string[];
+  /**
+   * Whether this file's rename lineage was contested. See `Lineage`.
+   *
+   * `certain` for every node in a repo with no history: nothing was inferred,
+   * so nothing was guessed.
+   */
+  readonly lineage: Lineage;
   /** Commits touching this file, following renames. 0 when there is no history. */
   readonly churn: number;
   /** Distinct commit authors. 0 when there is no history. */
@@ -186,13 +215,40 @@ export interface History {
   readonly commitsRetained: number;
   /** Oldest and newest commit dates seen. Null when `present` is false. */
   readonly window: { readonly from: IsoDate; readonly to: IsoDate } | null;
+  /**
+   * A commit touching more than this many indexed files was excluded from
+   * `coChange` entirely — it couples every file to every other file, which is
+   * true and useless.
+   *
+   * Part of the contract rather than an indexer detail, because it is not a
+   * budget: it changes what the numbers in `coChange` *mean*. A reader who does
+   * not know it will read "changed together 4 times" as a claim about all
+   * commits, and it is a claim about focused ones. Companion copies it into
+   * each challenge's `Evidence` so the pure `prompt()` — which sees a
+   * `Challenge` and nothing else — can tell the player the rule they are being
+   * graded under.
+   */
+  readonly wideLimit: number;
   /** Sorted by count desc, then a asc, then b asc. */
   readonly coChange: readonly CoChangePair[];
   /** Newest first. */
   readonly commits: readonly CommitRecord[];
 }
 
-export type VerbId = 'blastRadius';
+export type VerbId = 'blastRadius' | 'companion';
+
+/**
+ * Every verb id, sorted. **The only list.**
+ *
+ * It lives beside the type rather than in `src/verbs/` because the atlas
+ * validator needs it and cannot import from the verbs (that direction is
+ * circular — verbs are built on the atlas). Before M4 there were two hand-kept
+ * copies, one here and one in `src/player/save.ts`, and the save-side copy is
+ * the dangerous one: a stored pass naming a verb missing from that list is
+ * dropped at parse and erased by the next write, so a stale list silently
+ * destroys a player's progress rather than merely failing to validate.
+ */
+export const VERB_IDS: readonly VerbId[] = ['blastRadius', 'companion'];
 
 export type Evidence =
   | {
@@ -206,7 +262,37 @@ export type Evidence =
        */
       readonly depth: number;
     }
-  | { readonly kind: 'coChange'; readonly minCount: number };
+  | {
+      readonly kind: 'coChange';
+      /**
+       * The **measured** weakest coupling in this answer key: every truth
+       * member changed with the subject in at least this many commits, and the
+       * weakest of them in exactly this many.
+       *
+       * Measured rather than prescribed, exactly as `importGraph.depth` is
+       * (ADR-0008 §5). It is not a threshold the generator applied and then
+       * graded against — a count boundary would be the depth-bound mistake
+       * reborn, marking a player wrong over a 4-versus-5 they could not know.
+       * Instead every candidate that is *not* in the answer key is certified to
+       * have co-changed at most once, so the line the player draws is
+       * "coupled" against "never", with the whole middle of the range kept off
+       * the board (ADR-0014).
+       */
+      readonly minCount: number;
+      /**
+       * A commit touching more than this many indexed files was not counted at
+       * all — a vendoring commit or a mass reformat couples every file to every
+       * other file, which is true and useless.
+       *
+       * Carried into the atlas so the *player* can be told the exact rule they
+       * are graded under. The instruction line first read "commits touching a
+       * large fraction of the repo", which is false in both directions: the
+       * limit is absolute, so on a small repo it admits a commit touching a
+       * quarter of the files, and on a monorepo it excludes an ordinary feature
+       * landing. A number the player can read is the only honest version.
+       */
+      readonly wideLimit: number;
+    };
 
 export interface Challenge {
   readonly id: string;

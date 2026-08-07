@@ -16,11 +16,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
-import { buildGraph } from '../../src/atlas/index.js';
+import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import {
   EMPTY_PROGRESS,
   UNCHECKED,
-  answeredSubjects,
+  answerKey,
+  answeredKeys,
+  provedThrough,
   applyGrade,
   deriveFog,
   livenessOf,
@@ -28,6 +30,8 @@ import {
   recordSurvey,
 } from '../../src/player/progress.js';
 import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
+import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
+import { VERBS } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 function ids(count: number): string[] {
@@ -55,7 +59,7 @@ function fogOf(progress: Parameters<typeof deriveFog>[0]) {
 
 describe('applyGrade', () => {
   it('surveys everything the player was shown, whatever they scored', () => {
-    const grade = gradeSet(challenge, { picked: [] });
+    const grade = gradeSet(challenge, { picked: [] }, BLAST_PHRASING);
     const { progress, unlocked } = applyGrade(EMPTY_PROGRESS, challenge, grade);
     expect(unlocked).toBe(false);
     const fog = fogOf(progress);
@@ -70,7 +74,7 @@ describe('applyGrade', () => {
     // wrong reason.
     const grade = gradeSet(challenge, {
       picked: [...truth.slice(0, 2), candidates[10] ?? '', candidates[11] ?? '', candidates[12] ?? ''],
-    });
+    }, BLAST_PHRASING);
     expect(grade.score).toBeLessThan(PASS_THRESHOLD);
     const { progress } = applyGrade(EMPTY_PROGRESS, challenge, grade);
     expect(progress.passes).toHaveLength(0);
@@ -78,7 +82,7 @@ describe('applyGrade', () => {
   });
 
   it('promotes the subject and the picks that were right, on a pass', () => {
-    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 3)] });
+    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 3)] }, BLAST_PHRASING);
     expect(grade.score).toBeGreaterThanOrEqual(PASS_THRESHOLD);
     const { progress, unlocked } = applyGrade(EMPTY_PROGRESS, challenge, grade);
     expect(unlocked).toBe(true);
@@ -90,7 +94,7 @@ describe('applyGrade', () => {
   it('never promotes a member of the answer the player missed', () => {
     // The load-bearing one. Promoting a missed file would write a field note
     // claiming the player knows something they demonstrably did not.
-    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 3)] });
+    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 3)] }, BLAST_PHRASING);
     const fog = fogOf(applyGrade(EMPTY_PROGRESS, challenge, grade).progress);
     const missed = truth[3] ?? '';
     expect(grade.missed).toContain(missed);
@@ -99,14 +103,14 @@ describe('applyGrade', () => {
   });
 
   it('never promotes a spurious pick', () => {
-    const grade = gradeSet(challenge, { picked: [...truth, candidates[9] ?? ''] });
+    const grade = gradeSet(challenge, { picked: [...truth, candidates[9] ?? ''] }, BLAST_PHRASING);
     const fog = fogOf(applyGrade(EMPTY_PROGRESS, challenge, grade).progress);
     expect(fog.understood.has(candidates[9] ?? '')).toBe(false);
   });
 
   it('takes nothing away — guardrail 6', () => {
-    const before = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth })).progress;
-    const after = applyGrade(before, challenge, gradeSet(challenge, { picked: [] })).progress;
+    const before = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }, BLAST_PHRASING)).progress;
+    const after = applyGrade(before, challenge, gradeSet(challenge, { picked: [] }, BLAST_PHRASING)).progress;
     const [was, now] = [fogOf(before), fogOf(after)];
     for (const id of was.understood) expect(now.understood.has(id)).toBe(true);
     for (const id of was.surveyed) expect(now.surveyed.has(id)).toBe(true);
@@ -131,7 +135,7 @@ describe('the stored record', () => {
   });
 
   it('stores no understood set — it is derived, and two copies would disagree', () => {
-    const { progress } = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }));
+    const { progress } = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }, BLAST_PHRASING));
     expect(Object.keys(progress).sort()).toEqual(['passes', 'surveyed', 'version']);
   });
 
@@ -160,7 +164,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
 
   it('keeps a claim the graph still supports', () => {
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')]);
-    const fog = deriveFog(progress, livenessOf(graph));
+    const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/a.ts'))).toBe(true);
     expect(fog.understood.has(idFor('src/b.ts'))).toBe(true);
   });
@@ -170,7 +174,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
       idFor('src/b.ts'),
       idFor('src/d.ts'),
     ]);
-    const fog = deriveFog(progress, livenessOf(graph));
+    const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/b.ts'))).toBe(true);
     expect(fog.understood.has(idFor('src/d.ts'))).toBe(false);
   });
@@ -180,7 +184,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     // When nothing does, the map re-fogs — showing a stale claim as current
     // knowledge would be a worse lie than showing nothing.
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')]);
-    const fog = deriveFog(progress, livenessOf(graph));
+    const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/a.ts'))).toBe(false);
   });
 
@@ -190,16 +194,16 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     // correctly proves you know it sits in `a`'s radius — it proves nothing
     // about `b`'s *own* radius, which is a different question.
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')]);
-    const answered = answeredSubjects(progress, livenessOf(graph));
-    expect(answered.has(idFor('src/a.ts'))).toBe(true);
-    expect(answered.has(idFor('src/b.ts'))).toBe(false);
+    const answered = answeredKeys(progress, livenessOf(graph, VERBS));
+    expect(answered.has(answerKey('blastRadius', idFor('src/a.ts')))).toBe(true);
+    expect(answered.has(answerKey('blastRadius', idFor('src/b.ts')))).toBe(false);
     // ...even though b *is* understood.
-    expect(deriveFog(progress, livenessOf(graph)).understood.has(idFor('src/b.ts'))).toBe(true);
+    expect(deriveFog(progress, livenessOf(graph, VERBS)).understood.has(idFor('src/b.ts'))).toBe(true);
   });
 
   it('brings a question back when its pass has decayed', () => {
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')]);
-    expect(answeredSubjects(progress, livenessOf(graph)).size).toBe(0);
+    expect(answeredKeys(progress, livenessOf(graph, VERBS)).size).toBe(0);
   });
 
   it('ignores ids that name no node, rather than throwing on them', () => {
@@ -208,11 +212,82 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
       recordPass(EMPTY_PROGRESS, 'blastRadius', ghost, [ghost]),
       [ghost, idFor('src/b.ts')],
     );
-    const fog = deriveFog(progress, livenessOf(graph));
+    const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.surveyed.has(ghost)).toBe(false);
     expect(fog.understood.has(ghost)).toBe(false);
     expect(fog.surveyed.has(idFor('src/b.ts'))).toBe(true);
     // Ignored at render, retained in storage: reverting a deletion restores it.
     expect(progress.surveyed).toContain(ghost);
+  });
+});
+
+describe('one verb\'s pass must not unlock another verb\'s answer', () => {
+  /**
+   * The defect this exists for, found by a post-design review and confirmed
+   * against `main.ts`: `deriveFog` promotes every pass's subject into a
+   * **verb-blind** `understood` set, and the map reads that set to decide
+   * whether to draw a node's full transitive dependent radius on hover
+   * (ADR-0008 decision 1). With one verb that is exactly right. With two, a
+   * Companion pass on X would have printed the answer to the still-open Blast
+   * Radius question about X — the M1 hover leak, re-entered from a direction
+   * nothing tested.
+   *
+   * `provedThrough` is the narrower set the radius rule now reads.
+   */
+  const bare = atlasWith(
+    ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+    [['src/c.ts', 'src/a.ts']],
+  );
+  // `src/b.ts` changes with `src/a.ts` and imports nothing — so the companion
+  // claim below is one no import-graph check could ever support, which is the
+  // case that matters (67% of hono's answer-key members look like this).
+  const atlas = validateAtlas({
+    ...bare,
+    repo: { ...bare.repo, head: 'a'.repeat(40), headDate: '2026-01-01', root: 'b'.repeat(40) },
+    history: {
+      present: true,
+      commitsWalked: 10,
+      commitsRetained: 0,
+      window: { from: '2025-01-01', to: '2026-01-01' },
+      wideLimit: 25,
+      coChange: [[0, 1, 5] as const].map(([x, y, n]) => {
+        const a = bare.nodes.findIndex((node) => node.path === 'src/a.ts');
+        const b = bare.nodes.findIndex((node) => node.path === 'src/b.ts');
+        void x;
+        void y;
+        return (a < b ? [a, b, n] : [b, a, n]) as readonly [number, number, number];
+      }),
+      commits: [],
+    },
+  });
+  const graph = buildGraph(atlas);
+  const idFor = (path: string): NodeId => {
+    const ref = graph.refByPath.get(path);
+    return ref === undefined ? '' : (atlas.nodes[ref]?.id ?? '');
+  };
+
+  it('does not let a companion pass draw the import radius', () => {
+    const liveness = livenessOf(graph, VERBS);
+    const progress = recordPass(EMPTY_PROGRESS, 'companion', idFor('src/a.ts'), [
+      idFor('src/b.ts'),
+    ]);
+
+    // The name is earned — you did prove something about that file.
+    expect(deriveFog(progress, liveness).understood.has(idFor('src/a.ts'))).toBe(true);
+    // The import cone is not.
+    expect(provedThrough(progress, liveness, 'blastRadius').has(idFor('src/a.ts'))).toBe(false);
+    expect(provedThrough(progress, liveness, 'companion').has(idFor('src/a.ts'))).toBe(true);
+  });
+
+  it('leaves the other verb\'s question in the deck', () => {
+    const liveness = livenessOf(graph, VERBS);
+    const progress = recordPass(EMPTY_PROGRESS, 'companion', idFor('src/a.ts'), [
+      idFor('src/b.ts'),
+    ]);
+    const answered = answeredKeys(progress, liveness);
+    expect(answered.has(answerKey('companion', idFor('src/a.ts')))).toBe(true);
+    // Guardrail: a pass on one verb retiring the other verb's board would
+    // silently shrink the deck by half on every repo.
+    expect(answered.has(answerKey('blastRadius', idFor('src/a.ts')))).toBe(false);
   });
 });

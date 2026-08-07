@@ -16,6 +16,7 @@ import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, dependents, nodeAt, refOf, validateAtlas } from '../../src/atlas/index.js';
 import {
   difficultyOf,
+  hopReach,
   generateBlastRadius,
   generateWithReport,
   sampleByDistance,
@@ -298,18 +299,18 @@ describe('determinism', () => {
 describe('difficulty (§8.4)', () => {
   it('is 0 when the true answer is exactly the obvious one', () => {
     expect(surpriseOf(['a', 'b'], ['a', 'b'])).toBe(0);
-    expect(difficultyOf({ fanOut: 0, maxFanOut: 40, depth: 1, maxDepth: 4, surprise: 0 })).toBe(0);
+    expect(difficultyOf({ breadth: 0, maxBreadth: 40, reach: 0, surprise: 0 })).toBe(0);
   });
 
   it('rises with surprise, holding everything else fixed', () => {
-    const base = { fanOut: 10, maxFanOut: 40, depth: 2, maxDepth: 4 };
+    const base = { breadth: 10, maxBreadth: 40, reach: hopReach(2, 4) };
     const dull = difficultyOf({ ...base, surprise: 0 });
     const sharp = difficultyOf({ ...base, surprise: 1 });
     expect(sharp).toBeGreaterThan(dull);
     // §8.4 calls surprise "the interesting term", so it must move the number
     // more than either structural term can.
     expect(sharp - dull).toBeGreaterThan(
-      difficultyOf({ ...base, fanOut: 40, surprise: 0 }) - dull,
+      difficultyOf({ ...base, breadth: 40, surprise: 0 }) - dull,
     );
   });
 
@@ -319,9 +320,9 @@ describe('difficulty (§8.4)', () => {
 
   it('stays inside 0..1 whatever it is handed', () => {
     const extremes = [
-      { fanOut: 0, maxFanOut: 0, depth: 1, maxDepth: 1, surprise: 0 },
-      { fanOut: 9999, maxFanOut: 1, depth: 99, maxDepth: 1, surprise: 5 },
-      { fanOut: -3, maxFanOut: 10, depth: -1, maxDepth: 4, surprise: -1 },
+      { breadth: 0, maxBreadth: 0, reach: hopReach(1, 1), surprise: 0 },
+      { breadth: 9999, maxBreadth: 1, reach: hopReach(99, 1), surprise: 5 },
+      { breadth: -3, maxBreadth: 10, reach: -1, surprise: -1 },
     ];
     for (const input of extremes) {
       const value = difficultyOf(input);

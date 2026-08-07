@@ -125,6 +125,7 @@ describe('buildHistory — churn', () => {
       authors: 0,
       firstSeen: null,
       lastSeen: null,
+      contested: false,
     });
   });
 });

@@ -25,6 +25,7 @@ import {
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { isGameable, scoreSet } from '../../src/verbs/index.js';
+import { indexCoChange } from '../../src/verbs/companion/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -44,7 +45,7 @@ let manifest: Manifest;
 beforeAll(async () => {
   const built = await buildIndex(indexOptions(ROOT));
   atlas = built.atlas;
-  declinedReasons = built.generation.report.skipped;
+  declinedReasons = built.generation.blastRadius.report.skipped;
   serialized = serializeAtlas(atlas);
   manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as Manifest;
 }, 60_000);
@@ -291,11 +292,12 @@ describe('challenges', () => {
     // carries a question or appears in the declined tally with a named reason.
     // `noDependents` is not a refusal — it is a file nothing imports, which
     // carries no question because there is no radius to ask about.
+    const blast = atlas.challenges.filter((c) => c.verb === 'blastRadius');
     const refused = declinedReasons
       .filter(([reason]) => reason !== 'noDependents')
       .reduce((total, [, count]) => total + count, 0);
     const noRadius = declinedReasons.find(([reason]) => reason === 'noDependents')?.[1] ?? 0;
-    expect(atlas.challenges.length + refused).toBe(withRadius);
+    expect(blast.length + refused).toBe(withRadius);
     expect(noRadius).toBe(atlas.nodes.length - withRadius);
     for (const [reason, count] of declinedReasons) {
       expect(reason, 'a refusal must name a guardrail').not.toBe('');
@@ -308,8 +310,9 @@ describe('challenges', () => {
     // Recomputed here from the atlas rather than trusted from the generator —
     // a generator that agrees with itself has proved nothing.
     const graph = buildGraph(atlas);
-    expect(atlas.challenges.length).toBeGreaterThan(0);
-    for (const challenge of atlas.challenges) {
+    const blast = atlas.challenges.filter((c) => c.verb === 'blastRadius');
+    expect(blast.length).toBeGreaterThan(0);
+    for (const challenge of blast) {
       const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
       const reachedIds = new Set([...reached.keys()].map((ref) => nodeAt(graph, ref).id));
       const intersection = challenge.candidates.filter((id) => reachedIds.has(id));
@@ -317,9 +320,53 @@ describe('challenges', () => {
     }
   });
 
+  it('holds the companion invariant against a freshly recomputed matrix', () => {
+    // The M4 equivalent, and it is the same shape on purpose:
+    // candidates ∩ companions(subject) = truth. Recomputed from the atlas, not
+    // trusted from the generator.
+    //
+    // The strong form is what makes the question fair: a candidate outside the
+    // key is not merely *below* the bar, it is absent from the matrix entirely
+    // — so the line the player draws is "coupled" against "never", never a
+    // count they could not have known (ADR-0014).
+    const graph = buildGraph(atlas);
+    const index = indexCoChange(atlas);
+    const companions = atlas.challenges.filter((c) => c.verb === 'companion');
+    expect(companions.length).toBeGreaterThan(0);
+    for (const challenge of companions) {
+      const row = index.rows.get(refOf(graph, challenge.subject)) ?? new Map<number, number>();
+      const inMatrix = challenge.candidates.filter((id) => row.has(refOf(graph, id)));
+      expect(inMatrix, `${challenge.id}`).toEqual([...challenge.truth]);
+    }
+  });
+
+  it('never asks about a file whose rename lineage was contested', () => {
+    // Guardrail 4 on the git side: co-change counts credited to a file two live
+    // paths both claimed may belong to the other one.
+    const graph = buildGraph(atlas);
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'companion')) {
+      for (const id of [challenge.subject, ...challenge.candidates]) {
+        expect(nodeAt(graph, refOf(graph, id)).lineage, `${challenge.id}`).toBe('certain');
+      }
+    }
+  });
+
+  it('states a companion minCount that the matrix actually bears out', () => {
+    const graph = buildGraph(atlas);
+    const index = indexCoChange(atlas);
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'companion')) {
+      if (challenge.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
+      const row = index.rows.get(refOf(graph, challenge.subject)) ?? new Map<number, number>();
+      const counts = challenge.truth.map((id) => row.get(refOf(graph, id)) ?? 0);
+      // Measured, like `importGraph.depth` — the weakest coupling in the key.
+      expect(challenge.evidence.minCount, `${challenge.id}`).toBe(Math.min(...counts));
+      expect(challenge.evidence.wideLimit).toBe(atlas.history.wideLimit);
+    }
+  });
+
   it('states a measured depth, not a bound', () => {
     const graph = buildGraph(atlas);
-    for (const challenge of atlas.challenges) {
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'blastRadius')) {
       const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
       let furthest = 0;
       for (const id of challenge.truth) furthest = Math.max(furthest, reached.get(refOf(graph, id)) ?? 0);
@@ -333,7 +380,10 @@ describe('challenges', () => {
   it('never ships a question whose ground truth is uncertain', () => {
     // Guardrail 4, checked on the exact set the player is shown, unbounded.
     const graph = buildGraph(atlas);
-    for (const challenge of atlas.challenges) {
+    // Blast Radius only: `isChallengeable` asks whether the *import* graph is
+    // sound around this board, which is the wrong question for a verb graded on
+    // commits. Companion's equivalent guardrail is the lineage check above.
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'blastRadius')) {
       const refs = challenge.candidates.map((id) => refOf(graph, id));
       const verdict = isChallengeable(
         graph,
@@ -349,12 +399,44 @@ describe('challenges', () => {
     // A `.md` file cannot import anything, so putting one in a choice set makes
     // the question easier rather than harder. Padding is not a distractor.
     const graph = buildGraph(atlas);
-    for (const challenge of atlas.challenges) {
+    // Blast Radius only, and the contrast is the point: a `.md` file cannot be
+    // a dependent, so offering one is padding — but it *can* be a companion,
+    // and `docs/atlas-format.md` moving with `src/atlas/schema.ts` is one of
+    // the better things this repo has to teach. Companion's eligibility is
+    // deliberately every language, which is how it reaches the edgeless files
+    // the import graph structurally cannot (`docs/prior-art.md` §4.2).
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'blastRadius')) {
       for (const id of challenge.candidates) {
         const node = nodeAt(graph, refOf(graph, id));
         expect(canImport(node.lang), `${challenge.id} offers ${node.path}`).toBe(true);
       }
     }
+  });
+
+  it('lets companion reach files the import graph cannot', () => {
+    // The measured argument for this verb, asserted on the real atlas rather
+    // than quoted from the writeup.
+    const graph = buildGraph(atlas);
+    const reachable = (verb: string): Set<string> => {
+      const ids = new Set<string>();
+      for (const challenge of atlas.challenges.filter((c) => c.verb === verb)) {
+        ids.add(challenge.subject);
+        for (const id of challenge.truth) ids.add(id);
+      }
+      return ids;
+    };
+    const blast = reachable('blastRadius');
+    const extra = [...reachable('companion')].filter((id) => !blast.has(id));
+    expect(extra.length).toBeGreaterThan(0);
+    // At least one of them is a file no import edge touches at all, or a file
+    // that cannot import in the first place.
+    expect(
+      extra.some((id) => {
+        const ref = refOf(graph, id);
+        return !canImport(nodeAt(graph, ref).lang) ||
+          (graph.in[ref] ?? []).length + (graph.out[ref] ?? []).length === 0;
+      }),
+    ).toBe(true);
   });
 
   it('computes a difficulty that spans the range rather than clustering', () => {

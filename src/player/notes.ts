@@ -38,30 +38,40 @@
  * that no longer exists goes dormant — retained in storage, absent here.
  */
 
-import type { Graph, NodeId } from '../atlas/index.js';
+import type { Graph, NodeId, VerbId } from '../atlas/index.js';
 import { byteCompare, dependents, idOf, nodeAt } from '../atlas/index.js';
+import { indexCoChange } from '../verbs/companion/index.js';
 import type { Liveness, Progress } from './progress.js';
 import { livePasses } from './progress.js';
 
 export interface ProvedFile {
   readonly path: string;
-  /** Hops from this file to the subject. At least 1. */
-  readonly distance: number;
+  /**
+   * How far this file sits from the subject, in the unit its verb measures in:
+   * import hops for Blast Radius, shared commits for Companion. At least 1.
+   *
+   * One field rather than two because a note only ever renders one verb's
+   * claim, and `noteProse` says which unit it is in. Two nullable fields would
+   * make every reader ask which one is populated.
+   */
+  readonly weight: number;
 }
 
 export interface FieldNote {
+  readonly verb: VerbId;
   readonly subject: NodeId;
   readonly subjectPath: string;
-  /** Sorted by distance, then path. Never empty — an empty note is dropped. */
+  /** Sorted by weight, then path. Never empty — an empty note is dropped. */
   readonly proved: readonly ProvedFile[];
-  /** The furthest hop among `proved`. */
+  /** The largest `weight` among `proved`. */
   readonly farthest: number;
   /**
-   * The subject's full transitive dependent count **today**.
+   * The size of the subject's full population **today** — its transitive
+   * dependents, or its co-change partners.
    *
    * This is *revealed*, not proved, and the prose has to say so. It is
    * recomputed rather than stored, because it is a property of the current
-   * graph and the player's claim is about the files, not the count.
+   * atlas and the player's claim is about the files, not the count.
    */
   readonly radius: number;
 }
@@ -73,40 +83,70 @@ export interface FieldNote {
  * first, and derived from the graph, so two machines showing the same save show
  * the same page.
  */
+/**
+ * How far each node sits from the subject, in the unit this verb measures in.
+ *
+ * The two verbs have genuinely different rulers and neither can be expressed in
+ * the other. Before M4 this was a bare `dependents()` call, and a Companion pass
+ * reaching it would have found no import distance for any of its members and
+ * been **silently dropped** — the note would simply not appear, with nothing to
+ * say it had gone.
+ */
+function weightsFor(graph: Graph, verb: VerbId, subjectRef: number): Map<NodeId, number> {
+  const weights = new Map<NodeId, number>();
+  if (verb === 'companion') {
+    const row = indexCoChange(graph.atlas).rows.get(subjectRef);
+    for (const [ref, count] of row ?? []) weights.set(idOf(graph, ref), count);
+    return weights;
+  }
+  for (const [ref, distance] of dependents(graph, subjectRef, Infinity)) {
+    weights.set(idOf(graph, ref), distance);
+  }
+  return weights;
+}
+
 export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness): FieldNote[] {
   const notes: FieldNote[] = [];
   for (const pass of livePasses(progress, liveness)) {
     const subjectRef = graph.refById.get(pass.subject);
     if (subjectRef === undefined) continue;
-    const cone = dependents(graph, subjectRef, Infinity);
-    const distanceById = new Map<NodeId, number>();
-    for (const [ref, distance] of cone) distanceById.set(idOf(graph, ref), distance);
+    const weights = weightsFor(graph, pass.verb, subjectRef);
 
     const proved: ProvedFile[] = [];
     for (const member of pass.proved) {
       const ref = graph.refById.get(member);
-      const distance = distanceById.get(member);
+      const weight = weights.get(member);
       // Both guards are **unreachable in practice**, and that is deliberate:
-      // `livePasses` has already dropped every member the graph no longer
-      // supports, so a surviving pass is non-empty and each member is in the
-      // cone. Mutation testing confirmed it — disabling either changes no test.
-      // They stay because the types demand them and because `Math.max()` of an
-      // empty list is `-Infinity`, not because there are two filters. The rule
-      // lives in `livePasses` and only there.
-      if (ref === undefined || distance === undefined) continue;
-      proved.push({ path: nodeAt(graph, ref).path, distance });
+      // `livePasses` has already dropped every member the current atlas no
+      // longer supports, using the same verb's own rule, so a surviving pass is
+      // non-empty and each member has a weight. Mutation testing confirmed it —
+      // disabling either changes no test. They stay because the types demand
+      // them and because `Math.max()` of an empty list is `-Infinity`, not
+      // because there are two filters. The rule lives in `livePasses` and only
+      // there.
+      if (ref === undefined || weight === undefined) continue;
+      proved.push({ path: nodeAt(graph, ref).path, weight });
     }
     if (proved.length === 0) continue;
-    proved.sort((a, b) => a.distance - b.distance || byteCompare(a.path, b.path));
+    // Ascending for hops (nearest first) and for counts alike: the ordering is
+    // only there to make the sentence read the same way twice, and `farthest`
+    // states which end carries the claim.
+    proved.sort((a, b) => a.weight - b.weight || byteCompare(a.path, b.path));
     notes.push({
+      verb: pass.verb,
       subject: pass.subject,
       subjectPath: nodeAt(graph, subjectRef).path,
       proved,
-      farthest: Math.max(...proved.map((file) => file.distance)),
-      radius: cone.size,
+      farthest: Math.max(...proved.map((file) => file.weight)),
+      radius: weights.size,
     });
   }
-  notes.sort((a, b) => b.radius - a.radius || byteCompare(a.subjectPath, b.subjectPath));
+  notes.sort(
+    (a, b) =>
+      b.radius - a.radius ||
+      byteCompare(a.subjectPath, b.subjectPath) ||
+      byteCompare(a.verb, b.verb),
+  );
   return notes;
 }
 
@@ -128,13 +168,17 @@ function plural(count: number, one: string, many: string): string {
 export function noteProse(note: FieldNote): NoteProse {
   const count = note.proved.length;
   const names = note.proved.map((file) => file.path).join(', ');
-  const reach =
-    note.farthest === 1
-      ? 'all of them direct importers'
-      : `the farthest ${note.farthest} hops away`;
+
+  // Each verb's sentence states its own relation in its own unit. A single
+  // template would have had to describe a co-change count as a distance.
   const claim =
-    `You proved ${count} ${plural(count, 'file', 'files')} that ` +
-    `${plural(count, 'depends', 'depend')} on ${note.subjectPath} — ${names} — ${reach}.`;
+    note.verb === 'companion'
+      ? `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+        `${plural(count, 'changes', 'change')} with ${note.subjectPath} — ${names} — ` +
+        `the strongest sharing ${note.farthest} ${plural(note.farthest, 'commit', 'commits')}.`
+      : `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+        `${plural(count, 'depends', 'depend')} on ${note.subjectPath} — ${names} — ` +
+        `${note.farthest === 1 ? 'all of them direct importers' : `the farthest ${note.farthest} hops away`}.`;
 
   // The gap between what was proved and what the map shows is exactly the
   // sampled part of the answer key (ADR-0008). Naming it as *revealed* is what
@@ -142,7 +186,9 @@ export function noteProse(note: FieldNote): NoteProse {
   // unprovable example.
   const revealed =
     note.radius > count
-      ? `Its full radius — ${note.radius} ${plural(note.radius, 'file', 'files')} — is revealed on your map.`
+      ? note.verb === 'companion'
+        ? `It has changed with ${note.radius} ${plural(note.radius, 'file', 'files')} in all — the other ${note.radius - count} revealed to you, never proved.`
+        : `Its full radius — ${note.radius} ${plural(note.radius, 'file', 'files')} — is revealed on your map.`
       : null;
   return { claim, revealed };
 }

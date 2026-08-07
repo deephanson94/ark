@@ -27,28 +27,24 @@ import {
   nodeAt,
   routeTo,
 } from '../../atlas/index.js';
-import type { Grade } from '../types.js';
-import { directoryOf } from './distractors.js';
+import type { Grade, NoteKind, Reveal as VerbReveal, RevealNote as VerbRevealNote } from '../types.js';
+import { directoryOf } from '../paths.js';
 
-export type NoteKind = 'correct' | 'missed' | 'spurious';
+export type { NoteKind };
 
-export interface RevealNote {
-  readonly id: NodeId;
-  readonly path: string;
-  readonly kind: NoteKind;
+/**
+ * The shared note plus the one field only an import graph has. Widening rather
+ * than replacing keeps `Verb.reveal`'s return type honest — the console reads
+ * the shared shape and never learns what a hop is.
+ */
+export interface RevealNote extends VerbRevealNote {
   /** Hops from this file to the subject, or `null` when it does not reach it. */
   readonly distance: number | null;
-  /** The import chain to the subject, as paths. Empty when there is none. */
-  readonly route: readonly string[];
-  /** Why. Derived from the graph, never canned. */
-  readonly note: string;
 }
 
-export interface Reveal {
-  readonly subject: string;
+export interface Reveal extends VerbReveal {
   /** Every dependent of the subject, whether or not it was on the board. */
   readonly radius: number;
-  /** Sorted: missed first (the lesson), then spurious, then correct. */
   readonly notes: readonly RevealNote[];
 }
 
@@ -98,7 +94,14 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
       byteCompare(a.path, b.path),
   );
 
-  return { subject: subjectPath, radius: reached.size, notes };
+  return {
+    subject: subjectPath,
+    radius: reached.size,
+    // The console used to write this sentence itself, which meant it knew what
+    // a blast radius was. It belongs to the verb that sampled the key.
+    summary: `Its full blast radius is ${reached.size} file${reached.size === 1 ? '' : 's'} — now drawn on the map.`,
+    notes,
+  };
 }
 
 function whyYes(distance: number, route: readonly string[]): string {

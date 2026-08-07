@@ -23,7 +23,8 @@ import { coverage, landmarks } from './fog.js';
 import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, turn } from './orbit.js';
 import type { Progress } from './progress.js';
-import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } from './progress.js';
+import { VERBS } from '../verbs/index.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, provedThrough, recordSurvey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
@@ -74,7 +75,7 @@ function start(scene: Scene, root: HTMLElement): void {
   // function the whole session already exercised.
   const store = browserStore();
   const saveKey = storageKeyFor(scene.atlas.repo);
-  const liveness = livenessOf(scene.graph);
+  const liveness = livenessOf(scene.graph, VERBS);
   const shore = landmarks(scene.nodes);
   // The same set the fog gives away for free, drawn as summits. One rule, two
   // consequences: what you start knowing the name of, and what dominates the
@@ -91,6 +92,18 @@ function start(scene: Scene, root: HTMLElement): void {
   let orbit: Orbit | null = null;
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
+  /**
+   * What may have its **import** radius drawn — the subjects and members proved
+   * through Blast Radius, and nothing else.
+   *
+   * Deliberately narrower than `fog.understood`, which is verb-blind. ADR-0008
+   * decision 1 gives the full cone only to a player who proved they knew it;
+   * with two verbs, reading that rule off the verb-blind set means passing a
+   * *Companion* question prints the answer to the still-open *Blast Radius*
+   * question about the same file. Same leak M1 had on hover, arriving from a
+   * direction no existing test looks at.
+   */
+  let tracedRadius: ReadonlySet<NodeId> = provedThrough(progress, liveness, 'blastRadius');
 
   /**
    * What is under the pointer, in whichever view is on screen.
@@ -110,6 +123,7 @@ function start(scene: Scene, root: HTMLElement): void {
   const remember = (next: Progress): void => {
     progress = next;
     fog = deriveFog(progress, liveness, shore);
+    tracedRadius = provedThrough(progress, liveness, 'blastRadius');
     saveProgress(store, saveKey, progress);
   };
 
@@ -122,10 +136,18 @@ function start(scene: Scene, root: HTMLElement): void {
     dirty = true;
   };
 
-  // One question per subject, looked up by node id. Challenges the player has
-  // passed drop out of `unanswered`, which is what the map's rings and the
-  // HUD's counter both read.
-  const challengeById = new Map(scene.atlas.challenges.map((c) => [c.subject, c]));
+  // **Questions per subject, plural since M4.** A file can be the subject of a
+  // Blast Radius question *and* a Companion one — they ask different things
+  // about it — so this was a `Map<NodeId, Challenge>` that silently kept
+  // whichever challenge the atlas happened to list second. Challenges the
+  // player has passed drop out of `unanswered`, which is what the map's rings
+  // and the HUD's counter both read.
+  const challengesById = new Map<NodeId, Challenge[]>();
+  for (const challenge of scene.atlas.challenges) {
+    const bucket = challengesById.get(challenge.subject);
+    if (bucket === undefined) challengesById.set(challenge.subject, [challenge]);
+    else bucket.push(challenge);
+  }
   const unanswered = new Set<NodeRef>();
   // Session-scoped, never persisted: ADR-0011 decision 2 forbids storing a
   // cursor, and a position in the rotation is a cursor.
@@ -138,11 +160,13 @@ function start(scene: Scene, root: HTMLElement): void {
     // Read off `answeredSubjects` rather than `fog.understood`: a file you
     // picked correctly in someone else's question is understood, but its *own*
     // radius is a question you have not been asked.
-    const answered = answeredSubjects(progress, liveness);
+    const answered = answeredKeys(progress, liveness);
     unanswered.clear();
-    for (const [id] of challengeById) {
+    for (const [id, bucket] of challengesById) {
       const ref = scene.graph.refById.get(id);
-      if (ref !== undefined && !answered.has(id)) unanswered.add(ref);
+      // A node still carries a question while *any* of its verbs is unanswered.
+      const open = bucket.some((c) => !answered.has(answerKey(c.verb, c.subject)));
+      if (ref !== undefined && open) unanswered.add(ref);
     }
     // The selector reads the *same* set, so the HUD counter, the map's rings
     // and the button can never disagree about what is left.
@@ -171,17 +195,37 @@ function start(scene: Scene, root: HTMLElement): void {
    * member of the answer reads off the rest.
    */
   const depthFor = (node: SceneNode): number =>
-    fog.understood.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
+    tracedRadius.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
 
-  const challengeFor = (node: SceneNode | null): Challenge | null =>
-    node === null ? null : (challengeById.get(node.id) ?? null);
+  /**
+   * Which question a click on this node opens.
+   *
+   * The first one the player has not passed, in the atlas's own order, so a
+   * node carrying both verbs offers Blast Radius until it is answered and then
+   * Companion. Falling back to the first challenge when everything is answered
+   * keeps the inspector able to say what the node was asked about.
+   */
+  const challengeFor = (node: SceneNode | null): Challenge | null => {
+    if (node === null) return null;
+    const bucket = challengesById.get(node.id);
+    if (bucket === undefined || bucket.length === 0) return null;
+    return bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null;
+  };
 
   const describe = (node: SceneNode | null): void => {
+    const challenge = challengeFor(node);
     inspector.show({
       node,
+      answered:
+        challenge !== null && selector.answered.has(answerKey(challenge.verb, challenge.subject)),
       radius: node === null ? null : radius,
-      understood: node !== null && fog.understood.has(node.id),
-      challenge: challengeFor(node),
+      // `tracedRadius`, not `fog.understood`: this flag gates the *transitive
+      // dependent count* in the inspector, which is Blast Radius's answer.
+      // Verb-blind, a Companion pass printed the number the Blast Radius
+      // question about the same file was about to ask for — the same leak as
+      // `depthFor`, one panel over, and visible only in an e2e screenshot.
+      understood: node !== null && tracedRadius.has(node.id),
+      challenge,
     });
   };
 
@@ -210,7 +254,7 @@ function start(scene: Scene, root: HTMLElement): void {
         previous: challenge,
         attempts: progression.unlocked
           ? selector.attempts
-          : noteAttempt(selector.attempts, challenge.subject),
+          : noteAttempt(selector.attempts, answerKey(challenge.verb, challenge.subject)),
       };
       const ref = scene.graph.refById.get(challenge.subject);
       if (ref !== undefined) {

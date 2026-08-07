@@ -46,15 +46,37 @@
  * pass. The measurement says this is not a knife edge — on vite the surviving
  * count is identical at 0.7 and at 0.78 (135 both times), so the threshold sits
  * on a plateau rather than on a cliff.
+ *
+ * ## Why the heuristic set is per-verb
+ *
+ * This moved up from `blastRadius/` in M4 and gained a third heuristic,
+ * `churn` — *select the k busiest candidates* — which is Companion's version of
+ * the same failure: co-change's naive strategy is not "same folder" but "the
+ * files that change all the time change with everything". It is **not** applied
+ * to Blast Radius, and that is deliberate rather than tidy. Every heuristic
+ * here has to be a guess the verb's own board actually invites; adding one that
+ * merely *could* be scored would silently delete questions from a shipped verb
+ * for a reason nobody measured.
+ *
+ * It earns its place by firing: on the boards Companion assembles it refuses
+ * **13 of 39** subjects on this repo, 17 on `honojs/hono` and 132 on
+ * `sveltejs/svelte`. A gate that never rejects anything is a gate nobody
+ * installed.
  */
 
-import type { Graph, NodeRef } from '../../atlas/index.js';
-import { nodeAt } from '../../atlas/index.js';
-import { BAND_THRESHOLDS } from '../types.js';
-import { scoreSet } from '../score.js';
-import { directoryOf, nameTokens } from './distractors.js';
+import type { Graph, NodeRef } from '../atlas/index.js';
+import { nodeAt } from '../atlas/index.js';
+import { BAND_THRESHOLDS } from './types.js';
+import { scoreSet } from './score.js';
+import { directoryOf, nameTokens } from './paths.js';
 
-export type HeuristicId = 'directory' | 'name';
+export type HeuristicId = 'directory' | 'name' | 'churn';
+
+/** What Blast Radius is checked against. Unchanged from M2 — see the header. */
+export const PATH_HEURISTICS: readonly HeuristicId[] = ['directory', 'name'];
+
+/** Companion adds the busiest-files guess. */
+export const HISTORY_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 'churn'];
 
 /**
  * Band A. Read the header for why this is not the pass threshold.
@@ -72,21 +94,40 @@ export interface GateVerdict {
 }
 
 /**
- * What a player picks who reads only the file paths.
+ * What a player picks who reads only the file paths, or only the churn column.
  *
- * Both take the whole choice set and filter it, exactly as a person scanning a
- * list would — no graph access, no atlas access, nothing but the strings.
+ * Each takes the whole choice set and filters it, exactly as a person scanning
+ * a list would — no graph traversal, nothing that requires understanding the
+ * structure. `churn` is the one that reads a number rather than a string, and
+ * it is still structure-blind: the map already prints it, and "the busy files
+ * are the coupled files" needs no idea of what imports what.
+ *
+ * `churn` needs `size` because, unlike the other two, it has no natural cut —
+ * a threshold would be a magic number. Taking exactly as many as the answer key
+ * holds is the strongest form of the guess: it is what a player would pick who
+ * knew how many answers there were and nothing else, so a board it beats was
+ * never asking about coupling.
  */
 function guess(
   heuristic: HeuristicId,
   graph: Graph,
   subject: NodeRef,
   candidates: readonly NodeRef[],
+  size: number,
 ): NodeRef[] {
   const subjectPath = nodeAt(graph, subject).path;
   if (heuristic === 'directory') {
     const home = directoryOf(subjectPath);
     return candidates.filter((ref) => directoryOf(nodeAt(graph, ref).path) === home);
+  }
+  if (heuristic === 'churn') {
+    return [...candidates]
+      .sort(
+        (a, b) =>
+          nodeAt(graph, b).churn - nodeAt(graph, a).churn ||
+          (nodeAt(graph, a).id < nodeAt(graph, b).id ? -1 : 1),
+      )
+      .slice(0, size);
   }
   const wanted = new Set(nameTokens(subjectPath));
   return candidates.filter((ref) =>
@@ -99,14 +140,17 @@ export function gradeHeuristics(
   subject: NodeRef,
   candidates: readonly NodeRef[],
   truth: readonly NodeRef[],
+  heuristics: readonly HeuristicId[] = PATH_HEURISTICS,
   threshold = CTRL_F_THRESHOLD,
 ): GateVerdict {
   const truthIds = truth.map((ref) => nodeAt(graph, ref).id);
   const scores: [HeuristicId, number][] = [];
   const beatenBy: HeuristicId[] = [];
 
-  for (const heuristic of ['directory', 'name'] as const) {
-    const picked = guess(heuristic, graph, subject, candidates).map((ref) => nodeAt(graph, ref).id);
+  for (const heuristic of heuristics) {
+    const picked = guess(heuristic, graph, subject, candidates, truth.length).map(
+      (ref) => nodeAt(graph, ref).id,
+    );
     // The real scorer, not a reimplementation of it. If the pass threshold
     // moves, this moves with it — the same property ADR-0007 gave `isGameable`.
     const { score } = scoreSet(picked, truthIds);

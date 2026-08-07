@@ -14,6 +14,7 @@
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
+import { VERBS } from '../verbs/index.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -146,10 +147,16 @@ export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
 export interface InspectorView {
   readonly node: SceneNode | null;
   readonly radius: Radius | null;
-  /** True when the player has proved they know this node's radius. */
+  /**
+   * True when the player has proved they know this node's **import radius** —
+   * i.e. passed a Blast Radius question about it. Gates the transitive count
+   * below, and nothing else.
+   */
   readonly understood: boolean;
   /** The question this node carries, if any. */
   readonly challenge: Challenge | null;
+  /** True when `challenge` has already been passed. Labels the button. */
+  readonly answered: boolean;
 }
 
 export interface Inspector {
@@ -169,7 +176,7 @@ export function createInspector(
 
   return {
     root,
-    show({ node, radius, understood, challenge }) {
+    show({ node, radius, understood, challenge, answered }) {
       body.replaceChildren();
       empty.style.display = node === null ? 'block' : 'none';
       if (node === null) return;
@@ -237,8 +244,13 @@ export function createInspector(
       }
 
       if (challenge !== null) {
+        // The verb names its own question. This button read "Map its blast
+        // radius" for *every* challenge until M4, so a Companion question was
+        // opened by a control promising an import radius — the console's
+        // verb-blindness held, and the inspector's did not. Nothing in the test
+        // suite noticed; it was visible in the e2e screenshot.
         const action = el('button', 'inspector-action', [
-          understood ? 'Map it again' : 'Map its blast radius',
+          answered ? 'Ask it again' : VERBS[challenge.verb].prompt(challenge, (id) => id).action,
         ]);
         action.type = 'button';
         action.addEventListener('click', () => onChallenge(challenge));

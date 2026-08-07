@@ -16,7 +16,7 @@
  */
 
 import type { NodeId, RepoMeta, VerbId } from '../atlas/index.js';
-import { isNodeId } from '../atlas/index.js';
+import { VERB_IDS, isNodeId } from '../atlas/index.js';
 import type { Pass, Progress } from './progress.js';
 import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
 
@@ -25,8 +25,6 @@ export interface SaveStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
-
-const VERBS: readonly VerbId[] = ['blastRadius'];
 
 /**
  * Where this repo's progress lives.
@@ -62,7 +60,11 @@ function asPass(value: unknown): Pass | null {
   const record = value as Record<string, unknown>;
   const verb = record['verb'];
   const subject = record['subject'];
-  if (typeof verb !== 'string' || !(VERBS as readonly string[]).includes(verb)) return null;
+  // `VERB_IDS` comes from the schema, which is the only list. This used to be a
+  // second copy kept by hand here, and this is the dangerous place to keep one:
+  // a pass naming a verb missing from the list is dropped at parse and erased by
+  // the next write, so a stale copy destroys progress rather than failing loudly.
+  if (typeof verb !== 'string' || !(VERB_IDS as readonly string[]).includes(verb)) return null;
   if (typeof subject !== 'string' || !isNodeId(subject)) return null;
   return { verb: verb as VerbId, subject, proved: asIds(record['proved']) };
 }

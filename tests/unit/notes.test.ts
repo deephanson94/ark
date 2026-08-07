@@ -11,9 +11,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NodeId } from '../../src/atlas/index.js';
-import { buildGraph } from '../../src/atlas/index.js';
+import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { fieldNotes, noteProse } from '../../src/player/notes.js';
 import { EMPTY_PROGRESS, livenessOf, recordPass } from '../../src/player/progress.js';
+import { VERBS } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 // hub ← mid ← far, and `wide` also imports hub. `loner` imports nothing.
@@ -26,7 +27,7 @@ const atlas = atlasWith(
   ],
 );
 const graph = buildGraph(atlas);
-const liveness = livenessOf(graph);
+const liveness = livenessOf(graph, VERBS);
 const idFor = (path: string): NodeId => {
   const ref = graph.refByPath.get(path);
   return ref === undefined ? '' : (atlas.nodes[ref]?.id ?? '');
@@ -41,8 +42,8 @@ describe('what a note is built from', () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]?.subjectPath).toBe('src/hub.ts');
     expect(notes[0]?.proved).toEqual([
-      { path: 'src/mid.ts', distance: 1 },
-      { path: 'src/far.ts', distance: 2 },
+      { path: 'src/mid.ts', weight: 1 },
+      { path: 'src/far.ts', weight: 2 },
     ]);
     expect(notes[0]?.farthest).toBe(2);
   });
@@ -149,5 +150,58 @@ describe('the prose claims exactly what was proved', () => {
     for (const word of words) {
       expect([note.subjectPath, ...note.proved.map((f) => f.path)]).toContain(word);
     }
+  });
+});
+
+describe('a note reads in the unit its verb measures in', () => {
+  /**
+   * Before M4 `fieldNotes` computed import distances unconditionally, so a
+   * Companion pass would have found no distance for any member and been
+   * **silently dropped** — the note simply absent, with nothing saying so. The
+   * two verbs have different rulers and neither converts into the other.
+   */
+  const bare = atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts'], [['src/c.ts', 'src/a.ts']]);
+  const atlas = validateAtlas({
+    ...bare,
+    repo: { ...bare.repo, head: 'a'.repeat(40), headDate: '2026-01-01', root: 'b'.repeat(40) },
+    history: {
+      present: true,
+      commitsWalked: 40,
+      commitsRetained: 0,
+      window: { from: '2025-01-01', to: '2026-01-01' },
+      wideLimit: 25,
+      coChange: (() => {
+        const a = bare.nodes.findIndex((n) => n.path === 'src/a.ts');
+        const b = bare.nodes.findIndex((n) => n.path === 'src/b.ts');
+        return [(a < b ? [a, b, 12] : [b, a, 12]) as readonly [number, number, number]];
+      })(),
+      commits: [],
+    },
+  });
+  const companionGraph = buildGraph(atlas);
+  const id = (path: string): string =>
+    atlas.nodes[companionGraph.refByPath.get(path) ?? -1]?.id ?? '';
+
+  it('states a companion claim in shared commits, not in hops', () => {
+    const progress = recordPass(EMPTY_PROGRESS, 'companion', id('src/a.ts'), [id('src/b.ts')]);
+    const notes = fieldNotes(companionGraph, progress, livenessOf(companionGraph, VERBS));
+    expect(notes).toHaveLength(1);
+    const note = notes[0];
+    expect(note?.verb).toBe('companion');
+    // The weight is the co-change count, which no import distance could equal
+    // here: `src/b.ts` imports nothing at all.
+    expect(note?.proved[0]?.weight).toBe(12);
+    const prose = noteProse(note!);
+    expect(prose.claim).toContain('changes with');
+    expect(prose.claim).toContain('12 commits');
+    expect(prose.claim).not.toContain('hops');
+  });
+
+  it('still states a blast-radius claim in hops', () => {
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', id('src/a.ts'), [id('src/c.ts')]);
+    const notes = fieldNotes(companionGraph, progress, livenessOf(companionGraph, VERBS));
+    const prose = noteProse(notes[0]!);
+    expect(prose.claim).toContain('depend');
+    expect(prose.claim).not.toContain('commit');
   });
 });

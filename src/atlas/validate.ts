@@ -12,7 +12,7 @@
 
 import { isNodeId, nodeIdFor } from './identity.js';
 import { byteCompare, isStrictlySorted } from './order.js';
-import { ATLAS_VERSION } from './schema.js';
+import { ATLAS_VERSION, VERB_IDS } from './schema.js';
 import type {
   Atlas,
   AtlasEdge,
@@ -27,13 +27,13 @@ import type {
   IndexReport,
   IsoDate,
   Lang,
+  Lineage,
   NodeKind,
   Region,
   RegionKind,
   RepoMeta,
   SkipCount,
   Truncation,
-  VerbId,
 } from './schema.js';
 
 export class AtlasValidationError extends Error {
@@ -141,7 +141,10 @@ const LANGS: readonly Lang[] = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 
 const NODE_KINDS: readonly NodeKind[] = ['file'];
 const EDGE_KINDS: readonly EdgeKind[] = ['import', 'reexport', 'dynamic', 'type', 'require'];
 const CONFIDENCES: readonly Confidence[] = ['certain', 'probable'];
-const VERB_IDS: readonly VerbId[] = ['blastRadius'];
+const LINEAGES: readonly Lineage[] = ['certain', 'contested'];
+// `VERB_IDS` is imported from the schema rather than restated here. It used to
+// be a second hand-kept copy, which is how a verb comes to be valid in one
+// place and unknown in another.
 const TRUNCATION_WHATS: readonly Truncation['what'][] = [
   'commits',
   'coChange',
@@ -222,6 +225,7 @@ function validateNode(value: unknown, at: string): AtlasNode {
     exports: asSortedStrings(r['exports'], `${at}.exports`),
     unresolved: asSortedStrings(r['unresolved'], `${at}.unresolved`),
     externals: asSortedStrings(r['externals'], `${at}.externals`),
+    lineage: asMember(r['lineage'], `${at}.lineage`, LINEAGES),
     churn: asIntAtLeast(r['churn'], `${at}.churn`, 0),
     authors: asIntAtLeast(r['authors'], `${at}.authors`, 0),
     firstSeen: asNullableDate(r['firstSeen'], `${at}.firstSeen`),
@@ -346,7 +350,12 @@ function validateHistory(value: unknown, at: string, nodeCount: number): History
     fail(`${at}.commitsWalked`, 'must be 0 when history is absent');
   }
 
-  return { present, commitsWalked, commitsRetained, window, coChange, commits };
+  // At least 2, because a "wide" commit is one that couples more files than a
+  // pair: a limit below 2 would exclude every commit that can contribute a
+  // co-change at all, silently emptying the matrix rather than trimming it.
+  const wideLimit = asIntAtLeast(r['wideLimit'], `${at}.wideLimit`, 2);
+
+  return { present, commitsWalked, commitsRetained, window, wideLimit, coChange, commits };
 }
 
 /**
@@ -375,7 +384,14 @@ function validateEvidence(value: unknown, at: string): Evidence {
   if (kind === 'importGraph') {
     return { kind, depth: asIntAtLeast(r['depth'], `${at}.depth`, 1) };
   }
-  return { kind, minCount: asIntAtLeast(r['minCount'], `${at}.minCount`, 1) };
+  return {
+    kind,
+    // At least 2: a pair seen once is below the indexer's own noise floor and
+    // never enters the matrix, so an answer key resting on a single shared
+    // commit could not have been certified against anything.
+    minCount: asIntAtLeast(r['minCount'], `${at}.minCount`, 2),
+    wideLimit: asIntAtLeast(r['wideLimit'], `${at}.wideLimit`, 2),
+  };
 }
 
 function validateChallenge(value: unknown, at: string, ids: ReadonlySet<string>): Challenge {

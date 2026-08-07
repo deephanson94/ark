@@ -847,3 +847,114 @@ One line per iteration: what changed, and what to do next.
   and P1′'s real-hardware measurement gates a renderer *change* rather than any next rung. The flat
   map itself measured 45/49/50 fps at p95, unchanged by rung 1's summit rings — a regression check
   worth having taken.
+
+- **M4 — Companion, and the seam learns to hold two verbs.** `git` is the rubric now, not just the
+  import graph. A file's question can be *"which of these files have changed alongside it in at
+  least N separate commits?"*, graded against the co-change matrix, and the answer keys are worth
+  what NORTH-STAR §2 said they would be: on `honojs/hono` the deck reaches **27 files with no import
+  edge at all**, and the share of the map any question can ever un-fog goes from **156 nodes to 247**
+  there, **283 → 776** on `sveltejs/svelte`, 78 → 86 here. `docs/prior-art.md` §4.2 measured that the
+  import graph and the churn hotspots are nearly disjoint populations; this is that prediction
+  cashed.
+  **The verb was chosen for a structural reason as well as a measured one.** Placement's subject is a
+  *commit*, and `Challenge.subject` is a `NodeId` — so it would have meant changing the atlas shape,
+  the save key, the selector and the map's click path before a single question could be asked, which
+  is exactly what CLAUDE.md says adding a verb must not require. Its ground truth is also already
+  lossy in the atlas (`maxCommitFiles` truncates a retained commit's file list). Companion's subject
+  is a file and its ground truth is complete.
+  **The semantics are [ADR-0014](./docs/decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)
+  and the interesting half is what is *not* on the board.** The obvious construction — truth is
+  partners at or above N, distractors are partners below N — reproduces the exact mistake ADR-0008
+  removed: a candidate one under the bar is a trap for the player who *does* know the repo, marked
+  wrong over an integer nobody could have known. So the band between "certified never" and "in the
+  answer key" is not graded, it is **kept off the board**: every candidate is either in `truth` or
+  provably co-changed at most once, and `evidence.minCount` is *measured* — the weakest coupling that
+  actually made the key — exactly as `importGraph.depth` is. Keys rest on 2–3 shared commits here,
+  2–7 on hono, 2–613 on svelte.
+  **Absence from the matrix is not evidence of absence, and that is the whole guardrail-4 argument.**
+  Three rules drop pairs — the noise floor, the wide-commit exclusion, the 8,000-pair cap — so a
+  verb reading absence as zero would offer a genuine companion as a wrong answer. The bound is
+  derived rather than chosen: the matrix is sorted count-descending, so everything the cap threw away
+  is at or below the last kept pair's count, and a companion must clear that to be sampled.
+  **The raised branch of that bound fires on none of the three repos** and the ADR says so rather
+  than letting a later session read it as live code — it is a correctness bound, not a retry that
+  never retries, and deleting it would make the verb wrong on the first repo big enough to trip the
+  cap.
+  **A pre-writing review found the defect that would have been the worst thing here, and it was in
+  code I had not written yet.** `deriveFog` promotes every pass's subject into a **verb-blind**
+  `understood` set, and the map reads that set to decide whether to draw a node's full transitive
+  dependent radius on hover. With one verb that is ADR-0008 decision 1 working correctly. With two, a
+  Companion pass on X **prints the answer to the still-open Blast Radius question about X** — the M1
+  hover leak, re-entered from a direction no test looks at. `provedThrough(progress, liveness, verb)`
+  is the narrower set the radius rule now reads; `understood` stays verb-blind on purpose, because
+  proving *anything* about a file is a real reason to know its name. It is the radius, not the label,
+  that has to be earned in the verb that asks about it.
+  **A second instance of the same leak was found in an e2e screenshot and by nothing else.** The
+  inspector's `blast radius: N files` field was gated on the same verb-blind flag, so a Companion
+  pass printed the count as well as unlocking the drawing. Two panels, one rule, one of them fixed;
+  looking at `artifacts/` is what caught the other. The same screenshot showed the inspector button
+  reading **"Map its blast radius"** above a Companion question — the console's verb-blindness held
+  and the inspector's did not, so `Prompt` gained an `action` field and each verb writes its own
+  label. Templating the verb's title into the old sentence was the first fix and it produced *"Map
+  its companion"*.
+  **Guardrail 4 grew a git-side clause, because "deterministic" stopped being enough.**
+  `applyRenames` resolves a contested historical path arbitrarily — two live files both claiming the
+  same old path — and its comment said *"arbitrary but deterministic, which is the property that
+  matters"*. True while co-change only ranked Blast Radius's distractors; false the moment those
+  counts enter an answer key. `AtlasNode.lineage` records it and Companion refuses such a node as
+  subject, as answer **and as distractor**, since certifying an exclusion on history we know is
+  misattributed is the same defect. Measured before building it: **0 on this repo, 0 on svelte across
+  18,240 renames, 7 nodes on hono** — a pair renamed to each other's paths and back, so each live
+  file claims the other's history.
+  **Four things moved up out of `blastRadius/` and the seam is where the work actually was.**
+  `difficulty.ts` (§8.4 is one formula for every verb — the fields are now `breadth`/`reach`/
+  `surprise` because `fanOut`/`depth` described one *reading* of it), `gate.ts` (with a per-verb
+  heuristic set), `paths.ts`, and `reveal` + the summary sentence + the grade's phrasing onto the
+  `Verb` contract. The console had been importing `revealOf` straight out of `blastRadius/`, so a
+  second verb's grade would have been explained in the first verb's terms — "reached the subject by a
+  path you did not select" is a claim about imports and Companion would be lying if it said it.
+  Blast Radius's numbers are byte-identical across the move, which `hopReach` exists to guarantee.
+  **`(verb, subject)` is now the key everywhere it was `subject`**: `answeredKeys`, the selector's
+  `answered` and its `attempts`, and `Liveness.holds`. Each was a real defect, not tidying — held as
+  subjects, a full playthrough of this repo served **60 of 71 questions** and called the deck
+  finished, and an all-failing player stopped cycling evenly. Liveness is the sharpest: checked
+  against the import graph, a Companion claim would be dropped for 67% of hono's answer-key members
+  and 89% of svelte's, because those pairs never import anything. Each verb now says what its own
+  claim means (`Verb.stillHolds`). `save.ts`'s second hand-kept `VERBS` list is gone — it is the
+  dangerous place to keep one, because a pass naming a verb missing from it is dropped at parse and
+  erased by the next write.
+  **The naive guess is churn, and it was already free.** §8.4's `surprise` needs a baseline the map
+  actually hands over. For Blast Radius that is depth-1 importers, drawn on the canvas by design; for
+  Companion it is the **commit count the inspector already prints for every node**, which leaks no
+  pair. So map giveaway, `surprise` baseline and the new `churn` gate heuristic are the same
+  strategy, and closing that loop needed no map work at all. The gate refuses **8 subjects here, 48
+  on hono, 14 on svelte** — machinery that fires, counted before tests were written around it.
+  **I repeated a mistake this repo had already written down.** Companion's distractors scanned the
+  whole pool and called `nameTokens` — a regex and two splits — on every node for every subject.
+  `blastRadius/distractors.ts` documents that exact failure in its header ("cost 8 s of a 10 s index
+  budget"); mine cost **29.7 s on svelte against Blast Radius's 0.6**, and pushed a full index from
+  22.5 s to 47.8 s. An `analyse()` corpus and two inverted indexes bring it to **1.37 s** with
+  byte-identical output on hono, and svelte back to 22.8 s. The lesson is written into the new file's
+  header rather than left as a paragraph in the other verb's.
+  Verified: **414 unit + 86 atlas tests**, byte-identical atlas, budgets inside ceiling (1,346 B/file
+  against 2,621 — the second deck costs 26% more per file and sits at half the ceiling), e2e clean
+  and now playing a Companion question end to end. **10 targeted mutations, 10 of 10 caught** — and
+  two fixtures had to be rebuilt to get there: the pool ban survived mutation at churn 3 and again at
+  churn 99, because the sampled-away companions were never attractive enough to be *picked* as
+  distractors, so the assertion could not tell a correct exclusion from a ranking that happened never
+  to reach them.
+  Known and stated rather than hidden: **a Companion pass changes nothing on the map** beyond lifting
+  fog on what it proved — there is no co-change link drawn, so the verb's fog payoff is thinner than
+  Blast Radius's; the choice sets on *this* repo are heavily `.md`, which is true of a 36-commit
+  documentation-dense repo and reads as a doc quiz; and the `wide` limit is absolute (25 files) where
+  the thing it approximates is relative, so it admits a commit touching a quarter of this repo and
+  excludes an ordinary feature landing on svelte.
+  **Next**: the honest next step is **drawing the co-change relation on the map** — the verb asks
+  about a coupling the player is never shown, so the reveal is doing all the teaching and §4's "fog
+  lifts around what you proved" is only half kept. After that, in evidence order: **map rotation
+  between challenges** (`docs/prior-art.md` §4.4 still calls it the highest-leverage lowest-cost item
+  in the whole writeup, and it is still not done), the **negative witness** (a wrong pick already has
+  a known reason class and we never say it), and the **phenomenon catalogue** for risk #1. Still open
+  and only the owner can close them: `npm run raster` on real hardware (ADR-0009's P1′) and S1's
+  recall-experiment design, which ADR-0009 records as a breach and which gates the next rung of the
+  third-person direction.
