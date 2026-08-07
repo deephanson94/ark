@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 2;
+export const ATLAS_VERSION = 3;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -231,6 +231,16 @@ export interface RepoMeta {
   readonly head: string | null;
   /** HEAD's commit date. Stands in for a wall-clock `indexedAt` (ADR-0001). */
   readonly headDate: IsoDate | null;
+  /**
+   * Full 40-char sha of the repo's first commit — **identity**, where `head` is
+   * **staleness**. The player keys saved progress on this, because a HEAD-keyed
+   * save is wiped by every reindex (ADR-0011).
+   *
+   * Null when there is no history, and null for a shallow clone, whose oldest
+   * reachable commit is a graft boundary that moves. Null means the player
+   * falls back to a weaker, name-derived key; it is never an error.
+   */
+  readonly root: string | null;
   /** Sorted. */
   readonly languages: readonly Lang[];
   readonly fileCount: number;

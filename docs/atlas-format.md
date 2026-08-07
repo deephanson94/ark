@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 2**
+**Schema version: 3**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 2,
+  "version": 3,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -72,6 +72,7 @@ to mean something without a lookup table.
 | `name` | `string` | `package.json` name, falling back to the directory name. |
 | `head` | `string \| null` | Full 40-char sha. `null` when the repo has no commits, or is not a repo. |
 | `headDate` | `"YYYY-MM-DD" \| null` | HEAD's commit date. Null exactly when `head` is null. |
+| `root` | `string \| null` | Full 40-char sha of the repo's **first** commit. See below. |
 | `languages` | `Lang[]` | Sorted, unique. Every node's `lang` appears here. |
 | `fileCount` | `number` | Equals `nodes.length`. Redundant on purpose — it is a cheap integrity check. |
 | `tool` | `string` | The indexer build, e.g. `ark@0.1.0`. |
@@ -80,6 +81,28 @@ There is no `indexedAt`. See [ADR-0001](decisions/0001-no-wall-clock-time-in-the
 
 **The indexer reads the working tree, not `HEAD`.** `repo.head` names the commit the working tree
 is based on and nothing stronger — an atlas can describe a dirty checkout, and usually will.
+
+#### `root` is identity; `head` is staleness
+
+They answer different questions and must not be collapsed into one. `head` tells you *whether this
+atlas is current*: it is stale exactly when it is not the repo's HEAD. `root` tells you *which repo
+this is*, and the player keys saved progress on it — a HEAD-keyed save would be wiped by every
+reindex, which is the opposite of what [ADR-0002](decisions/0002-node-identity-survives-renames.md)
+and NORTH-STAR §7 exist to protect.
+
+It is the first commit on HEAD's **first-parent chain**, not simply a parentless commit. A subtree
+merge or an imported history adds a second root, so "any commit with no parents" is not a stable
+answer; the first-parent walk is linear and has exactly one.
+
+`root` is `null` in two cases, and `null` is not an error — the player falls back to a weaker,
+name-derived key:
+
+- the repo has no commits, or is not a repo (`head` is null too);
+- the clone is **shallow**, where the oldest reachable commit is a graft boundary that looks
+  parentless but moves on every `fetch --deepen`. Here `head` is set and `root` is not, so the two
+  are *not* null together.
+
+Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md).
 
 ### 3.2 `nodes`
 
@@ -245,6 +268,12 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 
 `truth` sits here in plaintext, deliberately. This is a learning tool, not an exam; anyone who opens
 devtools to read the answer has opted out of the product. Do not obfuscate it.
+
+**`id` is stable within an atlas and nowhere else.** It is a convenience for ordering and lookup, not
+an identity that survives a reindex — the generator may renumber freely when the deck changes. So
+nothing outside the atlas may key on it: the player's save records a pass by `(verb, subject)`,
+because `subject` is a `NodeId` and *that* is stable by construction
+([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)).
 
 A challenge should also not be passable by selecting everything. That requires
 `|candidates| > 3·|truth|`, which follows from the 0.5 pass threshold —

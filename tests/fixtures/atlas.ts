@@ -78,6 +78,7 @@ export function atlasWith(
       name: 'fixture',
       head: null,
       headDate: null,
+      root: null,
       languages,
       fileCount: nodes.length,
       tool: 'ark@test',

@@ -368,6 +368,16 @@ geography because a curriculum has no natural shape; a codebase does.
 - **Field notes**: the codex equivalent. Accumulates facts you have *proven* you know, not facts you
   were shown. "You know that `engine.ts` has 14 dependents." That distinction is the whole product.
 
+> **Amended 2026-08-07 — the example above is wrong on its own terms, and is corrected here.** Under
+> [ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) a hub's
+> answer key is a deterministic *sample* of its dependents, so a player who passes has proved some of
+> them, never the count. The number 14 was **shown** to them in the reveal — which is the `surveyed`
+> side of the very line this bullet says is the whole product. A note may therefore claim only what
+> was proved ("you proved 4 files that depend on `engine.ts`"), and may state the full radius only
+> when it is labelled as revealed rather than known. Provenance is immutable; the claim about *today*
+> is re-checked at render, and a claim the graph no longer supports is dropped rather than shown
+> stale. [ADR-0011](./docs/decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md).
+
 3D is an earned upgrade, not a v1 goal. If it happens, the layout must still derive from the graph.
 
 > **Amended 2026-08-07 — the north star is changing here, deliberately.** A **third-person view** is
@@ -395,7 +405,7 @@ geography because a curriculum has no natural shape; a codebase does.
 | Layout | `d3-force` or `webcola`, **run in the indexer** | Determinism |
 | Player render | Canvas 2D or SVG. **Not** WebGL for v1 | A few thousand nodes doesn't need it. Revisit above ~5k — or under [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)'s preconditions, which are the *only* other reason to change renderer. |
 | UI | Plain DOM + a small overlay factory | Same reasoning as Promptasy — imperative UI at interaction rates doesn't need a reconciler |
-| Persistence | localStorage, keyed by repo + HEAD | No account, no backend |
+| Persistence | localStorage, keyed by the repo's **root commit** | No account, no backend. **Amended 2026-08-07**: this row read "repo + HEAD", which cannot stand — HEAD moves on every commit, so a HEAD-keyed save is wiped by every reindex, defeating ADR-0002 and §7. `root` is identity, `head` is staleness. [ADR-0011](./docs/decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md) |
 | Deploy | Static | Player is a pure function of the atlas |
 
 ---

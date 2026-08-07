@@ -305,6 +305,35 @@ describe('history', () => {
     }, 'atlas.history.present', /exactly when atlas.repo.head is set/);
   });
 
+  it('rejects a root that is not a full sha', () => {
+    // The player keys saved progress on this string (ADR-0011). A truncated or
+    // upper-case sha would key a *different* save from the same repo.
+    rejects(VALID, (raw) => {
+      (raw['repo'] as Raw)['root'] = 'ABCDEF0123456789';
+    }, 'atlas.repo.root', /full 40-character lowercase sha/);
+  });
+
+  it('rejects a first commit in a repo that has no commits', () => {
+    rejects(VALID, (raw) => {
+      (raw['repo'] as Raw)['root'] = 'a'.repeat(40);
+    }, 'atlas.repo', /repo with no commits cannot have a first commit/);
+  });
+
+  it('accepts a head with no root — that is a shallow clone, not a bug', () => {
+    // The converse of the rule above, and it must NOT be symmetric: a shallow
+    // clone has a HEAD and no knowable root.
+    const raw = broken(VALID, (r) => {
+      const repo = r['repo'] as Raw;
+      repo['head'] = 'c'.repeat(40);
+      repo['headDate'] = '2026-01-01';
+      repo['root'] = null;
+      const history = r['history'] as Raw;
+      history['present'] = true;
+      history['commitsWalked'] = 1;
+    });
+    expect(() => validateAtlas(raw)).not.toThrow();
+  });
+
   it('rejects a retained count that disagrees with the commit list', () => {
     rejects(VALID, (raw) => {
       (raw['history'] as Raw)['commitsRetained'] = 5;

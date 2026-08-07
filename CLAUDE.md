@@ -256,27 +256,35 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 delivered — the loop is playable.** M0's atlas format and verb contracts, M1's map, and now the
-Blast Radius verb: `src/verbs/blastRadius/` generates 37 challenges for this repo, the four §8.3
-distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player has a
-challenge console over the map with partial credit, a derived per-file reveal, and fog that lifts on
-what you prove. 40 KiB of JS, zero runtime dependencies, first paint ~300 ms. `npx ark index .`
-produces a valid ~83 KiB atlas in ~250 ms.
+**M2 delivered, M3 in progress — rung 1 of 3 landed.** M0's atlas format and verb contracts, M1's
+map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 40 challenges for this repo, the four
+§8.3 distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player
+has a challenge console over the map with partial credit, a derived per-file reveal, and fog that
+lifts on what you prove. **Progress now survives a reload**, keyed on the repo's root commit. 43 KiB
+of JS, zero runtime dependencies, first paint ~150 ms. `npx ark index .` produces a valid ~95 KiB
+atlas in ~270 ms.
 
 The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
 and are not open: truth is the unbounded transitive dependent set, the generator maintains
 `candidates ∩ dependents(subject, ∞) = truth`, the prompt promises dependence rather than required
 change, and the map shows direct importers only until a node is in `fog.understood`.
 
+The save's shape is **[ADR-0011](./docs/decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)**
+and is likewise settled: `Progress` is the state and `Fog` is a view of it, the key is `repo.root`
+(identity) and never `repo.head` (staleness), a pass is keyed by `(verb, subject)` and never by
+`challenge.id`, and every restored claim is re-checked against the live graph before it renders as
+knowledge.
+
 CI runs every suite on push and PR, including a three-platform check that the same commit yields a
-byte-identical atlas, and a headless browser smoke test that plays a challenge and fails on any
-console error.
+byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page, and
+fails on any console error.
 
 The kill point passed on the strength of the reveal, **with a caveat recorded in `CHANGELOG.md`**:
-30 of 37 answer keys are exactly 6 files, 5 pairs of subjects have identical answer keys, and the
-co-change distractor strategy has never fired because this repo has 14 commits. Read that entry
-before deciding M3 is the obvious next move.
+32 of 40 answer keys are exactly 6 files, 5 pairs of subjects have identical answer keys, and the
+co-change distractor strategy has never fired because this repo has 23 commits. Read that entry
+before deciding what M3's remaining rungs are worth.
 
-Next action: **M3 — progression, field notes, localStorage.** The first thing it should fix is
-serving near-identical answer keys back to back.
+Next action: **M3 rung 2 — the progression selector.** ADR-0011 decision 4 fixes the rule and the
+measurements behind it; it is the thing that stops near-identical answer keys being served back to
+back. Rung 3 is the field-notes panel. If Blast Radius stops being interesting before those land,
 stop and rethink the verb rather than adding a second one.

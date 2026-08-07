@@ -1,0 +1,137 @@
+/**
+ * Persistence. The player's only edge onto the outside world besides `fetch`.
+ *
+ * Everything above this file is pure (`progress.ts` owns what a record *means*);
+ * this file owns bytes and `localStorage`, and it is deliberately paranoid,
+ * because a save is untrusted input in exactly the way an atlas is not. An
+ * atlas that violates its schema throws, loudly, because a wrong atlas would
+ * produce a wrong answer key. A corrupt save must do the opposite: **the game
+ * still starts**. Losing progress is bad; refusing to load is worse, and
+ * bricking the player on a string a user could paste into devtools would be a
+ * self-inflicted denial of service.
+ *
+ * ADR-0011 decides the key. The short version: `head` is *staleness* and `root`
+ * is *identity*, and a save keyed on HEAD is wiped by every reindex — which is
+ * the exact opposite of what ADR-0002 and §7 exist to protect.
+ */
+
+import type { NodeId, RepoMeta, VerbId } from '../atlas/index.js';
+import { isNodeId } from '../atlas/index.js';
+import type { Pass, Progress } from './progress.js';
+import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
+
+/** The subset of `Storage` this needs. Lets a test pass a plain object. */
+export interface SaveStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+const VERBS: readonly VerbId[] = ['blastRadius'];
+
+/**
+ * Where this repo's progress lives.
+ *
+ * `ark:<root>` — the sha of the repo's first commit. Identity, not state.
+ *
+ * `ark:name:<name>` when `root` is null: a repo with no history at all
+ * (NORTH-STAR risk #7), or a shallow clone, whose oldest reachable commit is a
+ * graft boundary that moves on every fetch.
+ *
+ * The fallback is **weaker on purpose and documented as such**. `NodeId` is a
+ * hash of `originPath` (ADR-0002) and is therefore repo-*independent*: two
+ * unrelated repos that both contain `src/index.ts` produce the same node id. So
+ * two repos sharing a key would share `understood` promotions, and an
+ * `understood` node unlocks its full transitive radius on hover — silently
+ * reopening the leak ADR-0008 decision 1 closes. Two repos with the same
+ * `package.json` name *and* no usable history is a much smaller class than two
+ * repos with the same file layout, which is why the fallback is on the name.
+ *
+ * The two forms cannot collide: a 40-hex sha never begins `name:`.
+ */
+export function storageKeyFor(repo: Pick<RepoMeta, 'root' | 'name'>): string {
+  return repo.root === null ? `ark:name:${repo.name}` : `ark:${repo.root}`;
+}
+
+function asIds(value: unknown): NodeId[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is NodeId => typeof item === 'string' && isNodeId(item));
+}
+
+function asPass(value: unknown): Pass | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const verb = record['verb'];
+  const subject = record['subject'];
+  if (typeof verb !== 'string' || !(VERBS as readonly string[]).includes(verb)) return null;
+  if (typeof subject !== 'string' || !isNodeId(subject)) return null;
+  return { verb: verb as VerbId, subject, proved: asIds(record['proved']) };
+}
+
+/**
+ * Read a stored record. Never throws; anything it cannot make sense of becomes
+ * an empty record.
+ *
+ * A record from a *newer* `SAVE_VERSION` is discarded rather than guessed at —
+ * the same rule guardrail 5 applies to the atlas. There is no installed base
+ * and no downgrade path, so this costs nothing today and stops a future shape
+ * from being half-read.
+ */
+export function parseProgress(text: string | null): Progress {
+  if (text === null || text === '') return EMPTY_PROGRESS;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return EMPTY_PROGRESS;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return EMPTY_PROGRESS;
+  const record = parsed as Record<string, unknown>;
+  if (record['version'] !== SAVE_VERSION) return EMPTY_PROGRESS;
+  const passes = (Array.isArray(record['passes']) ? record['passes'] : [])
+    .map(asPass)
+    .filter((pass): pass is Pass => pass !== null);
+  return { version: SAVE_VERSION, surveyed: asIds(record['surveyed']), passes };
+}
+
+export function serializeProgress(progress: Progress): string {
+  return JSON.stringify(progress);
+}
+
+/**
+ * `window.localStorage`, or null where it is unavailable.
+ *
+ * Reading the property itself throws in a browser with storage disabled, and
+ * in some sandboxed iframes — so this is a `try` around the *access*, not
+ * around a call. A null store means the game runs, and forgets.
+ */
+export function browserStore(): SaveStore | null {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function loadProgress(store: SaveStore | null, key: string): Progress {
+  if (store === null) return EMPTY_PROGRESS;
+  try {
+    return parseProgress(store.getItem(key));
+  } catch {
+    return EMPTY_PROGRESS;
+  }
+}
+
+/**
+ * Write, and say whether it landed. Quota exhaustion and private-mode Safari
+ * both throw from `setItem`; neither is a reason to stop the game, but the
+ * caller may want to say so once.
+ */
+export function saveProgress(store: SaveStore | null, key: string, progress: Progress): boolean {
+  if (store === null) return false;
+  try {
+    store.setItem(key, serializeProgress(progress));
+    return true;
+  } catch {
+    return false;
+  }
+}

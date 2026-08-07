@@ -312,6 +312,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       name: configIndex.for('package.json').name ?? basename(options.root),
       head: git.head,
       headDate: git.headDate,
+      root: git.root,
       languages,
       fileCount: nodes.length,
       tool: TOOL,

@@ -1,53 +1,56 @@
+/**
+ * The fog vocabulary.
+ *
+ * `progress.ts` derives a `Fog` from the player's record and owns every rule
+ * about *how* a node gets promoted; this file covers what the words mean once
+ * it has — which visibility a node reads as, and that coverage counts what was
+ * proved rather than what was looked at.
+ */
+
 import { describe, expect, it } from 'vitest';
 
-import { CLEAR_FOG, coverage, landmarks, survey, understand, visibilityOf } from '../../src/player/fog.js';
+import type { Fog } from '../../src/player/fog.js';
+import { coverage, landmarks, visibilityOf } from '../../src/player/fog.js';
 
 const A = 'n:aaaaaaaaaaaa';
 const B = 'n:bbbbbbbbbbbb';
 const C = 'n:cccccccccccc';
 
+const NOTHING: Fog = { surveyed: new Set(), understood: new Set() };
+const fogOf = (surveyed: string[], understood: string[] = []): Fog => ({
+  surveyed: new Set([...surveyed, ...understood]),
+  understood: new Set(understood),
+});
+
 describe('fog', () => {
   it('starts with nothing revealed', () => {
-    expect(visibilityOf(CLEAR_FOG, A)).toBe('silhouette');
-    expect(coverage(CLEAR_FOG, 10).fraction).toBe(0);
+    expect(visibilityOf(NOTHING, A)).toBe('silhouette');
+    expect(coverage(NOTHING, 10).fraction).toBe(0);
   });
 
   it('surveying reveals identity but not understanding', () => {
-    const fog = survey(CLEAR_FOG, A);
+    const fog = fogOf([A]);
     expect(visibilityOf(fog, A)).toBe('surveyed');
     // The distinction that is the whole product: looking is not knowing.
     expect(coverage(fog, 10).understood).toBe(0);
     expect(coverage(fog, 10).fraction).toBe(0);
   });
 
-  it('understanding implies having surveyed', () => {
-    const fog = understand(CLEAR_FOG, [A]);
+  it('understanding outranks surveying', () => {
+    const fog = fogOf([], [A]);
     expect(visibilityOf(fog, A)).toBe('understood');
     expect(fog.surveyed.has(A)).toBe(true);
   });
 
   it('measures coverage by what was understood, not what was looked at', () => {
-    const fog = understand(survey(survey(CLEAR_FOG, A), B), [C]);
-    const seen = coverage(fog, 4);
+    const seen = coverage(fogOf([A, B], [C]), 4);
     expect(seen.surveyed).toBe(3);
     expect(seen.understood).toBe(1);
     expect(seen.fraction).toBe(0.25);
   });
 
-  it('does not mutate the fog it was given', () => {
-    const before = survey(CLEAR_FOG, A);
-    const after = survey(before, B);
-    expect(before.surveyed.has(B)).toBe(false);
-    expect(after.surveyed.has(B)).toBe(true);
-  });
-
-  it('returns the same object when nothing changes', () => {
-    const fog = survey(CLEAR_FOG, A);
-    expect(survey(fog, A)).toBe(fog);
-  });
-
   it('handles an empty atlas without dividing by zero', () => {
-    expect(coverage(CLEAR_FOG, 0).fraction).toBe(0);
+    expect(coverage(NOTHING, 0).fraction).toBe(0);
   });
 });
 

@@ -296,8 +296,7 @@ async function main(): Promise<number> {
       await page.locator('.console-submit').click(); // "back to the map"
       await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
 
-      // The fog has to have moved, or `understand()` is still the unused
-      // function it was at M1.
+      // The fog has to have moved, or nothing the player proved reached it.
       const understood = Number.parseInt(
         /(\d+) understood/.exec(await page.locator('.hud-counts').innerText())?.[1] ?? '0',
         10,
@@ -307,6 +306,58 @@ async function main(): Promise<number> {
         failures.push({ what: 'fog', detail: 'passing a challenge lifted no fog' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
+
+      // ---- persistence -------------------------------------------------
+      // The only check that M3's first rung actually works. Everything in
+      // `save.test.ts` is a fake store; this is a real browser, a real reload,
+      // and the built bundle. A save that round-trips in a unit test and does
+      // not survive F5 is the failure mode worth catching.
+      const keys = await page.evaluate(() => Object.keys(globalThis.localStorage));
+      process.stdout.write(`e2e: localStorage keys → ${keys.join(', ') || '(none)'}\n`);
+      const expectedKey = `ark:${atlas.repo.root ?? ''}`;
+      if (atlas.repo.root !== null && !keys.includes(expectedKey)) {
+        // Keyed on the root commit, not HEAD: a HEAD key is wiped by every
+        // reindex, which is the whole of ADR-0011 decision 1.
+        failures.push({ what: 'save', detail: `expected key ${expectedKey}, got ${keys.join(', ')}` });
+      }
+      if (atlas.repo.head !== null && keys.includes(`ark:${atlas.repo.head}`)) {
+        failures.push({ what: 'save', detail: 'progress is keyed on HEAD; a reindex would wipe it' });
+      }
+
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('canvas.map', { timeout: 15_000 });
+      const restored = await page
+        .waitForFunction(
+          (want: number) => {
+            const text = document.querySelector('.hud-counts')?.textContent ?? '';
+            return Number.parseInt(/(\d+) understood/.exec(text)?.[1] ?? '0', 10) >= want;
+          },
+          understood,
+          { timeout: 5000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      const afterReload = (await page.locator('.hud-counts').innerText()).replace(/\s+/g, ' ').trim();
+      process.stdout.write(`e2e: after reload → ${afterReload}\n`);
+      if (!restored) {
+        failures.push({
+          what: 'save',
+          detail: `reload lost progress: had ${understood} understood, HUD now reads "${afterReload}"`,
+        });
+      }
+      // The question ring has to be gone too, or the reload restored the fog
+      // and not the deck — the player would be asked what they already proved.
+      const questionsLeft = Number.parseInt(
+        /(\d+) question/.exec(await page.locator('.hud-quests').innerText())?.[1] ?? '-1',
+        10,
+      );
+      if (questionsLeft >= atlas.challenges.length) {
+        failures.push({
+          what: 'save',
+          detail: `reload restored the fog but not the deck: ${questionsLeft} of ${atlas.challenges.length} still open`,
+        });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'after-reload.png') });
     }
 
     // Zoomed in, to check semantic zoom actually promotes detail.

@@ -290,3 +290,61 @@ One line per iteration: what changed, and what to do next.
   **Next**: M3 — progression, field notes, localStorage. We now know what progression has to fix,
   because it was measured rather than assumed: order by difficulty, and never serve two
   near-identical answer keys back to back.
+
+- **M3 rung 1 — progress survives a reload, keyed on the repo's identity rather than its state.**
+  Answering a question and pressing F5 no longer resets the map. `ADR-0011` settles the whole stored
+  shape first, because all three M3 rungs write into the same object and deciding it three times
+  would guarantee three different answers.
+  **The key is `repo.root`, a new atlas field — the sha of the first commit on HEAD's first-parent
+  chain.** NORTH-STAR §10 said "keyed by repo + HEAD", and that cannot stand next to ADR-0002 (node
+  identity survives renames *so that* fog and field notes survive a refactor): HEAD moves on every
+  commit, so a HEAD-keyed save is wiped by every reindex. `root` is identity, `head` is staleness;
+  the north star row is amended and points at the ADR. `--first-parent` is not decoration —
+  `--max-parents=0` alone lists *every* root, and a subtree merge adds one, so a "pick one from the
+  list" rule can change its mind and rotate every player's save. **It is null for a shallow clone**,
+  where the oldest reachable commit is a graft boundary that moves on every fetch: not a corner
+  case, since both large repos measured in the last two rungs were `--depth` clones. That falls back
+  to `ark:name:<name>`, which is documented as weaker rather than hidden — `NodeId` hashes
+  `originPath` and is therefore repo-*independent*, so two repos under one key would share
+  `understood` promotions, and an `understood` node unlocks its full radius on hover, silently
+  reopening the leak ADR-0008 closed. `ATLAS_VERSION` 2 → 3, `docs/atlas-format.md` §3.1 in the same
+  commit.
+  **`Progress` is now the state and `Fog` is a view of it.** Only `{surveyed, passes}` is stored;
+  `understood` is derived at load, because storing it alongside the passes that justify it would be
+  two representations of one fact that disagree after a reindex. A pass is keyed by `(verb, subject)`
+  — never by `challenge.id`, which the format promises is stable only *within* an atlas. That
+  collapses the restore path into the live path: the same function that renders a fresh session
+  renders a restored one, so a save that restored wrongly would break a test the session already runs
+  hundreds of times. Two passes on one hub union rather than replace, because answer keys are sampled
+  and guardrail 6 forbids the second attempt taking away what the first earned.
+  **A restored claim is re-checked before it is rendered as knowledge.** Provenance is immutable —
+  you did prove it — but each proved member is re-validated against `dependents(subject, ∞)` on load,
+  and a pair the graph no longer supports is dropped; a fully decayed pass demotes its subject and
+  the map re-fogs. Stored ids that name nothing are ignored at render and **kept in storage**, so
+  reverting a deletion restores your map.
+  **Two defects, found two different ways, neither by reading the code.**
+  *Mutation testing* (16 mutations, each reverted after) found the harness itself was lying first:
+  `--reporter=basic` is not a vitest 4 flag, so every run exited non-zero and every mutation read as
+  "caught". With that fixed, two survived — `--first-parent` was untested because the fixture repo
+  had one root, and the root-sha shape check had no test at all. Both now have one: a repo with a
+  vendored second root dated *later* than the mainline, so a naive `rev-list` returns the wrong sha
+  first, and a validator case for each half of the head/root nullability rule (they are deliberately
+  **not** symmetric — a shallow clone has a head and no root).
+  *Looking at an e2e screenshot* found the other: the HUD read **38 questions after one pass**, not
+  39. Deriving the deck from `fog.understood` retired a question nobody had answered — picking a file
+  correctly in someone else's question proves you know it sits in that radius, and proves nothing
+  about its own. The deck now reads `answeredSubjects()`, which is the subjects of surviving passes.
+  The assertion that catches it fails against the old rule.
+  **`survey()`, `understand()` and `CLEAR_FOG` are deleted.** With the fog derived, they were reached
+  only by their own tests — the landmine about code and test surface asserting a behaviour the
+  product does not have. `fog.ts` now owns the vocabulary and none of the state.
+  Verified: 319 unit + 72 atlas tests, byte-identical atlas across two runs, all hard budgets inside
+  ceiling (index 271 ms, generate@2000 2.9 s, 0 runtime deps), e2e clean with first paint 148 ms —
+  and the e2e now **reloads the page**, asserts the key is the root sha and not HEAD, and fails if
+  either the fog or the deck comes back empty. That assertion was itself checked by breaking
+  `loadProgress`.
+  **Next**: M3 rung 2 — the progression selector, per ADR-0011 decision 4: ascending
+  `(tier, difficulty, id)`, skipping a challenge whose truth is byte-equal to the last served, then
+  one whose region matches. Both constraints were measured on ark and vite before being written; (a)
+  fixes the repetition defect, (b) buys the tour. Then rung 3, the field-notes panel — which is why
+  `livePasses()` already returns the narrowed pass rather than just a boolean.

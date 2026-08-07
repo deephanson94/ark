@@ -19,8 +19,10 @@ import { fit, pan, screenToWorld, zoomAt } from './camera.js';
 import { createConsole } from './challenge.js';
 import { drawFrame } from './draw.js';
 import type { Fog } from './fog.js';
-import { CLEAR_FOG, coverage, landmarks, survey } from './fog.js';
-import { applyGrade } from './progress.js';
+import { coverage, landmarks } from './fog.js';
+import type { Progress } from './progress.js';
+import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } from './progress.js';
+import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
 import { createError, createHud, createInspector, createLegend } from './ui.js';
@@ -51,7 +53,25 @@ function start(scene: Scene, root: HTMLElement): void {
 
   let viewport = { width: 0, height: 0 };
   let camera: Camera = { x: 0, y: 0, scale: 1 };
-  let fog: Fog = { surveyed: new Set(landmarks(scene.nodes)), understood: CLEAR_FOG.understood };
+
+  // `progress` is the state; `fog` is a view of it (ADR-0011). Everything the
+  // player earns is written to the record and the fog is re-derived, so there
+  // is exactly one place a promotion can happen and the reload path is the same
+  // code as the live one — a save that restores wrongly would be a bug in a
+  // function the whole session already exercised.
+  const store = browserStore();
+  const saveKey = storageKeyFor(scene.atlas.repo);
+  const liveness = livenessOf(scene.graph);
+  const shore = landmarks(scene.nodes);
+  let progress: Progress = loadProgress(store, saveKey);
+  let fog: Fog = deriveFog(progress, liveness, shore);
+
+  const remember = (next: Progress): void => {
+    progress = next;
+    fog = deriveFog(progress, liveness, shore);
+    saveProgress(store, saveKey, progress);
+  };
+
   let hovered: SceneNode | null = null;
   let selected: SceneNode | null = null;
   let radius: Radius | null = null;
@@ -66,10 +86,22 @@ function start(scene: Scene, root: HTMLElement): void {
   // HUD's counter both read.
   const challengeById = new Map(scene.atlas.challenges.map((c) => [c.subject, c]));
   const unanswered = new Set<NodeRef>();
-  for (const [id] of challengeById) {
-    const ref = scene.graph.refById.get(id);
-    if (ref !== undefined) unanswered.add(ref);
-  }
+  const retally = (): void => {
+    // Derived from the record, not tracked alongside it, so a restored session
+    // starts with the deck it left with — and a pass whose claim has decayed
+    // puts its question back, which is the honest outcome.
+    //
+    // Read off `answeredSubjects` rather than `fog.understood`: a file you
+    // picked correctly in someone else's question is understood, but its *own*
+    // radius is a question you have not been asked.
+    const answered = answeredSubjects(progress, liveness);
+    unanswered.clear();
+    for (const [id] of challengeById) {
+      const ref = scene.graph.refById.get(id);
+      if (ref !== undefined && !answered.has(id)) unanswered.add(ref);
+    }
+  };
+  retally();
 
   /**
    * How far a node's radius may be drawn.
@@ -102,11 +134,10 @@ function start(scene: Scene, root: HTMLElement): void {
   const hud = createHud(scene.atlas);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade) {
-      const progression = applyGrade(fog, challenge, grade);
-      fog = progression.fog;
+      remember(applyGrade(progress, challenge, grade).progress);
+      retally();
       const ref = scene.graph.refById.get(challenge.subject);
       if (ref !== undefined) {
-        if (progression.unlocked) unanswered.delete(ref);
         // The reveal fires on every grade, pass or fail — guardrail 6 says a
         // wrong answer never takes anything away, so seeing the true shape is
         // not a reward, it is the point of having answered at all.
@@ -214,7 +245,7 @@ function start(scene: Scene, root: HTMLElement): void {
     const found = pick(scene, world.x, world.y, camera.scale);
     selected = found;
     if (found !== null) {
-      fog = survey(fog, found.id);
+      remember(recordSurvey(progress, [found.id]));
       radius = blastRadius(scene, found.ref, depthFor(found));
     } else {
       radius = null;

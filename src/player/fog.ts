@@ -11,9 +11,13 @@
  *               against ground truth.
  *
  * That distinction *is* the product (§9: field notes accumulate facts you have
- * proven you know, not facts you were shown). At M1 nothing can move a node
- * into `understood`, because challenge generation lands at M2 — so the counter
- * reads `0 understood` and that is the truthful number, not a stub.
+ * proven you know, not facts you were shown).
+ *
+ * **This module owns the vocabulary, not the state.** A `Fog` is derived from
+ * the player's stored record by `progress.ts` — there is one source of truth
+ * and it is the record, because `understood` stored alongside the passes that
+ * justify it would be two representations of one fact, and after a reindex they
+ * would disagree (ADR-0011).
  *
  * Risk #4 says fog must never read as "the tool is hiding things from me", so
  * an unsurveyed node is still drawn — position, size and region shape are all
@@ -28,27 +32,6 @@ export type Visibility = 'silhouette' | 'surveyed' | 'understood';
 export interface Fog {
   readonly surveyed: ReadonlySet<NodeId>;
   readonly understood: ReadonlySet<NodeId>;
-}
-
-export const CLEAR_FOG: Fog = { surveyed: new Set(), understood: new Set() };
-
-export function survey(fog: Fog, id: NodeId): Fog {
-  if (fog.surveyed.has(id)) return fog;
-  return { surveyed: new Set([...fog.surveyed, id]), understood: fog.understood };
-}
-
-/**
- * Promote nodes the player has proven they understand. Understanding implies
- * having surveyed — you cannot know a file you have never seen named.
- */
-export function understand(fog: Fog, ids: Iterable<NodeId>): Fog {
-  const understood = new Set(fog.understood);
-  const surveyed = new Set(fog.surveyed);
-  for (const id of ids) {
-    understood.add(id);
-    surveyed.add(id);
-  }
-  return { surveyed, understood };
 }
 
 export function visibilityOf(fog: Fog, id: NodeId): Visibility {

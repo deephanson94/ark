@@ -167,6 +167,15 @@ function validateRepo(value: unknown, at: string): RepoMeta {
   if ((head === null) !== (headDate === null)) {
     fail(at, 'head and headDate must be null together');
   }
+  const root = r['root'] === null ? null : asString(r['root'], `${at}.root`);
+  if (root !== null && !/^[0-9a-f]{40}$/.test(root)) {
+    fail(`${at}.root`, 'expected a full 40-character lowercase sha');
+  }
+  // The converse does not hold, and must not be asserted: a shallow clone has
+  // a head and no knowable root (ADR-0011).
+  if (root !== null && head === null) {
+    fail(at, 'root without head: a repo with no commits cannot have a first commit');
+  }
   const languages = asSortedStrings(r['languages'], `${at}.languages`).map((lang, i) =>
     asMember(lang, `${at}.languages[${i}]`, LANGS),
   );
@@ -174,6 +183,7 @@ function validateRepo(value: unknown, at: string): RepoMeta {
     name: asString(r['name'], `${at}.name`),
     head,
     headDate,
+    root,
     languages,
     fileCount: asIntAtLeast(r['fileCount'], `${at}.fileCount`, 0),
     tool: asString(r['tool'], `${at}.tool`),
