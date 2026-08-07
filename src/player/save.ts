@@ -38,9 +38,12 @@ export interface SaveStore {
  * The fallback is **weaker on purpose and documented as such**. `NodeId` is a
  * hash of `originPath` (ADR-0002) and is therefore repo-*independent*: two
  * unrelated repos that both contain `src/index.ts` produce the same node id. So
- * two repos sharing a key would share `understood` promotions, and an
- * `understood` node unlocks its full transitive radius on hover — silently
- * reopening the leak ADR-0008 decision 1 closes. Two repos with the same
+ * two repos sharing a key would share each other's *passes* — and a Blast
+ * Radius pass unlocks that node's full transitive radius on hover, silently
+ * reopening the leak ADR-0008 decision 1 closes. (Since M4 the unlock is keyed
+ * on a pass in that verb specifically rather than on the verb-blind
+ * `understood` set, which narrows what a shared key leaks without closing it:
+ * a shared Blast Radius pass still leaks.) Two repos with the same
  * `package.json` name *and* no usable history is a much smaller class than two
  * repos with the same file layout, which is why the fallback is on the name.
  *
