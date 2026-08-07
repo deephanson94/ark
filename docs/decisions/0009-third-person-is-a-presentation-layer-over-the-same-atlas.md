@@ -16,6 +16,20 @@
   quietly edited out, because an ADR that got its own measurements wrong is a useful warning to the
   session that reads it next.
 
+## Direction update, 2026-08-07
+
+**The human has stated that a third-person explorable world is the intended final form of the
+product**, naming Zelda and Assassin's Creed as the reference. This ADR was written when the question
+was "is this allowed?"; the answer to that is now moot, and the question is "when, and on what
+terms?".
+
+Nothing below is weakened by this. The preconditions exist because a third-person view built on an
+unmeasured renderer, an unvalidated loop, or unexamined prior art would be built on nothing — and
+that is *more* true when the view is the destination rather than an experiment. The status line
+stays as it is: **accepted in principle, blocked, not scheduled.** What changes is the priority of
+closing P1–P3, which is ordinary work with its own payoff, and the standard 2D decisions are held
+to: a choice that reads well flat but cannot survive being walked through is now the worse choice.
+
 ## Context
 
 The human asked for a third-person point of view — a camera behind a figure moving through the
@@ -167,10 +181,29 @@ likely answer does not fit.)
 real history — the one thing that will finally exercise the co-change distractor strategy. If the
 loop is not interesting in 2D on a real codebase, a camera will not rescue it.
 
-**P3. The interaction budget is no longer unmeasured.** `npm run budget` currently reports map
-interaction as **UNMEASURED** for raster cost. Closing that hole is small, belongs in M3, and must
+**P3. The interaction budget is no longer unmeasured.** ~~`npm run budget` currently reports map
+interaction as **UNMEASURED** for raster cost.~~ Closing that hole is small, belongs in M3, and must
 happen *before* a new renderer arrives — otherwise we cannot tell whether 3D regressed something we
 never measured.
+
+> **MET, 2026-08-07 — and the answer is not the comfortable one.** `npm run raster` drives the built
+> player in a real browser against a 2,000-node atlas laid out by the real layout, and reports
+> **45 / 33 / 43 fps at p95** (territory / district / street) against a ≥ 50 fps target. That is
+> **below target at every zoom level** — the budget is missed, not met.
+>
+> Two things this does and does not license. It **does** close P3: the number is no longer unknown,
+> so a future renderer can be compared against something. It does **not** by itself license WBGL —
+> the run is headless and software-rasterised in a container with no GPU, which makes it a *floor*
+> rather than the number a desktop sees, and the right next step is re-measuring on real hardware
+> rather than rewriting the renderer against a container's numbers.
+>
+> The instrument is worth more than the number. Its first two versions produced **plausible,
+> confidently wrong** results — 33/49/35 fps measured against a map that was not moving at all,
+> because synthetic pointer events did not drive the drag and, later, because wheeling out drove the
+> scale into `clampScale`'s floor where 2,000 nodes are a sub-pixel smudge and panning changes no
+> pixels. Both were caught by a liveness gate that hashes the canvas before and after the drag and
+> refuses to report timings when they are identical. Without it this precondition would have been
+> recorded as met on fiction.
 
 ### Design constraints — hold throughout, not checked once
 

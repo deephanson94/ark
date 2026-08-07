@@ -120,7 +120,7 @@ Add a `npm run budget` check that prints these and fails over the ceiling.
 | Atlas size | 5 MB @ 2,000 files | Above this, move history to a side-file loaded on demand |
 | Index time | 10 s @ 2,000 files | Pillar 6: ten minutes to first insight includes this |
 | Player first paint | 1.5 s | Static file, no excuses |
-| Map interaction | ≥ 50 fps @ 2,000 nodes | Below this, switch Canvas → WebGL, not before. *Performance* is not the only reason a renderer may change — see [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) — but nothing else licenses it either. **Currently UNMEASURED for raster cost; ADR-0009 makes closing that a precondition.** |
+| Map interaction | ≥ 50 fps @ 2,000 nodes | Below this, switch Canvas → WebGL, not before. *Performance* is not the only reason a renderer may change — see [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) — but nothing else licenses it either. **Measured 2026-08-07 by `npm run raster`: 45 / 33 / 43 fps at p95 (territory / district / street) — BELOW the 50 fps target at every zoom level.** Headless, software-rasterised, in a container — so this is a *floor*, not the number a GPU desktop sees. Re-measure on real hardware before acting on it. |
 | Runtime deps (player) | ≤ 3 | The player is a graph renderer and some DOM. It does not need a framework. |
 
 When a budget is exceeded, say so out loud in the CHANGELOG. Silent truncation reads as success.
@@ -186,6 +186,18 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the spec and will need a decision by M3.
 - **Dates are not the only thing git renders per-commit.** If a field comes from `--format`, ask
   what it depends on besides the commit.
+- **An instrument that measures nothing looks exactly like good news.** `npm run raster`'s first two
+  versions reported plausible frame times — 33/49/35 fps — against a map that was not moving at all:
+  once because synthetic `PointerEvent`s did not drive the drag, once because wheeling out drove the
+  scale into `clampScale`'s floor where 2,000 nodes are a sub-pixel smudge and panning changes no
+  pixels. Nothing in the numbers looked wrong. **Any measurement of "how fast is X" needs a gate
+  proving X happened** — here, hashing the canvas before and after and refusing to print timings
+  when they match. Note both failures produced *better* numbers than the truth, which is the
+  direction that gets believed.
+- **`page.evaluate` bodies may not contain `const f = () => …`.** tsx transpiles this repo with
+  esbuild's `keepNames`, which wraps named inner functions in a `__name` helper that does not exist
+  in the page; the evaluate fails at runtime with `ReferenceError: __name is not defined`. Inline the
+  function, or pass the body as a string.
 - **A second opinion catches reasoning, not liveness. Measure whether new machinery fires.** The
   Ctrl+F gate's repair pass was designed by a Fable consult *before* it was written, reviewed as
   sound, tested, and rescued **zero** boards on either repo. No amount of earlier consulting would
@@ -239,6 +251,7 @@ npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
+npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3)
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
 ```
 

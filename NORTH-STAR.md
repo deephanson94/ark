@@ -380,6 +380,24 @@ geography because a curriculum has no natural shape; a codebase does.
 
 3D is an earned upgrade, not a v1 goal. If it happens, the layout must still derive from the graph.
 
+> **Direction, stated by the human 2026-08-07 and recorded here because it changes what "finished"
+> means.** The intended final form of this product is a **third-person world you explore** — the
+> reference points given were Zelda and Assassin's Creed: you are *in* the repo, walking it, rather
+> than looking down at a diagram of it. That is a stronger claim than
+> [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)
+> carried: the ADR accepted third person as *allowed*; the direction is now that it is *intended*.
+>
+> **What this changes**: the destination, and therefore the standard every 2D decision is held to —
+> a choice that reads well flat but cannot survive being walked through is now a worse choice than
+> it was yesterday.
+>
+> **What this does not change**: any of ADR-0009's gates. The invariant (*the world is a rendering
+> of the atlas, never the reverse*), the three preconditions, the three design constraints and the
+> recall experiment all stand exactly as written, and the roadmap still contains no slot for it.
+> A destination is not a schedule. The honest way to serve this direction is to close the
+> preconditions in order — which is work with its own payoff in 2D — rather than to start building
+> a camera.
+
 > **Amended 2026-08-07 — the north star is changing here, deliberately.** A **third-person view** is
 > now *allowed* as a future presentation layer, which this section previously ruled out. It is
 > **blocked and not scheduled**: §13's roadmap is unchanged and deliberately contains no slot for it.

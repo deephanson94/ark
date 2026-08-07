@@ -438,3 +438,41 @@ One line per iteration: what changed, and what to do next.
   the inspector and HUD, which is a legibility defect on the pillar the map exists for;
   `placeLabels` already accepts `occupied` boxes, so the work is feeding it the panel rects, which
   needs main.ts to measure DOM for the canvas. (a) is worth more; (b) is more visible.
+
+- **Direction recorded, and ADR-0009's precondition P3 closed — the interaction budget is measured,
+  and it is missed.** The human stated that a **third-person explorable world** (Zelda, Assassin's
+  Creed) is the intended final form of the product, not merely an allowed one. That is a north-star
+  change and is written into `NORTH-STAR.md` §9 and the head of ADR-0009 as such. It changes the
+  destination and therefore the standard every 2D decision is held to — a choice that reads well
+  flat but cannot survive being walked through is now the worse choice. It changes **none** of
+  ADR-0009's gates: the invariant, three preconditions, three design constraints and the recall
+  experiment all stand, and the roadmap still has no slot for it. A destination is not a schedule,
+  and the honest way to serve it is to close the preconditions — work with its own payoff in 2D.
+  So: **P3**, which ADR-0009 assigns to M3 and M3 shipped without. `npm run raster` drives the built
+  player in a real browser against a 2,000-node atlas positioned by the *real* layout — a grid of
+  evenly spaced dots would understate overdraw, which is the cost being measured — and reports frame
+  time at three zoom levels. **45 / 33 / 43 fps at p95 (territory / district / street), against a
+  ≥ 50 fps target. Below target at every level.** Stated plainly per CLAUDE.md: a silently blown
+  budget reads as success.
+  **What that does and does not license.** It closes P3 — the number is no longer unknown, so a
+  future renderer can be compared against something. It does **not** on its own license WebGL: the
+  run is headless and software-rasterised in a container with no GPU, so it is a *floor*, not what a
+  desktop sees. The right next step is re-measuring on real hardware, not rewriting the renderer
+  against a container's numbers.
+  **The instrument is worth more than the number, and it caught itself lying twice.** Version one
+  reported a confident 33 / 49 / 35 fps — measured against a map that **was not moving at all**,
+  because synthetic pointer events did not drive the drag in that harness. Version two, after
+  switching to real input, still measured nothing: wheeling out to reach the `territory` zoom drove
+  the scale into `clampScale`'s floor, where 2,000 nodes render as a sub-pixel smudge and a pan
+  changes no pixels. Both were caught by a liveness gate that hashes the whole canvas before and
+  after the drag and **refuses to print timings when they are identical**. A third bug — three
+  `requestAnimationFrame` chains accumulating into one buffer after the recorder was re-installed
+  per level — showed up as p50 deltas of 0.0 ms. Without the gate, P3 would have been recorded as
+  met on fiction, which is worse than leaving it open.
+  Also recorded, twice bitten: `page.evaluate` bodies must contain no `const f = () => …`, because
+  tsx transpiles this repo with esbuild's `keepNames` and the injected `__name` helper does not
+  exist in the page.
+  **Next**: unchanged from the previous entry — generator-side dedupe of identical answer keys is
+  worth more; labels drawing underneath the overlay panels is more visible. Ahead of both, if this
+  is to be a world you walk: **re-measure `npm run raster` on real hardware**, because every renderer
+  decision after this one leans on that number.

@@ -18,7 +18,8 @@
     "test:unit": "vitest run tests/unit",
     "test:atlas": "vitest run tests/atlas",
     "test:determinism": "tsx scripts/determinism.ts",
-    "test:e2e": "tsx scripts/e2e.ts"
+    "test:e2e": "tsx scripts/e2e.ts",
+    "raster": "tsx scripts/raster.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
