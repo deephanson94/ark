@@ -32,6 +32,17 @@ const REFERENCE_FILES = 2000;
 const MAX_ATLAS_BYTES = 5 * 1024 * 1024;
 const MAX_INDEX_MS = 10_000;
 const MAX_PLAYER_DEPS = 3;
+/**
+ * A second repo to measure against, if the machine has one.
+ *
+ * `ARK_BUDGET_REPO=/path/to/a/big/repo npm run budget`. Everything else here
+ * measures Ark — 80 files, 270 ms — which is 4% of the scale the ceilings are
+ * quoted at, and that blind spot has now hidden two regressions: a 15 s
+ * generation cost that scored 2.93 ms/file locally, and a 5 s manifest read
+ * that only exists in a monorepo. Advisory rather than hard, because the repo
+ * is not in the tree and CI will not have it.
+ */
+const SCALE_REPO = process.env['ARK_BUDGET_REPO'];
 
 type Status = 'ok' | 'over' | 'unmeasured';
 
@@ -122,6 +133,17 @@ async function main(): Promise<number> {
   const deps = await runtimeDependencyCount();
   const scale = await generationAtScale();
 
+  let realRepo: { files: number; ms: number; name: string } | null = null;
+  if (SCALE_REPO !== undefined && SCALE_REPO !== '') {
+    const began = process.hrtime.bigint();
+    const other = await buildAtlas(indexOptions(SCALE_REPO));
+    realRepo = {
+      files: other.nodes.length,
+      ms: Number(process.hrtime.bigint() - began) / 1e6,
+      name: other.repo.name,
+    };
+  }
+
   const rows: Row[] = [
     row('atlas size', kib(bytes), kib(MAX_ATLAS_BYTES), true, bytes > MAX_ATLAS_BYTES),
     row(
@@ -148,6 +170,19 @@ async function main(): Promise<number> {
       true,
       scale.ms > MAX_INDEX_MS,
     ),
+    realRepo === null
+      ? unmeasured(
+          'index @ real repo',
+          `${MAX_INDEX_MS} ms`,
+          'set ARK_BUDGET_REPO to a large clone — this repo is 4% of the reference scale',
+        )
+      : {
+          budget: 'index @ real repo',
+          measured: `${realRepo.ms.toFixed(0)} ms  (${realRepo.name}, ${realRepo.files} files)`,
+          ceiling: `${MAX_INDEX_MS} ms`,
+          hard: false,
+          status: realRepo.ms > MAX_INDEX_MS ? ('over' as const) : ('ok' as const),
+        },
     row('player runtime deps', String(deps), String(MAX_PLAYER_DEPS), true, deps > MAX_PLAYER_DEPS),
     unmeasured('player first paint', '1.5 s', 'needs a browser — measured by test:e2e'),
     unmeasured(

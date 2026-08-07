@@ -84,7 +84,9 @@ export function atlasWith(
     },
     nodes,
     edges,
-    regions: [{ id: 'test', label: 'test', nodeCount: nodes.length, centroid: [0, 0] }],
+    regions: [
+      { id: 'test', label: 'test', nodeCount: nodes.length, centroid: [0, 0], kind: 'topology' },
+    ],
     history: {
       present: false,
       commitsWalked: 0,

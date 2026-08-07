@@ -25,6 +25,7 @@ export type {
   NodeKind,
   NodeRef,
   Region,
+  RegionKind,
   RepoMeta,
   SkipCount,
   Truncation,

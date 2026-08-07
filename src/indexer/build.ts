@@ -38,7 +38,8 @@ import type { HistoryLimits } from './history.js';
 import { DEFAULT_LAYOUT_OPTIONS, computeLayout } from './layout.js';
 import type { LayoutOptions } from './layout.js';
 import { detectRegions } from './regions.js';
-import { loadProjectConfig, resolveSpecifier } from './resolve.js';
+import { isManifest, loadConfigIndex } from './config.js';
+import { resolveSpecifier } from './resolve.js';
 import { scanModule } from './scan.js';
 import { DEFAULT_WALK_OPTIONS, walk } from './walk.js';
 import type { WalkOptions } from './walk.js';
@@ -95,10 +96,21 @@ interface PendingEdge {
 
 export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   const walked = await walk({ root: options.root, ...options.walk });
-  const config = await loadProjectConfig(options.root);
+  // Resolution reads the manifests nearest each importing file, not just the
+  // repo root's — see `config.ts`. The walk has already applied .gitignore and
+  // the default excludes, so this cannot wander into `node_modules`.
+  const configIndex = await loadConfigIndex(
+    options.root,
+    walked.files.map((file) => file.path).filter(isManifest),
+  );
   const paths = walked.files.map((file) => file.path);
   const indexed = new Set(paths);
-  const context = { indexed, onDisk: walked.onDisk, config };
+  const context = {
+    indexed,
+    onDisk: walked.onDisk,
+    configFor: (path: string) => configIndex.for(path),
+    workspaceNames: configIndex.workspaceNames,
+  };
 
   // ---- scan and resolve -------------------------------------------------
   const unresolvedByPath = new Map<string, string[]>();
@@ -226,6 +238,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       label: region.label,
       nodeCount: region.members.length,
       centroid: [round2(sumX / size), round2(sumY / size)] as const,
+      kind: region.kind,
     };
   });
 
@@ -296,7 +309,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   const draft: Atlas = {
     version: ATLAS_VERSION,
     repo: {
-      name: config.name ?? basename(options.root),
+      name: configIndex.for('package.json').name ?? basename(options.root),
       head: git.head,
       headDate: git.headDate,
       languages,

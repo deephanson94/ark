@@ -62,7 +62,18 @@ export interface ResolveContext {
   readonly indexed: ReadonlySet<string>;
   /** Every non-ignored file the walk saw, indexed or not. */
   readonly onDisk: ReadonlySet<string>;
-  readonly config: ProjectConfig;
+  /**
+   * The configuration in scope for a given file — the manifests nearest it,
+   * not the repo root's. See `config.ts` for why that distinction is worth a
+   * module.
+   */
+  configFor(path: string): ProjectConfig;
+  /**
+   * Package names declared by a `package.json` inside this repo. A specifier
+   * naming one of these is never `external`, whatever any manifest says about
+   * it.
+   */
+  readonly workspaceNames: ReadonlySet<string>;
 }
 
 const BUILTINS = new Set(builtinModules);
@@ -212,6 +223,7 @@ export function resolveSpecifier(
   context: ResolveContext,
 ): Resolution {
   if (specifier.length === 0) return { kind: 'unresolved' };
+  const config = context.configFor(fromPath);
 
   if (specifier.startsWith('./') || specifier.startsWith('../') || specifier === '.' || specifier === '..') {
     const base = normalizeJoin(dirnameOf(fromPath), specifier);
@@ -225,7 +237,7 @@ export function resolveSpecifier(
   if (specifier.startsWith('node:')) return { kind: 'external', name: specifier };
   if (/^[a-z][a-z0-9+.-]*:/.test(specifier)) return { kind: 'external', name: specifier };
 
-  for (const alias of context.config.aliases) {
+  for (const alias of config.aliases) {
     const matches = alias.wildcard ? specifier.startsWith(alias.prefix) : specifier === alias.prefix;
     if (!matches) continue;
     const rest = alias.wildcard ? specifier.slice(alias.prefix.length) : '';
@@ -239,13 +251,13 @@ export function resolveSpecifier(
   }
 
   if (specifier.startsWith('#')) {
-    return context.config.selfImports.some((key) => matchesSelfImport(key, specifier))
+    return config.selfImports.some((key) => matchesSelfImport(key, specifier))
       ? { kind: 'external', name: packageNameOf(specifier) }
       : { kind: 'unresolved' };
   }
 
-  if (context.config.baseUrl !== null) {
-    const base = normalizeJoin(context.config.baseUrl, specifier);
+  if (config.baseUrl !== null) {
+    const base = normalizeJoin(config.baseUrl, specifier);
     if (base !== null) {
       const hit = pick(base, context);
       if (hit !== null) return hit;
@@ -254,13 +266,26 @@ export function resolveSpecifier(
 
   const packageName = packageNameOf(specifier);
   if (BUILTINS.has(packageName)) return { kind: 'external', name: packageName };
-  if (context.config.dependencies.has(packageName)) return { kind: 'external', name: packageName };
-  if (context.config.name !== null && packageName === context.config.name) {
-    return { kind: 'external', name: packageName };
-  }
 
-  // A bare specifier we cannot tie to a declared dependency. It might be a
-  // workspace sibling, an implicit transitive dep, or a typo. We do not know.
+  // A package this repo itself defines is **never** external, however it is
+  // declared. `external` means "no risk: nothing outside the repo can import
+  // back into it", and a workspace sibling imports straight back in — vite's
+  // root manifest lists `"vite": "workspace:*"`, so `import 'vite'` from a
+  // playground file used to be called external while reaching 332 files inside
+  // the repo. That is a file that looks fully resolved and is hiding a
+  // dependency, which is the exact false negative guardrail 4 exists to catch.
+  //
+  // We do not resolve it either: a package's entry point is its `exports` or
+  // `main`, and in a monorepo those name *built* output that is gitignored and
+  // not on the map. Pillar 6 forbids requiring a build to index, so the honest
+  // answer is that we do not know — which taints the file and costs a
+  // challenge, rather than shipping an answer key over an invisible edge.
+  if (context.workspaceNames.has(packageName)) return { kind: 'unresolved' };
+
+  if (config.dependencies.has(packageName)) return { kind: 'external', name: packageName };
+
+  // A bare specifier we cannot tie to a declared dependency. It might be an
+  // implicit transitive dep, or a typo. We do not know.
   return { kind: 'unresolved' };
 }
 
