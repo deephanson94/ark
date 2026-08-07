@@ -47,6 +47,20 @@ export const DEFAULT_EXCLUDES: readonly string[] = [
   'coverage/',
   '.next/',
   'vendor/',
+  // Lockfiles are generated, not authored. A 2,000-line dependency lock is the
+  // largest node on the map and teaches nothing about the codebase's structure
+  // (pillar 3: coupling, not trivia). This is a rule about a kind of file, not
+  // about any one project.
+  'package-lock.json',
+  'npm-shrinkwrap.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'bun.lockb',
+  'Cargo.lock',
+  'poetry.lock',
+  'composer.lock',
+  'Gemfile.lock',
+  'go.sum',
 ];
 
 export interface WalkOptions {

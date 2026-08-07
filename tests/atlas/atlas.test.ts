@@ -7,6 +7,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -23,12 +24,22 @@ import { isGameable, scoreSet } from '../../src/verbs/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
+interface Manifest {
+  readonly name: string;
+  readonly version: string;
+  readonly dependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
+  readonly peerDependencies?: Record<string, string>;
+}
+
 let atlas: Atlas;
 let serialized: string;
+let manifest: Manifest;
 
 beforeAll(async () => {
   atlas = await buildAtlas(indexOptions(ROOT));
   serialized = serializeAtlas(atlas);
+  manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as Manifest;
 }, 60_000);
 
 describe('the atlas for this repo', () => {
@@ -43,11 +54,7 @@ describe('the atlas for this repo', () => {
     expect(parseAtlas(serialized).nodes).toHaveLength(atlas.nodes.length);
   });
 
-  it('reports the indexer version that package.json declares', async () => {
-    const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as {
-      name: string;
-      version: string;
-    };
+  it('reports the indexer version that package.json declares', () => {
     expect(TOOL).toBe(`${manifest.name}@${manifest.version}`);
     expect(atlas.repo.tool).toBe(TOOL);
   });
@@ -140,12 +147,20 @@ describe('what it found in this repo', () => {
   });
 
   it('did not invent dependencies on packages it cannot see', () => {
-    const declared = new Set(['node:', 'vitest', 'typescript', 'tsx', '@types/node']);
+    // Read the manifest rather than hard-coding a list: an allowlist written
+    // out by hand goes stale the first time someone adds a devDependency, and
+    // then fails for a reason that has nothing to do with the indexer.
+    const declared = new Set<string>(builtinModules);
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+      for (const name of Object.keys(manifest[field] ?? {})) declared.add(name);
+    }
     for (const node of atlas.nodes) {
       for (const external of node.externals) {
+        const name = external.startsWith('node:') ? external.slice(5) : external;
+        const base = name.startsWith('@') ? name.split('/').slice(0, 2).join('/') : name.split('/')[0];
         expect(
-          [...declared].some((name) => external.startsWith(name)),
-          `${node.path} claims an external dependency on ${external}`,
+          declared.has(base ?? name),
+          `${node.path} claims an external dependency on ${external}, which package.json does not declare`,
         ).toBe(true);
       }
     }

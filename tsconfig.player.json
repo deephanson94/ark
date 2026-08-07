@@ -1,0 +1,17 @@
+{
+  // The player, checked in isolation.
+  //
+  // `types: []` is the whole point of this file. It removes @types/node, so any
+  // reference to `process`, `Buffer`, `fs` or a subprocess in the player — or
+  // in `src/atlas`, which the player imports — becomes a compile error.
+  //
+  // NORTH-STAR §7 draws a wall: the indexer touches your source, the player
+  // never does. This is that wall, checked by the compiler. Without it the
+  // guarantee rests on nobody ever adding the wrong import.
+  "extends": "./tsconfig.json",
+  "include": ["src/player", "src/atlas", "src/verbs"],
+  "compilerOptions": {
+    "types": [],
+    "lib": ["esnext", "dom", "dom.iterable"]
+  }
+}

@@ -54,6 +54,38 @@ jobs:
       - name: budgets
         run: npm run budget
 
+  player:
+    name: player smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: install chromium
+        run: npx playwright install --with-deps chromium
+
+      # The only check that can say "no console errors in the player", which is
+      # in the definition of done and is not assertable from Node. It builds the
+      # real bundle, serves it, drives it, and screenshots the result.
+      - name: e2e
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: player-screenshots
+          path: artifacts/
+          if-no-files-found: warn
+
   fingerprint:
     name: atlas fingerprint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

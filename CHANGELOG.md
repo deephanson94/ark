@@ -37,3 +37,26 @@ One line per iteration: what changed, and what to do next.
   which means the same thing everywhere. All three platforms now emit byte-identical atlases, so
   ADR-0006's "bit-identical across engines" is checked rather than asserted. **Next**: M1 — the map
   render. Every node carries `layout` and `region` and nothing draws them.
+
+- **M1 — the map.** Built the player: `src/player/` (camera, semantic zoom, fog of war, label placement,
+  scene culling, canvas renderer, DOM overlay), served by vite as a static bundle — **23 KiB of JS,
+  zero runtime dependencies**, first contentful paint 100 ms against a 1.5 s ceiling. Three zoom
+  levels (territory → district → street), pan/zoom that holds the point under the cursor, and hover
+  that lights up a file's **blast radius** in gold, which puts the M2 question on the map before the
+  verb that asks it exists. `tsconfig.player.json` re-checks the player with `types: []`, so a Node
+  import anywhere in it — or in `src/atlas` — is now a compile error rather than a promise: pillar 5
+  enforced by the compiler. `test:e2e` builds the real bundle, drives it in Chromium, fails on any
+  console error and screenshots the result; wired into CI, which is the only way "no console errors
+  in the player" is checkable at all. **Looking at the first screenshot changed the design three
+  times**: regions were one 36-of-64-file blob (barrels make label propagation conclude a repo is one
+  community, so high-degree connectors are now held out of the vote and undersized regions are folded
+  into their strongest neighbour — regions are now real modules, and each groups a test with the code
+  it tests); the layout scattered every region across the map (added a cohesion force, so geography
+  matches topology as pillar 4 requires); and every unsurveyed node was the same grey, which hid the
+  regional structure entirely — silhouettes now carry their region's hue, drained almost to the
+  background, which is what risk #4 actually asks for. Also: the most depended-upon files start named,
+  because §4's loop opens with "pick a landmark" and you cannot pick one you cannot see; lockfiles are
+  excluded as generated (`package-lock.json` was the largest node on the map and taught nothing).
+  195 unit tests. **Next**: M2, the kill point — Blast Radius generation and the distractor
+  subsystem. The graph query and the challengeability rule are already written and tested; what is
+  missing is `generate()`, the four distractor strategies from §8.3, and difficulty from §8.4.

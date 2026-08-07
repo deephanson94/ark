@@ -220,13 +220,18 @@ npm run test:e2e           # slow — ask before running
 
 ## Current state
 
-**M0 delivered.** `docs/atlas-format.md` (schema v1), `src/atlas/` (types, validation, graph
-queries), `src/indexer/` (walk, scan, resolve, git, history, layout, regions), `src/verbs/`
-(contracts + F1 scoring). `npx ark index .` produces a valid 27.5 KiB atlas for this repo in ~110 ms.
-`challenges` is `[]` — generation lands with the Blast Radius verb at M2.
+**M1 delivered.** M0's atlas format, indexer and verb contracts, plus the player: `src/player/`
+renders the map on a canvas with fog of war, semantic zoom, and blast-radius highlighting on hover.
+23 KiB of JS, zero runtime dependencies, first paint ~100 ms. `npx ark index .` produces a valid
+~40 KiB atlas for this repo in ~140 ms; `npm run dev` serves the player. `challenges` is still
+`[]` — generation lands with the Blast Radius verb at M2.
 
-Next action: `npm run budget` as a real script, then M1 — every node already carries `layout` and
-`region`, and nothing renders them.
+CI runs every suite on push and PR, including a three-platform check that the same commit yields a
+byte-identical atlas, and a headless browser smoke test that fails on any console error.
+
+Next action: **M2, the kill point** — Blast Radius `generate()`, the four distractor strategies
+(§8.3) and computed difficulty (§8.4). `isChallengeable()` and the graph queries already exist.
 
 Roadmap kill point is **M2** — if the Blast Radius verb isn't engaging on a repo we wrote ourselves,
+stop and rethink the verb rather than adding a second one.
 stop and rethink the verb rather than adding a second one.

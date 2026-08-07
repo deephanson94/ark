@@ -7,8 +7,8 @@
  * are written against, and printing them is how a regression gets noticed.
  */
 
-import { writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -88,6 +88,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   const started = Date.now();
   const atlas = await buildAtlas(indexOptions(args.root));
   const text = serializeAtlas(atlas);
+  // The player's `public/` directory is generated and gitignored, so on a fresh
+  // clone it does not exist yet and `--out` into it would fail with ENOENT.
+  await mkdir(dirname(args.out), { recursive: true });
   await writeFile(args.out, text, 'utf8');
 
   if (!args.quiet) {

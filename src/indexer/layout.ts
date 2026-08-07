@@ -32,6 +32,17 @@ export interface LayoutOptions {
   readonly gravity: number;
   /** Repulsion is ignored beyond this multiple of the ideal distance. */
   readonly cutoff: number;
+  /**
+   * Pull toward the centroid of the node's own region.
+   *
+   * Not decoration. Pillar 4 says geography is topology, and a region *is*
+   * topology — a derived cluster of the import graph. Without this the members
+   * of a cluster scatter across the map and the colours become confetti: you
+   * can see that two files share a region only by comparing two hues on
+   * opposite sides of the screen. With it, a region is somewhere you can point
+   * at, which is the whole basis of remembering where anything is.
+   */
+  readonly cohesion: number;
 }
 
 export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
@@ -39,6 +50,7 @@ export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   spacing: 60,
   gravity: 0.015,
   cutoff: 2.5,
+  cohesion: 0.32,
 };
 
 /** A 32-bit LCG. Deterministic, seeded, and exact — no floating point state. */
@@ -58,6 +70,8 @@ export function computeLayout(
   count: number,
   edges: readonly LayoutEdge[],
   options: LayoutOptions = DEFAULT_LAYOUT_OPTIONS,
+  /** Region index per node, if regions have been detected. */
+  groups: readonly number[] = [],
 ): [number, number][] {
   if (count === 0) return [];
   if (count === 1) return [[0, 0]];
@@ -148,6 +162,29 @@ export function computeLayout(
       dy[a] = (dy[a] ?? 0) - fy;
       dx[b] = (dx[b] ?? 0) + fx;
       dy[b] = (dy[b] ?? 0) + fy;
+    }
+
+    // Region cohesion. Centroids are accumulated in index order so the sums are
+    // formed in a fixed sequence and stay reproducible.
+    if (groups.length === count && options.cohesion > 0) {
+      const sumX = new Map<number, number>();
+      const sumY = new Map<number, number>();
+      const tally = new Map<number, number>();
+      for (let i = 0; i < count; i++) {
+        const group = groups[i] ?? 0;
+        sumX.set(group, (sumX.get(group) ?? 0) + (xs[i] ?? 0));
+        sumY.set(group, (sumY.get(group) ?? 0) + (ys[i] ?? 0));
+        tally.set(group, (tally.get(group) ?? 0) + 1);
+      }
+      for (let i = 0; i < count; i++) {
+        const group = groups[i] ?? 0;
+        const size = tally.get(group) ?? 1;
+        if (size < 2) continue;
+        const centreX = (sumX.get(group) ?? 0) / size;
+        const centreY = (sumY.get(group) ?? 0) / size;
+        dx[i] = (dx[i] ?? 0) + (centreX - (xs[i] ?? 0)) * options.cohesion * ideal;
+        dy[i] = (dy[i] ?? 0) + (centreY - (ys[i] ?? 0)) * options.cohesion * ideal;
+      }
     }
 
     // Gravity.

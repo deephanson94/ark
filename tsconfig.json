@@ -1,12 +1,19 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
-  "include": ["src", "tests", "scripts"],
+  // The default project: everything that runs under Node — the indexer, the
+  // verbs, the scripts and the tests — plus the player, so an editor sees one
+  // coherent program.
+  //
+  // `tsconfig.player.json` then re-checks the player alone with `types: []`,
+  // which is what actually enforces the wall in NORTH-STAR §7: the player has
+  // no filesystem, no subprocess and no Node built-ins available to it. That is
+  // pillar 5 turned into a compile error rather than a promise.
+  "include": ["src", "tests", "scripts", "vite.config.ts", "vitest.config.ts"],
   "compilerOptions": {
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
-    "lib": ["esnext"],
+    "lib": ["esnext", "dom", "dom.iterable"],
     "types": ["node"],
 
     // Other Outputs

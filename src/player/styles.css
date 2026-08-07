@@ -1,0 +1,239 @@
+/* The map is the interface. Everything else is a thin overlay that must never
+   compete with it for attention — panels are translucent, edges are quiet, and
+   nothing animates for decoration. */
+
+:root {
+  --ground: #0a0d13;
+  --panel: rgba(16, 21, 31, 0.86);
+  --line: rgba(120, 140, 170, 0.18);
+  --text: #e6edf7;
+  --text-dim: #7c8798;
+  --accent: #ffd682;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+/* ---- heads-up display ------------------------------------------------- */
+
+.hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 296px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.hud-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.hud-sub,
+.hud-counts,
+.hud-detail {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.hud-sub {
+  margin-top: 2px;
+}
+
+.hud-progress {
+  margin: 10px 0 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(120, 140, 170, 0.2);
+  overflow: hidden;
+}
+
+.hud-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 160ms ease-out;
+}
+
+.hud-detail {
+  margin-top: 4px;
+  opacity: 0.72;
+}
+
+/* ---- legend ------------------------------------------------------------ */
+
+.legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  max-height: 42vh;
+  width: 260px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.legend-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.legend-swatch {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* ---- inspector --------------------------------------------------------- */
+
+.inspector {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 300px;
+  max-height: calc(100vh - 32px);
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.inspector-empty {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.inspector-path {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--text);
+}
+
+.field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-top: 1px solid rgba(120, 140, 170, 0.1);
+}
+
+.field-key {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.field-value {
+  font-family: var(--mono);
+  text-align: right;
+  word-break: break-word;
+}
+
+.inspector-warn {
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(255, 170, 90, 0.1);
+  border: 1px solid rgba(255, 170, 90, 0.28);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ffcf9a;
+}
+
+/* ---- fatal ------------------------------------------------------------- */
+
+.fatal {
+  max-width: 720px;
+  margin: 12vh auto;
+  padding: 24px;
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  border-radius: 8px;
+  background: rgba(40, 16, 20, 0.7);
+}
+
+.fatal h1 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.fatal pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: #ffc9c9;
+}
