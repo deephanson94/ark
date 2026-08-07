@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 3;
+export const ATLAS_VERSION = 4;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -90,6 +90,24 @@ export interface AtlasNode {
   readonly bytes: number;
   /** Precomputed, deterministic, rounded to 2dp. Geography is topology (pillar 4). */
   readonly layout: readonly [number, number];
+  /**
+   * How load-bearing this file is: the bit length of its transitive dependent
+   * count. 0 dependents → 0, 1 → 1, 2–3 → 2, 4–7 → 3. One layer up is twice as
+   * depended-upon, and a layer means the same thing in every repo.
+   *
+   * **Deliberately not a third entry in `layout`.** `layout` is the force
+   * simulation's output — a seeded, iterative, whole-graph computation whose
+   * stability argument is ADR-0006's. This is a pure per-node graph query with
+   * a different provenance and different stability: it depends on the node's
+   * own cone and on nothing else in the repo. Folding them into one tuple would
+   * imply they are computed together and would make `asPoint` and
+   * `Region.centroid` disagree about how many dimensions a position has.
+   *
+   * It is an attribute, like `loc` and `churn`, and the renderer decides what
+   * visual channel it drives — which is what ADR-0009's "additive, preserving
+   * today's X,Y" asks for. See `src/indexer/elevation.ts`.
+   */
+  readonly elevation: number;
   /** Id of the region in `Atlas.regions` this node was clustered into. */
   readonly region: string;
   /** Sorted. `default` for a default export, `*` for `export * from …`. */

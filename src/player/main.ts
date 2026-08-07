@@ -74,6 +74,13 @@ function start(scene: Scene, root: HTMLElement): void {
   const saveKey = storageKeyFor(scene.atlas.repo);
   const liveness = livenessOf(scene.graph);
   const shore = landmarks(scene.nodes);
+  // The same set the fog gives away for free, drawn as summits. One rule, two
+  // consequences: what you start knowing the name of, and what dominates the
+  // skyline, are the same files — which is what makes "pick a landmark" a real
+  // instruction rather than a hint you have to hunt for.
+  const peaks = new Set(
+    shore.map((id) => scene.graph.refById.get(id)).filter((ref): ref is number => ref !== undefined),
+  );
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
 
@@ -254,11 +261,15 @@ function start(scene: Scene, root: HTMLElement): void {
         selected,
         radius,
         questions: unanswered,
+        peaks,
       });
       hud.update(
         coverage(fog, scene.nodes.length),
         stats.level,
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels`,
+        // `peaks` is in the HUD because it is the only measured proof that
+        // ADR-0013's elevation reaches a pixel. CLAUDE.md: a measurement of
+        // "how many X" needs a gate proving X happened, and the e2e reads this.
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks`,
         unanswered.size,
       );
       // Recomputed, never latched: a pass can decay and a reindex can resurrect

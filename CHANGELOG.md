@@ -665,3 +665,57 @@ One line per iteration: what changed, and what to do next.
   `main.js`. Ark rewards layered codebases; a deliberately flat one has nothing to predict.
   **Next**: rung 1 — `layout` gains a derived, quantised Z (height = transitive dependent count),
   rendered first as contours in the existing 2D map.
+
+- **Rung 1 — the map finally says which files are load-bearing.** `AtlasNode` gains `elevation`
+  (**ATLAS_VERSION 3 → 4**), the bit length of a file's transitive dependent count: 0 dependents →
+  0, 1 → 1, 2–3 → 2, one layer up is twice as depended-upon. **ADR-0013** fixes the semantics and
+  freezes them, which is the point of writing it before any pixel: X,Y are frozen because a
+  re-layout scrambles learned maps, and *vertical* memory has the identical argument that nobody had
+  recorded. ADR-0009 lists "depth in dependency order, upstream is up" as a candidate Z — the
+  near-opposite of this one, since an entry point has maximal depth and **zero** dependents — so a
+  later rung switching quantity would invert every height the player had learned.
+  **The map was measurably silent about this.** Restricted to nodes that actually have dependents,
+  cone size correlates with what the map already draws at rho **−0.19 to 0.56 against `loc`** (the
+  disc radius) and **−0.03 to 0.77 against direct in-degree** (the label priority) — ≈ 0 on this
+  repo and on svelte. NORTH-STAR §4 says a session should end with the player able to name the
+  most-depended-upon module, and nothing on screen helped. A trap for whoever re-measures, recorded
+  in the code: over *all* nodes those correlations read 0.91–1.00 and elevation looks redundant —
+  an artifact of 50–90% of nodes tying at zero dependents *and* zero importers.
+  **The rendering is landmarks, not contours, and that was a review's correction.** Contours need a
+  *field* and an atlas has *points*: interpolating height into the space between files asserts
+  terrain where no file exists, which is inventing geography, which pillar 4 loses. A hypsometric
+  tint has no free channel either — fill already carries region hue, fog state and dimming. So
+  `fog.landmarks()` now **ranks by elevation instead of in-degree** and the picks are drawn as
+  summits: concentric rings, one per layer, visible at every zoom and drawn even on silhouettes,
+  which is risk #4's own mitigation read literally — you can always see *that* there is a mountain,
+  and its name is still withheld until you survey it.
+  **Ranking by elevation changes 8 of this repo's 13 landmarks**, and 23 of hono's 51. The reason is
+  *chokepoints* — files few things import directly but nearly everything reaches through a barrel.
+  `src/atlas/identity.ts` has **2 direct importers and 60 transitive dependents**; hono's
+  `src/utils/mime.ts` has 5 and 245; vite's `shared/constants.ts` has 10 and 178. Under in-degree
+  none of them was a landmark. They are exactly the files whose importance you cannot see by
+  looking, which is the whole product. Counted per repo: 32 / 118 / 245 / 367 chokepoints.
+  **A cap was added because a fraction does not scale**: at 12% svelte named **488** landmarks, and
+  a skyline of 488 peaks is a plateau.
+  **The schema bump is against a review's recommendation, and the reasoning is in ADR-0013 rather
+  than hidden.** Fable argued for deriving elevation in the player — it is a pure function of
+  `edges`, integer-exact on every engine so ADR-0006's float argument does not apply, ~7 ms — and
+  quoted ADR-0009's own warning: *"do not bump early. Carrying a dead Z coordinate through several
+  milestones with no renderer to use it is worse than the change itself."* Overridden for three
+  reasons, the first of which is a bet: the renderer arrives in the same session rather than several
+  milestones later; in the atlas it falls under `test:determinism` and in the player it would be
+  covered by nothing; and the atlas is the contract. **If rung 2 does not land, this was wrong and
+  the next session should revert it.**
+  **ADR-0009 gains a dated owner's note**, because the rung ladder and the ADR disagreed and the ADR
+  says a session may propose a gate is met but never decide it. It records what the owner authorised
+  (rungs 0–2), what it costs (rung 2 lands ahead of P2's M4, so the first walkthrough is of a sparse
+  world — a stated cost, not an oversight), what stays deferred (**P1′** — raster is still a headless
+  floor, so no interaction claim may be made), and what stays shut: **P4 stands, the walkable avatar
+  waits for Trace (M6)**, on evidence rather than caution.
+  Liveness, per the landmine about measuring whether new machinery fires: the HUD reports
+  `peaksDrawn` and the e2e **fails if it is zero** — a "how many X" number needs a gate proving X
+  happened. Three mutations caught on `computeElevations`, one of them by non-termination (deleting
+  the visited check hangs on a cycle, which is its own kind of caught). Two caught on the landmark
+  ranking. Verified: 374 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling
+  (1,064 B/file, 261 ms), e2e clean with 13 peaks drawn and `src/atlas/schema.ts` the tallest.
+  **Next**: rung 2 — extruded scene, orbit camera. The measured 3D win is exocentric and this is it.

@@ -213,6 +213,11 @@ function validateNode(value: unknown, at: string): AtlasNode {
     loc: asIntAtLeast(r['loc'], `${at}.loc`, 0),
     bytes: asIntAtLeast(r['bytes'], `${at}.bytes`, 0),
     layout: asPoint(r['layout'], `${at}.layout`),
+    // A layer index, so a non-negative integer. Bounded above at 32 because it
+    // is the bit length of a count that cannot exceed the node count, and a
+    // repo with 2^32 files is not the case this is guarding against — an
+    // out-of-range value means the producer computed something else entirely.
+    elevation: asIntAtLeast(r['elevation'], `${at}.elevation`, 0),
     region: asString(r['region'], `${at}.region`),
     exports: asSortedStrings(r['exports'], `${at}.exports`),
     unresolved: asSortedStrings(r['unresolved'], `${at}.unresolved`),

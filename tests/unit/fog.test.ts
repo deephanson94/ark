@@ -55,12 +55,14 @@ describe('fog', () => {
 });
 
 describe('landmarks', () => {
+  // `elevation` is the bit length of the *transitive* cone (ADR-0013);
+  // `dependentCount` is the direct in-degree.
   const nodes = [
-    { id: 'n:000000000001', dependentCount: 0, radius: 20 },
-    { id: 'n:000000000002', dependentCount: 9, radius: 4 },
-    { id: 'n:000000000003', dependentCount: 3, radius: 8 },
-    { id: 'n:000000000004', dependentCount: 0, radius: 3 },
-    { id: 'n:000000000005', dependentCount: 5, radius: 5 },
+    { id: 'n:000000000001', elevation: 0, dependentCount: 0, radius: 20 },
+    { id: 'n:000000000002', elevation: 4, dependentCount: 9, radius: 4 },
+    { id: 'n:000000000003', elevation: 2, dependentCount: 3, radius: 8 },
+    { id: 'n:000000000004', elevation: 0, dependentCount: 0, radius: 3 },
+    { id: 'n:000000000005', elevation: 3, dependentCount: 5, radius: 5 },
   ];
 
   it('picks the most depended-upon files', () => {
@@ -68,11 +70,39 @@ describe('landmarks', () => {
     expect(landmarks(nodes, 0.6, 1)).toEqual(['n:000000000002', 'n:000000000005', 'n:000000000003']);
   });
 
-  it('breaks ties by size, then id, so the choice is the same everywhere', () => {
+  it('ranks a chokepoint above a file with more direct importers', () => {
+    // The reason ranking moved from in-degree to elevation, as a fixture. The
+    // chokepoint has **one** direct importer and reaches sixty files through a
+    // barrel; the popular file is imported by twenty and reaches nobody else.
+    // In-degree ranks them backwards, and it is the chokepoint a newcomer needs
+    // named — its importance is precisely what looking cannot tell you. Real
+    // instance: `src/atlas/identity.ts`, 2 direct importers, 60 dependents.
+    const pair = [
+      { id: 'n:0000000000aa', elevation: 6, dependentCount: 1, radius: 4 },
+      { id: 'n:0000000000bb', elevation: 5, dependentCount: 20, radius: 9 },
+    ];
+    expect(landmarks(pair, 1, 1)).toEqual(['n:0000000000aa', 'n:0000000000bb']);
+  });
+
+  it('caps the count, because a skyline of 488 peaks is a plateau', () => {
+    // A fraction does not scale: at 12% svelte names 488 landmarks. The
+    // prior-art writeup's §4.3.5 is that a few globally visible landmarks beat
+    // any amount of terrain, so the count is capped rather than grown.
+    const many = Array.from({ length: 400 }, (_, i) => ({
+      id: `n:${i.toString(16).padStart(12, '0')}`,
+      elevation: i % 7,
+      dependentCount: i,
+      radius: 5,
+    }));
+    expect(landmarks(many, 0.12, 3)).toHaveLength(24);
+    expect(landmarks(many, 0.12, 3, 5)).toHaveLength(5);
+  });
+
+  it('breaks ties by in-degree, then size, then id, so the choice is the same everywhere', () => {
     const tied = [
-      { id: 'n:00000000000b', dependentCount: 2, radius: 5 },
-      { id: 'n:00000000000a', dependentCount: 2, radius: 5 },
-      { id: 'n:00000000000c', dependentCount: 2, radius: 9 },
+      { id: 'n:00000000000b', elevation: 2, dependentCount: 2, radius: 5 },
+      { id: 'n:00000000000a', elevation: 2, dependentCount: 2, radius: 5 },
+      { id: 'n:00000000000c', elevation: 2, dependentCount: 2, radius: 9 },
     ];
     expect(landmarks(tied, 1, 1)).toEqual(['n:00000000000c', 'n:00000000000a', 'n:00000000000b']);
   });

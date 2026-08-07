@@ -33,6 +33,11 @@ export interface FrameInput {
   readonly radius: Radius | null;
   /** Nodes carrying a question the player has not passed yet. */
   readonly questions: ReadonlySet<NodeRef>;
+  /**
+   * The peaks — `fog.landmarks()`'s pick, by ADR-0013 elevation. Drawn as
+   * always-visible summits and always labelled, at every zoom level.
+   */
+  readonly peaks: ReadonlySet<NodeRef>;
 }
 
 export interface FrameStats {
@@ -40,6 +45,8 @@ export interface FrameStats {
   readonly edgesDrawn: number;
   readonly labelsDrawn: number;
   readonly level: string;
+  /** Peaks actually drawn this frame. A measured value, for the liveness test. */
+  readonly peaksDrawn: number;
 }
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -50,7 +57,7 @@ const REGION_LABEL_PADDING = 10;
 const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius, questions } = input;
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks } = input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
 
@@ -119,6 +126,46 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       context.stroke();
     }
     context.globalAlpha = 1;
+  }
+
+  // ---- summits ----------------------------------------------------------
+  //
+  // ADR-0013: `elevation` is how many files transitively depend on this one, and
+  // the map was previously silent about it — measured on this repo, cone size
+  // correlates with disc radius at rho −0.19. So the load-bearing files get a
+  // summit: concentric rings, one per layer above the ground, drawn *behind*
+  // nothing and visible at every zoom.
+  //
+  // Rings rather than a hypsometric tint or contour lines, and that was a
+  // review's correction. Contours need a *field*, and an atlas has points —
+  // interpolating height into the empty space between files asserts terrain
+  // where no file exists, which is inventing geography, which pillar 4 loses. A
+  // tint has no free channel either: fill already carries region hue, fog state
+  // and dimming. `docs/prior-art.md` §4.3.5 is the positive argument — globally
+  // visible **landmarks** beat terrain texture for spatial learning, measurably
+  // and three weeks later.
+  //
+  // Drawn even when the node is a silhouette. That is risk #4's own mitigation
+  // read literally: you can always see *that* there is a mountain there. Its
+  // name is still withheld until you have surveyed it, which the label pass
+  // below enforces.
+  let peaksDrawn = 0;
+  for (const node of nodes) {
+    if (!peaks.has(node.ref) || node.elevation <= 0) continue;
+    const point = project(node);
+    const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+    // One ring per layer, capped: twelve rings is a target, not a summit.
+    const rings = Math.min(4, node.elevation);
+    context.strokeStyle = regionColor(node.regionIndex, 1);
+    for (let ring = 1; ring <= rings; ring++) {
+      context.globalAlpha = 0.5 - ring * 0.08;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.arc(point.x, point.y, drawn + ring * 4, 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.globalAlpha = 1;
+    peaksDrawn++;
   }
 
   // ---- question rings ---------------------------------------------------
@@ -215,7 +262,11 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
         x: point.x,
         y: point.y,
         offset: Math.max(1.4, node.radius * camera.scale * style.nodeScale) + 2,
-        priority: node.dependentCount * 10 + node.radius,
+        // Elevation first, so the label that survives a crowded frame is the
+        // one on the most load-bearing file. In-degree remains the tiebreak: it
+        // is a fine proxy everywhere except the chokepoints, which is exactly
+        // where elevation is doing the work.
+        priority: node.elevation * 1000 + node.dependentCount * 10 + node.radius,
       });
     }
     const placed = placeLabels(candidates, (text) => context.measureText(text).width, {
@@ -235,5 +286,5 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   }
 
   context.restore();
-  return { nodesDrawn: nodes.length, edgesDrawn: edges.length, labelsDrawn, level };
+  return { nodesDrawn: nodes.length, edgesDrawn: edges.length, labelsDrawn, level, peaksDrawn };
 }

@@ -281,6 +281,42 @@ precondition is met; it may not decide it. This project is run by sessions that 
 and act on it, and the failure mode this clause exists to prevent is a future session
 self-certifying "gates basically met" from the word "accepted".
 
+### Owner's note — 2026-08-07: the rung ladder, and what it does and does not open
+
+**Recorded by a session, quoting the owner, because the clause above says an agent may propose and
+not decide — and because a plan that contradicts this document would be correctly refused by the
+next session that reads it.**
+
+The owner stated, after reading `docs/prior-art.md` and its P1 verdict:
+
+> *"lets follow your rung plans … you can proceed all the rungs, without my intervention."*
+
+The ladder that refers to is: **rung 0** `ark play` and a deploy (shipped); **rung 1** a derived
+`elevation` rendered in the existing 2D map; **rung 2** an extruded scene with an orbit camera;
+**rung 3** the walkable avatar.
+
+What this opens:
+
+- **Rungs 0 and 1 were never gated.** Neither touches a renderer. Rung 1 is a derived metric drawn
+  on the flat map, which is the same class of change as sizing a disc by `loc`.
+- **Rung 2 (orbit) is authorised ahead of P2**, which required M3 *and M4*. M3 shipped; M4 has not.
+  The owner has accepted the exchange knowingly: `docs/prior-art.md` measured that the content
+  density M4 provides is what makes a world worth moving through, and building the camera first
+  means the first walkthrough will be of a sparse world. That is a stated cost, not an oversight.
+- **P1′ is deferred, not met.** `npm run raster` has still not been re-measured on real hardware;
+  45/33/43 fps remains a headless software floor. Rung 2 may be built against it, but **no claim
+  about interaction performance may be made from it**, and P1′ still gates any decision to change
+  renderer technology.
+
+What this does **not** open:
+
+- **P4 stands. Rung 3 — the walkable avatar — remains gated on the Trace verb (M6)** and on the
+  orbit's own measured results. `docs/prior-art.md` §2 is the reason and it is evidence rather than
+  caution: the measured 3D win is *exocentric*, and the two studies closest to a walkable world are
+  the ones it lost. Before Trace, the product asks no question that walking answers better than
+  orbiting. A session reaching rung 3 must stop and say so.
+- The invariant, the design constraints and the ship criterion below are untouched.
+
 ### The first experiment is the fly-through, not the avatar
 
 If the preconditions open, **build the orbit-camera fly-through first** — a 3D camera over an

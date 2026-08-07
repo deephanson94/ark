@@ -8,6 +8,7 @@
 
 import type { Atlas, AtlasEdge, AtlasNode, Challenge, Lang } from '../../src/atlas/index.js';
 import { ATLAS_VERSION, byteCompare, edgeOrder, nodeIdFor, validateAtlas } from '../../src/atlas/index.js';
+import { computeElevations } from '../../src/indexer/elevation.js';
 
 const LANG_BY_EXTENSION: Readonly<Record<string, Lang>> = {
   ts: 'ts',
@@ -38,27 +39,9 @@ export function atlasWith(
   const ordered = [...paths].sort((a, b) => byteCompare(nodeIdFor(a), nodeIdFor(b)));
   const refByPath = new Map(ordered.map((path, ref) => [path, ref]));
 
-  const nodes: AtlasNode[] = ordered.map((path, ref) =>
-    mapNode({
-      id: nodeIdFor(path),
-      path,
-      originPath: path,
-      kind: 'file',
-      lang: langOf(path),
-      loc: 10,
-      bytes: 100,
-      layout: [ref * 10, 0],
-      region: 'test',
-      exports: [],
-      unresolved: [],
-      externals: [],
-      churn: 0,
-      authors: 0,
-      firstSeen: null,
-      lastSeen: null,
-    }),
-  );
-
+  // Edges first, so elevation can be derived here exactly as the indexer
+  // derives it. A fixture that hard-coded `elevation: 0` would let a test pass
+  // against a value the real pipeline never produces.
   const edges: AtlasEdge[] = [];
   for (const [fromPath, toPath] of links) {
     const from = refByPath.get(fromPath);
@@ -69,6 +52,29 @@ export function atlasWith(
     edges.push(mapEdge({ from, to, kind: 'import', confidence: 'certain', weight: 1 }, fromPath, toPath));
   }
   edges.sort(edgeOrder);
+  const { layers } = computeElevations(ordered.length, edges);
+
+  const nodes: AtlasNode[] = ordered.map((path, ref) =>
+    mapNode({
+      id: nodeIdFor(path),
+      path,
+      originPath: path,
+      kind: 'file',
+      lang: langOf(path),
+      loc: 10,
+      bytes: 100,
+      layout: [ref * 10, 0],
+      elevation: layers[ref] ?? 0,
+      region: 'test',
+      exports: [],
+      unresolved: [],
+      externals: [],
+      churn: 0,
+      authors: 0,
+      firstSeen: null,
+      lastSeen: null,
+    }),
+  );
 
   const languages = [...new Set(nodes.map((node) => node.lang))].sort(byteCompare);
 

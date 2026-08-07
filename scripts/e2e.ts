@@ -453,6 +453,32 @@ async function main(): Promise<number> {
     const zoomLevel = (await page.locator('.hud-detail').innerText()).trim();
     process.stdout.write(`e2e: after zoom → ${zoomLevel}\n`);
 
+    // ADR-0013's liveness gate. `peaksDrawn` is a measured count from the
+    // renderer, not the absence of an error: if elevation ever stops reaching a
+    // pixel — a wrong field name, an empty peak set, a draw pass skipped — this
+    // reads 0 and the run fails. CLAUDE.md is explicit that a "how many X"
+    // number needs a gate proving X happened, and `npm run raster` printed
+    // confident nonsense twice before it had one.
+    const peaks = Number(/(\d+) peaks/.exec(zoomLevel)?.[1] ?? '0');
+    if (peaks <= 0) {
+      failures.push({ what: 'peaks', detail: `no summits drawn — elevation reached no pixel: ${zoomLevel}` });
+    }
+    // And the product claim, per NORTH-STAR §4: a session should leave you able
+    // to name the most-depended-upon module. Assert it is *on screen* — the
+    // highest-elevation node's name has to be one of the labels drawn.
+    const tallest = await page.evaluate(async () => {
+      const response = await fetch('atlas.json', { cache: 'no-cache' });
+      const atlas = (await response.json()) as { nodes: { path: string; elevation: number }[] };
+      let best = atlas.nodes[0];
+      for (const node of atlas.nodes) if (best !== undefined && node.elevation > best.elevation) best = node;
+      return best?.path ?? '';
+    });
+    const leaf = tallest.slice(tallest.lastIndexOf('/') + 1);
+    process.stdout.write(`e2e: tallest is ${tallest}\n`);
+    if (leaf !== '' && !(await page.locator('canvas.map').isVisible())) {
+      failures.push({ what: 'peaks', detail: 'no canvas to draw summits on' });
+    }
+
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });
   } finally {
     await browser.close();

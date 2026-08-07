@@ -118,6 +118,7 @@ Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-note
 | `loc` | `number` | Physical lines. |
 | `bytes` | `number` | File size. |
 | `layout` | `[number, number]` | Precomputed, deterministic, 2dp. |
+| `elevation` | `number` | Layer index — how load-bearing the file is. See below. |
 | `region` | `string` | A `regions[].id`. |
 | `exports` | `string[]` | Sorted. `"default"` for a default export, `"*"` for `export * from`. |
 | `unresolved` | `string[]` | Sorted. Import specifiers we could **not** pin down. Drives guardrail 4. |
@@ -125,6 +126,31 @@ Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-note
 | `churn` | `number` | Commits touching this file, following renames. `0` without history. |
 | `authors` | `number` | Distinct commit authors. |
 | `firstSeen`, `lastSeen` | `"YYYY-MM-DD" \| null` | Null without history. |
+
+#### `elevation` — the third coordinate
+
+**The bit length of the file's transitive dependent count.** 0 dependents → `0`, 1 → `1`, 2–3 → `2`,
+4–7 → `3`, and so on. One layer up means twice as depended-upon, and a layer number means the same
+thing in every repo — layer 8 is 128–255 dependents, here and anywhere.
+
+It is **not** a third entry in `layout`, deliberately. `layout` is the force simulation's output: a
+seeded, iterative, whole-graph computation whose stability rests on [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+`elevation` is a pure per-node graph query that depends on the node's own cone and nothing else in
+the repo — different provenance, different stability. It is an *attribute*, like `loc` and `churn`,
+and a renderer decides which visual channel it drives. That is what
+[ADR-0009](decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)'s "additive,
+preserving today's X,Y" asks for: adding it changes no existing coordinate.
+
+Quantised rather than continuous because spatial memory for item locations degrades as freedom in a
+third dimension grows, and quantised **by bit length** rather than by rank or percentile because a
+rank is a function of every *other* node's cone — one new file would restack the landscape, and the
+save is keyed to the repo rather than to the commit ([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)).
+Every edge kind counts, including `type` and `probable`: this is the shape of the place, not an
+answer key, and guardrail 4 governs what may be *asked*, never what may be *drawn*. Reasoning and
+measurements: [`docs/prior-art.md`](prior-art.md) §4.3, `src/indexer/elevation.ts`.
+
+The distribution is lumpy, and that is terrain rather than a defect — 56% of this repo, 74% of
+`vite` and 90% of `svelte` sit at layer 0 because nothing imports them.
 
 #### Identity across renames
 
