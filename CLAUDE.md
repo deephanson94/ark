@@ -245,6 +245,7 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 
 ```bash
 npm run dev                # player dev server (pick a free port; don't assume)
+npm run play -- <path>     # index ANY repo and serve it — needs `npm run build` once
 npm run index              # index this repo → atlas.json  (the bootstrap fixture)
 npm run build              # typecheck + bundle
 npm run test:unit          # fast — every change
@@ -269,8 +270,18 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 and M3 delivered.** M0's atlas format and verb contracts, M1's
-map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 39 challenges for this repo — **all
+**M2 and M3 delivered, and the first three rungs toward the third-person world are shipped.**
+Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
+plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
+Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
+allowed). The scanner is **ES modules only**, so a Python or Go repo produces a map with no edges and
+no questions until M5.
+
+Press **`o`** for the orbit view: every file a column standing on its 2D footing, height =
+`elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
+it to the pixel. Still zero runtime dependencies.
+
+M0's atlas format and verb contracts, M1's map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 39 challenges for this repo — **all
 39 with a distinct answer key** — the four §8.3 distractor strategies pick the wrong answers,
 difficulty is computed per §8.4, and the player has a challenge console over the map with partial
 credit, a derived per-file reveal, and fog that lifts on what you prove. **Progress survives a
@@ -289,9 +300,22 @@ and is likewise settled: `Progress` is the state and `Fog` is a view of it, the 
 `challenge.id`, and every restored claim is re-checked against the live graph before it renders as
 knowledge.
 
+The third dimension is **[ADR-0013](./docs/decisions/0013-height-is-the-transitive-dependent-count.md)**
+and is frozen: `elevation` is the bit length of a file's transitive dependent count, one layer up is
+twice as depended-upon, and the meaning does not change in a later rung — X,Y are frozen because a
+re-layout scrambles learned maps, and vertical memory has the identical argument. Height means
+*load-bearing*, never "importance": under it an **entry point sits at sea level**, which tier 1's
+first question needs and which a separate glyph will have to serve.
+
+Why the world is orbited and not walked is **[`docs/prior-art.md`](./docs/prior-art.md)**, which
+closed risk #6 and ADR-0009's P1: no tool in the category died of 3D legibility, but the evidence
+splits on **viewpoint** rather than dimension — 3D wins from outside a structure with motion
+parallax, and loses from inside it. **P4 stands: the walkable avatar waits for the Trace verb (M6).**
+
 CI runs every suite on push and PR, including a three-platform check that the same commit yields a
-byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page, and
-fails on any console error.
+byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page,
+turns the world and fails on any console error. `pages.yml` publishes the player with Ark's own
+atlas and refuses to deploy one with zero challenges.
 
 The M2 kill-point caveat — several pairs of subjects with identical answer keys — is **closed at the
 source**. **[ADR-0012](./docs/decisions/0012-an-answer-key-is-issued-once.md)**: the generator issues
@@ -301,11 +325,28 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the twins are never mentioned to the player.** `cone(A) = cone(B)` is a true, derived,
-non-obvious fact, and on a fixture-heavy repo it is arguably worth more than the questions it
-replaces. It must be a *shown* fact — named in the reveal, no field note, no `understood` promotion —
-because `(verb, subject)` is the unit of proof (ADR-0011 decision 3). More visible but worth less:
-node labels near the top edge draw underneath the inspector and HUD, which is a legibility defect on
-the pillar the map exists for; `placeLabels` already takes `occupied` boxes. If Blast Radius stops
-being interesting, stop and rethink the verb rather than adding a second one — M4's git verbs are not
-a way to avoid that question.
+Next action: **M4 — the git verbs (Companion, Placement, Archaeology).** Not a change of subject:
+`docs/prior-art.md` §4.2 measured that the import graph and the change-history hotspots are nearly
+disjoint populations — of the top 2% of files by churn, Blast Radius covers **0% here, 64.6% on
+svelte, 2.4% on vite** — so the git verbs cover complementary ground rather than more of the same,
+and they reach the edgeless files (56% of vite) the import graph structurally cannot. Every node on
+every repo measured has `churn > 0`, so their ceiling is 100% and what limits them is **our own
+`maxCommitFiles` cap**, which NORTH-STAR already anticipated moving to a side-file. It is also what a
+world needs to be worth moving through: a walk with nothing to read en route is a loading screen with
+extra steps.
+
+Then, in evidence order: **map rotation between challenges** (`docs/prior-art.md` §4.4 — map-derived
+spatial memory is *orientation-locked*, ours is north-up forever, and it is the highest-leverage
+lowest-cost item in the whole writeup); **the negative witness** (a wrong pick already has a known
+reason class — sibling, name-alike, distance n±1, co-change ghost — and we never say it); and **the
+phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that would give
+the product an atom that *transfers* to another repo, which is risk #1.
+
+Smaller and still open: the twins a duplicate answer key drops are never mentioned to the player
+(`cone(A) = cone(B)` is a true derived fact and must be *shown*, not proved — ADR-0011 decision 3);
+node labels near the top edge draw underneath the inspector and HUD; the orbit does not re-fit on
+entry and has no frustum cull. And one measurement only a human can take: **`npm run raster` on real
+hardware** — 45/33/43 fps is a headless software floor, and ADR-0009's P1′ gates the renderer on it.
+
+If Blast Radius stops being interesting, stop and rethink the verb rather than adding a second one —
+M4's git verbs are not a way to avoid that question.
