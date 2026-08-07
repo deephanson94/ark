@@ -41,6 +41,19 @@ export interface LayoutOptions {
    * can see that two files share a region only by comparing two hues on
    * opposite sides of the screen. With it, a region is somewhere you can point
    * at, which is the whole basis of remembering where anything is.
+   *
+   * **Read the arithmetic before tuning this.** The force applied is
+   * `(centroid − position) · cohesion · spacing`, which at 0.32 and spacing 60
+   * is 19× the distance to the centroid — it overshoots enormously, and the
+   * only thing keeping the layout stable is the per-step temperature clamp
+   * further down. Cohesion therefore *saturates* for any node more than a
+   * pixel or two from its centroid, and what this constant really controls is
+   * late-iteration behaviour once the temperature has cooled, not the force
+   * balance the formula suggests. The layout is in effect "regions first,
+   * edges second", which suits the territory zoom level — but it is a regime
+   * that was arrived at, not chosen, and A/B-ing values here changes less than
+   * it appears to. `tests/atlas/atlas.test.ts` pins the resulting clustering
+   * quality so the eyeball judgement is at least a regression floor.
    */
   readonly cohesion: number;
 }

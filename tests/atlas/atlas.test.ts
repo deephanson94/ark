@@ -167,6 +167,48 @@ describe('what it found in this repo', () => {
   });
 });
 
+describe('the map reads as clustered', () => {
+  // Pillar 4: geography is topology. The cohesion force in the layout was tuned
+  // by looking at a screenshot and stopping when it looked right, which is a
+  // vibe rather than a budget. This turns that judgement into a number: if a
+  // change scatters regions across the map again, this fails instead of
+  // quietly making the map worse.
+  it('places files nearer their own region than the map is wide', () => {
+    const centroids = new Map(atlas.regions.map((region) => [region.id, region.centroid]));
+
+    let withinSum = 0;
+    let withinCount = 0;
+    for (const node of atlas.nodes) {
+      const centroid = centroids.get(node.region);
+      if (centroid === undefined) continue;
+      withinSum += Math.hypot(node.layout[0] - centroid[0], node.layout[1] - centroid[1]);
+      withinCount++;
+    }
+    const meanWithin = withinSum / Math.max(1, withinCount);
+
+    let betweenSum = 0;
+    let betweenCount = 0;
+    for (const [i, a] of atlas.regions.entries()) {
+      for (const b of atlas.regions.slice(i + 1)) {
+        betweenSum += Math.hypot(a.centroid[0] - b.centroid[0], a.centroid[1] - b.centroid[1]);
+        betweenCount++;
+      }
+    }
+    const meanBetween = betweenSum / Math.max(1, betweenCount);
+
+    const ratio = meanWithin / meanBetween;
+    // Measured on this repo: 0.090 with the cohesion force, 0.356 without it.
+    // The ceiling sits between the two, so it fails if cohesion is removed or
+    // neutered and passes with room for ordinary drift. The first version of
+    // this test used 0.75 and passed with cohesion disabled — a threshold that
+    // cannot fail is not a test.
+    expect(
+      ratio,
+      `mean intra-region spread ${meanWithin.toFixed(1)} vs inter-region spacing ${meanBetween.toFixed(1)} (ratio ${ratio.toFixed(3)})`,
+    ).toBeLessThan(0.2);
+  });
+});
+
 describe('challenges', () => {
   it('every challenge answer key is a proper subset of what the player sees', () => {
     for (const challenge of atlas.challenges) {

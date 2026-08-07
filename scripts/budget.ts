@@ -100,7 +100,11 @@ async function main(): Promise<number> {
     ),
     row('player runtime deps', String(deps), String(MAX_PLAYER_DEPS), true, deps > MAX_PLAYER_DEPS),
     unmeasured('player first paint', '1.5 s', 'needs a browser — measured by test:e2e'),
-    unmeasured('map interaction', '≥ 50 fps @ 2000 nodes', 'needs a browser — frame cost bounded in tests/unit/scene.test.ts'),
+    unmeasured(
+      'map interaction',
+      '≥ 50 fps @ 2000 nodes',
+      'raster cost UNMEASURED; culling only, <8 ms @ 2000 in tests/unit/scene.test.ts',
+    ),
   ];
 
   const width = Math.max(...rows.map((entry) => entry.budget.length));

@@ -211,7 +211,7 @@ Consequences worth noting:
 ```jsonc
 {
   "version": 1,
-  "repo": { "name": "…", "head": "a1b2c3d", "indexedAt": "…", "languages": ["ts"] },
+  "repo": { "name": "…", "head": "a1b2c3d", "headDate": "2026-07-30", "languages": ["ts"] },
 
   "nodes": [{
     "id": "src/engine/engine.ts",
@@ -248,6 +248,14 @@ Consequences worth noting:
 Design notes: `truth` sits in the atlas in plaintext. That is fine — this is a learning tool, not an
 exam, and anyone who opens devtools to cheat has opted out of the product. Do not obfuscate it; the
 complexity is not worth it.
+
+> **Amended 2026-08-07.** This sketch originally carried `repo.indexedAt`, a wall-clock timestamp.
+> It is gone, replaced by `repo.headDate` (HEAD's commit date, a property of the repo rather than of
+> when we looked at it). A timestamp and a byte-identical determinism test cannot both exist, and
+> determinism is what makes spatial memory of a codebase survive across sessions and machines —
+> which is the mechanic §7 puts layout in the indexer to protect. Staleness is answered better by
+> `repo.head` anyway: an atlas is stale exactly when its head is not the repo's current HEAD.
+> Reasoning and rejected alternatives: [`docs/decisions/0001-no-wall-clock-time-in-the-atlas.md`](./docs/decisions/0001-no-wall-clock-time-in-the-atlas.md).
 
 ### 7.2 Language support strategy
 

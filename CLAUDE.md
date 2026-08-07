@@ -161,6 +161,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - **Dynamic imports and string-built paths are unresolvable.** Detect and mark; don't guess.
 - **A file with zero dependents is not necessarily dead** — it may be an entry point. Check the
   manifest before implying anything.
+- **Telling a regex from a division needs a real parse.** The scanner guesses from the last
+  significant token plus a keyword list. A division read as a regex (`return width / height`)
+  swallows to end of line; a regex read as code leaks its body into the token stream. Both are
+  narrow, neither is impossible — do not write "can never" in a comment about a heuristic.
+- **A silently dropped import is worse than a wrong one.** `require(expr)` once produced no
+  reference at all while `import(expr)` produced an unresolved one, so a file could hide a
+  dependency and still look fully resolved to guardrail 4. Every unparseable specifier must emit
+  something.
 - **`git log --date=short` renders each commit in its *own* recorded timezone.** So a repo with
   contributors in two zones produces dates that do not decrease along the log, and two commits made
   at the same instant get different dates. Use `--date=short-local` with `TZ` pinned.

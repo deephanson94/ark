@@ -76,14 +76,17 @@ export function scanModule(source: string): ModuleFacts {
       const open = skipSpace(masked, start + keyword.length);
       if (masked[open] !== '(') continue;
       const argument = skipSpace(masked, open + 1);
-      if (isQuote(masked[argument] ?? '')) {
-        imports.push({
-          specifier: literalAt(argument),
-          kind: 'require',
-          at: start,
-          raw: 'require(…)',
-        });
-      }
+      // A computed argument is recorded, not skipped. Dropping it would leave
+      // the file looking fully resolved while it hides a dependency, which is
+      // the one thing guardrail 4 must never allow — and it is exactly what the
+      // dynamic-import branch below already gets right.
+      const specifier = isQuote(masked[argument] ?? '') ? literalAt(argument) : null;
+      imports.push({
+        specifier,
+        kind: 'require',
+        at: start,
+        raw: specifier === null ? 'require(<expression>)' : `require('${specifier}')`,
+      });
       continue;
     }
 

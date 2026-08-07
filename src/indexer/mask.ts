@@ -59,8 +59,16 @@ function isIdentifierChar(char: string): boolean {
 /**
  * Decide whether the `/` at `index` opens a regex literal, by looking back at
  * the last significant character. Ambiguous in general — it needs a real parse.
- * The failure mode is that a regex gets read as code, which at worst leaks a
- * few characters into the token stream and can never invent an import.
+ *
+ * Two ways it can be wrong, both narrow:
+ *
+ *  - A regex read as code leaks its body into the token stream. Usually
+ *    harmless, but not *incapable* of harm: a regex whose body happens to
+ *    contain `from './x'` would scan as an import. That needs a regex sitting
+ *    where a division would go, which real code essentially never has.
+ *  - A division read as a regex (`return width / height`) swallows to the end
+ *    of the line. That loses code and can never invent an import, so it fails
+ *    in the safe direction.
  */
 function startsRegex(source: string, index: number): boolean {
   let i = index - 1;

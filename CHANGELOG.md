@@ -60,3 +60,26 @@ One line per iteration: what changed, and what to do next.
   195 unit tests. **Next**: M2, the kill point — Blast Radius generation and the distractor
   subsystem. The graph query and the challengeability rule are already written and tested; what is
   missing is `generate()`, the four distractor strategies from §8.3, and difficulty from §8.4.
+
+- **M1 review fixes (Fable).** Second opinion on the M1 tradeoffs found one real bug and several
+  half-finished decisions. **`require(expr)` was silently dropped by the scanner** while
+  `import(expr)` four lines away correctly recorded an unresolved reference — so a file doing
+  `require(name)` looked fully resolved and could carry an answer key built on a dependency it was
+  hiding, which is precisely the failure guardrail 4 exists to prevent. Fixed, with a regression
+  test that fails first. **The `offMap` extension check was an allowlist**, so `.vue`/`.svelte`/
+  `.astro` — formats full of imports — counted as inert; inverted to a denylist of known-inert
+  extensions, so an unknown extension now costs a challenge rather than an answer key. Tightened
+  ADR-0003's prose: "anything already traced really is a dependent" holds only over `certain` edges,
+  and the truth half's soundness depends on the validator's `truth ⊆ candidates` rule. **Amended
+  NORTH-STAR §7.1** to drop `indexedAt` and add `headDate`, since leaving the spec contradicting
+  ADR-0001 invited a future session to "fix" the indexer back into nondeterminism. Wrote down that
+  the layout's cohesion force is ~19× the distance to the centroid and therefore saturates the
+  temperature clamp — the constant tunes late-iteration behaviour, not the force balance it appears
+  to — and replaced "it looked right" with a measured floor: mean intra-region spread over
+  inter-region spacing, **0.090 with cohesion and 0.356 without**, asserted below 0.20. The first
+  version of that assertion used 0.75 and passed with cohesion disabled; a threshold that cannot
+  fail is not a test. **Next**: M2, and two things to settle *before* writing `generate()` — the
+  map's hover preview currently reveals a node's exact blast radius, which is a walking answer key
+  once challenges exist; and §8.3's "distance n±1" distractor strategy will select real dependents
+  one hop past the depth bound and grade excluding them as correct, so "dependent, to what depth,
+  worded how" needs pinning down first.
