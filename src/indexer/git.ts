@@ -4,12 +4,12 @@
  *
  * Three landmines are defused here, all of them silent if you miss them:
  *
- *   LC_ALL=C            git localises `--numstat` and `--porcelain` headers, so
- *                       without this the output — and therefore the atlas —
- *                       differs by machine locale.
- *   -M                  without rename detection, `git log --numstat` reports a
- *                       rename as a delete plus an add, so churn is wrong in
- *                       exactly the files that have moved the most.
+ *   LC_ALL=C            git localises `--name-status` and `--porcelain`
+ *                       headers, so without this the output — and therefore the
+ *                       atlas — differs by machine locale.
+ *   -M                  without rename detection, git reports a rename as a
+ *                       delete plus an add, so churn is wrong in exactly the
+ *                       files that have moved the most.
  *   config isolation    `diff.renames`, `log.date` and friends live in the
  *                       user's global config. Two developers with different
  *                       dotfiles would produce different atlases for the same
@@ -148,7 +148,17 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
         'log',
         '-z',
         '-M',
-        '--numstat',
+        // **`--name-status`, not `--numstat`** — a 13× difference, measured.
+        //
+        // Nothing downstream uses the added/deleted line counts: `parseLog`
+        // read the third tab-separated field and threw the first two away, and
+        // churn, authorship, co-change and rename lineage all need only *which*
+        // files a commit touched. But `--numstat` makes git diff the content of
+        // every file in every commit to produce them. On vitejs/vite (3,730
+        // commits) that was **4,027 ms**; `--name-status`, which needs no
+        // content diff, is **308 ms** for the same information and a slightly
+        // smaller payload. It was 42% of the whole index.
+        '--name-status',
         // `short` renders each commit in *its own* recorded timezone, so a repo
         // with contributors in two zones produces dates that do not decrease
         // along the log, and two commits made at the same instant get different
@@ -215,21 +225,27 @@ export function parseLog(stdout: string): GitCommit[] {
 
     if (current === null) continue;
 
-    const parts = field.split('\t');
-    if (parts.length !== 3) continue;
-    const path = parts[2] ?? '';
-    if (path === '') {
-      // Rename: `add<TAB>del<TAB>` then the old and new paths as separate fields.
+    // `--name-status -z` writes a status field, then the path(s) it applies to,
+    // each NUL-separated: `M`, `A`, `D`, `T` take one path; `R100` and `C075`
+    // take two, old then new. The similarity score is part of the status field,
+    // so match on the first character only.
+    const status = field[0] ?? '';
+    if (status === 'R' || status === 'C') {
       const from = fields[i + 1] ?? '';
       const to = fields[i + 2] ?? '';
       i += 2;
       if (from !== '' && to !== '') {
-        current.renames.push([from, to]);
+        // A copy is not a rename — the original still exists — so only `R`
+        // contributes to the lineage that node identity is built on (ADR-0002).
+        if (status === 'R') current.renames.push([from, to]);
         current.files.push(to);
       }
       continue;
     }
-    current.files.push(path);
+    if (!/^[A-Z]$/.test(status) || field.length !== 1) continue;
+    const path = fields[i + 1] ?? '';
+    i += 1;
+    if (path !== '') current.files.push(path);
   }
 
   if (current !== null) commits.push(freeze(current));

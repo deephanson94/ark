@@ -27,12 +27,12 @@ function history(commits: readonly GitCommit[]): GitHistory {
 }
 
 describe('parseLog', () => {
-  it('reads the NUL-delimited numstat stream', () => {
+  it('reads the NUL-delimited name-status stream', () => {
     const log =
       `ARK${UNIT}abc123${UNIT}2026-01-02${UNIT}ada${UNIT}second${NUL}\n` +
-      `4\t2\tsrc/b.ts${NUL}` +
+      `M${NUL}src/b.ts${NUL}` +
       `ARK${UNIT}def456${UNIT}2026-01-01${UNIT}grace${UNIT}first${NUL}\n` +
-      `9\t0\tsrc/a.ts${NUL}`;
+      `A${NUL}src/a.ts${NUL}`;
     const commits = parseLog(log);
     expect(commits).toHaveLength(2);
     expect(commits[0]).toMatchObject({ sha: 'abc123', date: '2026-01-02', author: 'ada', subject: 'second' });
@@ -40,20 +40,40 @@ describe('parseLog', () => {
     expect(commits[1]?.files).toEqual(['src/a.ts']);
   });
 
-  it('reads a rename record, which git emits as three fields', () => {
+  it('reads a rename, which carries a similarity score and two paths', () => {
     const log =
       `ARK${UNIT}abc123${UNIT}2026-01-02${UNIT}ada${UNIT}move it${NUL}\n` +
-      `1\t0\t${NUL}src/old.ts${NUL}src/new.ts${NUL}`;
+      `R096${NUL}src/old.ts${NUL}src/new.ts${NUL}`;
     const commits = parseLog(log);
     expect(commits[0]?.renames).toEqual([['src/old.ts', 'src/new.ts']]);
     expect(commits[0]?.files).toEqual(['src/new.ts']);
+  });
+
+  it('treats a copy as a touch of the new path, not a rename', () => {
+    // `C075` means the original is still there, so nothing moved. Feeding it
+    // into the rename lineage would make two live files claim one origin path,
+    // which is the ambiguity ADR-0002 throws on.
+    const log =
+      `ARK${UNIT}abc123${UNIT}2026-01-02${UNIT}ada${UNIT}copy it${NUL}\n` +
+      `C075${NUL}src/old.ts${NUL}src/copy.ts${NUL}`;
+    const commits = parseLog(log);
+    expect(commits[0]?.renames).toEqual([]);
+    expect(commits[0]?.files).toEqual(['src/copy.ts']);
+  });
+
+  it('reads a delete, which still counts as churn on that file', () => {
+    const log =
+      `ARK${UNIT}abc123${UNIT}2026-01-02${UNIT}ada${UNIT}drop it${NUL}\n` +
+      `D${NUL}src/gone.ts${NUL}`;
+    const commits = parseLog(log);
+    expect(commits[0]?.files).toEqual(['src/gone.ts']);
   });
 
   it('handles a commit that touched nothing', () => {
     const log =
       `ARK${UNIT}aaa${UNIT}2026-01-02${UNIT}ada${UNIT}empty${NUL}\n` +
       `ARK${UNIT}bbb${UNIT}2026-01-01${UNIT}ada${UNIT}real${NUL}\n` +
-      `1\t1\tx.ts${NUL}`;
+      `M${NUL}x.ts${NUL}`;
     const commits = parseLog(log);
     expect(commits).toHaveLength(2);
     expect(commits[0]?.files).toEqual([]);

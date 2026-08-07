@@ -260,3 +260,33 @@ One line per iteration: what changed, and what to do next.
   fail and were rewritten, and one of those is how the dead repair loop was found.
   **Next**: index time. `computeLayout` and `git log` own the 10 s budget and neither has ever been
   optimised. Then M3 proper — progression, field notes, localStorage.
+
+- **Index time: one flag, 11.9 s → 7.0 s, byte-identical output.** The budget row added last rung
+  said vite indexed in 10.6 s against a 10 s ceiling. Profiled per phase rather than guessed at:
+  `git log` **4.3 s (42%)**, `computeLayout` **3.9 s (38%)**, walk 1.6 s, everything else under
+  350 ms combined. The git half turned out to be free money. `parseLog` read the *third*
+  tab-separated field of each `--numstat` line and threw the first two away — and nothing downstream
+  ever wanted them, because churn, authorship, co-change and rename lineage all need only *which*
+  files a commit touched. But `--numstat` makes git diff the content of every file in every commit
+  to produce those numbers. `--name-status` carries the same information, plus the rename similarity
+  score, and needs no content diff: **4,027 ms → 308 ms on vite's 3,730 commits**, for a payload
+  that is actually 3% smaller. Full index **11,881 → 6,957 ms**, and the resulting atlas is
+  **byte-identical** — verified by `cmp`, which is the strongest claim available that a performance
+  change altered nothing. The parser rewrite was checked the same way: a differential harness parsed
+  both formats over **5,251 commits across ark, vite and vllm** and found **0 file-list mismatches
+  and 0 rename mismatches**. Two behaviours the old format could not express are now explicit and
+  tested: a `C` copy touches the new path but is **not** a rename (feeding it into the lineage would
+  make two live files claim one origin path, which is the ambiguity ADR-0002 throws on), and a `D`
+  delete still counts as churn.
+  **Layout is now the ceiling risk, and it is measured, not guessed.** 3.9 s of the remaining 7.0 s.
+  The bookkeeping is not the problem — the per-iteration grid rebuild costs 35 ms across all 300
+  iterations and the 9-cell lookups 95 ms. The cost is the physics: **300 iterations × 2,025 nodes ×
+  533 neighbours within the cutoff = 324 million distance computations**, because the layout
+  converges into a blob dense enough that a cutoff radius covers a quarter of the map. **Every lever
+  that would reduce it — a smaller cutoff, fewer iterations, Barnes-Hut — changes layout output**,
+  and NORTH-STAR §7 puts layout in the indexer precisely so that the same repo gives the same map
+  forever. So it is not a tack-on: it needs its own rung and probably its own ADR about what we are
+  willing to trade. It is not urgent — 7.0 s against a 10 s ceiling — but it is what breaks first.
+  **Next**: M3 — progression, field notes, localStorage. We now know what progression has to fix,
+  because it was measured rather than assumed: order by difficulty, and never serve two
+  near-identical answer keys back to back.
