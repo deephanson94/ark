@@ -150,3 +150,54 @@ One line per iteration: what changed, and what to do next.
   the repetition above: never serve two near-identical answer keys in a row, and rank by difficulty
   rather than by whatever the player clicks. Also worth doing before M4: point the indexer at a
   large repo with real history and re-read this entry, because `coChange` has still never fired.
+
+- **ADR-0009 and the first real-repo test.** Two things, one session.
+  **ADR-0009 — third person is a presentation layer, and it is blocked.** The human asked for a
+  third-person POV, which NORTH-STAR §9 and Appendix B forbid, so it needed an ADR rather than a
+  quiet edit. Accepted *in principle*, blocked, and deliberately **not** on the roadmap: three
+  preconditions (risk #6's prior-art writeup, finally; M3/M4 plus a large real repo answering the
+  content question; the unmeasured map-interaction budget closed), three design constraints (the
+  overview survives; the world renders the atlas and never the reverse; ADR-0006's no-transcendentals
+  rule carries forward), and one ship criterion that only the human may sign off. If the gates open,
+  **the orbit fly-through is built first and the walkable avatar is gated behind its measured
+  results** — it preserves X,Y by construction and has no ground to invent, so it cannot violate
+  pillar 4. A Fable review demolished the first draft and was right three times: the "88%
+  presentation-independent" figure dropped `main.ts` and `palette.ts` from its own denominator (it is
+  **74%**), `node.layout` is *not* the only 2D thing in the atlas (`Region.centroid` is another, and
+  `asPoint` hard-asserts two coordinates), and the method-of-loci argument was backwards — the
+  map-learning literature says map study beats navigation for exactly the *survey* knowledge this
+  product teaches, so the strongest "for" argument predicts the flat map wins its own experiment.
+  All three corrections are in the ADR rather than edited out.
+  **Then we pointed it at real repos, and it broke in four measurable ways.** `vllm` first, at the
+  human's suggestion: **918 nodes, 0 edges, 0 challenges** — it is 4,108 Python files and the v1
+  scanner is ES-modules only (§7.2), so 5,494 files were skipped as unsupported. Not a scale test, a
+  language test, and Ark fails it. It did reveal that **the walk (4.1 s) and `git log` (2.4 s)
+  dominate index time on any real repo** — 6.5 s of a 10 s budget before a single import is parsed.
+  Then `vitejs/vite`: 2,025 nodes, 3,730 commits, **9.7 s to index against a 10 s ceiling**. Findings,
+  in order of severity. (1) **97% of the questions are about the wrong thing.** 197 of 254 subjects
+  are `playground/` demos and 49 are test fixtures; **7 are about vite's actual source**, because 54%
+  of `packages/` is refused by guardrail 4 (762 unresolved imports — workspace aliases and tsconfig
+  paths the resolver does not know) while the playground's tiny self-contained fixtures resolve
+  perfectly. The guardrail is working exactly as designed and is systematically selecting the least
+  interesting part of the repo. (2) **The map is unreadable** — 771 regions for 2,025 nodes, and
+  `draw.ts` renders every region label with no collision pass (node labels get one, region labels do
+  not), so the screenshot is a solid smear of overlapping text. Risk #2, confirmed. (3) **A real
+  defect in M2's generator**: truth was sampled from the dependent set without filtering by taint, so
+  a tainted answer-key member dragged its unsound cone onto the board and `isChallengeable` refused
+  the whole question — **14 of 40 shipped challenges lost for no reason**. Fixed by sampling from the
+  certain dependents only, which is free because unsampled dependents are banned from the board
+  anyway. vite went **26 → 254 challenges**, and `coChange` produced its first distractors ever (12).
+  (4) **`maxChallenges: 40` was the wrong shape** — 26 questions for a 2,025-file repo. Now
+  `maxChallengesFor(n) = max(40, ⌈n/8⌉)`; ark is unchanged at 37.
+  **A cold playtest on vite scored 80% over five questions, and that is the bad news.** Four of the
+  five were answerable by "which file in this directory is called `index.js`" — pillar 3's stated
+  Ctrl+F failure. The fifth scored 0% and was worse: difficulty **0.91**, a synthetic 24-deep chain
+  `a24 → … → a0` that exists only to exercise vite's bundler, whose reveal printed a 24-hop route as
+  a wall of text. **§8.4's `surprise` term cannot tell "surprising because the architecture is
+  subtle" from "surprising because it is a generated chain"**, and it ranked the most worthless
+  question in the deck top. That is the sharpest thing this session learned.
+  **Next**: not M3. The content question is now answered and the answer is no — on a real repo the
+  questions are about the wrong files. Fix that first: teach the resolver tsconfig `paths` and
+  workspace packages (it converts 54% of vite's source from unaskable to askable), decide what to do
+  about repos that are mostly fixtures, cap the reveal's route rendering, and give region detection
+  and region labels a collision pass. Then M3.

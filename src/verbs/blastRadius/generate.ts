@@ -32,7 +32,7 @@ import {
   taintedRefs,
 } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
-import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
+import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
 import { difficultyOf, surpriseOf } from './difficulty.js';
@@ -236,6 +236,26 @@ export function generateWithReport(
       continue;
     }
 
+    // The answer key may only contain dependents we are *certain* about.
+    //
+    // Reachability is sound over `certain` edges — an unknown import can only
+    // add reachability, never remove it — so a tainted dependent really is a
+    // dependent. But putting one on the board drags its unsound cone into the
+    // choice set, and `isChallengeable` then refuses the whole question.
+    // Because unsampled dependents are banned from the board anyway (the
+    // invariant), leaving them out costs nothing and keeps the challenge.
+    //
+    // Measured on vitejs/vite: 111 of 361 otherwise-answerable subjects have a
+    // tainted file somewhere in their radius, and sampling blindly threw
+    // **14 of 40** shipped challenges into the final gate for no reason.
+    const clean = new Map<NodeRef, number>();
+    for (const [ref, distance] of reached) if (!tainted.has(ref)) clean.set(ref, distance);
+    if (clean.size === 0) {
+      // Everything that depends on it is unsound. Nothing certain left to ask.
+      note('uncertain');
+      continue;
+    }
+
     // Every dependent is banned from the choice set unless it is in the answer
     // key. This is the invariant, and it is enforced here rather than checked
     // later, because "check afterwards" is how an answer key goes wrong.
@@ -252,7 +272,7 @@ export function generateWithReport(
     // padding `candidates`, because the pool is finite and padding it with
     // distant files makes the question easier, not harder.
     let size = 0;
-    for (let attempt = Math.min(cap, reached.size); attempt >= 1; attempt--) {
+    for (let attempt = Math.min(cap, clean.size); attempt >= 1; attempt--) {
       if (Math.min(pool.size, options.candidateCount - attempt) > 2 * attempt) {
         size = attempt;
         break;
@@ -264,9 +284,7 @@ export function generateWithReport(
     }
 
     const truthRefs =
-      reached.size <= size
-        ? [...reached.keys()]
-        : sampleByDistance(graph, reached, size, breadth);
+      clean.size <= size ? [...clean.keys()] : sampleByDistance(graph, clean, size, breadth);
     const distractors: readonly DistractorChoice[] = selectDistractors(
       context,
       Math.min(pool.size, options.candidateCount - size),
@@ -281,7 +299,7 @@ export function generateWithReport(
     // `evidence.depth` is measured, not prescribed (ADR-0008 §5): the furthest
     // the answer key actually travels, so `explain()` can state it as fact.
     let depth = 1;
-    for (const ref of truthRefs) depth = Math.max(depth, reached.get(ref) ?? 1);
+    for (const ref of truthRefs) depth = Math.max(depth, clean.get(ref) ?? 1);
 
     // §8.4's naive guess: what you would answer knowing only the direct
     // importers — which is exactly what the map gives away on hover.
@@ -314,7 +332,8 @@ export function generateWithReport(
     });
   }
 
-  const shortlist = retain(built, options.maxChallenges);
+  const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
+  const shortlist = retain(built, limit);
   for (let i = shortlist.length; i < built.length; i++) note('capped');
 
   // The authoritative guardrail-4 check, on the exact sets the player will see.

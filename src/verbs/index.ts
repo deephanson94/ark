@@ -8,7 +8,13 @@
  */
 
 export type { Band, GenerateOptions, Grade, Prompt, SetAnswer, Verb } from './types.js';
-export { BAND_THRESHOLDS, DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, bandFor } from './types.js';
+export {
+  BAND_THRESHOLDS,
+  DEFAULT_GENERATE_OPTIONS,
+  PASS_THRESHOLD,
+  bandFor,
+  maxChallengesFor,
+} from './types.js';
 export type { SetScore } from './score.js';
 export { gradeSet, isGameable, scoreSet, selectAllScore } from './score.js';
 import { blastRadius } from './blastRadius/index.js';

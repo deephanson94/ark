@@ -120,7 +120,7 @@ Add a `npm run budget` check that prints these and fails over the ceiling.
 | Atlas size | 5 MB @ 2,000 files | Above this, move history to a side-file loaded on demand |
 | Index time | 10 s @ 2,000 files | Pillar 6: ten minutes to first insight includes this |
 | Player first paint | 1.5 s | Static file, no excuses |
-| Map interaction | ≥ 50 fps @ 2,000 nodes | Below this, switch Canvas → WebGL, not before |
+| Map interaction | ≥ 50 fps @ 2,000 nodes | Below this, switch Canvas → WebGL, not before. *Performance* is not the only reason a renderer may change — see [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) — but nothing else licenses it either. **Currently UNMEASURED for raster cost; ADR-0009 makes closing that a precondition.** |
 | Runtime deps (player) | ≤ 3 | The player is a graph renderer and some DOM. It does not need a framework. |
 
 When a budget is exceeded, say so out loud in the CHANGELOG. Silent truncation reads as success.

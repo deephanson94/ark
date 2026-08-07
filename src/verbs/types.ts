@@ -31,10 +31,30 @@ export interface SetAnswer {
 }
 
 export interface GenerateOptions {
-  /** Upper bound on challenges emitted for this verb. */
-  readonly maxChallenges: number;
+  /**
+   * Upper bound on challenges emitted for this verb.
+   *
+   * `null` means "scale with the repo" — see `maxChallengesFor`. A fixed number
+   * is available for tests and for anyone who wants a short deck.
+   */
+  readonly maxChallenges: number | null;
   /** Target size of the choice set shown to the player. */
   readonly candidateCount: number;
+}
+
+/**
+ * How many questions a repo of `n` files should carry.
+ *
+ * A flat cap is the wrong shape and measurement said so: 40 was fine for this
+ * repo's 80 files and produced **26 questions for vitejs/vite's 2,025** — a
+ * deck you exhaust in one sitting on a codebase you could not learn in a month.
+ * One question per eight files, floor 40, tracks the thing that actually varies.
+ *
+ * The cost is bounded and small: a challenge serialises to roughly 600 bytes,
+ * so this adds ~150 KiB at 2,000 files against a 5 MB ceiling.
+ */
+export function maxChallengesFor(nodeCount: number): number {
+  return Math.max(40, Math.ceil(nodeCount / 8));
 }
 
 /**
@@ -44,7 +64,7 @@ export interface GenerateOptions {
  * (ADR-0008).
  */
 export const DEFAULT_GENERATE_OPTIONS: GenerateOptions = {
-  maxChallenges: 40,
+  maxChallenges: null,
   candidateCount: 20,
 };
 
