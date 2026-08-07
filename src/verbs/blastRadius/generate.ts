@@ -36,6 +36,7 @@ import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
 import { difficultyOf, surpriseOf } from './difficulty.js';
+import { gradeHeuristics } from './gate.js';
 
 /** NORTH-STAR §5: predicting change propagation is tier 3, Coupling. */
 const TIER = 3;
@@ -58,7 +59,12 @@ export type SkipReason =
    *  passed by selecting everything. */
   | 'tooFewDistractors'
   /** Dropped to stay inside `maxChallenges`. */
-  | 'capped';
+  | 'capped'
+  /**
+   * Pillar 3: a structure-blind heuristic passed the board and no arrangement
+   * of the available distractors could stop it. See `gate.ts`.
+   */
+  | 'ctrlF';
 
 export interface GenerationReport {
   readonly subjectsConsidered: number;
@@ -285,10 +291,31 @@ export function generateWithReport(
 
     const truthRefs =
       clean.size <= size ? [...clean.keys()] : sampleByDistance(graph, clean, size, breadth);
-    const distractors: readonly DistractorChoice[] = selectDistractors(
-      context,
-      Math.min(pool.size, options.candidateCount - size),
+    const want = Math.min(pool.size, options.candidateCount - size);
+
+    // Assemble, then check the board against the structure-blind heuristics
+    // (ADR-0010 decision 4, `gate.ts`).
+    //
+    // There is no repair pass, and that is a measured decision rather than an
+    // omission. One was written: on a beaten board, re-mix with the quota
+    // weighted toward whichever strategy punishes the heuristic that won. It
+    // **rescued zero boards on both this repo and vitejs/vite**, because §8.3's
+    // default mix already *is* the repair — it spends 25% on tree-siblings and
+    // 20% on name-alikes precisely to defeat these two guesses. A board they
+    // still beat is one where that supply does not exist, and re-weighting an
+    // empty supply changes nothing. The loop was deleted rather than shipped
+    // untested.
+    const distractors: readonly DistractorChoice[] = selectDistractors(context, want);
+    const verdict = gradeHeuristics(
+      graph,
+      subject,
+      [...truthRefs, ...distractors.map((choice) => choice.ref)],
+      truthRefs,
     );
+    if (!verdict.passed) {
+      note('ctrlF');
+      continue;
+    }
 
     const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];
     const idOfRef = (ref: NodeRef): string => nodeAt(graph, ref).id;

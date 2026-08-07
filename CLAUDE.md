@@ -186,6 +186,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the spec and will need a decision by M3.
 - **Dates are not the only thing git renders per-commit.** If a field comes from `--format`, ask
   what it depends on besides the commit.
+- **A second opinion catches reasoning, not liveness. Measure whether new machinery fires.** The
+  Ctrl+F gate's repair pass was designed by a Fable consult *before* it was written, reviewed as
+  sound, tested, and rescued **zero** boards on either repo. No amount of earlier consulting would
+  have found that — a reviewer can tell you a design is coherent, not whether the branch is ever
+  taken on real data. The mutation test found it: disabling the loop changed no test result. So when
+  you add a fallback, a retry, a repair or any other "and if that fails, try harder" path, **count
+  how many times it fires on a real repo before you write tests around it.** A path that never
+  executes is worse than no path: it is code, comments and test surface asserting a behaviour the
+  product does not have.
 
 ---
 

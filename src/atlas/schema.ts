@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 1;
+export const ATLAS_VERSION = 2;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -121,6 +121,8 @@ export interface AtlasEdge {
 }
 
 /** A derived cluster of the import graph. Not a directory (pillar 4). */
+export type RegionKind = 'topology' | 'terrain';
+
 export interface Region {
   /** Stable slug, unique within the atlas. */
   readonly id: string;
@@ -129,6 +131,14 @@ export interface Region {
   readonly nodeCount: number;
   /** Mean of member layout positions, rounded to 2dp. */
   readonly centroid: readonly [number, number];
+  /**
+   * `topology` — a cluster the import graph produced.
+   * `terrain`  — files the graph has nothing to say about, aggregated coarsely.
+   *
+   * The player must not colour them the same: seven hundred edgeless files
+   * eating palette slots is what turned vite's map into confetti (ADR-0010).
+   */
+  readonly kind: RegionKind;
 }
 
 /** `[a, b, count]` with `a < b`, both indices into `Atlas.nodes`. */

@@ -3,12 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_CONFIG, normalizeJoin, resolveSpecifier } from '../../src/indexer/resolve.js';
 import type { ProjectConfig, ResolveContext } from '../../src/indexer/resolve.js';
 
-function context(files: readonly string[], overrides: Partial<ProjectConfig> = {}): ResolveContext {
+function context(
+  files: readonly string[],
+  overrides: Partial<ProjectConfig> = {},
+  workspaceNames: readonly string[] = [],
+): ResolveContext {
   const indexed = new Set(files);
+  const config = { ...EMPTY_CONFIG, ...overrides };
   return {
     indexed,
     onDisk: new Set(files),
-    config: { ...EMPTY_CONFIG, ...overrides },
+    configFor: () => config,
+    workspaceNames: new Set(workspaceNames),
   };
 }
 
@@ -73,7 +79,8 @@ describe('resolveSpecifier — relative', () => {
     const ctx: ResolveContext = {
       indexed: new Set(['src/a.ts']),
       onDisk: new Set(['src/a.ts', 'src/styles.css']),
-      config: EMPTY_CONFIG,
+      configFor: () => EMPTY_CONFIG,
+      workspaceNames: new Set<string>(),
     };
     expect(resolveSpecifier('src/a.ts', './styles.css', ctx)).toEqual({
       kind: 'offMap',
@@ -85,7 +92,8 @@ describe('resolveSpecifier — relative', () => {
     const ctx: ResolveContext = {
       indexed: new Set(['src/a.ts']),
       onDisk: new Set(['src/a.ts', 'src/huge.ts']),
-      config: EMPTY_CONFIG,
+      configFor: () => EMPTY_CONFIG,
+      workspaceNames: new Set<string>(),
     };
     expect(resolveSpecifier('src/a.ts', './huge.js', ctx)).toEqual({ kind: 'unresolved' });
   });
@@ -99,7 +107,8 @@ describe('resolveSpecifier — relative', () => {
       const ctx: ResolveContext = {
         indexed: new Set(['src/a.ts']),
         onDisk: new Set(['src/a.ts', `src/widget.${extension}`]),
-        config: EMPTY_CONFIG,
+        configFor: () => EMPTY_CONFIG,
+      workspaceNames: new Set<string>(),
       };
       expect(
         resolveSpecifier('src/a.ts', `./widget.${extension}`, ctx),

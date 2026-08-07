@@ -16,10 +16,10 @@ import type { Camera, Viewport } from './camera.js';
 import { visibleBounds, worldToScreen } from './camera.js';
 import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
-import type { LabelCandidate } from './labels.js';
+import type { LabelCandidate, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
 import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
-import type { Radius, Scene, SceneNode } from './scene.js';
+import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import { visibleEdges, visibleNodes } from './scene.js';
 import { levelFor, styleFor } from './zoom.js';
 
@@ -43,6 +43,10 @@ export interface FrameStats {
 }
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+/** Tall enough for the label and its file count, which are drawn as a pair. */
+const REGION_LINE_HEIGHT = 34;
+const REGION_LABEL_PADDING = 10;
+
 const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
@@ -150,23 +154,50 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   }
 
   // ---- region labels ----------------------------------------------------
+  //
+  // Through the same collision pass node labels use. Drawing them raw was a
+  // rendering bug independent of how good region detection is: on a 2,000-file
+  // repo it printed 771 overlapping labels and the map became a solid smear.
+  // Ranking by member count means territory zoom shows the big regions and
+  // zooming in gives the small ones room — which is what `zoom.ts` promises and
+  // what no numeric cap can reproduce.
   let labelsDrawn = 0;
+  let placedRegions: readonly PlacedLabel[] = [];
   if (style.showRegionLabels) {
     context.font = REGION_FONT;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    for (const region of scene.regions) {
+    const byText = new Map<string, SceneRegion>();
+    const candidates = scene.regions.map((region) => {
+      byText.set(region.label, region);
       const point = worldToScreen(camera, viewport, region);
-      if (point.x < -80 || point.x > viewport.width + 80) continue;
-      if (point.y < -40 || point.y > viewport.height + 40) continue;
+      return {
+        text: region.label,
+        x: point.x,
+        y: point.y,
+        offset: -REGION_LINE_HEIGHT / 2,
+        priority: region.nodeCount,
+      };
+    });
+    placedRegions = placeLabels(candidates, (text) => context.measureText(text).width, {
+      budget: Number.POSITIVE_INFINITY,
+      padding: REGION_LABEL_PADDING,
+      lineHeight: REGION_LINE_HEIGHT,
+      width: viewport.width,
+      height: viewport.height,
+    });
+    for (const label of placedRegions) {
+      const region = byText.get(label.text);
+      if (region === undefined) continue;
       context.fillStyle = regionColor(region.index, 0.85);
-      context.fillText(region.label, point.x, point.y);
+      context.font = REGION_FONT;
+      context.fillText(label.text, label.x, label.y - REGION_LINE_HEIGHT / 2);
       context.fillStyle = INK.textDim;
       context.font = LABEL_FONT;
-      context.fillText(`${region.nodeCount} files`, point.x, point.y + 16);
-      context.font = REGION_FONT;
+      context.fillText(`${region.nodeCount} files`, label.x, label.y + REGION_LINE_HEIGHT / 2);
       labelsDrawn++;
     }
+    context.font = REGION_FONT;
   }
 
   // ---- node labels ------------------------------------------------------
@@ -193,6 +224,8 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       budget: style.nodeLabelBudget,
       width: viewport.width,
       height: viewport.height,
+      // Region labels went down first and keep their space.
+      occupied: placedRegions,
     });
     for (const label of placed) {
       context.fillStyle = INK.text;

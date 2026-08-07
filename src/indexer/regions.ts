@@ -19,7 +19,9 @@
  * still purely topological; it just stops one hub from swallowing the map.
  *
  * Files with no import edges are the honest exception. Topology says nothing
- * about a standalone markdown file, so those fall back to grouping by directory.
+ * about a standalone markdown file, so those — and components too small to be
+ * worth a region — aggregate into coarse `terrain` regions, one per top-level
+ * path segment. They stay on the map and out of the legend's way (ADR-0010).
  */
 
 import { byteCompare } from '../atlas/index.js';
@@ -32,6 +34,16 @@ export interface RegionEdge {
 export interface DetectedRegion {
   readonly id: string;
   readonly label: string;
+  /**
+   * `topology` — a cluster the import graph actually produced.
+   * `terrain`  — a bag of files the graph has nothing to say about.
+   *
+   * The distinction is the honest one and pillar 4 requires it: a derived
+   * cluster is a claim about structure, and a pile of edgeless files is not.
+   * Conflating them is how 1,142 unconnected files came to found 500 regions
+   * on vite and turned the legend into a wall (ADR-0010).
+   */
+  readonly kind: 'topology' | 'terrain';
   /** Node indices, ascending. */
   readonly members: readonly number[];
 }
@@ -133,18 +145,58 @@ export function detectRegions(
 
   absorbSmallRegions(labels, neighbours, count);
 
-  // Unconnected files: group by directory rather than pretend the graph knows.
-  const directoryLabels = new Map<string, number>();
+  // ---- terrain ----------------------------------------------------------
+  //
+  // Files the graph has nothing to say about, plus components too small to be
+  // worth a region, aggregate by **top-level path segment**.
+  //
+  // The old rule grouped edgeless files by their exact directory, which is a
+  // finer claim than the data supports and which manufactured ~500 regions on
+  // vite's playground alone. The granularity here is pinned by the curriculum,
+  // not by taste: this fallback exists to serve tier 1, and the tier-1 question
+  // is literally "what are the top-level regions?" (ADR-0010 decision 1.)
+  const terrainLabels = new Map<string, number>();
+  /** Label id → the top-level segment it stands for. Names them directly. */
+  const terrainName = new Map<number, string>();
+  const terrain = new Set<number>();
   let nextSynthetic = count;
-  for (let i = 0; i < count; i++) {
-    if ((neighbours[i] ?? []).length > 0) continue;
-    const directory = dirnameOf(paths[i] ?? '');
-    let label = directoryLabels.get(directory);
+  const terrainLabelFor = (path: string): number => {
+    const slash = path.indexOf('/');
+    const top = slash === -1 ? '' : path.slice(0, slash);
+    let label = terrainLabels.get(top);
     if (label === undefined) {
       label = nextSynthetic++;
-      directoryLabels.set(directory, label);
+      terrainLabels.set(top, label);
+      // Named here rather than by `nameFor`, whose "directory of the busiest
+      // file" fallback is meaningless when every member has degree zero — it
+      // labelled vite's 841-file `playground` terrain
+      // `playground/dynamic-import-inline/src/foo`, which is a true path and a
+      // false claim about what the region is.
+      terrainName.set(label, top === '' ? 'root' : top);
+      terrain.add(label);
     }
-    labels[i] = label;
+    return label;
+  };
+
+  for (let i = 0; i < count; i++) {
+    if ((neighbours[i] ?? []).length > 0) continue;
+    labels[i] = terrainLabelFor(paths[i] ?? '');
+  }
+
+  // Islands below the floor fold into terrain too. Their internal edges still
+  // draw, so "these two talk only to each other" stays visible on the map —
+  // they just stop costing a legend entry and a palette slot.
+  const connectedSizes = new Map<number, number>();
+  for (let i = 0; i < count; i++) {
+    if ((neighbours[i] ?? []).length === 0) continue;
+    const label = labels[i] ?? i;
+    connectedSizes.set(label, (connectedSizes.get(label) ?? 0) + 1);
+  }
+  for (let i = 0; i < count; i++) {
+    if ((neighbours[i] ?? []).length === 0) continue;
+    const label = labels[i] ?? i;
+    if ((connectedSizes.get(label) ?? 0) >= MIN_REGION) continue;
+    labels[i] = terrainLabelFor(paths[i] ?? '');
   }
 
   const groups = new Map<number, number[]>();
@@ -155,15 +207,20 @@ export function detectRegions(
     else bucket.push(i);
   }
 
-  const ordered = [...groups.values()].sort((a, b) =>
+  const orderedEntries = [...groups.entries()].sort(([, a], [, b]) =>
     byteCompare(paths[a[0] ?? 0] ?? '', paths[b[0] ?? 0] ?? ''),
   );
+  const ordered = orderedEntries.map(([, members]) => members);
+  const labelOf = orderedEntries.map(([label]) => label);
 
   // Name in two passes. A directory name is the most useful label available,
   // but four distinct communities inside `src/indexer` all called "src/indexer"
   // tell you nothing — so any name claimed by more than one region is refined
   // with that region's busiest file. "src/indexer/scan" says where you are.
-  const preliminary = ordered.map((members) => nameFor(members, paths, degrees));
+  const preliminary = ordered.map((members, index) => {
+    const own = labelOf[index] ?? -1;
+    return terrainName.get(own) ?? nameFor(members, paths, degrees);
+  });
   const taken = new Map<string, number>();
   for (const name of preliminary) taken.set(name, (taken.get(name) ?? 0) + 1);
 
@@ -172,8 +229,15 @@ export function detectRegions(
   const regions: DetectedRegion[] = [];
   for (const [index, members] of ordered.entries()) {
     const preferred = preliminary[index] ?? 'root';
+    const isTerrain = terrain.has(labelOf[index] ?? -1);
+    // Terrain never refines. Refinement names a region after its busiest file,
+    // which is meaningless when every member has degree zero — and when a
+    // terrain lump and a real cluster both wanted `packages`, refining *both*
+    // gave the terrain one a 364-file region called
+    // `packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic`.
+    // The terrain keeps the plain top-level name; the cluster refines around it.
     let label =
-      (taken.get(preferred) ?? 0) > 1
+      !isTerrain && (taken.get(preferred) ?? 0) > 1
         ? `${preferred}/${hubSuffix(paths[hubOf(members, paths, degrees)] ?? '', preferred)}`
         : preferred;
     // The legend prints labels, not ids, so two regions sharing a label makes
@@ -190,7 +254,7 @@ export function detectRegions(
     let id = base;
     for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
     used.add(id);
-    regions.push({ id, label, members });
+    regions.push({ id, label, kind: isTerrain ? 'terrain' : 'topology', members });
   }
   regions.sort((a, b) => byteCompare(a.id, b.id));
   return regions;

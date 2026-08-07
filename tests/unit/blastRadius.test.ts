@@ -158,9 +158,14 @@ describe('the generator invariant', () => {
 
 describe('guardrail 4', () => {
   it('refuses a subject reachable through an unresolved import', () => {
+    // The `src/a/quiet*` files are non-dependent siblings. Without them the
+    // directory heuristic — "select everything in the subject's folder" —
+    // scores 1.0 and the Ctrl+F gate refuses the question for a reason that has
+    // nothing to do with what this test is checking.
     const paths = [
       'src/a/subject.ts',
       'src/a/importer.ts',
+      ...Array.from({ length: 6 }, (_, i) => `src/a/quiet${String(i).padStart(2, '0')}.ts`),
       ...Array.from({ length: 20 }, (_, i) => `src/b/p${String(i).padStart(2, '0')}.ts`),
     ];
     const links: [string, string][] = [['src/a/importer.ts', 'src/a/subject.ts']];
@@ -226,6 +231,7 @@ describe('choice-set shape', () => {
         'src/a/importer.ts',
         'src/a/README.md',
         'src/a/tsconfig.json',
+        ...Array.from({ length: 6 }, (_, i) => `src/a/quiet${String(i).padStart(2, '0')}.ts`),
         ...Array.from({ length: 20 }, (_, i) => `src/b/p${String(i).padStart(2, '0')}.ts`),
       ],
       [['src/a/importer.ts', 'src/a/subject.ts']],

@@ -201,3 +201,62 @@ One line per iteration: what changed, and what to do next.
   workspace packages (it converts 54% of vite's source from unaskable to askable), decide what to do
   about repos that are mostly fixtures, cap the reveal's route rendering, and give region detection
   and region labels a collision pass. Then M3.
+
+- **M3a — make it work on a real repo.** Three fixes the vite run demanded, in the order the
+  dependencies forced. **ADR-0010** records the design; a Fable consult rejected two of the three
+  framings I started from and was right both times.
+  **1. Resolution reads the manifest nearest the importing file.** `loadProjectConfig` read only the
+  repo root, which is correct for one package and wrong for every monorepo — vite has 299
+  `package.json` and 55 `tsconfig.json` files, and 762 unresolved specifiers traced to three causes,
+  all of them "we looked in one directory": `~utils` ×126 declared in `playground/tsconfig.json`,
+  614 bare specifiers declared in `packages/vite/package.json`, and 81 `#types/*` declared in that
+  file's `imports` map. Now: dependencies **union up the tree** (Node's `node_modules` walk), `#`
+  imports resolve at **the nearest package boundary only** (Node's rule), and `paths`/`baseUrl` come
+  from the **nearest tsconfig** with relative `extends` followed (TypeScript's). vite: unresolved
+  **762 → 399**, edges 1745 → 1885, `packages/` refused by guardrail 4 43% → 36%, challenges about
+  the real source **7 → 21**.
+  **2. A workspace sibling is never `external` — a soundness bug, not a coverage gap.** vite's root
+  manifest declares `"vite": "workspace:*"`, so `import 'vite'` from a playground file resolved as
+  `external`, whose contract says *"no risk: nothing outside the repo can import back into it"* — of
+  an import that reaches 332 files **inside** it. The file looked fully resolved and was hiding a
+  dependency, which is the false negative guardrail 4 exists to catch, and the same class as the
+  `require(expr)` bug found at M1. It is now `unresolved`, which taints and costs a challenge. We
+  cannot do better: a package's entry point is its `exports`/`main`, and in a monorepo those name
+  *built* output that is gitignored — **you cannot map cross-package edges without a build, and
+  pillar 6 forbids requiring one.** Two more resolver bugs fell out: wildcard `paths` targets lost
+  their separator (`@app/*` → `src`, so `@app/foo` resolved to `srcfoo`) — **broken since M0**,
+  invisible because Ark declares no `paths` and the unit test hand-wrote its target with the
+  separator already attached; and `tsconfig.base.json` was not recognised as a manifest, so an
+  `extends` chain silently dropped its inherited `paths`.
+  **3. Terrain, islands, and a collision pass.** 56% of vite's nodes have no edge at all, and the old
+  fallback grouped them by *exact* directory — which alone manufactured ~500 of the 771 regions, and
+  `draw.ts` then printed every region label with no collision test. **Not** a label-propagation
+  failure, so `CLAUDE.md`'s Leiden tripwire does not fire: propagation never sees a degree-0 node.
+  Edgeless files and sub-floor components now aggregate into `terrain` regions by top-level segment
+  (`Region.kind`, **ATLAS_VERSION → 2**), share one desaturated wash instead of eating palette slots,
+  and region labels go through the same `placeLabels` node labels already used — with node labels now
+  reserving the boxes regions took. vite: **771 → 123 regions**. No cap on region count: the bound
+  `regions ≤ n/3 + topLevelDirs` is a theorem from the floor, asserted in `test:atlas`.
+  **4. The Ctrl+F gate.** Pillar 3 says a challenge is violated when it is "answerable by Ctrl+F
+  rather than by reasoning about structure", and a cold playtest had just demonstrated it: four of
+  five vite questions fell to *"which file here is called `index.js`"*. Two structure-blind
+  strategies — select-the-directory, select-the-name-alikes — are now scored with the real
+  `scoreSet`, and a board either beats them or is refused. **The bar is band A, not the pass
+  threshold**: in a directory-aligned codebase "these files are coupled" is cheap but *true*, and at
+  0.5 the deck fell 254 → 57 taking two thirds of the real-source questions with it; at 0.78 it keeps
+  163, and 0.70 and 0.78 keep the identical count so the threshold sits on a plateau. Ark keeps all
+  39 of its challenges; vite sheds 139. **A repair pass was written, measured, and deleted** — it
+  rescued **zero** boards on both repos, because §8.3's 25%-siblings/20%-name-alikes mix already *is*
+  the repair, so a board that still loses is one where that supply does not exist. The synthetic
+  `a24 → … → a0` chain that §8.4 ranked hardest dies exactly where it should: at the chain's *end*,
+  where every file in the directory is a dependent. A subject in the *middle* survives, because the
+  files it imports are same-directory non-dependents — ADR-0008's flagship distractor, doing its job.
+  **Budgets, and one breach stated out loud.** `npm run budget` only ever measured Ark — 86 files,
+  292 ms, 4% of the reference scale — which has now hidden two regressions. It takes
+  `ARK_BUDGET_REPO` and reports a real clone: **vite indexes in 10.6 s against a 10 s ceiling**, an
+  advisory breach. The cost is not in anything this rung added — profiled, it is `computeLayout`
+  (seconds, grid-bucketed force sim at 300 iterations) and `git log --numstat` (4.4 s for 3,730
+  commits). 353 unit tests, 64 atlas tests. Every new assertion was mutation-checked; two could not
+  fail and were rewritten, and one of those is how the dead repair loop was found.
+  **Next**: index time. `computeLayout` and `git log` own the 10 s budget and neither has ever been
+  optimised. Then M3 proper — progression, field notes, localStorage.

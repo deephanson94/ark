@@ -41,18 +41,31 @@ export const INK: Ink = {
   textDim: '#7c8798',
 };
 
+/**
+ * Terrain — files with no edges — is drawn in one desaturated grey rather than
+ * given a hue. A hue is a claim of topological kinship; terrain has none.
+ */
+const TERRAIN_HUE = 220;
+const TERRAIN_SATURATION = 8;
+
+function isTerrain(index: number): boolean {
+  return index < 0;
+}
+
 /** Hue in degrees for the region at `index` in the atlas's sorted region list. */
 export function regionHue(index: number): number {
-  return (index * GOLDEN_ANGLE) % 360;
+  return isTerrain(index) ? TERRAIN_HUE : (index * GOLDEN_ANGLE) % 360;
 }
 
 export function regionColor(index: number, alpha = 1): string {
-  return `hsla(${regionHue(index).toFixed(1)}, 58%, 62%, ${alpha})`;
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 58;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 62%, ${alpha})`;
 }
 
 /** A darker companion for fills that sit behind the node colour. */
 export function regionWash(index: number, alpha = 1): string {
-  return `hsla(${regionHue(index).toFixed(1)}, 48%, 30%, ${alpha})`;
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 48;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 30%, ${alpha})`;
 }
 
 /**
@@ -69,7 +82,8 @@ export function regionWash(index: number, alpha = 1): string {
  * is the name, and what depends on it.
  */
 export function regionSilhouette(index: number, alpha = 1): string {
-  return `hsla(${regionHue(index).toFixed(1)}, 26%, 17%, ${alpha})`;
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 26;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 17%, ${alpha})`;
 }
 
 /**

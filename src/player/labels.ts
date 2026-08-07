@@ -45,6 +45,8 @@ export interface PlaceOptions {
   /** Skip candidates outside this screen rectangle. */
   readonly width: number;
   readonly height: number;
+  /** Boxes an earlier pass already committed. Never returned, only avoided. */
+  readonly occupied?: readonly PlacedLabel[];
 }
 
 function overlaps(a: PlacedLabel, b: PlacedLabel): boolean {
@@ -70,9 +72,14 @@ export function placeLabels(
     (a, b) => b.priority - a.priority || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
   );
 
-  const placed: PlacedLabel[] = [];
+  // Boxes already committed by an earlier pass. Region labels are placed first
+  // and node labels must not be allowed to overwrite them — two passes that
+  // each avoid collisions internally still collide with each other, which is
+  // what put `a22.js` through the middle of a region name on vite.
+  const placed: PlacedLabel[] = [...(options.occupied ?? [])];
+  const reserved = placed.length;
   for (const candidate of ranked) {
-    if (placed.length >= options.budget) break;
+    if (placed.length - reserved >= options.budget) break;
 
     const width = measure(candidate.text) + options.padding * 2;
     const height = options.lineHeight;
@@ -94,5 +101,5 @@ export function placeLabels(
 
     placed.push(box);
   }
-  return placed;
+  return placed.slice(reserved);
 }

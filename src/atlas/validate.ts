@@ -29,6 +29,7 @@ import type {
   Lang,
   NodeKind,
   Region,
+  RegionKind,
   RepoMeta,
   SkipCount,
   Truncation,
@@ -227,6 +228,8 @@ function validateEdge(value: unknown, at: string, nodeCount: number): AtlasEdge 
   };
 }
 
+const REGION_KINDS: readonly RegionKind[] = ['terrain', 'topology'];
+
 function validateRegion(value: unknown, at: string): Region {
   const r = asRecord(value, at);
   return {
@@ -234,6 +237,7 @@ function validateRegion(value: unknown, at: string): Region {
     label: asString(r['label'], `${at}.label`),
     nodeCount: asIntAtLeast(r['nodeCount'], `${at}.nodeCount`, 1),
     centroid: asPoint(r['centroid'], `${at}.centroid`),
+    kind: asMember(r['kind'], `${at}.kind`, REGION_KINDS),
   };
 }
 

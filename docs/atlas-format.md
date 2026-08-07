@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 1**
+**Schema version: 2**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -131,6 +131,14 @@ the walk), files over 512 KiB, and anything containing a NUL byte.
 | `confidence` | `"certain" \| "probable"` | See below. |
 | `weight` | `number` | Distinct specifiers in `from` producing this edge. ≥ 1. |
 
+Resolution reads the `package.json` and `tsconfig.json` **nearest the importing file**, then
+upward — which is what Node and TypeScript do, and what a monorepo requires. Dependencies union up
+the tree; `#` subpath imports come from the nearest package boundary only; `paths` and `baseUrl`
+come from the nearest tsconfig, following relative `extends`. A package name declared by any
+`package.json` inside the repo is **never** `external`, whatever a manifest says about it — calling
+a workspace sibling external asserts that nothing outside the repo can import back in, about an
+import that does exactly that.
+
 `type` edges — `import type { X } from 'y'` — are real couplings. They vanish at runtime and they
 absolutely break when `y` changes its signature, which is exactly the question Blast Radius asks.
 
@@ -163,10 +171,27 @@ truth set is sound and only the distractors are at risk) is set out in
 | `label` | `string` | The shared directory itself, or `"root"`. |
 | `nodeCount` | `number` | Must equal the number of nodes claiming this region. |
 | `centroid` | `[number, number]` | Mean member position, 2dp. |
+| `kind` | `"topology" \| "terrain"` | Whether the graph produced this cluster, or the graph had nothing to say. |
 
 Regions are derived from the import graph by label propagation, **not** from the directory tree
-(pillar 4). Files with no import edges fall back to grouping by directory, because topology has
-nothing to say about them. [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+(pillar 4). [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+
+#### `topology` versus `terrain`
+
+A **topology** region is a cluster the import graph produced, and it always has at least three
+members. A **terrain** region is the honest fallback: files with no edges at all, plus connected
+components below that floor, aggregated by **top-level path segment** — one `docs`, one `playground`,
+not one per directory.
+
+The distinction is load-bearing rather than cosmetic. On `vitejs/vite`, 56% of files have no edge in
+either direction, and grouping those by exact directory produced **771 regions** whose labels covered
+the map in overlapping text. Terrain says the true thing (`841 files under playground/ import
+nothing`) instead of five hundred precise useless ones, and the player draws all terrain in one
+desaturated wash so colour stays reserved for claims the graph actually supports.
+
+There is deliberately **no cap** on region count. The bound is a consequence rather than a tuning:
+`regions ≤ nodes / 3 + topLevelDirectories`, asserted in `test:atlas`.
+[ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
 
 ### 3.5 `history`
 
@@ -252,6 +277,11 @@ Choice sets contain only nodes whose `lang` is in `IMPORTING_LANGS`. A `.md` or 
 import anything, so offering one as a wrong answer makes the question easier rather than harder —
 padding is not a distractor (NORTH-STAR §8.3).
 
+A challenge is also refused when a **structure-blind heuristic** would earn band A on it: "select
+every candidate in the subject's directory", or "select every candidate sharing a name token". That
+is pillar 3's *"answerable by Ctrl+F"* made computable, scored with the same `scoreSet` the player is
+graded by. [ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
+
 > **Status at M2**: `blastRadius` generates. On this repo that is one challenge per subject with a
 > non-empty radius. The CLI prints how many it declined and why, and how much of each choice set
 > came from a principled distractor strategy rather than from `distant` padding.
@@ -266,7 +296,7 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `1`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `2`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 a v2 atlas into a v1 build fails with
 

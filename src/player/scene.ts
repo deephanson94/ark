@@ -10,7 +10,15 @@
  * the 2,000-node cost without a browser.
  */
 
-import type { Atlas, AtlasEdge, Confidence, EdgeKind, NodeId, NodeRef } from '../atlas/index.js';
+import type {
+  Atlas,
+  AtlasEdge,
+  Confidence,
+  EdgeKind,
+  NodeId,
+  NodeRef,
+  RegionKind,
+} from '../atlas/index.js';
 import { buildGraph, dependents } from '../atlas/index.js';
 import type { Graph } from '../atlas/index.js';
 import type { Bounds } from './camera.js';
@@ -46,6 +54,7 @@ export interface SceneRegion {
   readonly x: number;
   readonly y: number;
   readonly nodeCount: number;
+  readonly kind: RegionKind;
 }
 
 export interface Scene {
@@ -57,9 +66,23 @@ export interface Scene {
   readonly bounds: Bounds;
 }
 
+/**
+ * Terrain regions share one palette slot.
+ *
+ * Colour is the map's main legibility device, and a region hue is a claim that
+ * these files belong together for a *topological* reason. Edgeless files have
+ * no such reason, so giving each terrain lump its own hue spends the palette on
+ * the one thing it cannot describe — which is how 1,142 unconnected files
+ * turned vite's map into confetti. One shared wash says the true thing: this is
+ * ground, not a neighbourhood (ADR-0010).
+ */
+export const TERRAIN_INDEX = -1;
+
 export function prepare(atlas: Atlas): Scene {
   const graph = buildGraph(atlas);
-  const regionIndexById = new Map(atlas.regions.map((region, index) => [region.id, index]));
+  const regionIndexById = new Map(
+    atlas.regions.map((region, index) => [region.id, region.kind === 'terrain' ? TERRAIN_INDEX : index]),
+  );
 
   const nodes: SceneNode[] = atlas.nodes.map((node, ref) => ({
     ref,
@@ -83,10 +106,11 @@ export function prepare(atlas: Atlas): Scene {
   const regions: SceneRegion[] = atlas.regions.map((region, index) => ({
     id: region.id,
     label: region.label,
-    index,
+    index: region.kind === 'terrain' ? TERRAIN_INDEX : index,
     x: region.centroid[0],
     y: region.centroid[1],
     nodeCount: region.nodeCount,
+    kind: region.kind,
   }));
 
   return { atlas, graph, nodes, edges, regions, bounds: boundsOf(nodes) };

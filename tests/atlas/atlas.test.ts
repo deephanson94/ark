@@ -227,6 +227,39 @@ describe('regions', () => {
   });
 });
 
+describe('the region-count bound', () => {
+  it('gives every topology region at least the floor, so the count is bounded', () => {
+    // ADR-0010 refuses a numeric cap on region count — a magic number with no
+    // objective function. What replaces it is a theorem: every *topology*
+    // region has >= MIN_REGION members and terrain regions number at most one
+    // per top-level directory, so regions <= n/MIN_REGION + topLevelDirs. This
+    // asserts the premise the bound rests on.
+    const MIN_REGION = 3;
+    for (const region of atlas.regions) {
+      if (region.kind === 'terrain') continue;
+      expect(region.nodeCount, `${region.id} is a topology region of ${region.nodeCount}`)
+        .toBeGreaterThanOrEqual(MIN_REGION);
+    }
+    const topLevel = new Set(atlas.nodes.map((node) => node.path.split('/')[0] ?? ''));
+    expect(atlas.regions.filter((r) => r.kind === 'terrain').length).toBeLessThanOrEqual(
+      topLevel.size,
+    );
+    expect(atlas.regions.length).toBeLessThanOrEqual(
+      Math.ceil(atlas.nodes.length / MIN_REGION) + topLevel.size,
+    );
+  });
+
+  it('never marks an edgeless file as belonging to a topology region', () => {
+    const graph = buildGraph(atlas);
+    const byId = new Map(atlas.regions.map((region) => [region.id, region]));
+    for (const [ref, node] of atlas.nodes.entries()) {
+      const degree = (graph.in[ref] ?? []).length + (graph.out[ref] ?? []).length;
+      if (degree > 0) continue;
+      expect(byId.get(node.region)?.kind, `${node.path} has no edges`).toBe('terrain');
+    }
+  });
+});
+
 describe('challenges', () => {
   it('every challenge answer key is a proper subset of what the player sees', () => {
     for (const challenge of atlas.challenges) {

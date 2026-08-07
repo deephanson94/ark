@@ -149,3 +149,47 @@ describe('commonDirectory', () => {
     expect(commonDirectory([])).toBe('');
   });
 });
+
+describe('terrain', () => {
+  it('aggregates edgeless files by top-level segment, not by exact directory', () => {
+    // The rule that took vite from 771 regions to 123. Grouping by exact
+    // directory is a finer claim than a degree-0 node supports, and a repo with
+    // hundreds of small directories manufactures hundreds of regions from it.
+    const paths = [
+      'docs/guide/a.md',
+      'docs/guide/b.md',
+      'docs/api/c.md',
+      'docs/blog/posts/d.md',
+      'scripts/one.md',
+    ];
+    const regions = detectRegions(paths, []);
+    expect(regions.every((region) => region.kind === 'terrain')).toBe(true);
+    expect(regions.map((region) => region.label).sort()).toEqual(['docs', 'scripts']);
+    expect(regions.find((region) => region.label === 'docs')?.members).toHaveLength(4);
+  });
+
+  it('folds a component below the floor into terrain rather than giving it a legend entry', () => {
+    // Two files that import only each other are a true island, and the edge
+    // still draws — but a two-node region costs a palette slot and a legend line
+    // for a claim the map already makes visually.
+    const paths = ['pkg/pair/a.ts', 'pkg/pair/b.ts', 'pkg/big/x.ts', 'pkg/big/y.ts', 'pkg/big/z.ts'];
+    const regions = detectRegions(paths, [
+      { from: 0, to: 1 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+    ]);
+    const pair = regions.find((region) => region.members.includes(0));
+    expect(pair?.kind).toBe('terrain');
+    expect(regions.find((region) => region.members.includes(2))?.kind).toBe('topology');
+  });
+
+  it('never marks a real cluster as terrain', () => {
+    const paths = ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'];
+    const regions = detectRegions(paths, [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+    ]);
+    expect(regions.every((region) => region.kind === 'topology')).toBe(true);
+  });
+});
