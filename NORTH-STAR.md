@@ -370,6 +370,18 @@ geography because a curriculum has no natural shape; a codebase does.
 
 3D is an earned upgrade, not a v1 goal. If it happens, the layout must still derive from the graph.
 
+> **Amended 2026-08-07 — the north star is changing here, deliberately.** A **third-person view** is
+> now *allowed* as a future presentation layer, which this section previously ruled out. It is
+> **blocked and not scheduled**: §13's roadmap is unchanged and deliberately contains no slot for it.
+> The invariant is that **the world is a rendering of the atlas, never the reverse** — the third
+> dimension must be derived from the graph and **additive, preserving today's X,Y**, because a
+> re-layout would scramble every map anyone has learned, which is the asset §7 puts layout in the
+> indexer to protect. Pillar 4 is not suspended for it. Everything above still stands and is now the
+> constraint the direction has to satisfy, not an obstacle it removes; the ADR is the conditions
+> under which it is revisited, what it costs, and who is allowed to decide a gate has been met (the
+> human, not a session).
+> [`docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md`](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md).
+
 ---
 
 ## 10. Tech stack
@@ -381,7 +393,7 @@ geography because a curriculum has no natural shape; a codebase does.
 | Parsing | Hand-rolled ES-module scanner → tree-sitter (WASM) | Build-free, per pillar 6 |
 | Git | `git log --numstat`, `git blame --porcelain` via subprocess | No libgit2 dependency; the plumbing commands are stable and fast |
 | Layout | `d3-force` or `webcola`, **run in the indexer** | Determinism |
-| Player render | Canvas 2D or SVG. **Not** WebGL for v1 | A few thousand nodes doesn't need it. Revisit above ~5k. |
+| Player render | Canvas 2D or SVG. **Not** WebGL for v1 | A few thousand nodes doesn't need it. Revisit above ~5k — or under [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)'s preconditions, which are the *only* other reason to change renderer. |
 | UI | Plain DOM + a small overlay factory | Same reasoning as Promptasy — imperative UI at interaction rates doesn't need a reconciler |
 | Persistence | localStorage, keyed by repo + HEAD | No account, no backend |
 | Deploy | Static | Player is a pure function of the atlas |
@@ -476,7 +488,7 @@ focused weekends.
 
 | Pattern | Why not |
 |---|---|
-| 3D world | Codebases have intrinsic topology; imposed geography fights it (pillar 4) |
+| 3D world | Codebases have intrinsic topology; imposed geography fights it (pillar 4). **Amended 2026-08-07**: a gated third-person view is now accepted as a later presentation layer — the objection here is unchanged and becomes the constraint it must satisfy. [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) |
 | Hand-authored curriculum | Directly violates pillar 2 — the whole point is that it generalises |
 | Procedural art / zero assets | Irrelevant. Our visual output is a graph, and it should look like one |
 | Vanilla JS | We want types here; the atlas format and verb contracts are exactly what a type system is for |

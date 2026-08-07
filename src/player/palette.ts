@@ -22,6 +22,8 @@ export interface Ink {
   readonly silhouette: string;
   readonly edge: string;
   readonly edgeHighlight: string;
+  /** Ring on a node that still carries an unanswered question. */
+  readonly question: string;
   readonly text: string;
   readonly textDim: string;
 }
@@ -32,6 +34,9 @@ export const INK: Ink = {
   silhouette: '#2b3444',
   edge: 'rgba(140, 160, 190, 0.16)',
   edgeHighlight: 'rgba(255, 214, 130, 0.85)',
+  // Deliberately not the highlight colour: a question marker and a blast-radius
+  // highlight appear at the same time and must not read as the same thing.
+  question: 'rgba(126, 214, 214, 0.62)',
   text: '#e6edf7',
   textDim: '#7c8798',
 };

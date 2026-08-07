@@ -12,15 +12,17 @@
  * the repo at all.
  */
 
-import type { Atlas } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeRef } from '../atlas/index.js';
 import { parseAtlas } from '../atlas/index.js';
 import type { Camera } from './camera.js';
 import { fit, pan, screenToWorld, zoomAt } from './camera.js';
+import { createConsole } from './challenge.js';
 import { drawFrame } from './draw.js';
 import type { Fog } from './fog.js';
 import { CLEAR_FOG, coverage, landmarks, survey } from './fog.js';
+import { applyGrade } from './progress.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { blastRadius, pick, prepare } from './scene.js';
+import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
 import { createError, createHud, createInspector, createLegend } from './ui.js';
 
 const ATLAS_URL = 'atlas.json';
@@ -47,10 +49,6 @@ function start(scene: Scene, root: HTMLElement): void {
   if (maybeContext === null) throw new Error('This browser has no 2D canvas context.');
   const context = maybeContext;
 
-  const hud = createHud(scene.atlas);
-  const inspector = createInspector(scene);
-  root.replaceChildren(canvas, hud.root, createLegend(scene), inspector.root);
-
   let viewport = { width: 0, height: 0 };
   let camera: Camera = { x: 0, y: 0, scale: 1 };
   let fog: Fog = { surveyed: new Set(landmarks(scene.nodes)), understood: CLEAR_FOG.understood };
@@ -62,6 +60,68 @@ function start(scene: Scene, root: HTMLElement): void {
   const invalidate = (): void => {
     dirty = true;
   };
+
+  // One question per subject, looked up by node id. Challenges the player has
+  // passed drop out of `unanswered`, which is what the map's rings and the
+  // HUD's counter both read.
+  const challengeById = new Map(scene.atlas.challenges.map((c) => [c.subject, c]));
+  const unanswered = new Set<NodeRef>();
+  for (const [id] of challengeById) {
+    const ref = scene.graph.refById.get(id);
+    if (ref !== undefined) unanswered.add(ref);
+  }
+
+  /**
+   * How far a node's radius may be drawn.
+   *
+   * ADR-0008 decision 1, and the whole of it: **direct importers for everyone,
+   * the full cone only for what you have proved you know**. The rule does not
+   * depend on whether a challenge is open, because the leak it closes happens
+   * at the moment of *choosing* a subject — hovering to pick a landmark used to
+   * print the complete answer before the click that asked the question.
+   *
+   * Suppressing it for the subject alone would not have worked either: if D
+   * imports S then `dependents(D) ⊆ dependents(S)`, so hovering any suspected
+   * member of the answer reads off the rest.
+   */
+  const depthFor = (node: SceneNode): number =>
+    fog.understood.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
+
+  const challengeFor = (node: SceneNode | null): Challenge | null =>
+    node === null ? null : (challengeById.get(node.id) ?? null);
+
+  const describe = (node: SceneNode | null): void => {
+    inspector.show({
+      node,
+      radius: node === null ? null : radius,
+      understood: node !== null && fog.understood.has(node.id),
+      challenge: challengeFor(node),
+    });
+  };
+
+  const hud = createHud(scene.atlas);
+  const challengePanel = createConsole(scene, {
+    onGraded(challenge, grade) {
+      const progression = applyGrade(fog, challenge, grade);
+      fog = progression.fog;
+      const ref = scene.graph.refById.get(challenge.subject);
+      if (ref !== undefined) {
+        if (progression.unlocked) unanswered.delete(ref);
+        // The reveal fires on every grade, pass or fail — guardrail 6 says a
+        // wrong answer never takes anything away, so seeing the true shape is
+        // not a reward, it is the point of having answered at all.
+        selected = scene.nodes[ref] ?? selected;
+        radius = blastRadius(scene, ref, FULL_RADIUS);
+      }
+      describe(selected);
+      invalidate();
+    },
+    onClose() {
+      invalidate();
+    },
+  });
+  const inspector = createInspector(scene, (challenge) => challengePanel.open(challenge));
+  root.replaceChildren(canvas, hud.root, createLegend(scene), inspector.root, challengePanel.root);
 
   function resize(): void {
     const ratio = window.devicePixelRatio || 1;
@@ -76,11 +136,21 @@ function start(scene: Scene, root: HTMLElement): void {
   function frame(): void {
     if (dirty) {
       dirty = false;
-      const stats = drawFrame(context, { scene, camera, viewport, fog, hovered, selected, radius });
+      const stats = drawFrame(context, {
+        scene,
+        camera,
+        viewport,
+        fog,
+        hovered,
+        selected,
+        radius,
+        questions: unanswered,
+      });
       hud.update(
         coverage(fog, scene.nodes.length),
         stats.level,
         `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels`,
+        unanswered.size,
       );
     }
     requestAnimationFrame(frame);
@@ -121,12 +191,14 @@ function start(scene: Scene, root: HTMLElement): void {
     const found = pick(scene, world.x, world.y, camera.scale);
     if (found === hovered) return;
     hovered = found;
-    // Hovering previews the M2 question — "change this, what breaks?" — before
-    // the challenge that asks it exists.
-    radius = found === null ? null : blastRadius(scene, found.ref);
-    if (found !== null) inspector.show(found, radius);
-    else if (selected !== null) inspector.show(selected, null);
-    else inspector.show(null, null);
+    // Hovering previews the question — "change this, what imports it?" — at the
+    // depth `depthFor` allows, which for anything unproven is one hop.
+    radius = found === null ? null : blastRadius(scene, found.ref, depthFor(found));
+    if (found !== null) describe(found);
+    else if (selected !== null) {
+      radius = blastRadius(scene, selected.ref, depthFor(selected));
+      describe(selected);
+    } else describe(null);
     canvas.style.cursor = found === null ? 'grab' : 'pointer';
     invalidate();
   });
@@ -143,11 +215,11 @@ function start(scene: Scene, root: HTMLElement): void {
     selected = found;
     if (found !== null) {
       fog = survey(fog, found.id);
-      radius = blastRadius(scene, found.ref);
+      radius = blastRadius(scene, found.ref, depthFor(found));
     } else {
       radius = null;
     }
-    inspector.show(found, radius);
+    describe(found);
     invalidate();
   };
 
@@ -166,9 +238,21 @@ function start(scene: Scene, root: HTMLElement): void {
   );
 
   window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && challengePanel.isOpen()) {
+      challengePanel.close();
+      return;
+    }
+    if (challengePanel.isOpen()) return;
     if (event.key === 'f') {
       camera = fit(scene.bounds, viewport);
       invalidate();
+    }
+    if (event.key === 'Enter') {
+      const challenge = challengeFor(selected);
+      if (challenge !== null) {
+        event.preventDefault();
+        challengePanel.open(challenge);
+      }
     }
   });
 

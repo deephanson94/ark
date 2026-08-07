@@ -84,7 +84,13 @@ export function reach(
   return seen;
 }
 
-/** Everything that transitively imports `subject` within `maxDepth` hops. */
+/**
+ * Everything that transitively imports `subject` within `maxDepth` hops.
+ *
+ * Pass `Infinity` for the unbounded set, which is what the Blast Radius answer
+ * key is (ADR-0008) — the traversal terminates when the frontier empties, and
+ * `seen` makes cycles safe.
+ */
 export function dependents(graph: Graph, subject: NodeRef, maxDepth: number): Map<NodeRef, number> {
   return reach(graph, subject, 'dependents', maxDepth);
 }
@@ -96,6 +102,51 @@ export function dependencies(
   maxDepth: number,
 ): Map<NodeRef, number> {
   return reach(graph, subject, 'dependencies', maxDepth);
+}
+
+/**
+ * For every transitive dependent of `subject`, the node it imports that sits
+ * one hop closer — a shortest-path tree, pointing inward.
+ *
+ * This is what turns "you missed two" into "you missed the two that reach it
+ * through `src/atlas/index.ts`". Appendix A: partial credit plus *derived*
+ * evidence, never canned. Deterministic because `atlas.edges` is sorted, so
+ * ties between equal-length routes always break the same way.
+ */
+export function dependentRoutes(graph: Graph, subject: NodeRef): Map<NodeRef, NodeRef> {
+  const nextHop = new Map<NodeRef, NodeRef>();
+  const seen = new Set<NodeRef>([subject]);
+  let frontier: NodeRef[] = [subject];
+  while (frontier.length > 0) {
+    const next: NodeRef[] = [];
+    for (const ref of frontier) {
+      for (const edge of graph.in[ref] ?? []) {
+        if (seen.has(edge.from)) continue;
+        seen.add(edge.from);
+        nextHop.set(edge.from, ref);
+        next.push(edge.from);
+      }
+    }
+    frontier = next;
+  }
+  return nextHop;
+}
+
+/**
+ * The import chain from `from` down to the subject, both ends included.
+ * Returns `[from]` alone when no route exists.
+ */
+export function routeTo(routes: ReadonlyMap<NodeRef, NodeRef>, from: NodeRef): NodeRef[] {
+  const chain = [from];
+  const guard = routes.size + 1;
+  let at = from;
+  for (let step = 0; step < guard; step++) {
+    const next = routes.get(at);
+    if (next === undefined) break;
+    chain.push(next);
+    at = next;
+  }
+  return chain;
 }
 
 export type Challengeability =
@@ -118,9 +169,14 @@ export type Challengeability =
  * the candidates covers the truth set too.
  *
  * A candidate's verdict is therefore only trustworthy if every node on its
- * outgoing side, within the depth bound, has fully resolved imports and is
- * reached over `certain` edges. Anything less and we skip the challenge; a
- * missing challenge costs nothing, a wrong answer key costs trust permanently.
+ * outgoing side has fully resolved imports and is reached over `certain` edges.
+ * Anything less and we skip the challenge; a missing challenge costs nothing, a
+ * wrong answer key costs trust permanently.
+ *
+ * `maxDepth` exists so the caller states the reach it is claiming. Blast Radius
+ * passes `Infinity`, because its truth set is unbounded (ADR-0008) — a bounded
+ * check would certify a distractor that reaches the subject one hop past the
+ * bound, which is exactly the wrong answer key this function exists to prevent.
  */
 export function isChallengeable(
   graph: Graph,
@@ -174,4 +230,45 @@ export function isChallengeable(
   }
 
   return { ok: true };
+}
+
+/**
+ * `isChallengeable`'s verdict for every node at once.
+ *
+ * A node is **tainted** when anything in its dependency closure — itself
+ * included — has an unresolved import or a `probable` outgoing edge. That is
+ * precisely the condition `isChallengeable` rejects on, so
+ * `isChallengeable(graph, s, cs, Infinity).ok` holds exactly when none of
+ * `{s, ...cs}` is tainted. `tests/unit/graph.test.ts` asserts that equivalence
+ * rather than assuming it.
+ *
+ * Computed by one reverse breadth-first search from every unsound node: X's
+ * dependency closure contains B if and only if X can reach B along import
+ * edges, which is the same as B reaching X along them backwards. O(V + E) once,
+ * instead of O(V · E) across a repo's worth of candidate sets.
+ */
+export function taintedRefs(graph: Graph): Set<NodeRef> {
+  const tainted = new Set<NodeRef>();
+  let frontier: NodeRef[] = [];
+  for (const [ref, node] of graph.atlas.nodes.entries()) {
+    const unsound =
+      node.unresolved.length > 0 ||
+      (graph.out[ref] ?? []).some((edge) => edge.confidence !== 'certain');
+    if (unsound) {
+      tainted.add(ref);
+      frontier.push(ref);
+    }
+  }
+  while (frontier.length > 0) {
+    const next: NodeRef[] = [];
+    for (const ref of frontier) {
+      for (const edge of graph.in[ref] ?? []) {
+        if (tainted.has(edge.from)) continue;
+        tainted.add(edge.from);
+        next.push(edge.from);
+      }
+    }
+    frontier = next;
+  }
+  return tainted;
 }

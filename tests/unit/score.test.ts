@@ -109,7 +109,8 @@ describe('gradeSet', () => {
   it('derives evidence from the measured result', () => {
     const grade = gradeSet(challenge, { picked: [...truth.slice(0, 2), candidates[10] ?? ''] });
     expect(grade.evidence).toContain('Found 2 of 4');
-    expect(grade.evidence).toContain('depth 2');
+    // The measured furthest hop, not a bound the generator imposed (ADR-0008).
+    expect(grade.evidence).toContain('furthest is 2 hops away');
     expect(grade.evidence).toContain('2 reached the subject');
     expect(grade.evidence).toContain('1 of your picks');
   });

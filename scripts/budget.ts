@@ -61,6 +61,46 @@ function kib(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
+/**
+ * Challenge generation at the scale the ceilings are quoted at.
+ *
+ * This one cannot be extrapolated from the real repo, and pretending otherwise
+ * nearly shipped a ten-second regression: generation is superlinear in node
+ * count — the dependent sweep is O(V·E), and the distractor strategies are asked
+ * for a choice set once per subject — so `ms/file` measured on 80 files says
+ * nothing about 2,000. The first version of the generator scored 2.93 ms/file
+ * here, comfortably inside its per-file ceiling, and took **15.3 s** on the
+ * fixture below.
+ *
+ * A layered graph: 2,000 files in 20 directories, each importing three files in
+ * the layer beneath. Not any particular repo, but the right shape — deep cones,
+ * wide fan-in, and a hub layer at the bottom.
+ */
+async function generationAtScale(): Promise<{ ms: number; challenges: number }> {
+  const { atlasWith } = await import('../tests/fixtures/atlas.js');
+  const { generateBlastRadius } = await import('../src/verbs/blastRadius/index.js');
+  const layers = 20;
+  const per = REFERENCE_FILES / layers;
+  const name = (layer: number, index: number): string =>
+    `src/l${String(layer).padStart(2, '0')}/f${String(index).padStart(3, '0')}.ts`;
+
+  const paths: string[] = [];
+  for (let layer = 0; layer < layers; layer++) {
+    for (let i = 0; i < per; i++) paths.push(name(layer, i));
+  }
+  const links: (readonly [string, string])[] = [];
+  for (let layer = 1; layer < layers; layer++) {
+    for (let i = 0; i < per; i++) {
+      for (let k = 0; k < 3; k++) links.push([name(layer, i), name(layer - 1, (i * 7 + k * 13) % per)]);
+    }
+  }
+
+  const atlas = atlasWith(paths, links);
+  const started = process.hrtime.bigint();
+  const challenges = generateBlastRadius(atlas);
+  return { ms: Number(process.hrtime.bigint() - started) / 1e6, challenges: challenges.length };
+}
+
 async function runtimeDependencyCount(): Promise<number> {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
     dependencies?: Record<string, string>;
@@ -80,6 +120,7 @@ async function main(): Promise<number> {
   const projectedBytes = bytesPerFile * REFERENCE_FILES;
   const bytesPerFileCeiling = MAX_ATLAS_BYTES / REFERENCE_FILES;
   const deps = await runtimeDependencyCount();
+  const scale = await generationAtScale();
 
   const rows: Row[] = [
     row('atlas size', kib(bytes), kib(MAX_ATLAS_BYTES), true, bytes > MAX_ATLAS_BYTES),
@@ -97,6 +138,15 @@ async function main(): Promise<number> {
       `${(MAX_INDEX_MS / REFERENCE_FILES).toFixed(2)} ms`,
       false,
       msPerFile > MAX_INDEX_MS / REFERENCE_FILES,
+    ),
+    // Hard, and measured rather than projected: generation is the one indexer
+    // stage whose cost does not scale linearly with file count.
+    row(
+      'generate @ 2000',
+      `${scale.ms.toFixed(0)} ms  (${scale.challenges} challenges on a synthetic 20-layer graph)`,
+      `${MAX_INDEX_MS} ms`,
+      true,
+      scale.ms > MAX_INDEX_MS,
     ),
     row('player runtime deps', String(deps), String(MAX_PLAYER_DEPS), true, deps > MAX_PLAYER_DEPS),
     unmeasured('player first paint', '1.5 s', 'needs a browser — measured by test:e2e'),

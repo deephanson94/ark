@@ -11,7 +11,7 @@
  * inferred — if the panel says 14 dependents, a graph query said 14.
  */
 
-import type { Atlas, AtlasNode } from '../atlas/index.js';
+import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -40,7 +40,7 @@ function field(label: string, value: string, title?: string): HTMLElement {
 
 export interface Hud {
   readonly root: HTMLElement;
-  update(coverage: Coverage, level: string, stats: string): void;
+  update(coverage: Coverage, level: string, stats: string, questionsLeft: number): void;
 }
 
 export function createHud(atlas: Atlas): Hud {
@@ -54,38 +54,58 @@ export function createHud(atlas: Atlas): Hud {
   const bar = el('div', 'hud-bar');
   progress.append(bar);
   const counts = el('div', 'hud-counts');
+  const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
 
-  const root = el('div', 'hud', [title, head, progress, counts, detail]);
+  const root = el('div', 'hud', [title, head, progress, counts, quests, detail]);
 
   return {
     root,
-    update(coverage, level, stats) {
+    update(coverage, level, stats, questionsLeft) {
       bar.style.width = `${(coverage.fraction * 100).toFixed(1)}%`;
       // Two numbers, deliberately separate. Surveyed is what you have looked
       // at; understood is what you have proven. Only the second lifts the fog
-      // for real, and until the Blast Radius verb lands it is honestly zero.
+      // for real, which is why the bar tracks it and not the larger number.
       counts.textContent = `${coverage.understood} understood · ${coverage.surveyed} surveyed · ${coverage.total} files`;
+      // Short enough not to wrap in a 296 px panel: the first version read
+      // "N questions left — ringed on the map", took two lines, and pushed the
+      // stats line into a third.
+      quests.textContent =
+        questionsLeft === 0
+          ? 'every question answered'
+          : `${questionsLeft} question${questionsLeft === 1 ? '' : 's'} ringed on the map`;
       detail.textContent = `${level} · ${stats}`;
     },
   };
 }
 
-export interface Inspector {
-  readonly root: HTMLElement;
-  show(node: SceneNode | null, radius: Radius | null): void;
+export interface InspectorView {
+  readonly node: SceneNode | null;
+  readonly radius: Radius | null;
+  /** True when the player has proved they know this node's radius. */
+  readonly understood: boolean;
+  /** The question this node carries, if any. */
+  readonly challenge: Challenge | null;
 }
 
-export function createInspector(scene: Scene): Inspector {
+export interface Inspector {
+  readonly root: HTMLElement;
+  show(view: InspectorView): void;
+}
+
+export function createInspector(
+  scene: Scene,
+  onChallenge: (challenge: Challenge) => void,
+): Inspector {
   const empty = el('div', 'inspector-empty', [
-    'Click a landmark to survey it. Hover to see what would break if you changed it.',
+    'Click a landmark to survey it. Hover to see what imports it — the rest of the radius is earned.',
   ]);
   const body = el('div', 'inspector-body');
   const root = el('aside', 'inspector', [empty, body]);
 
   return {
     root,
-    show(node, radius) {
+    show({ node, radius, understood, challenge }) {
       body.replaceChildren();
       empty.style.display = node === null ? 'block' : 'none';
       if (node === null) return;
@@ -101,13 +121,25 @@ export function createInspector(scene: Scene): Inspector {
         field('region', region?.label ?? atlasNode.region),
         field('lines', String(atlasNode.loc)),
         field('imports', String(dependencies)),
-        field('depended on by', String(node.dependentCount)),
+        // "imported by", not "depended on by": the second reads as transitive,
+        // and this number is the direct in-degree. On a repo with a barrel the
+        // two differ by an order of magnitude, and conflating them is the exact
+        // mistake the verb exists to correct.
+        field('imported by', String(node.dependentCount)),
       );
 
-      if (radius !== null && radius.subject === node.ref) {
+      // What the map is allowed to tell you before you have proved anything.
+      //
+      // M1 printed `blast radius (≤3 hops): 38 files` here for every node, which
+      // is the answer to the question the game is about to ask — handed over on
+      // hover, involuntarily, to a player who never chose to cheat. ADR-0008
+      // decision 1: direct importers are free (they are drawn on the canvas
+      // already, and §8.4 measures `surprise` against exactly that guess); the
+      // transitive count is a fact you earn by passing this node's challenge.
+      if (understood && radius !== null && radius.subject === node.ref) {
         body.append(
           field(
-            `blast radius (≤${radius.maxDepth} hops)`,
+            'blast radius',
             `${radius.dependents.size} file${radius.dependents.size === 1 ? '' : 's'}`,
           ),
         );
@@ -138,6 +170,15 @@ export function createInspector(scene: Scene): Inspector {
             atlasNode.exports.join('\n'),
           ),
         );
+      }
+
+      if (challenge !== null) {
+        const action = el('button', 'inspector-action', [
+          understood ? 'Map it again' : 'Map its blast radius',
+        ]);
+        action.type = 'button';
+        action.addEventListener('click', () => onChallenge(challenge));
+        body.append(action, el('div', 'inspector-hint', ['or press enter']));
       }
 
       if (atlasNode.unresolved.length > 0) {

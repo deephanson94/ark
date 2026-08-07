@@ -104,3 +104,100 @@ One line per iteration: what changed, and what to do next.
   "fixes" the generator back into over-promising. **Next**: M2 itself. ADR-0008 lists the algorithm,
   the invariant `candidates ∩ dependents(subject, ∞) = truth`, and every existing file that has to
   change. Nothing is implemented yet.
+
+- **M2 — the Blast Radius verb.** The kill point, and the first iteration where the thing is a game.
+  `src/verbs/blastRadius/` ships `generate()`, the four §8.3 distractor strategies, computed
+  difficulty per §8.4, and a `reveal()` that turns a grade into the reason each pick was or was not
+  in the radius. `npx ark index .` now emits **37 challenges, one per subject with a non-empty
+  radius**, and the player has a challenge console over the map: partial credit, derived evidence,
+  and `understand()` finally doing the job it was written for at M1 — passing a question lifts the
+  fog on the subject and on the files you actually got right, and unlocks its full radius on the map.
+  Everything ADR-0008 fixed is implemented as written: unbounded truth, the invariant
+  `candidates ∩ dependents(subject, ∞) = truth`, a prompt that promises dependence rather than
+  required change, and direct-importers-only on hover until you have earned the rest.
+  **Kill-point verdict: continue, with a caveat.** The strongest part is the reveal — being told
+  that `tests/unit/ignore.test.ts` reaches `src/atlas/serialize.ts` in three hops *through
+  `src/atlas/index.ts`* is a true, non-obvious, useful fact about this repo, and it is the moment
+  §4 promises. The distractors carry it: on a question about `src/atlas/schema.ts`, `order.ts` and
+  `identity.ts` sit in the same directory, are imported by the same files, and import nothing from
+  it — you have to reason to reject them. The caveat is that **the evidence is thin and partly
+  negative**. 30 of 37 answer keys are exactly 6 files, which is a tell an attentive player would
+  learn; 5 pairs of subjects have byte-identical answer keys because their cones genuinely are
+  identical; and two of the four strategies are nearly dry here (`nameSimilar` found 2 wrong answers
+  in 37 questions, `coChange` found **0**, because 14 commits produce no co-change signal and
+  because files with confusable names in a small disciplined repo usually really do import each
+  other). 96% of the wrong answers came from two strategies. So the loop works, but *this repo
+  cannot tell us whether it stays interesting* — that needs a bigger codebase with real history,
+  which is also the only thing that will exercise §8.3's best strategy.
+  **Three things measurement caught that reading would not.** (1) Ranking a hub's sampled answer key
+  by in-degree — "hubs are memorable" — produced seven groups of subjects with identical answer keys,
+  every `src/indexer/` module answering the same five files plus its own unit test, which collapses
+  the question into "which test shares this name": pillar 3's Ctrl+F failure reached from the other
+  side. Ranking by *smallest transitive dependency set* instead — prefer the dependent that
+  discriminates — cut that to five. (2) Generation took **15.3 s on a 2,000-file fixture** while
+  scoring a comfortable 2.93 ms/file on this one, because it is superlinear and the budget script
+  only extrapolated linearly; certifying every considered subject rather than the shortlist cost 7 s
+  of that, and tokenising filenames inside the per-subject loop cost the rest. Now **1.8 s**, and
+  `npm run budget` measures it on a synthetic 2,000-node graph rather than projecting it. (3) Two
+  regions were both labelled `src/verbs/index`, so the legend claimed two different colours were the
+  same place — refinement now uses the hub's path below the shared name, and an atlas test asserts
+  labels are unique. Atlas grew 40 → 83 KiB (1067 B/file against a 2621 B ceiling). 266 unit tests,
+  62 atlas tests. Every new assertion was checked by breaking the thing it claims to check: three of
+  them could not fail and were rewritten — the flagship-distractor test passed with the flagship
+  disabled, the sampling test used an even sample size where round-robin is direction-blind, and the
+  inert-file test put its `.md` files where no strategy would have offered them anyway.
+  **Next**: M3 — progression, field notes and localStorage — and the first thing it should fix is
+  the repetition above: never serve two near-identical answer keys in a row, and rank by difficulty
+  rather than by whatever the player clicks. Also worth doing before M4: point the indexer at a
+  large repo with real history and re-read this entry, because `coChange` has still never fired.
+
+- **ADR-0009 and the first real-repo test.** Two things, one session.
+  **ADR-0009 — third person is a presentation layer, and it is blocked.** The human asked for a
+  third-person POV, which NORTH-STAR §9 and Appendix B forbid, so it needed an ADR rather than a
+  quiet edit. Accepted *in principle*, blocked, and deliberately **not** on the roadmap: three
+  preconditions (risk #6's prior-art writeup, finally; M3/M4 plus a large real repo answering the
+  content question; the unmeasured map-interaction budget closed), three design constraints (the
+  overview survives; the world renders the atlas and never the reverse; ADR-0006's no-transcendentals
+  rule carries forward), and one ship criterion that only the human may sign off. If the gates open,
+  **the orbit fly-through is built first and the walkable avatar is gated behind its measured
+  results** — it preserves X,Y by construction and has no ground to invent, so it cannot violate
+  pillar 4. A Fable review demolished the first draft and was right three times: the "88%
+  presentation-independent" figure dropped `main.ts` and `palette.ts` from its own denominator (it is
+  **74%**), `node.layout` is *not* the only 2D thing in the atlas (`Region.centroid` is another, and
+  `asPoint` hard-asserts two coordinates), and the method-of-loci argument was backwards — the
+  map-learning literature says map study beats navigation for exactly the *survey* knowledge this
+  product teaches, so the strongest "for" argument predicts the flat map wins its own experiment.
+  All three corrections are in the ADR rather than edited out.
+  **Then we pointed it at real repos, and it broke in four measurable ways.** `vllm` first, at the
+  human's suggestion: **918 nodes, 0 edges, 0 challenges** — it is 4,108 Python files and the v1
+  scanner is ES-modules only (§7.2), so 5,494 files were skipped as unsupported. Not a scale test, a
+  language test, and Ark fails it. It did reveal that **the walk (4.1 s) and `git log` (2.4 s)
+  dominate index time on any real repo** — 6.5 s of a 10 s budget before a single import is parsed.
+  Then `vitejs/vite`: 2,025 nodes, 3,730 commits, **9.7 s to index against a 10 s ceiling**. Findings,
+  in order of severity. (1) **97% of the questions are about the wrong thing.** 197 of 254 subjects
+  are `playground/` demos and 49 are test fixtures; **7 are about vite's actual source**, because 54%
+  of `packages/` is refused by guardrail 4 (762 unresolved imports — workspace aliases and tsconfig
+  paths the resolver does not know) while the playground's tiny self-contained fixtures resolve
+  perfectly. The guardrail is working exactly as designed and is systematically selecting the least
+  interesting part of the repo. (2) **The map is unreadable** — 771 regions for 2,025 nodes, and
+  `draw.ts` renders every region label with no collision pass (node labels get one, region labels do
+  not), so the screenshot is a solid smear of overlapping text. Risk #2, confirmed. (3) **A real
+  defect in M2's generator**: truth was sampled from the dependent set without filtering by taint, so
+  a tainted answer-key member dragged its unsound cone onto the board and `isChallengeable` refused
+  the whole question — **14 of 40 shipped challenges lost for no reason**. Fixed by sampling from the
+  certain dependents only, which is free because unsampled dependents are banned from the board
+  anyway. vite went **26 → 254 challenges**, and `coChange` produced its first distractors ever (12).
+  (4) **`maxChallenges: 40` was the wrong shape** — 26 questions for a 2,025-file repo. Now
+  `maxChallengesFor(n) = max(40, ⌈n/8⌉)`; ark is unchanged at 37.
+  **A cold playtest on vite scored 80% over five questions, and that is the bad news.** Four of the
+  five were answerable by "which file in this directory is called `index.js`" — pillar 3's stated
+  Ctrl+F failure. The fifth scored 0% and was worse: difficulty **0.91**, a synthetic 24-deep chain
+  `a24 → … → a0` that exists only to exercise vite's bundler, whose reveal printed a 24-hop route as
+  a wall of text. **§8.4's `surprise` term cannot tell "surprising because the architecture is
+  subtle" from "surprising because it is a generated chain"**, and it ranked the most worthless
+  question in the deck top. That is the sharpest thing this session learned.
+  **Next**: not M3. The content question is now answered and the answer is no — on a real repo the
+  questions are about the wrong files. Fix that first: teach the resolver tsconfig `paths` and
+  workspace packages (it converts 54% of vite's source from unaskable to askable), decide what to do
+  about repos that are mostly fixtures, cap the reveal's route rendering, and give region detection
+  and region labels a collision pass. Then M3.

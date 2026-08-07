@@ -168,13 +168,24 @@ export function detectRegions(
   for (const name of preliminary) taken.set(name, (taken.get(name) ?? 0) + 1);
 
   const used = new Set<string>();
+  const usedLabels = new Set<string>();
   const regions: DetectedRegion[] = [];
   for (const [index, members] of ordered.entries()) {
     const preferred = preliminary[index] ?? 'root';
-    const label =
+    let label =
       (taken.get(preferred) ?? 0) > 1
-        ? `${preferred}/${stemOf(paths[hubOf(members, paths, degrees)] ?? '')}`
+        ? `${preferred}/${hubSuffix(paths[hubOf(members, paths, degrees)] ?? '', preferred)}`
         : preferred;
+    // The legend prints labels, not ids, so two regions sharing a label makes
+    // the legend say two different colours are the same place — a false claim
+    // about the map, which pillar 4 does not allow it to make for tidiness or
+    // any other reason. Refinement already disambiguates by hub file; this is
+    // the backstop for when even that collides.
+    if (usedLabels.has(label)) {
+      const base = label;
+      for (let suffix = 2; usedLabels.has(label); suffix++) label = `${base} (${suffix})`;
+    }
+    usedLabels.add(label);
     const base = slugify(label);
     let id = base;
     for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
@@ -200,6 +211,21 @@ function hubOf(
     if (better) hub = member;
   }
   return hub;
+}
+
+/**
+ * How to say which community inside `preferred` this is, given its busiest
+ * file. The hub's path *below* the shared name, not just its stem — two regions
+ * under `src/verbs` whose hubs are both called `index.ts` would otherwise both
+ * refine to `src/verbs/index`, which is how a legend ends up naming two
+ * different colours the same thing.
+ */
+function hubSuffix(hubPath: string, preferred: string): string {
+  const prefix = `${preferred}/`;
+  const relative = hubPath.startsWith(prefix) ? hubPath.slice(prefix.length) : hubPath;
+  const slash = relative.lastIndexOf('/');
+  const directory = slash === -1 ? '' : `${relative.slice(0, slash)}/`;
+  return `${directory}${stemOf(relative)}`;
 }
 
 /** `src/indexer/scan.ts` → `scan`. */

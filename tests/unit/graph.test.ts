@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Atlas, AtlasEdge, AtlasNode } from '../../src/atlas/index.js';
-import { buildGraph, dependencies, dependents, isChallengeable, refOf } from '../../src/atlas/index.js';
+import {
+  buildGraph,
+  dependencies,
+  dependentRoutes,
+  dependents,
+  isChallengeable,
+  refOf,
+  routeTo,
+  taintedRefs,
+} from '../../src/atlas/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /**
@@ -130,5 +139,91 @@ describe('isChallengeable — guardrail 4', () => {
     const verdict = isChallengeable(graph, graph.refByPath.get('a.ts') ?? 0, candidatesOf(atlas, ['d.ts']), 3);
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.reason).toContain('ambiguous');
+  });
+});
+
+describe('taintedRefs — guardrail 4, precomputed', () => {
+  it('agrees with isChallengeable on every subject and choice set', () => {
+    // The optimisation is only allowed to exist if it is the *same* verdict.
+    // Asserted by exhaustive comparison rather than by reading both functions
+    // and agreeing they look alike.
+    const variants: Atlas[] = [
+      chain(),
+      chain({ unresolvedIn: ['a.ts'] }),
+      chain({ unresolvedIn: ['c.ts'] }),
+      chain({ unresolvedIn: ['island.ts'] }),
+      chain({ probableFrom: 'c.ts' }),
+      chain({ probableFrom: 'b.ts' }),
+    ];
+    let sawBoth = { ok: 0, refused: 0 };
+    for (const atlas of variants) {
+      const graph = buildGraph(atlas);
+      const tainted = taintedRefs(graph);
+      for (const subject of atlas.nodes.keys()) {
+        for (const candidate of atlas.nodes.keys()) {
+          if (candidate === subject) continue;
+          const verdict = isChallengeable(graph, subject, [candidate], Number.POSITIVE_INFINITY);
+          const fast = !tainted.has(subject) && !tainted.has(candidate);
+          expect(
+            fast,
+            `${atlas.nodes[subject]?.path} / ${atlas.nodes[candidate]?.path}`,
+          ).toBe(verdict.ok);
+          if (verdict.ok) sawBoth.ok++;
+          else sawBoth.refused++;
+        }
+      }
+    }
+    // Both outcomes have to occur, or the equivalence above is trivially true.
+    expect(sawBoth.ok).toBeGreaterThan(0);
+    expect(sawBoth.refused).toBeGreaterThan(0);
+  });
+
+  it('taints everything upstream of an unresolved import, not just the file itself', () => {
+    const atlas = chain({ unresolvedIn: ['a.ts'] });
+    const graph = buildGraph(atlas);
+    const tainted = taintedRefs(graph);
+    for (const path of ['a.ts', 'b.ts', 'c.ts', 'd.ts']) {
+      expect(tainted.has(graph.refByPath.get(path) ?? -1), path).toBe(true);
+    }
+    expect(tainted.has(graph.refByPath.get('island.ts') ?? -1)).toBe(false);
+  });
+});
+
+describe('dependentRoutes', () => {
+  it('gives every dependent a shortest chain back to the subject', () => {
+    const atlas = chain();
+    const graph = buildGraph(atlas);
+    const subject = graph.refByPath.get('a.ts') ?? 0;
+    const routes = dependentRoutes(graph, subject);
+    const pathsOf = (from: string): string[] =>
+      routeTo(routes, graph.refByPath.get(from) ?? 0).map((ref) => atlas.nodes[ref]?.path ?? '');
+    expect(pathsOf('b.ts')).toEqual(['b.ts', 'a.ts']);
+    expect(pathsOf('d.ts')).toEqual(['d.ts', 'c.ts', 'b.ts', 'a.ts']);
+  });
+
+  it('returns the node alone when nothing connects it', () => {
+    const atlas = chain();
+    const graph = buildGraph(atlas);
+    const routes = dependentRoutes(graph, graph.refByPath.get('a.ts') ?? 0);
+    expect(routeTo(routes, graph.refByPath.get('island.ts') ?? 0)).toEqual([
+      graph.refByPath.get('island.ts'),
+    ]);
+  });
+
+  it('terminates on a cycle instead of walking it forever', () => {
+    const atlas = atlasWith(
+      ['x.ts', 'y.ts', 'z.ts'],
+      [
+        ['y.ts', 'x.ts'],
+        ['z.ts', 'y.ts'],
+        ['x.ts', 'z.ts'],
+      ],
+    );
+    const graph = buildGraph(atlas);
+    const routes = dependentRoutes(graph, graph.refByPath.get('x.ts') ?? 0);
+    const chainBack = routeTo(routes, graph.refByPath.get('z.ts') ?? 0);
+    expect(chainBack.length).toBeLessThanOrEqual(atlas.nodes.length);
+    expect(chainBack[0]).toBe(graph.refByPath.get('z.ts'));
+    expect(chainBack.at(-1)).toBe(graph.refByPath.get('x.ts'));
   });
 });
