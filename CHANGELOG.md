@@ -719,3 +719,53 @@ One line per iteration: what changed, and what to do next.
   ranking. Verified: 374 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling
   (1,064 B/file, 261 ms), e2e clean with 13 peaks drawn and `src/atlas/schema.ts` the tallest.
   **Next**: rung 2 — extruded scene, orbit camera. The measured 3D win is exocentric and this is it.
+
+- **Rung 2 — the world stands up, and it turns.** `o` tips the map into an orbit view: every file is
+  a column standing on its own 2D footing, its height ADR-0013's `elevation`, wires running roof to
+  roof, and dragging turns the whole world. `o` again returns to the flat map. **Zero runtime
+  dependencies still.**
+  **The shape of this rung is the evidence, not a compromise.** `docs/prior-art.md` §2 found that the
+  literature splits on *viewpoint*, not on dimension: every result where 3D beat 2D came from motion
+  parallax over a structure the viewer stayed **outside** of — and the strongest is about this
+  product's exact task, path tracing in a node-link graph (~55 comprehensible nodes in 2D against
+  ~160 with parallax, replicated 2005, **preregistered** 2023 against a 2D baseline that had edge
+  routing *and* interactive highlighting). Parallax beat stereo in the study that separated them,
+  which is why this needs a mouse and not a headset. Every result where 3D *lost* put the viewer
+  inside. So orbiting is not a stepping stone toward the real thing — on the evidence it **is** the
+  intervention, and ADR-0009's P4 keeps the avatar behind the Trace verb.
+  **Straight down is the flat map, to the pixel** — asserted, not promised. ADR-0009's invariant is
+  that a third dimension preserves today's X,Y, and the strongest form of that is making the flat map
+  a *position of this camera*: at `pitch = π/2` the projection reduces to `worldToScreen` exactly,
+  and a unit test pins the equality. The overview is one keystroke away, which is D1.
+  **Canvas, not WebGL, and that is a measured position rather than thrift.** Columns standing on a
+  plane never interpenetrate, so painter's order is *exact* — a sort and some strokes, the work the
+  flat map already does. WebGL earns its place when per-frame reprojection stops fitting in a frame;
+  ADR-0009's P1′ says measure on real hardware before buying it, and that measurement still has not
+  happened. Runtime trigonometry is fine here and would not be in the indexer: ADR-0006 forbids
+  transcendentals in **layout** because the atlas must be byte-identical across machines, and nothing
+  in this view reaches the atlas.
+  **Liveness is a canvas hash, because this is exactly where `npm run raster` lied twice.** The e2e
+  hashes the pixels, presses `o`, hashes again, drags in eight small steps and hashes a third time,
+  and **fails if any pair is identical** — a map that did not tip, or a drag that turned nothing,
+  both used to look like success. One console warning is now suppressed and the suppression says
+  why: `getImageData` makes Chromium advise `willReadFrequently`, which is advice aimed at the test,
+  and setting that flag on the real canvas would move it off the GPU and change the very rendering
+  the gate exists to measure.
+  **Two tests were wrong before they were right.** A mutation run found nothing checked that pitch
+  *foreshortens* — the overhead test passes either way, because `sin(π/2)` is 1 — so a scene with no
+  tilt at all would have shipped green. And the "camera centre stays fixed" test failed the moment
+  headroom was added, correctly: it was pinning where the camera points as well as what turning does
+  to it, when the real property is **independence from yaw**. Headroom itself is proportional to
+  `cos(pitch)`, the same factor the lift uses, so it vanishes at overhead and the flat-map equality
+  survives — mutating it to a constant breaks two tests.
+  Verified: 384 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean with
+  the orbit gate green. Known rough edges, stated rather than hidden: the scene is not re-fitted on
+  entering orbit so a steep tilt can still crowd the top edge; only peaks are labelled in orbit (by
+  design — `docs/prior-art.md` §4.3.5); and there is no frustum cull, which is the first thing to add
+  when a raster run says so.
+  **Next**: rung 3 is the walk and **it is gated** — ADR-0009's P4 holds it behind the Trace verb
+  (M6), on evidence rather than caution. The honest next rungs are the ones that make a world worth
+  moving through: **M4's git verbs** (measured to reach the churn hotspots the import graph misses
+  entirely — 0% / 64.6% / 2.4% of the top 2%), the **phenomenon catalogue**, and **map rotation
+  between challenges**, which `docs/prior-art.md` §4.4 calls the highest-leverage lowest-cost item in
+  the whole writeup. Also unresolved and now more visible: `npm run raster` on real hardware.

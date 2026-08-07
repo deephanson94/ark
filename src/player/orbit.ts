@@ -1,0 +1,149 @@
+/**
+ * The orbit view — the same atlas, seen from outside and turned.
+ *
+ * ## Why this exists, and why it is not a walk
+ *
+ * `docs/prior-art.md` §2 is the reason this rung is shaped the way it is. The
+ * empirical literature on 3D does **not** split on dimension; it splits on
+ * *viewpoint*. Every result where 3D beat 2D came from giving the viewer motion
+ * parallax over a structure they stayed **outside** of — and the strongest of
+ * them is about this product's exact task, path tracing in a node-link graph:
+ * ~55 comprehensible nodes in 2D against ~160 with parallax (Ware & Franck
+ * 1996), replicated in 2005, and again in a **preregistered** 2023 study that
+ * beat a 2D baseline carrying edge routing *and* interactive highlighting.
+ * Parallax carried more of that effect than stereo, which is why this needs a
+ * mouse and not a headset.
+ *
+ * Every result where 3D *lost* came from putting the viewer inside: spatial
+ * memory for item locations degraded monotonically with dimensional freedom
+ * (Cockburn & McKenzie, n=69, in physical environments too), and traversing a
+ * virtual building was the worst of map / real navigation / VE. So orbiting is
+ * not a stepping stone toward the real thing — on the evidence it *is* the
+ * intervention, and ADR-0009's P4 keeps the avatar behind the Trace verb.
+ *
+ * ## What it draws
+ *
+ * A file is a column standing on the flat map: its footing is exactly its 2D
+ * `layout`, and its height is ADR-0013's `elevation`. **X and Y are untouched**
+ * — ADR-0009's invariant — so looking straight down reproduces the flat map,
+ * and every map anyone has already learned still holds.
+ *
+ * ## Canvas, not WebGL, and not a dependency
+ *
+ * Columns standing on a plane never interpenetrate, so painter's order is
+ * *exact*: sort by distance from the camera and draw far to near. That is a
+ * sort and some strokes — the same work the flat map already does — and it
+ * spends none of the three-runtime-dependency budget. WebGL earns its place
+ * when per-frame reprojection of thousands of prisms at arbitrary pitch stops
+ * fitting in a frame; measure before buying it, per ADR-0009's P1′.
+ *
+ * Runtime trigonometry is fine here and would not be in the indexer:
+ * ADR-0006 forbids transcendentals in **layout** because the atlas must be
+ * byte-identical across machines. Nothing here reaches the atlas.
+ */
+
+import type { Camera, Point, Viewport } from './camera.js';
+import type { SceneNode } from './scene.js';
+
+/** Where the eye is. `yaw` turns the world; `pitch` tips it toward overhead. */
+export interface Orbit {
+  /** Radians. 0 looks along +Y, and the flat map's north stays north. */
+  readonly yaw: number;
+  /**
+   * Radians, 0..π/2. π/2 is straight down — which reproduces the flat map
+   * exactly, and is deliberately reachable: ADR-0009's D1 says the overview
+   * survives, and the cheapest way to keep that promise is to make the flat map
+   * a *position* of this camera rather than a different mode.
+   */
+  readonly pitch: number;
+  /** World units of height per elevation layer. */
+  readonly rise: number;
+}
+
+export const DEFAULT_ORBIT: Orbit = { yaw: 0, pitch: 1.05, rise: 26 };
+
+/** Straight down. `project` then equals `worldToScreen`, to the pixel. */
+export const OVERHEAD: Orbit = { yaw: 0, pitch: Math.PI / 2, rise: 0 };
+
+const MIN_PITCH = 0.18;
+const MAX_PITCH = Math.PI / 2;
+
+export function turn(orbit: Orbit, dYaw: number, dPitch: number): Orbit {
+  return {
+    ...orbit,
+    yaw: orbit.yaw + dYaw,
+    pitch: Math.min(MAX_PITCH, Math.max(MIN_PITCH, orbit.pitch + dPitch)),
+  };
+}
+
+/**
+ * A node's footing and its top, in screen space.
+ *
+ * Yaw rotates about the map's centre, then pitch foreshortens the away-axis and
+ * height lifts against it. At `pitch = π/2` the sine is 1 and the cosine 0, so
+ * the away-axis is unforeshortened and height contributes nothing — the flat
+ * map, exactly.
+ */
+export interface Column {
+  readonly node: SceneNode;
+  readonly base: Point;
+  readonly top: Point;
+  /** Distance from the eye along the view axis. Larger is further away. */
+  readonly depth: number;
+}
+
+export function project(
+  camera: Camera,
+  viewport: Viewport,
+  orbit: Orbit,
+  node: { readonly x: number; readonly y: number; readonly elevation: number },
+): { base: Point; top: Point; depth: number } {
+  const cos = Math.cos(orbit.yaw);
+  const sin = Math.sin(orbit.yaw);
+  const dx = node.x - camera.x;
+  const dy = node.y - camera.y;
+  // Rotate about the camera's centre so turning does not slide the map away.
+  const right = dx * cos - dy * sin;
+  const away = dx * sin + dy * cos;
+  const lift = node.elevation * orbit.rise;
+
+  const screenX = right * camera.scale + viewport.width / 2;
+  // Headroom. Columns rise *up* the screen, so a tipped view needs room above
+  // the ground plane or the tallest files — the ones the view exists to show —
+  // clip off the top edge. It is proportional to `cos(pitch)`, which is the same
+  // factor the lift itself uses: the more you tip, the taller things stand and
+  // the more room they need. At overhead `cos` is 0, so the bias vanishes and
+  // the flat-map equality holds exactly.
+  const headroom = viewport.height * 0.18 * Math.cos(orbit.pitch);
+  const flattened =
+    away * Math.sin(orbit.pitch) * camera.scale + viewport.height / 2 + headroom;
+  return {
+    base: { x: screenX, y: flattened },
+    top: { x: screenX, y: flattened - lift * Math.cos(orbit.pitch) * camera.scale },
+    // Painter's order. Nearer the eye means *larger* `away` after rotation, so
+    // ascending `away` is far-to-near, which is the order to draw in.
+    depth: away,
+  };
+}
+
+/**
+ * Columns in draw order: furthest first.
+ *
+ * Ties break on node id via the caller's stable input order, so two files at
+ * the same distance are drawn the same way on every machine and every frame —
+ * a flicker between two orderings would read as a rendering bug and is exactly
+ * the kind of nondeterminism this project treats as a defect.
+ */
+export function columns(
+  nodes: readonly SceneNode[],
+  camera: Camera,
+  viewport: Viewport,
+  orbit: Orbit,
+): Column[] {
+  const built = nodes.map((node) => {
+    const { base, top, depth } = project(camera, viewport, orbit, node);
+    return { node, base, top, depth };
+  });
+  built.sort((a, b) => a.depth - b.depth || (a.node.id < b.node.id ? -1 : 1));
+  return built;
+}

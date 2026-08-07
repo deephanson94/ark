@@ -17,9 +17,11 @@ import { parseAtlas } from '../atlas/index.js';
 import type { Camera } from './camera.js';
 import { centreOn, fit, pan, screenToWorld, zoomAt } from './camera.js';
 import { createConsole } from './challenge.js';
-import { drawFrame } from './draw.js';
+import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Fog } from './fog.js';
 import { coverage, landmarks } from './fog.js';
+import type { Orbit } from './orbit.js';
+import { DEFAULT_ORBIT, turn } from './orbit.js';
 import type { Progress } from './progress.js';
 import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
@@ -81,6 +83,12 @@ function start(scene: Scene, root: HTMLElement): void {
   const peaks = new Set(
     shore.map((id) => scene.graph.refById.get(id)).filter((ref): ref is number => ref !== undefined),
   );
+  // The orbit view. `null` is the flat map, which stays the default and the
+  // arrival state — ADR-0009's D1 says the overview survives, and the evidence
+  // in `docs/prior-art.md` §2 says the flat map is what teaches survey
+  // knowledge. Turning the world is an *addition*, one keystroke away and one
+  // keystroke back.
+  let orbit: Orbit | null = null;
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
 
@@ -252,7 +260,7 @@ function start(scene: Scene, root: HTMLElement): void {
   function frame(): void {
     if (dirty) {
       dirty = false;
-      const stats = drawFrame(context, {
+      const frameInput = {
         scene,
         camera,
         viewport,
@@ -262,10 +270,14 @@ function start(scene: Scene, root: HTMLElement): void {
         radius,
         questions: unanswered,
         peaks,
-      });
+      };
+      const stats =
+        orbit === null
+          ? drawFrame(context, frameInput)
+          : drawOrbitFrame(context, frameInput, orbit);
       hud.update(
         coverage(fog, scene.nodes.length),
-        stats.level,
+        orbit === null ? stats.level : 'orbit',
         // `peaks` is in the HUD because it is the only measured proof that
         // ADR-0013's elevation reaches a pixel. CLAUDE.md: a measurement of
         // "how many X" needs a gate proving X happened, and the e2e reads this.
@@ -313,7 +325,15 @@ function start(scene: Scene, root: HTMLElement): void {
       moved += Math.abs(dx) + Math.abs(dy);
       lastX = event.clientX;
       lastY = event.clientY;
-      camera = pan(camera, dx, dy);
+      if (orbit === null) {
+        camera = pan(camera, dx, dy);
+      } else {
+        // Drag turns the world. This is the whole intervention: motion parallax
+        // over a structure you stay outside of is what the measured 3D win is
+        // made of, and it beat stereo in the study that separated them
+        // (`docs/prior-art.md` §2).
+        orbit = turn(orbit, dx * 0.006, -dy * 0.004);
+      }
       invalidate();
       return;
     }
@@ -380,6 +400,13 @@ function start(scene: Scene, root: HTMLElement): void {
     if (challengePanel.isOpen() || notebook.isOpen()) return;
     if (event.key === 'f') {
       camera = fit(scene.bounds, viewport);
+      invalidate();
+    }
+    if (event.key === 'o') {
+      // One key there, the same key back. ADR-0009's D1 — the overview survives
+      // — is only a real promise if leaving it costs one keystroke, so the flat
+      // map is never more than `o` away and it is what the player arrives in.
+      orbit = orbit === null ? DEFAULT_ORBIT : null;
       invalidate();
     }
     if (event.key === 'Enter') {

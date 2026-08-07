@@ -81,10 +81,22 @@ async function main(): Promise<number> {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
     const consoleErrors: string[] = [];
+    /**
+     * One exclusion, and it is the harness apologising for itself.
+     *
+     * The orbit liveness gate hashes the canvas with `getImageData`, and
+     * Chromium advises setting `willReadFrequently` when you do that repeatedly.
+     * The advice is aimed at the *test*, not at the player — nothing in the
+     * product ever reads pixels back. Suppressing it here rather than setting
+     * the flag on the real canvas, because that flag moves the canvas off the
+     * GPU and would quietly change the very rendering the gate exists to
+     * measure. Matched narrowly, so any other Canvas2D warning still fails.
+     */
+    const harnessNoise = /willReadFrequently/;
     page.on('console', (message: ConsoleMessage) => {
-      if (message.type() === 'error' || message.type() === 'warning') {
-        consoleErrors.push(`${message.type()}: ${message.text()}`);
-      }
+      if (message.type() !== 'error' && message.type() !== 'warning') return;
+      if (harnessNoise.test(message.text())) return;
+      consoleErrors.push(`${message.type()}: ${message.text()}`);
     });
     page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
     page.on('requestfailed', (request) =>
@@ -477,6 +489,67 @@ async function main(): Promise<number> {
     process.stdout.write(`e2e: tallest is ${tallest}\n`);
     if (leaf !== '' && !(await page.locator('canvas.map').isVisible())) {
       failures.push({ what: 'peaks', detail: 'no canvas to draw summits on' });
+    }
+
+    // ---- the orbit view -------------------------------------------------
+    //
+    // Gated by a canvas hash, because `npm run raster` printed confident,
+    // plausible, completely false numbers twice before it had one: synthetic
+    // input that drove nothing, and a zoom level where the map rendered as a
+    // sub-pixel smudge. Both looked like success. So the assertion here is not
+    // "no error" — it is "the pixels changed, and changed again when turned".
+    const hashCanvas = async (): Promise<string> =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas.map');
+        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
+        const context = canvas.getContext('2d');
+        if (context === null) return 'no-context';
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let hash = 2166136261;
+        for (let i = 0; i < data.length; i += 997) {
+          hash ^= data[i] ?? 0;
+          hash = Math.imul(hash, 16777619);
+        }
+        return String(hash >>> 0);
+      });
+
+    const flatPixels = await hashCanvas();
+    await page.keyboard.press('o');
+    await page.waitForTimeout(220);
+    const orbitPixels = await hashCanvas();
+    const orbitDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: orbit → ${orbitDetail}\n`);
+    await page.screenshot({ path: join(SHOT_DIR, 'orbit.png') });
+    if (orbitPixels === flatPixels) {
+      failures.push({ what: 'orbit', detail: 'pressing o changed nothing on the canvas' });
+    }
+
+    // Turning is the whole intervention — motion parallax over a structure you
+    // stay outside of. If the drag moves no pixels, the rung does not exist.
+    const canvasBox = await page.locator('canvas.map').boundingBox();
+    if (canvasBox !== null) {
+      const cx = canvasBox.x + canvasBox.width / 2;
+      const cy = canvasBox.y + canvasBox.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      // Several small steps, not one jump: a single move can be coalesced away
+      // and then the drag "happened" without ever reaching the handler.
+      for (let i = 1; i <= 8; i++) await page.mouse.move(cx + i * 14, cy + i * 3);
+      await page.mouse.up();
+      await page.waitForTimeout(220);
+    }
+    const turnedPixels = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'orbit-turned.png') });
+    if (turnedPixels === orbitPixels) {
+      failures.push({ what: 'orbit', detail: 'dragging did not turn the world — no parallax' });
+    }
+
+    // ADR-0009's D1: the overview survives, one keystroke away.
+    await page.keyboard.press('o');
+    await page.waitForTimeout(220);
+    const backDetail = (await page.locator('.hud-detail').innerText()).trim();
+    if (backDetail.includes('orbit')) {
+      failures.push({ what: 'orbit', detail: `o did not return to the flat map: ${backDetail}` });
     }
 
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });

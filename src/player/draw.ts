@@ -19,6 +19,8 @@ import { visibilityOf } from './fog.js';
 import type { LabelCandidate, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
 import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
+import type { Orbit } from './orbit.js';
+import { columns } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import { visibleEdges, visibleNodes } from './scene.js';
 import { levelFor, styleFor } from './zoom.js';
@@ -287,4 +289,164 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
 
   context.restore();
   return { nodesDrawn: nodes.length, edgesDrawn: edges.length, labelsDrawn, level, peaksDrawn };
+}
+
+
+/**
+ * The orbit frame: the same scene, standing up and turned.
+ *
+ * Deliberately a *second function* rather than a mode inside `drawFrame`. The
+ * flat map is the thing the whole product rests on and it is measured, tested
+ * and screenshot on every run; threading a projection through it would put the
+ * overview one bad conditional away from breaking. This shares the scene, the
+ * fog, the palette and the label placer, and nothing else.
+ *
+ * Edges are drawn **between the tops of columns**, not along the ground. That
+ * is the point of the whole view: path tracing in a node-link graph is the task
+ * 3D-with-parallax measurably wins at (`docs/prior-art.md` §2), and a wire
+ * between two roofs is a path you can follow with your eye as the world turns.
+ */
+export function drawOrbitFrame(
+  context: CanvasRenderingContext2D,
+  input: FrameInput,
+  orbit: Orbit,
+): FrameStats {
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks } = input;
+  const level = levelFor(camera.scale);
+  const style = styleFor(level);
+
+  context.save();
+  context.fillStyle = INK.ground;
+  context.fillRect(0, 0, viewport.width, viewport.height);
+
+  // Every node, every frame: there is no view-frustum cull here yet, and that
+  // is a measured omission rather than an oversight — at this repo's scale the
+  // sort dominates. It is the first thing to add when `npm run raster` says so.
+  const ordered = columns(scene.nodes, camera, viewport, orbit);
+  const screenOf = new Map(ordered.map((column) => [column.node.ref, column]));
+  const highlighted = radius?.dependents ?? null;
+
+  // ---- wires ------------------------------------------------------------
+  context.lineWidth = Math.max(0.5, 0.8 * Math.min(1, camera.scale));
+  let edgesDrawn = 0;
+  for (const edge of scene.edges) {
+    const from = screenOf.get(edge.from);
+    const to = screenOf.get(edge.to);
+    if (from === undefined || to === undefined) continue;
+    const lit =
+      radius !== null &&
+      (highlighted?.has(edge.from) === true || edge.from === radius.subject) &&
+      (highlighted?.has(edge.to) === true || edge.to === radius.subject);
+    context.beginPath();
+    context.moveTo(from.top.x, from.top.y);
+    context.lineTo(to.top.x, to.top.y);
+    context.strokeStyle = lit ? INK.edgeHighlight : INK.edge;
+    context.globalAlpha = lit ? 1 : style.edgeAlpha * 0.7;
+    context.setLineDash(edge.confidence === 'probable' ? [3, 3] : []);
+    context.stroke();
+    edgesDrawn++;
+  }
+  context.setLineDash([]);
+  context.globalAlpha = 1;
+
+  // ---- columns, far to near ---------------------------------------------
+  let peaksDrawn = 0;
+  for (const column of ordered) {
+    const { node, base, top } = column;
+    const state = visibilityOf(fog, node.id);
+    const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+    const dimmed = radius !== null && node.ref !== radius.subject && highlighted?.has(node.ref) !== true;
+
+    if (node.elevation > 0) {
+      // The stalk. Its length *is* the claim: how many files depend on this one.
+      context.beginPath();
+      context.moveTo(base.x, base.y);
+      context.lineTo(top.x, top.y);
+      context.strokeStyle = state === 'silhouette' ? regionSilhouette(node.regionIndex, 1) : regionColor(node.regionIndex, 1);
+      context.globalAlpha = dimmed ? 0.25 : 0.55;
+      context.lineWidth = Math.max(1, drawn * 0.5);
+      context.stroke();
+      // A footing, so a tall column still reads as standing *somewhere* — the
+      // whole reason X,Y are preserved is that the ground plan is the memory.
+      context.globalAlpha = dimmed ? 0.15 : 0.3;
+      context.beginPath();
+      context.ellipse(base.x, base.y, drawn, Math.max(0.6, drawn * Math.cos(orbit.pitch)), 0, 0, Math.PI * 2);
+      context.fillStyle = regionWash(node.regionIndex, 1);
+      context.fill();
+    }
+
+    context.globalAlpha = dimmed ? 0.45 : 1;
+    context.beginPath();
+    context.arc(top.x, top.y, drawn, 0, Math.PI * 2);
+    if (state === 'silhouette') {
+      context.fillStyle = regionSilhouette(node.regionIndex, 1);
+      context.fill();
+    } else {
+      context.fillStyle = regionWash(node.regionIndex, 1);
+      context.fill();
+      context.strokeStyle = regionColor(node.regionIndex, 1);
+      context.lineWidth = state === 'understood' ? 2.5 : 1.4;
+      context.stroke();
+    }
+    context.globalAlpha = 1;
+
+    if (questions.has(node.ref)) {
+      context.strokeStyle = INK.question;
+      context.lineWidth = 1.6;
+      context.setLineDash([2.5, 3.5]);
+      context.beginPath();
+      context.arc(top.x, top.y, drawn + 3.5, 0, Math.PI * 2);
+      context.stroke();
+      context.setLineDash([]);
+    }
+    if (peaks.has(node.ref) && node.elevation > 0) peaksDrawn++;
+    if (node === selected || node === hovered) {
+      context.beginPath();
+      context.arc(top.x, top.y, drawn + 5, 0, Math.PI * 2);
+      context.strokeStyle = node === selected ? INK.text : INK.edgeHighlight;
+      context.lineWidth = 1.5;
+      context.stroke();
+    }
+  }
+
+  // ---- labels, on the summits only --------------------------------------
+  //
+  // Only peaks are named here, and that is `docs/prior-art.md` §4.3.5 applied:
+  // a few globally visible landmarks outperform terrain texture for spatial
+  // learning. A turning world with every name on it is a smear.
+  context.font = LABEL_FONT;
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+  const candidates: LabelCandidate[] = [];
+  for (const column of ordered) {
+    if (!peaks.has(column.node.ref)) continue;
+    if (visibilityOf(fog, column.node.id) === 'silhouette') continue;
+    candidates.push({
+      text: column.node.label,
+      x: column.top.x,
+      y: column.top.y,
+      offset: Math.max(1.4, column.node.radius * camera.scale * style.nodeScale) + 2,
+      priority: column.node.elevation * 1000 + column.node.dependentCount,
+    });
+  }
+  const placed = placeLabels(candidates, (text) => context.measureText(text).width, {
+    lineHeight: 14,
+    padding: 3,
+    budget: Number.POSITIVE_INFINITY,
+    width: viewport.width,
+    height: viewport.height,
+  });
+  for (const label of placed) {
+    context.fillStyle = INK.text;
+    context.fillText(label.text, label.x, label.y - 3);
+  }
+
+  context.restore();
+  return {
+    nodesDrawn: ordered.length,
+    edgesDrawn,
+    labelsDrawn: placed.length,
+    level,
+    peaksDrawn,
+  };
 }
