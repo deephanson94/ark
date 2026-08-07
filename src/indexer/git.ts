@@ -18,6 +18,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { devNull } from 'node:os';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -77,7 +78,11 @@ async function git(root: string, args: readonly string[]): Promise<string> {
       LANG: 'C',
       TZ: 'UTC',
       GIT_CONFIG_NOSYSTEM: '1',
-      GIT_CONFIG_GLOBAL: '/dev/null',
+      // `os.devNull`, not a hard-coded `/dev/null`: on Windows that path does
+      // not exist, and git would fall back to reading the user's real global
+      // config — quietly reintroducing the machine dependence this is here to
+      // remove, on the one platform we cannot test locally.
+      GIT_CONFIG_GLOBAL: devNull,
       GIT_TERMINAL_PROMPT: '0',
     },
   });

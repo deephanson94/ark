@@ -9,6 +9,7 @@
   "scripts": {
     "index": "tsx src/indexer/cli.ts .",
     "build": "tsc --noEmit",
+    "budget": "tsx scripts/budget.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:atlas": "vitest run tests/atlas",
