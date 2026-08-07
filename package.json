@@ -5,20 +5,27 @@
   "description": "A game that teaches you the shape of an unfamiliar codebase by making you map it.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "dev": "npm run index:player && vite",
     "index": "tsx src/indexer/cli.ts .",
-    "build": "tsc --noEmit",
+    "index:player": "tsx src/indexer/cli.ts . --out src/player/public/atlas.json --quiet",
+    "build": "tsc --noEmit && tsc -p tsconfig.player.json --noEmit && npm run index:player && vite build",
     "budget": "tsx scripts/budget.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:atlas": "vitest run tests/atlas",
-    "test:determinism": "tsx scripts/determinism.ts"
+    "test:determinism": "tsx scripts/determinism.ts",
+    "test:e2e": "tsx scripts/e2e.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "playwright": "^1.62.1",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
+    "vite": "^8.2.1",
     "vitest": "^4.1.10"
   }
 }

@@ -81,8 +81,55 @@ const REWRITES: ReadonlyMap<string, readonly string[]> = new Map([
   ['.jsx', ['.tsx', '.jsx']],
 ]);
 
-/** Extensions that can themselves import something, and so can hide an edge. */
-const IMPORTING_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
+/**
+ * Extensions known to be inert — they cannot import anything, so an import
+ * pointing at one hides nothing and is safely off-map.
+ *
+ * A **denylist, not an allowlist**, and the direction matters. Listing the
+ * extensions that *can* import means every format nobody thought of — `.vue`,
+ * `.svelte`, `.astro`, whatever ships next — is silently treated as inert, and
+ * a file full of imports becomes invisible to guardrail 4. Listing the ones
+ * that certainly cannot means an unknown extension is treated as a risk, which
+ * costs a challenge rather than an answer key.
+ */
+const INERT_EXTENSIONS = new Set([
+  '.css',
+  '.scss',
+  '.sass',
+  '.less',
+  '.styl',
+  '.json',
+  '.jsonc',
+  '.json5',
+  '.md',
+  '.mdx',
+  '.txt',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.ico',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.eot',
+  '.mp3',
+  '.mp4',
+  '.webm',
+  '.wav',
+  '.pdf',
+  '.wasm',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.graphql',
+  '.gql',
+  '.html',
+]);
 
 function extensionOf(path: string): string {
   const slash = path.lastIndexOf('/');
@@ -144,10 +191,11 @@ function pick(base: string, context: ResolveContext): Resolution | null {
   for (const candidate of candidates) {
     if (!context.onDisk.has(candidate)) continue;
     // The file exists but is not on the map (too large, unsupported type). If it
-    // could carry imports of its own, it might hide a path we would need.
-    return IMPORTING_EXTENSIONS.has(extensionOf(candidate))
-      ? { kind: 'unresolved' }
-      : { kind: 'offMap', path: candidate };
+    // could carry imports of its own, it might hide a path we would need — so
+    // anything not known to be inert counts as a risk.
+    return INERT_EXTENSIONS.has(extensionOf(candidate))
+      ? { kind: 'offMap', path: candidate }
+      : { kind: 'unresolved' };
   }
   return null;
 }

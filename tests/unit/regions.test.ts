@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest';
+
+import { commonDirectory, detectRegions } from '../../src/indexer/regions.js';
+import type { RegionEdge } from '../../src/indexer/regions.js';
+
+function edgesFrom(paths: readonly string[], links: readonly (readonly [string, string])[]): RegionEdge[] {
+  return links.map(([from, to]) => ({ from: paths.indexOf(from), to: paths.indexOf(to) }));
+}
+
+/** Which region each path landed in, keyed by path. */
+function assignment(paths: readonly string[], links: readonly (readonly [string, string])[]) {
+  const regions = detectRegions(paths, edgesFrom(paths, links));
+  const byPath = new Map<string, string>();
+  for (const region of regions) {
+    for (const member of region.members) byPath.set(paths[member] ?? '', region.id);
+  }
+  return { regions, byPath };
+}
+
+describe('detectRegions', () => {
+  it('puts every node in exactly one region', () => {
+    const paths = ['a.ts', 'b.ts', 'c.ts'];
+    const { regions } = assignment(paths, [['a.ts', 'b.ts']]);
+    const members = regions.flatMap((region) => region.members).sort((x, y) => x - y);
+    expect(members).toEqual([0, 1, 2]);
+  });
+
+  it('separates two clusters joined only by a barrel', () => {
+    // The failure that made this rewrite necessary: plain label propagation
+    // decides a repo with one shared barrel is a single community. On this repo
+    // that put 36 of 64 files in one region.
+    // Six a side, so the barrel's degree clears the connector cutoff the way a
+    // real barrel does. The heuristic is relative to the median degree, so a
+    // "hub" with only twice the connections of its neighbours is not treated as
+    // one — at that ratio it is a peer, and merging the two groups is arguably
+    // the right answer anyway.
+    const left = ['left/a.ts', 'left/b.ts', 'left/c.ts', 'left/d.ts', 'left/e.ts', 'left/f.ts'];
+    const right = ['right/u.ts', 'right/v.ts', 'right/w.ts', 'right/x.ts', 'right/y.ts', 'right/z.ts'];
+    const paths = ['barrel.ts', ...left, ...right];
+    const links: [string, string][] = [];
+    for (const side of [left, right]) {
+      for (let i = 0; i < side.length; i++) {
+        links.push([side[i] ?? '', side[(i + 1) % side.length] ?? '']);
+        links.push([side[i] ?? '', 'barrel.ts']);
+      }
+    }
+    const { byPath } = assignment(paths, links);
+    expect(byPath.get('left/a.ts')).toBe(byPath.get('left/c.ts'));
+    expect(byPath.get('right/x.ts')).toBe(byPath.get('right/z.ts'));
+    expect(byPath.get('left/a.ts')).not.toBe(byPath.get('right/x.ts'));
+  });
+
+  it('folds a stranded file into the region it is most connected to', () => {
+    // Holding connectors out of the vote leaves some files with no voters at
+    // all. Without absorption each became its own region — 22 of them here.
+    const paths = ['hub.ts', 'a.ts', 'b.ts', 'c.ts', 'lonely.ts', 'd.ts', 'e.ts'];
+    const links: [string, string][] = [
+      ['a.ts', 'b.ts'],
+      ['b.ts', 'c.ts'],
+      ['c.ts', 'a.ts'],
+      ['a.ts', 'hub.ts'],
+      ['b.ts', 'hub.ts'],
+      ['c.ts', 'hub.ts'],
+      ['d.ts', 'hub.ts'],
+      ['e.ts', 'hub.ts'],
+      ['lonely.ts', 'hub.ts'],
+      ['lonely.ts', 'a.ts'],
+    ];
+    const { regions, byPath } = assignment(paths, links);
+    expect(byPath.get('lonely.ts')).toBe(byPath.get('a.ts'));
+    for (const region of regions) expect(region.members.length).toBeGreaterThan(0);
+  });
+
+  it('groups unlinked files by directory, since topology says nothing', () => {
+    const paths = ['docs/one.md', 'docs/two.md', 'other/three.md'];
+    const { byPath } = assignment(paths, []);
+    expect(byPath.get('docs/one.md')).toBe(byPath.get('docs/two.md'));
+    expect(byPath.get('docs/one.md')).not.toBe(byPath.get('other/three.md'));
+  });
+
+  it('names a region after the directory its members share', () => {
+    const paths = ['src/atlas/a.ts', 'src/atlas/b.ts', 'src/atlas/c.ts'];
+    const { regions } = assignment(paths, [
+      ['src/atlas/a.ts', 'src/atlas/b.ts'],
+      ['src/atlas/b.ts', 'src/atlas/c.ts'],
+    ]);
+    expect(regions.map((region) => region.label)).toContain('src/atlas');
+  });
+
+  it('disambiguates same-named regions by their busiest file', () => {
+    // Four distinct communities inside src/indexer all called "src/indexer"
+    // told you nothing, which is what this rule fixes.
+    const paths = [
+      'src/x/alpha.ts',
+      'src/x/alpha-helper.ts',
+      'src/x/alpha-extra.ts',
+      'src/x/beta.ts',
+      'src/x/beta-helper.ts',
+      'src/x/beta-extra.ts',
+    ];
+    const { regions } = assignment(paths, [
+      ['src/x/alpha-helper.ts', 'src/x/alpha.ts'],
+      ['src/x/alpha-extra.ts', 'src/x/alpha.ts'],
+      ['src/x/beta-helper.ts', 'src/x/beta.ts'],
+      ['src/x/beta-extra.ts', 'src/x/beta.ts'],
+    ]);
+    const labels = regions.map((region) => region.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(new Set(regions.map((region) => region.id)).size).toBe(regions.length);
+  });
+
+  it('is deterministic', () => {
+    const paths = Array.from({ length: 40 }, (_, i) => `src/f${i}.ts`);
+    const links: [string, string][] = [];
+    for (let i = 1; i < paths.length; i++) links.push([paths[i] ?? '', paths[i % 6] ?? '']);
+    const first = JSON.stringify(detectRegions(paths, edgesFrom(paths, links)));
+    const second = JSON.stringify(detectRegions(paths, edgesFrom(paths, links)));
+    expect(second).toBe(first);
+  });
+
+  it('sorts regions by id and gives each a unique one', () => {
+    const paths = Array.from({ length: 30 }, (_, i) => `src/dir${i % 4}/f${i}.ts`);
+    const links: [string, string][] = [];
+    for (let i = 1; i < paths.length; i++) links.push([paths[i] ?? '', paths[i - 1] ?? '']);
+    const regions = detectRegions(paths, edgesFrom(paths, links));
+    const ids = regions.map((region) => region.id);
+    expect([...ids].sort()).toEqual(ids);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('handles an empty repo', () => {
+    expect(detectRegions([], [])).toEqual([]);
+  });
+});
+
+describe('commonDirectory', () => {
+  it('finds the deepest shared directory', () => {
+    expect(commonDirectory(['src/a/x.ts', 'src/a/y.ts'])).toBe('src/a');
+    expect(commonDirectory(['src/a/x.ts', 'src/b/y.ts'])).toBe('src');
+  });
+
+  it('returns empty for paths sharing nothing', () => {
+    expect(commonDirectory(['src/a.ts', 'tests/b.ts'])).toBe('');
+    expect(commonDirectory(['a.ts', 'b.ts'])).toBe('');
+  });
+
+  it('handles a single path and no paths', () => {
+    expect(commonDirectory(['src/deep/a.ts'])).toBe('src/deep');
+    expect(commonDirectory([])).toBe('');
+  });
+});

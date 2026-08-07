@@ -3,7 +3,9 @@
 - **Status**: accepted
 - **Date**: 2026-08-06
 - **Extends**: NORTH-STAR §7.1 (atlas format sketch)
-- **Contradicts**: NORTH-STAR §7.1's `repo.indexedAt` field
+- **Amends**: NORTH-STAR §7.1 — `repo.indexedAt` removed, `repo.headDate` added. The north star
+  carries a note pointing here (edited 2026-08-07, after Fable review flagged that leaving the spec
+  unamended invites a future session to "fix" the indexer back into nondeterminism).
 
 ## Context
 

@@ -108,6 +108,30 @@ describe('scanModule — imports', () => {
     expect(facts.imports[0]?.specifier).toBe('node:fs');
   });
 
+  it('reports a computed require as unknowable, exactly like a computed import', () => {
+    // The hole this closes: a computed `require` used to produce no reference at
+    // all, so the file looked fully resolved and `isChallengeable` would happily
+    // build an answer key around it. A computed `import()` four lines away in
+    // the scanner already did the right thing. Guardrail 4's whole cost
+    // asymmetry — a false unresolved costs a challenge, a missed one costs an
+    // answer key — says this must fail loud, not quiet.
+    const facts = scanModule('const m = require(name);');
+    expect(facts.imports).toHaveLength(1);
+    expect(facts.imports[0]?.specifier).toBeNull();
+    expect(facts.imports[0]?.kind).toBe('require');
+    expect(facts.imports[0]?.raw).toBe('require(<expression>)');
+  });
+
+  it('reports an interpolated require specifier as unknowable', () => {
+    const facts = scanModule('const m = require(`./plugins/${name}.js`);');
+    expect(facts.imports).toHaveLength(1);
+    expect(facts.imports[0]?.specifier).toBeNull();
+  });
+
+  it('is not fooled by a method named require', () => {
+    expect(scanModule('registry.require(name);').imports).toEqual([]);
+  });
+
   it('returns imports in source order', () => {
     const source = `import z from './z.js';\nimport a from './a.js';\n`;
     expect(specifiers(source)).toEqual(['./z.js', './a.js']);

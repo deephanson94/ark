@@ -89,6 +89,24 @@ describe('resolveSpecifier — relative', () => {
     };
     expect(resolveSpecifier('src/a.ts', './huge.js', ctx)).toEqual({ kind: 'unresolved' });
   });
+
+  it('treats an unknown extension as a risk, not as inert', () => {
+    // The list of inert extensions is a denylist on purpose. If it were an
+    // allowlist of "things that can import", every format nobody thought of —
+    // .vue, .svelte, .astro — would be silently assumed to hide nothing, and a
+    // file full of imports would become invisible to guardrail 4.
+    for (const extension of ['vue', 'svelte', 'astro', 'unheard-of']) {
+      const ctx: ResolveContext = {
+        indexed: new Set(['src/a.ts']),
+        onDisk: new Set(['src/a.ts', `src/widget.${extension}`]),
+        config: EMPTY_CONFIG,
+      };
+      expect(
+        resolveSpecifier('src/a.ts', `./widget.${extension}`, ctx),
+        `.${extension} should count as a risk`,
+      ).toEqual({ kind: 'unresolved' });
+    }
+  });
 });
 
 describe('resolveSpecifier — bare', () => {

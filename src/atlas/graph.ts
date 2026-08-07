@@ -106,10 +106,16 @@ export type Challengeability =
  * Guardrail 4, mechanised.
  *
  * A blast-radius answer key says "these candidates depend on the subject, the
- * rest do not". The first half is safe: unknown edges can only *add*
- * reachability, so anything we already found really is a dependent. The second
- * half is the fragile one — a candidate we call a distractor might actually
- * reach the subject through an import we failed to resolve.
+ * rest do not". The first half is safe *over `certain` edges*: unknown imports
+ * can only ever **add** reachability, so anything already traced really is a
+ * dependent. The second half is the fragile one — a candidate we call a
+ * distractor might actually reach the subject through an import we failed to
+ * resolve.
+ *
+ * The `certain` qualifier is why the probable-edge scan below is not optional,
+ * and why `truth ⊆ candidates` (enforced by the validator) is load-bearing
+ * rather than tidy: because every truth member is also a candidate, scanning
+ * the candidates covers the truth set too.
  *
  * A candidate's verdict is therefore only trustworthy if every node on its
  * outgoing side, within the depth bound, has fully resolved imports and is

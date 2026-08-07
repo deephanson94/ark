@@ -7,6 +7,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -23,12 +24,22 @@ import { isGameable, scoreSet } from '../../src/verbs/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
+interface Manifest {
+  readonly name: string;
+  readonly version: string;
+  readonly dependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
+  readonly peerDependencies?: Record<string, string>;
+}
+
 let atlas: Atlas;
 let serialized: string;
+let manifest: Manifest;
 
 beforeAll(async () => {
   atlas = await buildAtlas(indexOptions(ROOT));
   serialized = serializeAtlas(atlas);
+  manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as Manifest;
 }, 60_000);
 
 describe('the atlas for this repo', () => {
@@ -43,11 +54,7 @@ describe('the atlas for this repo', () => {
     expect(parseAtlas(serialized).nodes).toHaveLength(atlas.nodes.length);
   });
 
-  it('reports the indexer version that package.json declares', async () => {
-    const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as {
-      name: string;
-      version: string;
-    };
+  it('reports the indexer version that package.json declares', () => {
     expect(TOOL).toBe(`${manifest.name}@${manifest.version}`);
     expect(atlas.repo.tool).toBe(TOOL);
   });
@@ -140,15 +147,65 @@ describe('what it found in this repo', () => {
   });
 
   it('did not invent dependencies on packages it cannot see', () => {
-    const declared = new Set(['node:', 'vitest', 'typescript', 'tsx', '@types/node']);
+    // Read the manifest rather than hard-coding a list: an allowlist written
+    // out by hand goes stale the first time someone adds a devDependency, and
+    // then fails for a reason that has nothing to do with the indexer.
+    const declared = new Set<string>(builtinModules);
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+      for (const name of Object.keys(manifest[field] ?? {})) declared.add(name);
+    }
     for (const node of atlas.nodes) {
       for (const external of node.externals) {
+        const name = external.startsWith('node:') ? external.slice(5) : external;
+        const base = name.startsWith('@') ? name.split('/').slice(0, 2).join('/') : name.split('/')[0];
         expect(
-          [...declared].some((name) => external.startsWith(name)),
-          `${node.path} claims an external dependency on ${external}`,
+          declared.has(base ?? name),
+          `${node.path} claims an external dependency on ${external}, which package.json does not declare`,
         ).toBe(true);
       }
     }
+  });
+});
+
+describe('the map reads as clustered', () => {
+  // Pillar 4: geography is topology. The cohesion force in the layout was tuned
+  // by looking at a screenshot and stopping when it looked right, which is a
+  // vibe rather than a budget. This turns that judgement into a number: if a
+  // change scatters regions across the map again, this fails instead of
+  // quietly making the map worse.
+  it('places files nearer their own region than the map is wide', () => {
+    const centroids = new Map(atlas.regions.map((region) => [region.id, region.centroid]));
+
+    let withinSum = 0;
+    let withinCount = 0;
+    for (const node of atlas.nodes) {
+      const centroid = centroids.get(node.region);
+      if (centroid === undefined) continue;
+      withinSum += Math.hypot(node.layout[0] - centroid[0], node.layout[1] - centroid[1]);
+      withinCount++;
+    }
+    const meanWithin = withinSum / Math.max(1, withinCount);
+
+    let betweenSum = 0;
+    let betweenCount = 0;
+    for (const [i, a] of atlas.regions.entries()) {
+      for (const b of atlas.regions.slice(i + 1)) {
+        betweenSum += Math.hypot(a.centroid[0] - b.centroid[0], a.centroid[1] - b.centroid[1]);
+        betweenCount++;
+      }
+    }
+    const meanBetween = betweenSum / Math.max(1, betweenCount);
+
+    const ratio = meanWithin / meanBetween;
+    // Measured on this repo: 0.090 with the cohesion force, 0.356 without it.
+    // The ceiling sits between the two, so it fails if cohesion is removed or
+    // neutered and passes with room for ordinary drift. The first version of
+    // this test used 0.75 and passed with cohesion disabled — a threshold that
+    // cannot fail is not a test.
+    expect(
+      ratio,
+      `mean intra-region spread ${meanWithin.toFixed(1)} vs inter-region spacing ${meanBetween.toFixed(1)} (ratio ${ratio.toFixed(3)})`,
+    ).toBeLessThan(0.2);
   });
 });
 

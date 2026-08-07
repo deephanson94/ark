@@ -193,7 +193,12 @@ export async function buildAtlas(options: IndexOptions): Promise<Atlas> {
     for (const member of region.members) regionByRef.set(member, region.id);
   }
 
-  const positions = computeLayout(orderedPaths.length, edges, options.layout);
+  // Regions before layout, so the layout can pull each cluster together.
+  const groupByRef = new Array<number>(orderedPaths.length).fill(0);
+  for (const [index, region] of detected.entries()) {
+    for (const member of region.members) groupByRef[member] = index;
+  }
+  const positions = computeLayout(orderedPaths.length, edges, options.layout, groupByRef);
 
   const regions: Region[] = detected.map((region) => {
     let sumX = 0;

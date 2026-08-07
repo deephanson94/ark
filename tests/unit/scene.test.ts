@@ -1,0 +1,182 @@
+import { describe, expect, it } from 'vitest';
+
+import { blastRadius, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
+import { DISTRICT_SCALE, STREET_SCALE, levelFor, shortLabel, styleFor } from '../../src/player/zoom.js';
+import { atlasWith } from '../fixtures/atlas.js';
+
+const ATLAS = atlasWith(
+  ['a.ts', 'b.ts', 'c.ts', 'docs/readme.md'],
+  [
+    ['b.ts', 'a.ts'],
+    ['c.ts', 'b.ts'],
+  ],
+);
+
+describe('prepare', () => {
+  const scene = prepare(ATLAS);
+  const at = (path: string): number => scene.nodes.findIndex((node) => node.path === path);
+
+  it('carries one scene node per atlas node, in the same order', () => {
+    expect(scene.nodes.map((node) => node.path)).toEqual(ATLAS.nodes.map((node) => node.path));
+  });
+
+  it('reads positions straight from the atlas — layout is not the player’s job', () => {
+    for (const [ref, node] of scene.nodes.entries()) {
+      expect([node.x, node.y]).toEqual([...(ATLAS.nodes[ref]?.layout ?? [])]);
+    }
+  });
+
+  it('counts dependents, which is what ranks a label', () => {
+    expect(scene.nodes[at('a.ts')]?.dependentCount).toBe(1);
+    expect(scene.nodes[at('docs/readme.md')]?.dependentCount).toBe(0);
+  });
+
+  it('shortens labels to the filename', () => {
+    expect(scene.nodes[at('docs/readme.md')]?.label).toBe('readme.md');
+  });
+
+  it('bounds every node', () => {
+    for (const node of scene.nodes) {
+      expect(node.x).toBeGreaterThanOrEqual(scene.bounds.minX);
+      expect(node.x).toBeLessThanOrEqual(scene.bounds.maxX);
+    }
+  });
+});
+
+describe('culling', () => {
+  const scene = prepare(ATLAS);
+
+  it('keeps only what the viewport can see', () => {
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error('fixture has no nodes');
+    const tight = { minX: first.x - 1, minY: first.y - 1, maxX: first.x + 1, maxY: first.y + 1 };
+    const visible = visibleNodes(scene, tight, 1);
+    expect(visible.length).toBeLessThan(scene.nodes.length);
+    expect(visible).toContain(first);
+  });
+
+  it('keeps a node whose centre is off screen but whose edge is not', () => {
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error('fixture has no nodes');
+    const justPast = {
+      minX: first.x + first.radius / 2,
+      minY: first.y - 1,
+      maxX: first.x + 100,
+      maxY: first.y + 1,
+    };
+    expect(visibleNodes(scene, justPast, 1)).toContain(first);
+  });
+
+  it('keeps an edge when either end is on screen', () => {
+    const edges = visibleEdges(scene, new Set([0]));
+    for (const edge of edges) expect(edge.from === 0 || edge.to === 0).toBe(true);
+  });
+
+  it('keeps everything when the viewport covers the whole atlas', () => {
+    expect(visibleNodes(scene, scene.bounds, 1)).toHaveLength(scene.nodes.length);
+  });
+});
+
+describe('pick', () => {
+  const scene = prepare(ATLAS);
+
+  it('finds the node under the point', () => {
+    const target = scene.nodes[1];
+    if (target === undefined) throw new Error('fixture has no second node');
+    expect(pick(scene, target.x, target.y, 1)?.path).toBe(target.path);
+  });
+
+  it('finds nothing in empty space', () => {
+    expect(pick(scene, 1e6, 1e6, 1)).toBeNull();
+  });
+
+  it('keeps a usable hit target when zoomed far out', () => {
+    const target = scene.nodes[0];
+    if (target === undefined) throw new Error('fixture has no nodes');
+    // At scale 0.1 the disc is a couple of pixels; the pick radius has to grow
+    // in world units or small files become unclickable.
+    expect(pick(scene, target.x + 20, target.y, 0.1)?.path).toBe(target.path);
+  });
+});
+
+describe('blastRadius', () => {
+  const scene = prepare(ATLAS);
+  const at = (path: string): number => scene.nodes.findIndex((node) => node.path === path);
+
+  it('finds everything that transitively depends on the subject', () => {
+    const radius = blastRadius(scene, at('a.ts'), 3);
+    const paths = [...radius.dependents.keys()].map((ref) => scene.nodes[ref]?.path).sort();
+    expect(paths).toEqual(['b.ts', 'c.ts']);
+  });
+
+  it('respects the depth bound', () => {
+    expect(blastRadius(scene, at('a.ts'), 1).dependents.size).toBe(1);
+  });
+
+  it('is empty for a leaf', () => {
+    expect(blastRadius(scene, at('c.ts'), 3).dependents.size).toBe(0);
+  });
+});
+
+describe('semantic zoom', () => {
+  it('promotes detail as you zoom in', () => {
+    expect(levelFor(DISTRICT_SCALE - 0.01)).toBe('territory');
+    expect(levelFor(DISTRICT_SCALE)).toBe('district');
+    expect(levelFor(STREET_SCALE)).toBe('street');
+  });
+
+  it('withholds node labels until they would be readable', () => {
+    expect(styleFor('territory').showNodeLabels).toBe(false);
+    expect(styleFor('district').showNodeLabels).toBe(true);
+  });
+
+  it('drops region labels once individual files are named', () => {
+    expect(styleFor('territory').showRegionLabels).toBe(true);
+    expect(styleFor('street').showRegionLabels).toBe(false);
+  });
+
+  it('raises the label budget monotonically', () => {
+    expect(styleFor('district').nodeLabelBudget).toBeGreaterThan(styleFor('territory').nodeLabelBudget);
+    expect(styleFor('street').nodeLabelBudget).toBeGreaterThan(styleFor('district').nodeLabelBudget);
+  });
+
+  it('shortens a path to its filename', () => {
+    expect(shortLabel('src/indexer/build.ts')).toBe('build.ts');
+    expect(shortLabel('package.json')).toBe('package.json');
+  });
+});
+
+describe('cost at scale', () => {
+  // CLAUDE.md budgets map interaction at 50 fps with 2,000 nodes — 20 ms a
+  // frame for everything. Culling is the part that runs every frame, so it has
+  // to be a small fraction of that. The layout is precomputed; this is the
+  // check that the player has not started recomputing it per frame.
+  const paths = Array.from({ length: 2000 }, (_, i) => `src/gen/f${i}.ts`);
+  const links: [string, string][] = [];
+  for (let i = 0; i < paths.length; i++) {
+    const target = i % 97;
+    // A node importing itself is not a thing, and the validator says so.
+    if (target === i) continue;
+    links.push([paths[i] ?? '', paths[target] ?? '']);
+  }
+  const big = atlasWith(paths, links);
+
+  it('prepares a 2,000-node atlas once, quickly', () => {
+    const started = performance.now();
+    const scene = prepare(big);
+    const elapsed = performance.now() - started;
+    expect(scene.nodes).toHaveLength(2000);
+    expect(elapsed, `prepare took ${elapsed.toFixed(1)} ms`).toBeLessThan(250);
+  });
+
+  it('culls a 2,000-node scene in well under a frame', () => {
+    const scene = prepare(big);
+    const started = performance.now();
+    for (let i = 0; i < 60; i++) {
+      const visible = visibleNodes(scene, scene.bounds, 1);
+      visibleEdges(scene, new Set(visible.map((node) => node.ref)));
+    }
+    const perFrame = (performance.now() - started) / 60;
+    expect(perFrame, `culling took ${perFrame.toFixed(2)} ms/frame`).toBeLessThan(8);
+  });
+});

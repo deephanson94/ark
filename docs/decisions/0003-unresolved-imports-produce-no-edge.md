@@ -43,9 +43,17 @@ outside the repo can import back into it.
 Blast Radius asks "which of these files break if I change the subject?". The answer key has two
 halves, and only one of them is fragile:
 
-- *"these candidates depend on the subject"* — **safe**. An import we failed to resolve can only
-  ever *add* reachability, so anything we already traced really is a dependent. The truth set is a
-  lower bound, and every member of it is correct.
+- *"these candidates depend on the subject"* — **safe, but only over `certain` edges**. An import we
+  failed to resolve can only ever *add* reachability, so anything traced over edges we are sure of
+  really is a dependent: the truth set is a lower bound and every member of it is correct. A path
+  running through a `probable` edge is the exception — that edge is a guess between two viable
+  targets, and if the guess is wrong the "dependent" is not one.
+
+  This is why the rule below scans candidates for `probable` edges as well as unresolved imports,
+  and why it is load-bearing that **`truth ⊆ candidates`** (enforced by the validator). Every member
+  of the truth set is also a candidate, so the candidate scan covers the truth set too. A generator
+  that computed a truth set without presenting it in `candidates` would slip past this and is
+  forbidden by the schema for exactly that reason.
 - *"the rest do not"* — **fragile**. A candidate we are presenting as a distractor might reach the
   subject through an import we could not resolve. Marking a player wrong for picking it would be
   our error, sold to them as theirs.
