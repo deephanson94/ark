@@ -391,6 +391,7 @@ function validateEvidence(value: unknown, at: string): Evidence {
     // commit could not have been certified against anything.
     minCount: asIntAtLeast(r['minCount'], `${at}.minCount`, 2),
     wideLimit: asIntAtLeast(r['wideLimit'], `${at}.wideLimit`, 2),
+    atMost: asIntAtLeast(r['atMost'], `${at}.atMost`, 1),
   };
 }
 

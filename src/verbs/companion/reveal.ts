@@ -44,13 +44,11 @@ export function revealOf(
   for (const edge of graph.in[subjectRef] ?? []) importedBy.add(edge.from);
 
   const notes: RevealNote[] = [];
-  const counted: number[] = [];
   const add = (id: NodeId, kind: NoteKind): void => {
     const ref = refById.get(id);
     if (ref === undefined) return;
     const path = nodeAt(graph, ref).path;
     const together = row.get(ref);
-    if (together !== undefined) counted.push(together);
     notes.push({
       id,
       path,

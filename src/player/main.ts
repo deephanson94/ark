@@ -261,8 +261,20 @@ function start(scene: Scene, root: HTMLElement): void {
         // The reveal fires on every grade, pass or fail — guardrail 6 says a
         // wrong answer never takes anything away, so seeing the true shape is
         // not a reward, it is the point of having answered at all.
-        selected = scene.nodes[ref] ?? selected;
-        radius = blastRadius(scene, ref, FULL_RADIUS);
+        //
+        // **Through `depthFor`, not `FULL_RADIUS` directly.** Hard-coded, this
+        // drew the complete import cone after *any* grade — so answering a
+        // Companion question rendered a cone nobody had earned, and by the
+        // containment argument `depthFor` itself sets out (if D imports S then
+        // `dependents(D) ⊆ dependents(S)`) that exposes part of the open Blast
+        // Radius answer for every file below it. Passing Blast Radius still
+        // shows the full cone: `remember()` above has already promoted the
+        // subject into `tracedRadius`, so `depthFor` returns `FULL_RADIUS` on
+        // the very next line. One rule, one place — which is what the two
+        // earlier instances of this leak were missing.
+        const node = scene.nodes[ref];
+        selected = node ?? selected;
+        radius = node === undefined ? radius : blastRadius(scene, ref, depthFor(node));
       }
       describe(selected);
       invalidate();

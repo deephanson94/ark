@@ -44,6 +44,7 @@ export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string):
       ? `in at least ${evidence.minCount} separate commit${evidence.minCount === 1 ? '' : 's'}`
       : 'in the same commit';
   const wide = evidence.kind === 'coChange' ? evidence.wideLimit : 0;
+  const atMost = evidence.kind === 'coChange' ? evidence.atMost : 1;
   return {
     title: 'companion',
     // "Which of these" is load-bearing, exactly as it is for Blast Radius: it
@@ -55,7 +56,7 @@ export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string):
     // is false in both directions: the limit is absolute, so on a small repo it
     // admits a commit touching a quarter of the files and on a monorepo it
     // excludes an ordinary feature landing.
-    instruction: `Everything else on this board has changed with it at most once. Commits touching more than ${wide} files at once are ignored — they couple everything to everything. Wrong picks cost you nothing.`,
+    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} files at once are ignored — they couple everything to everything. Wrong picks cost you nothing.`,
     action: 'Map what changes with it',
   };
 }
@@ -84,9 +85,10 @@ export const companion: Verb = {
   reveal: revealOf,
   /**
    * A Companion claim is "these two files change together". It stops being true
-   * when the current matrix no longer records the pair — a file died, the walk
-   * window slid past the commits that coupled them, or a commit that used to be
-   * focused became wide as its other files were deleted.
+   * when the current matrix no longer records the pair — a file died, or the
+   * walk window slid past the commits that coupled them. (An earlier version of
+   * this comment also claimed a focused commit could *become* wide; it cannot —
+   * deleting files only shrinks `touched`, so wideness can only fall away.)
    *
    * Checked against **presence in the matrix**, not against the bar the pass was
    * earned at: ADR-0011 stores what was proved, not what it was proved against,

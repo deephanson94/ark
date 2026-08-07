@@ -13,7 +13,12 @@ import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { PASS_THRESHOLD, scoreSet } from '../../src/verbs/index.js';
 import { companion, generateWithReport, indexCoChange } from '../../src/verbs/companion/index.js';
+import { ASSUMED_MIN_CO_CHANGE } from '../../src/verbs/companion/cochange.js';
+import { DEFAULT_HISTORY_LIMITS, buildHistory } from '../../src/indexer/history.js';
 import { atlasWith } from '../fixtures/atlas.js';
+
+/** The truncation tag the indexer writes for a capped co-change matrix. */
+const COCHANGE_TAG = 'coChange' as const;
 
 /**
  * Twenty-four files, a few import edges, no history. Wide enough that the 3:1
@@ -103,7 +108,12 @@ function withHistory(
     },
     report: {
       ...atlas.report,
-      truncations: options.capBit === true ? [{ what: 'coChange', kept: coChange.length, dropped: 9 }] : [],
+      // `COCHANGE_TAG` rather than a literal, so this fixture cannot drift from
+      // the tag the indexer writes — see the test that pins the two.
+      truncations:
+        options.capBit === true
+          ? [{ what: COCHANGE_TAG, kept: coChange.length, dropped: 9 }]
+          : [],
     },
   });
 }
@@ -320,5 +330,113 @@ describe('a claim decays under its own verb, not the other one', () => {
         idOf(gone, 'lib/alpha.ts'),
       ),
     ).toBe(false);
+  });
+});
+
+
+describe('the two constants that cross the indexer/player wall', () => {
+  /**
+   * Neither of these can be imported by production code on the player side —
+   * that would make the player depend on the indexer — so they are duplicated,
+   * and a test is the only thing that can hold them equal. A test may cross the
+   * wall; production may not.
+   */
+  it('assumes exactly the noise floor the indexer actually applies', () => {
+    // Getting this wrong in the *raising* direction is not conservative, it is
+    // a false certification: with an indexer floor of 5 and an assumption of 2,
+    // absent pairs hold counts 2–4 while `evidence.atMost` claims 1.
+    expect(ASSUMED_MIN_CO_CHANGE).toBe(DEFAULT_HISTORY_LIMITS.minCoChangeCount);
+  });
+
+  it('watches for the same truncation tag the indexer writes', () => {
+    // `indexCoChange` decides `capBit` by string-matching this tag. Rename it on
+    // either side and the bound silently drops to 2 on every capped repo, with
+    // every suite still green — the fixture below would have kept passing
+    // because it wrote its own copy of the string.
+    const limits = { ...DEFAULT_HISTORY_LIMITS, maxCoChangePairs: 1 };
+    const git = {
+      present: true,
+      head: 'a'.repeat(40),
+      headDate: '2026-01-01',
+      root: 'b'.repeat(40),
+      totalCommits: 2,
+      commits: [
+        { sha: 'c'.repeat(40), date: '2026-01-01', author: 'a', subject: 'one', files: ['x.ts', 'y.ts', 'z.ts'], renames: [] },
+        { sha: 'd'.repeat(40), date: '2026-01-02', author: 'a', subject: 'two', files: ['x.ts', 'y.ts', 'z.ts'], renames: [] },
+      ],
+    };
+    const result = buildHistory(git, ['x.ts', 'y.ts', 'z.ts'], limits);
+    const tags = result.truncations.map((entry) => entry.what);
+    expect(tags).toContain(COCHANGE_TAG);
+  });
+});
+
+describe('a walk that stopped short refuses the whole repo (guardrail 4)', () => {
+  /**
+   * `maxCommitsWalked` is a **fourth** loss channel and the certification bound
+   * says nothing about it: a pair coupled only in history the walk never read is
+   * absent for a reason no ceiling covers, so it would be offered as a certified
+   * exclusion while being a genuine companion.
+   *
+   * Fires on none of ark, hono or svelte (36 / 2,758 / 11,285 commits against a
+   * 20,000 ceiling). It is a refusal rather than a rescue path: without it the
+   * first repo past the ceiling ships a wrong answer key.
+   */
+  const pairs = COMPANIONS.map((path, i) => [SUBJECT, path, 9 - i] as const);
+
+  it('generates nothing, and says why, when the walk was cut short', () => {
+    const full = withHistory(fixtureAtlas(), pairs);
+    expect(generateWithReport(full).challenges.length).toBeGreaterThan(0);
+    expect(generateWithReport(full).report.walkTruncated).toBe(false);
+
+    // Same atlas, except the walk read fewer commits than the repo has: the
+    // retention truncation says 40 existed, `commitsWalked` says we saw 30.
+    const short = validateAtlas({
+      ...full,
+      history: { ...full.history, commitsWalked: 30, commitsRetained: 0 },
+      report: { ...full.report, truncations: [{ what: 'commits', kept: 0, dropped: 40 }] },
+    });
+    const result = generateWithReport(short);
+    expect(result.report.walkTruncated).toBe(true);
+    expect(result.challenges).toEqual([]);
+    expect(result.report.skipped).toContainEqual(['windowTruncated', 1]);
+  });
+});
+
+describe('the instruction states the certification it can actually make', () => {
+  it('says "at most once" when the cap did not bite', () => {
+    const atlas = withHistory(fixtureAtlas(), COMPANIONS.map((p, i) => [SUBJECT, p, 9 - i] as const));
+    const challenge = generateWithReport(atlas).challenges[0] as Challenge;
+    if (challenge.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
+    expect(challenge.evidence.atMost).toBe(1);
+    expect(companion.prompt(challenge, (id) => id).instruction).toContain('at most once');
+  });
+
+  it('raises the claim with the bound when the cap did bite', () => {
+    // The half of the raised branch that was missing: `cochange.ts` computed the
+    // higher ceiling correctly and the instruction went on saying "at most
+    // once", which is a false certification on exactly the repos the branch
+    // exists for.
+    const atlas = withHistory(
+      fixtureAtlas(),
+      [
+        [SUBJECT, 'lib/alpha.ts', 40],
+        [SUBJECT, 'vendor/beta.ts', 30],
+        [SUBJECT, 'docs/gamma.md', 20],
+        [SUBJECT, 'tools/delta.ts', 10],
+        [SUBJECT, 'web/epsilon.ts', 9],
+        [SUBJECT, 'api/zeta.ts', 8],
+        [SUBJECT, 'misc/eta.ts', 4],
+      ],
+      { capBit: true },
+    );
+    const challenge = generateWithReport(atlas).challenges.find(
+      (c) => c.subject === idOf(atlas, SUBJECT),
+    );
+    expect(challenge).toBeDefined();
+    if (challenge?.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
+    expect(challenge.evidence.atMost).toBe(4);
+    expect(companion.prompt(challenge, (id) => id).instruction).toContain('at most 4 times');
+    expect(companion.prompt(challenge, (id) => id).instruction).not.toContain('at most once');
   });
 });

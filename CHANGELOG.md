@@ -943,6 +943,30 @@ One line per iteration: what changed, and what to do next.
   churn 99, because the sampled-away companions were never attractive enough to be *picked* as
   distractors, so the assertion could not tell a correct exclusion from a ranking that happened never
   to reach them.
+  **A post-ship review of the finished code found a third instance of the leak class, running in the
+  direction nobody was watching.** Blast Radius's own reveal said *"changed with the subject in N
+  commits, but never imports it"* about a distractor `coChangeStrategy` had picked from the matrix
+  **ranked count-descending** — the strongest member of Companion's answer key for that subject,
+  handed over with its count, while that question was still open (Blast Radius is served first,
+  because `blast-` sorts before `companion-`). Free when it was the only verb; not free now. The
+  sentence is gone and the lesson is not lost — Companion asks about that coupling directly. The same
+  review found `onGraded` drawing the full import cone after *any* grade instead of through
+  `depthFor`. **Both were true statements rendered to a player who had not earned them, which is why
+  neither the type system nor 414 tests could see either.**
+  **It also found a fourth loss channel the guardrail-4 argument had not modelled.** `maxCommitsWalked`
+  stops the walk at 20,000 commits, and the ceiling argument reasons only about pairs the *matrix*
+  dropped — so a pair coupled solely in older history is absent for a reason no bound covers, and
+  would ship as a certified exclusion. There is nothing to derive, so the verb now refuses the whole
+  repo and says so. It fires on none of ark, hono or svelte; it would fire on TypeScript. Two smaller
+  corrections from the same pass: `evidence.atMost` now carries what an excluded candidate is
+  actually certified at, because the instruction said *"at most once"* unconditionally and that is
+  **false whenever the pair cap bit** — a bound that raises correctly while its sentence does not is
+  half a fix; and the comment beside `ASSUMED_MIN_CO_CHANGE` had the safe direction **backwards**,
+  claiming a raised indexer floor "costs questions rather than correctness" when it is exactly the
+  direction that reopens the banned middle band. A test now pins the two constants equal, and another
+  pins the truncation tag the two sides string-match on — rename it either side and every suite stayed
+  green while the bound silently dropped to 2.
+  Six more mutations on the new code, six caught, for **16 of 16** across the session.
   Known and stated rather than hidden: **a Companion pass changes nothing on the map** beyond lifting
   fog on what it proved — there is no co-change link drawn, so the verb's fog payoff is thinner than
   Blast Radius's; the choice sets on *this* repo are heavily `.md`, which is true of a 36-commit

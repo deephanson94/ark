@@ -80,7 +80,7 @@ export type Confidence = 'certain' | 'probable';
  * co-change only ranks its distractors — but Companion puts these counts in an
  * answer key, at which point "arbitrary but deterministic" stops being enough.
  *
- * Measured: 0 contested nodes on this repo and on `sveltejs/svelte`, **10 on
+ * Measured: 0 contested nodes on this repo and on `sveltejs/svelte`, **7 on
  * `honojs/hono`** — where a pair of files was renamed to each other's paths and
  * back, so both paths are live and each claims the other's history.
  */
@@ -292,6 +292,17 @@ export type Evidence =
        * landing. A number the player can read is the only honest version.
        */
       readonly wideLimit: number;
+      /**
+       * What a candidate *outside* the answer key is certified at: it changed
+       * with the subject at most this many times. Normally 1 — a pair seen once
+       * is below the matrix's noise floor — but the pair cap can raise it.
+       *
+       * Carried for the same reason as `wideLimit`: the instruction line said
+       * "at most once" unconditionally, which is a **false certification** on
+       * any repo where the cap bit. A branch that raises the bar correctly and
+       * leaves the sentence describing the old one is half a fix.
+       */
+      readonly atMost: number;
     };
 
 export interface Challenge {

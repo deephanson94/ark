@@ -37,16 +37,21 @@
  *
  * ## What this verb refuses to ask about
  *
- * Guardrail 4, three ways:
+ * Guardrail 4, four ways:
  *
  *  - **No history, no questions.** A repo with no commits produces none, and
  *    risk #7 says tiers 1–4 must stay playable without them.
+ *  - **A truncated walk.** If `maxCommitsWalked` stopped the indexer short of
+ *    the repo's history, absence from the matrix proves nothing whatever and
+ *    the entire repo is refused. There is no bound to derive here — this is the
+ *    one loss channel the ceiling argument cannot cover.
  *  - **Contested lineage.** A file whose rename history two live paths both
  *    claimed carries counts that may belong to another file (`Lineage`), so it
  *    is barred from being a subject, an answer or a distractor.
- *  - **A matrix too truncated to certify an exclusion.** If the pair cap bit,
- *    absence only proves a count at or below the last kept pair's, so a key
- *    whose weakest member does not clear that is refused.
+ *  - **A matrix too truncated to certify at all.** If the pair cap bit, absence
+ *    only proves a count at or below the last kept pair's, so the bar every
+ *    companion must clear rises with it and `evidence.atMost` says what an
+ *    exclusion is actually certified at.
  *
  * Nothing here consults `Math.random()`; every ordering is total and tie-broken
  * on node id.
@@ -79,8 +84,12 @@ export type SkipReason =
   /** The matrix records nothing changing with it. */
   | 'noCompanions'
   /**
-   * Guardrail 4: contested rename lineage, or a matrix too truncated to
-   * certify this key's exclusions.
+   * Guardrail 4: contested rename lineage. **Not** the truncation cases —
+   * those are `windowTruncated` (whole repo) and the raised floor (which routes
+   * a subject to `noCompanions`, because it has none this atlas can certify).
+   * The label used to claim truncation too and no code path ever produced it
+   * for that reason, which would have made the report wrong in exactly the case
+   * the branch exists for.
    */
   | 'uncertain'
   /** Not enough certified non-companions to build a choice set that cannot be
@@ -91,7 +100,13 @@ export type SkipReason =
   /** Pillar 3: a structure-blind heuristic passed the board. See `gate.ts`. */
   | 'ctrlF'
   /** Another subject already asks this exact answer key. */
-  | 'duplicateKey';
+  | 'duplicateKey'
+  /**
+   * The commit walk stopped short of the repo's history, so absence from the
+   * matrix certifies nothing and the whole repo is refused. Counted once, not
+   * once per subject — it is a fact about the atlas, not about a question.
+   */
+  | 'windowTruncated';
 
 export interface GenerationReport {
   readonly subjectsConsidered: number;
@@ -100,6 +115,8 @@ export interface GenerationReport {
   readonly minCountRange: readonly [number, number] | null;
   /** True when the pair cap forced the certification bound above 1. */
   readonly capBit: boolean;
+  /** True when the commit walk was cut short, so no question could be asked. */
+  readonly walkTruncated: boolean;
   /** Nodes barred from every role by contested lineage. */
   readonly contestedNodes: number;
   /** Nodes no Companion question can ever lift the fog from. */
@@ -178,7 +195,13 @@ export function generateWithReport(
   const built: Built[] = [];
   let considered = 0;
 
-  for (const subject of atlas.nodes.keys()) {
+  // Guardrail 4, at the whole-repo level: if the walk stopped short of the
+  // repo's history, absence from the matrix proves nothing at all and no
+  // certification is possible. See `CoChangeIndex.walkTruncated`.
+  const askable = !index.walkTruncated;
+  if (!askable) note('windowTruncated');
+
+  for (const subject of askable ? atlas.nodes.keys() : []) {
     const row = index.rows.get(subject);
     if (row === undefined) {
       note('noCompanions');
@@ -288,7 +311,12 @@ export function generateWithReport(
         subject: idOf(subject),
         candidates,
         truth,
-        evidence: { kind: 'coChange', minCount, wideLimit: index.wideLimit },
+        evidence: {
+          kind: 'coChange',
+          minCount,
+          wideLimit: index.wideLimit,
+          atMost: index.floor - 1,
+        },
       },
     });
   }
@@ -339,6 +367,7 @@ export function generateWithReport(
       generated: kept.length,
       minCountRange: kept.length === 0 ? null : [low, high],
       capBit: index.capBit,
+      walkTruncated: index.walkTruncated,
       contestedNodes: excluded.size,
       unprovableNodes: atlas.nodes.length - provable.size,
       skipped: [...skipped].sort(([a], [b]) => byteCompare(a, b)),

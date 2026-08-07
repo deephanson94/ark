@@ -9,8 +9,10 @@
  *
  * Nothing here is in the grading path (guardrail 3 is about models, but the
  * same discipline applies: the score must not depend on presentation). Every
- * note below is a fact read off the graph or the co-change matrix; none of it
+ * note below is a fact read off **the import graph**, and only that; none of it
  * is authored per repo (guardrail 2).
+ *
+ * It used to read the co-change matrix too. See `whyNot` for why it must not.
  *
  * This is where the distractor strategies pay off. A player who picks
  * `src/atlas/order.ts` for a question about `src/atlas/schema.ts` gets told
@@ -50,7 +52,11 @@ export interface Reveal extends VerbReveal {
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
 
-export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade: Grade): Reveal {
+// `_atlas` is unused since the co-change sentence went (see `whyNot`), but the
+// parameter stays because `Verb.reveal` is the seam's shape and Companion needs
+// it. A verb that happens not to read the atlas is not a reason to change the
+// contract for the one that does.
+export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grade: Grade): Reveal {
   const refById = graph.refById;
   const subjectRef = refById.get(challenge.subject);
   if (subjectRef === undefined) {
@@ -59,7 +65,6 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
   const subjectPath = nodeAt(graph, subjectRef).path;
   const reached = dependents(graph, subjectRef, Number.POSITIVE_INFINITY);
   const routes = dependentRoutes(graph, subjectRef);
-  const coChange = coChangeWith(atlas, subjectRef);
   const imported = dependencies(graph, subjectRef, Number.POSITIVE_INFINITY);
 
   const notes: RevealNote[] = [];
@@ -78,7 +83,7 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
       route,
       note:
         distance === null
-          ? whyNot(ref, path, subjectPath, imported, coChange)
+          ? whyNot(ref, path, subjectPath, imported)
           : whyYes(distance, route),
     });
   };
@@ -116,7 +121,6 @@ function whyNot(
   path: string,
   subjectPath: string,
   imported: ReadonlyMap<NodeRef, number>,
-  coChange: ReadonlyMap<NodeRef, number>,
 ): string {
   const depth = imported.get(ref);
   if (depth !== undefined) {
@@ -125,21 +129,25 @@ function whyNot(
       ? 'the subject imports this — the arrow points the other way.'
       : `the subject depends on this (${depth} hops out), not the reverse.`;
   }
-  const together = coChange.get(ref);
-  if (together !== undefined) {
-    return `changed with the subject in ${together} commits, but never imports it.`;
-  }
+  // **There is deliberately no co-change sentence here any more.**
+  //
+  // This used to read "changed with the subject in N commits, but never imports
+  // it" — §8.3's best distractor explaining itself, and free while this was the
+  // only verb. It is not free now. `coChangeStrategy` seeds these distractors
+  // from the matrix *ranked count-descending*, which is precisely Companion's
+  // answer key for the same subject; and for a shared subject Blast Radius is
+  // always served first (`blast-` sorts before `companion-`), so that Companion
+  // question is open when this renders. Falling for the flagship distractor
+  // handed the player a member of the other verb's answer, with its count.
+  //
+  // Third instance of one class — after the map's radius unlock and the
+  // inspector's count — and the first to run in the *opposite* direction, from
+  // the older verb into the newer one. The lesson it carried is not lost:
+  // Companion now asks about that coupling directly, which teaches it better
+  // than a parenthetical ever did.
   if (directoryOf(path) === directoryOf(subjectPath)) {
     return 'same directory, no import path — a folder is not a module.';
   }
   return 'no chain of imports reaches the subject.';
 }
 
-function coChangeWith(atlas: Atlas, subject: NodeRef): Map<NodeRef, number> {
-  const counts = new Map<NodeRef, number>();
-  for (const [a, b, count] of atlas.history.coChange) {
-    if (a === subject) counts.set(b, count);
-    else if (b === subject) counts.set(a, count);
-  }
-  return counts;
-}

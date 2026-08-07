@@ -113,7 +113,14 @@ export function recordPass(
 
 export interface Progression {
   readonly progress: Progress;
-  /** True when this grade unlocked the subject's full radius. */
+  /**
+   * True when this grade reached the pass threshold.
+   *
+   * Named for what it means now rather than for what one verb does with it:
+   * this used to read "unlocked the subject's full radius", which is false for
+   * a Companion pass and is the kind of verb-specific wording that invites the
+   * next leak. What a pass unlocks is the verb's business (`provedThrough`).
+   */
   readonly unlocked: boolean;
 }
 

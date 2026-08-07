@@ -70,6 +70,23 @@ export interface CoChangeIndex {
   /** Every node with at least one partner in the matrix. Empty rows are absent. */
   readonly rows: ReadonlyMap<NodeRef, CoChangeRow>;
   /**
+   * True when the indexer did **not** reach the end of the repo's history —
+   * `maxCommitsWalked` stopped it short.
+   *
+   * This is a **fourth** loss channel, and the first draft of this file missed
+   * it: the ceiling argument below reasons about pairs the *matrix* dropped and
+   * says nothing about commits the *walk* never read. A pair coupled only in
+   * older history is absent for a reason no bound covers, so it would be
+   * offered as a certified exclusion when it is a genuine companion — precisely
+   * the wrong answer key guardrail 4 exists to prevent.
+   *
+   * There is no bound to derive here, so the verb refuses the repo instead. It
+   * fires on none of ark, hono or svelte (36, 2,758 and 11,285 commits against
+   * a 20,000 ceiling); it would fire on TypeScript. A missing deck costs
+   * nothing and a wrong answer key costs trust permanently.
+   */
+  readonly walkTruncated: boolean;
+  /**
    * The weakest coupling this atlas can still certify an *exclusion* against.
    * See the header — this is the whole guardrail-4 argument, and it is one
    * number.
@@ -94,16 +111,23 @@ export interface CoChangeIndex {
  * carry.
  *
  * Duplicating a default across the wall is a real smell, so here is why it is
- * the lesser evil. The alternative is a new atlas field recording the limits
- * the indexer ran under — more schema surface, on a shape guardrail 5 makes
- * expensive to change, to carry a constant that has never moved. The safe
- * direction is also known: if the indexer's floor were ever *raised* above this,
- * this stays conservative and the bar sits lower than it could, which costs
- * questions rather than correctness. If it were *lowered*, pairs with a count of
- * 1 would enter the matrix and the derivation below would still be sound,
- * because the matrix would then prove their counts directly.
+ * the lesser evil: the alternative is a new atlas field carrying a constant that
+ * has never moved, on a shape guardrail 5 makes expensive to change.
+ *
+ * **Only one direction is safe, and an earlier version of this comment had it
+ * backwards.** Lowering the indexer's floor is fine — pairs with a count of 1
+ * enter the matrix and the derivation below proves their counts directly.
+ * *Raising* it is not: with an indexer floor of 5 and this constant at 2, absent
+ * pairs can hold counts of 2 to 4, `evidence.atMost` would claim 1, and the
+ * middle-band trap ADR-0014 exists to ban comes straight back. The ADR states
+ * the rule correctly — assume a floor **no lower** than the real one — and the
+ * comment here used to say the opposite, which is worse than saying nothing,
+ * because it addresses exactly the session that would change it.
+ *
+ * `tests/unit/companion.test.ts` pins the two equal. A test may reach across the
+ * wall; production may not.
  */
-const ASSUMED_MIN_CO_CHANGE = 2;
+export const ASSUMED_MIN_CO_CHANGE = 2;
 
 /**
  * Memoised per atlas, because `stillHolds` is called once per stored claim when
@@ -142,12 +166,23 @@ function buildIndex(atlas: Atlas): CoChangeIndex {
   const last = atlas.history.coChange.at(-1);
   const ceiling = capBit && last !== undefined ? last[2] : ASSUMED_MIN_CO_CHANGE - 1;
 
+  // Total commits reachable from HEAD is recoverable exactly: the `commits`
+  // truncation records what retention dropped against that total, so
+  // `kept + dropped` is the total and `commitsWalked` is what we actually read.
+  // With no truncation entry, retention kept everything it walked.
+  const retention = atlas.report.truncations.find((entry) => entry.what === 'commits');
+  const totalCommits =
+    retention === undefined
+      ? atlas.history.commitsRetained
+      : retention.kept + retention.dropped;
+
   return {
     rows,
     floor: ceiling + 1,
     maxCount,
     wideLimit: atlas.history.wideLimit,
     capBit,
+    walkTruncated: atlas.history.commitsWalked < totalCommits,
   };
 }
 

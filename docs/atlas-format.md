@@ -318,7 +318,7 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | `subject` | `NodeId` | The file the question is about. Never appears in `candidates`. |
 | `candidates` | `NodeId[]` | Sorted. The choice set. Non-empty. |
 | `truth` | `NodeId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
-| `evidence` | `Evidence` | `{kind: "importGraph", depth}` or `{kind: "coChange", minCount, wideLimit}`. |
+| `evidence` | `Evidence` | `{kind: "importGraph", depth}` or `{kind: "coChange", minCount, wideLimit, atMost}`. |
 
 Both `evidence` variants carry a **measured** quantity rather than a bound the generator imposed:
 `depth` is the furthest hop this answer key actually travels
@@ -326,6 +326,11 @@ Both `evidence` variants carry a **measured** quantity rather than a bound the g
 `minCount` is the weakest coupling that made this key
 ([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)). Each verb's prompt may
 therefore state its own as a fact.
+
+`atMost` is the other half of a Companion board's claim: what a candidate **outside** the answer key
+is certified at. Normally 1, raised when the pair cap bit. It exists because the instruction line
+said "at most once" unconditionally, which is a false certification on any repo where the cap fired —
+a bound that raises correctly while the sentence describing it does not is half a fix.
 
 `truth` sits here in plaintext, deliberately. This is a learning tool, not an exam; anyone who opens
 devtools to read the answer has opted out of the product. Do not obfuscate it.

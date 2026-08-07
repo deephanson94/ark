@@ -126,7 +126,15 @@ function summarise(
     );
   }
   if (companion.capBit) {
-    lines.push(`companion   co-change cap bit — certification bound raised to ${'≥'}2`);
+    lines.push('companion   co-change pair cap bit — the certification bound rose above 1');
+  }
+  if (companion.walkTruncated) {
+    // The whole-repo refusal, said out loud. Absence from a matrix built over
+    // part of the history certifies nothing, so no question could be asked.
+    lines.push(
+      `companion   REFUSED the repo: the walk stopped at ${atlas.history.commitsWalked} commits,` +
+        ' so absence from the co-change matrix proves nothing',
+    );
   }
 
   // The cost of every refusal above, in the currency the player feels: how much

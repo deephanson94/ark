@@ -29,6 +29,7 @@ Two things make that harder than it looks.
 | `minCoChangeCount` (2) | pairs seen fewer times than this |
 | `wideCommitFiles` (25) | commits touching more indexed files than this, entirely |
 | `maxCoChangePairs` (8,000) | the tail of the matrix, sorted by count descending |
+| `maxCommitsWalked` (20,000) | **the older end of history, entirely** — see decision 7 |
 
 So "this pair is not in the matrix" does **not** mean "these files never changed
 together". A generator that read absence as zero would offer a genuine companion
@@ -116,15 +117,31 @@ back so each live file claims the other's history.
 
 **5. The prompt states the rule it is graded under, with numbers.**
 
-The player is told the measured bar (*"in at least 3 separate commits"*) and the
-wide-commit limit (*"commits touching more than 25 files at once are ignored"*).
+The player is told the measured bar (*"in at least 3 separate commits"*), the
+wide-commit limit (*"commits touching more than 25 files at once are ignored"*)
+and what everything else on the board is certified at (`evidence.atMost` —
+*"at most once"*, or higher when the pair cap raised the bound).
 An earlier draft said "commits touching a large fraction of the repo", which is
 false in both directions: the limit is absolute, so on a small repo it admits a
 commit touching a quarter of the files, and on a monorepo it excludes an ordinary
 feature landing. `History.wideLimit` exists to carry the real number across the
 wall.
 
-**6. The naive guess this verb is measured against is churn, not adjacency.**
+**6. A walk that stopped short refuses the whole repo.**
+
+`maxCommitsWalked` is a **fourth** loss channel, and the first draft of this ADR
+listed only three. The ceiling below reasons about pairs the *matrix* dropped
+and says nothing about commits the *walk* never read: a pair coupled only in
+older history is absent for a reason no bound covers, so it would be offered as
+a certified exclusion while being a genuine companion.
+
+There is nothing to derive here, so the verb refuses. Recoverable exactly from
+the atlas — `commitsWalked` against the `commits` truncation's `kept + dropped`
+— and reported as `windowTruncated`. It fires on none of ark (36 commits), hono
+(2,758) or svelte (11,285); it would fire on TypeScript. A missing deck costs
+nothing and a wrong answer key costs trust permanently.
+
+**7. The naive guess this verb is measured against is churn, not adjacency.**
 
 §8.4's `surprise` needs a baseline the map actually gives away. For Blast Radius
 that is depth-1 importers, drawn on the canvas by design. For Companion it is the
@@ -158,6 +175,28 @@ verb's most active guardrail after the deck cap.
 - **Dedupe stays within-verb**, per ADR-0012 and `docs/atlas-format.md` §3.6:
   two verbs may honestly share an answer set because they are asking different
   questions about it.
+
+## Found after shipping, by a second review of the finished code
+
+Three instances of one class, all *"verb-blind state read by verb-specific
+code"*, and the third ran in the direction nobody was watching:
+
+1. the map's radius unlock (`depthFor`), caught before writing;
+2. the inspector's transitive-count field, caught in an e2e screenshot;
+3. **Blast Radius's own reveal**, which said *"changed with the subject in N
+   commits, but never imports it"* about a distractor that `coChangeStrategy`
+   had picked from the matrix ranked count-descending — i.e. the strongest
+   member of Companion's answer key for the same subject, handed over with its
+   count, while that question was still open. The sentence is gone; Companion
+   asks about that coupling directly now, which teaches it better.
+
+Plus `onGraded`, which drew the full import cone after *any* grade rather than
+through `depthFor`. The rule is one line and it now lives in one place.
+
+**The lesson worth carrying**: two of the three were found by a reviewer reading
+for this specific class, and one only by looking at a screenshot. Neither the
+type system nor the test suite could see any of them, because every one is a
+true statement rendered to a player who had not earned it.
 
 ## What this does not decide
 
