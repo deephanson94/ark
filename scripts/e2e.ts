@@ -358,6 +358,54 @@ async function main(): Promise<number> {
         });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-reload.png') });
+
+      // ---- the progression affordance ----------------------------------
+      // "Where next?" takes you to a landmark; it must NOT open a question.
+      // ADR-0011 calls it an affordance rather than a mode, and §4's loop is
+      // "pick a landmark" — sending the player straight into a modal is the
+      // first step towards a quiz deck.
+      const guideCaption = (await page.locator('.guide-caption').innerText()).trim();
+      process.stdout.write(`e2e: guide → ${guideCaption}\n`);
+      await page.locator('.guide-action').click();
+      if (await page.locator('.console-scrim:not([hidden])').count()) {
+        failures.push({ what: 'guide', detail: 'the suggestion opened a modal instead of moving the map' });
+      }
+      const landedOn = (await page.locator('.inspector-path').innerText()).trim();
+      process.stdout.write(`e2e: guide sent us to ${landedOn}\n`);
+      if (landedOn === '') {
+        failures.push({ what: 'guide', detail: 'the suggestion selected nothing' });
+      }
+      if (landedOn === subject) {
+        // The subject just passed leaves the deck, so re-offering it would mean
+        // the selector is not reading the same answered set the HUD reads.
+        failures.push({ what: 'guide', detail: `suggested ${landedOn}, which was just answered` });
+      }
+      // It has to have gone somewhere the name is readable, or it sent the
+      // player to an unlabelled dot.
+      const levelAfter = (await page.locator('.hud-detail').innerText()).trim();
+      if (levelAfter.startsWith('territory')) {
+        failures.push({ what: 'guide', detail: `landed at ${levelAfter}, where node names are not drawn` });
+      }
+      // ...and the question it took us to must be answerable from where we are.
+      if ((await page.locator('.inspector-action').count()) === 0) {
+        failures.push({ what: 'guide', detail: `no "answer this" control on ${landedOn}` });
+      }
+      // Having arrived, the panel must stop pointing somewhere else — a caption
+      // that still reads "next is X" while you stand on X is a control that
+      // looks like it did nothing.
+      const arrivedCaption = await page
+        .waitForFunction(
+          () => (document.querySelector('.guide-caption')?.textContent ?? '').includes('you are on'),
+          undefined,
+          { timeout: 5000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (!arrivedCaption) {
+        const actual = (await page.locator('.guide-caption').innerText()).trim();
+        failures.push({ what: 'guide', detail: `after arriving the caption still reads "${actual}"` });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'suggested.png') });
     }
 
     // Zoomed in, to check semantic zoom actually promotes detail.

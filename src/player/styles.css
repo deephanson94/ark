@@ -541,3 +541,53 @@ body {
   white-space: pre-wrap;
   color: #ffc9c9;
 }
+
+/* ---- the progression affordance ---------------------------------------- */
+
+.guide {
+  /* Bottom-right: the inspector owns the top-right column and can grow to the
+     full viewport height, so anything sharing that corner eventually collides
+     with it. */
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 268px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+}
+
+.guide-action {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 214, 130, 0.42);
+  border-radius: 6px;
+  background: rgba(255, 214, 130, 0.12);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.guide-action:hover:not(:disabled) {
+  background: rgba(255, 214, 130, 0.2);
+}
+
+.guide-action:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.guide-caption {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}

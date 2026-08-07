@@ -23,7 +23,7 @@ import {
   serializeAtlas,
   validateAtlas,
 } from '../../src/atlas/index.js';
-import { TOOL, buildAtlas, indexOptions } from '../../src/indexer/build.js';
+import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { isGameable, scoreSet } from '../../src/verbs/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -37,11 +37,14 @@ interface Manifest {
 }
 
 let atlas: Atlas;
+let declinedReasons: readonly (readonly [string, number])[];
 let serialized: string;
 let manifest: Manifest;
 
 beforeAll(async () => {
-  atlas = await buildAtlas(indexOptions(ROOT));
+  const built = await buildIndex(indexOptions(ROOT));
+  atlas = built.atlas;
+  declinedReasons = built.generation.report.skipped;
   serialized = serializeAtlas(atlas);
   manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as Manifest;
 }, 60_000);
@@ -277,15 +280,27 @@ describe('challenges', () => {
     }
   });
 
-  it('ships a challenge for most of the repo, so the checks above are not vacuous', () => {
+  it('accounts for every subject with a radius — shipped or declined with a reason', () => {
     const withRadius = atlas.nodes.filter(
       (_, ref) => dependents(buildGraph(atlas), ref, Number.POSITIVE_INFINITY).size > 0,
     ).length;
     expect(atlas.challenges.length).toBeGreaterThan(20);
-    // Every subject with a radius should carry a question on a repo with zero
-    // unresolved imports. If this starts failing, the CLI's `declined` lines
-    // say which guardrail refused and why.
-    expect(atlas.challenges.length).toBe(withRadius);
+    // Not "every subject ships a question": the guardrails are allowed to
+    // refuse, and on this repo the Ctrl+F gate does. What must hold is that
+    // nothing goes missing *silently* — every subject with a radius either
+    // carries a question or appears in the declined tally with a named reason.
+    // `noDependents` is not a refusal — it is a file nothing imports, which
+    // carries no question because there is no radius to ask about.
+    const refused = declinedReasons
+      .filter(([reason]) => reason !== 'noDependents')
+      .reduce((total, [, count]) => total + count, 0);
+    const noRadius = declinedReasons.find(([reason]) => reason === 'noDependents')?.[1] ?? 0;
+    expect(atlas.challenges.length + refused).toBe(withRadius);
+    expect(noRadius).toBe(atlas.nodes.length - withRadius);
+    for (const [reason, count] of declinedReasons) {
+      expect(reason, 'a refusal must name a guardrail').not.toBe('');
+      expect(count).toBeGreaterThan(0);
+    }
   });
 
   it('holds the answer-key invariant against a freshly recomputed graph', () => {

@@ -12,10 +12,10 @@
  * the repo at all.
  */
 
-import type { Atlas, Challenge, NodeRef } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeId, NodeRef } from '../atlas/index.js';
 import { parseAtlas } from '../atlas/index.js';
 import type { Camera } from './camera.js';
-import { fit, pan, screenToWorld, zoomAt } from './camera.js';
+import { centreOn, fit, pan, screenToWorld, zoomAt } from './camera.js';
 import { createConsole } from './challenge.js';
 import { drawFrame } from './draw.js';
 import type { Fog } from './fog.js';
@@ -25,7 +25,10 @@ import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } fro
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
-import { createError, createHud, createInspector, createLegend } from './ui.js';
+import type { SelectorState } from './selector.js';
+import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
+import { createError, createGuide, createHud, createInspector, createLegend } from './ui.js';
+import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
 /** Pointer movement below this is a click, not a drag. */
@@ -86,6 +89,9 @@ function start(scene: Scene, root: HTMLElement): void {
   // HUD's counter both read.
   const challengeById = new Map(scene.atlas.challenges.map((c) => [c.subject, c]));
   const unanswered = new Set<NodeRef>();
+  // Session-scoped, never persisted: ADR-0011 decision 2 forbids storing a
+  // cursor, and a position in the rotation is a cursor.
+  let selector: SelectorState = NO_HISTORY;
   const retally = (): void => {
     // Derived from the record, not tracked alongside it, so a restored session
     // starts with the deck it left with — and a pass whose claim has decayed
@@ -100,8 +106,18 @@ function start(scene: Scene, root: HTMLElement): void {
       const ref = scene.graph.refById.get(id);
       if (ref !== undefined && !answered.has(id)) unanswered.add(ref);
     }
+    // The selector reads the *same* set, so the HUD counter, the map's rings
+    // and the button can never disagree about what is left.
+    selector = { ...selector, answered };
   };
   retally();
+
+  const regionOf = (subject: NodeId): string => {
+    const ref = scene.graph.refById.get(subject);
+    return ref === undefined ? '' : (scene.atlas.nodes[ref]?.region ?? '');
+  };
+  const nextUp = (): Challenge | null =>
+    suggestNext(scene.atlas.challenges, regionOf, selector);
 
   /**
    * How far a node's radius may be drawn.
@@ -134,8 +150,20 @@ function start(scene: Scene, root: HTMLElement): void {
   const hud = createHud(scene.atlas);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade) {
-      remember(applyGrade(progress, challenge, grade).progress);
+      const progression = applyGrade(progress, challenge, grade);
+      remember(progression.progress);
       retally();
+      // Both paths into a challenge converge here, which is why the selector's
+      // history is updated here and nowhere else: a map-click answer shapes the
+      // next suggestion exactly as a suggested one does, because a byte-identical
+      // answer key is felt the same however the question arrived.
+      selector = {
+        ...selector,
+        previous: challenge,
+        attempts: progression.unlocked
+          ? selector.attempts
+          : noteAttempt(selector.attempts, challenge.subject),
+      };
       const ref = scene.graph.refById.get(challenge.subject);
       if (ref !== undefined) {
         // The reveal fires on every grade, pass or fail — guardrail 6 says a
@@ -152,7 +180,38 @@ function start(scene: Scene, root: HTMLElement): void {
     },
   });
   const inspector = createInspector(scene, (challenge) => challengePanel.open(challenge));
-  root.replaceChildren(canvas, hud.root, createLegend(scene), inspector.root, challengePanel.root);
+
+  /**
+   * Take the player to the next landmark. Deliberately does **not** open the
+   * question: §4's loop is "pick a landmark", and ADR-0011 calls suggested-next
+   * an affordance rather than a mode. The map stays the frame; the existing
+   * "answer this" control is one keystroke away once you arrive.
+   */
+  const guide = createGuide(() => {
+    const challenge = nextUp();
+    if (challenge === null) return;
+    const ref = scene.graph.refById.get(challenge.subject);
+    const node = ref === undefined ? undefined : scene.nodes[ref];
+    if (node === undefined) return;
+    selected = node;
+    hovered = null;
+    remember(recordSurvey(progress, [node.id]));
+    // Far enough in that the destination's name is drawn — arriving at an
+    // unlabelled dot is arriving nowhere.
+    camera = centreOn(camera, node, DISTRICT_SCALE);
+    radius = blastRadius(scene, node.ref, depthFor(node));
+    describe(node);
+    invalidate();
+  });
+
+  root.replaceChildren(
+    canvas,
+    hud.root,
+    createLegend(scene),
+    inspector.root,
+    guide.root,
+    challengePanel.root,
+  );
 
   function resize(): void {
     const ratio = window.devicePixelRatio || 1;
@@ -183,6 +242,17 @@ function start(scene: Scene, root: HTMLElement): void {
         `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels`,
         unanswered.size,
       );
+      // Recomputed, never latched: a pass can decay and a reindex can resurrect
+      // its question, so a stored "you are finished" would go on lying.
+      const upcoming = nextUp();
+      const upcomingRef =
+        upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+      guide.update({
+        next: upcoming,
+        path: upcomingRef === undefined ? null : (scene.nodes[upcomingRef]?.label ?? null),
+        arrived: upcoming !== null && selected?.id === upcoming.subject,
+        questionsLeft: unanswered.size,
+      });
     }
     requestAnimationFrame(frame);
   }

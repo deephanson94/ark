@@ -256,13 +256,14 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 delivered, M3 in progress — rung 1 of 3 landed.** M0's atlas format and verb contracts, M1's
+**M2 delivered, M3 in progress — rungs 1 and 2 of 3 landed.** M0's atlas format and verb contracts, M1's
 map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 40 challenges for this repo, the four
 §8.3 distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player
 has a challenge console over the map with partial credit, a derived per-file reveal, and fog that
-lifts on what you prove. **Progress now survives a reload**, keyed on the repo's root commit. 43 KiB
-of JS, zero runtime dependencies, first paint ~150 ms. `npx ark index .` produces a valid ~95 KiB
-atlas in ~270 ms.
+lifts on what you prove. **Progress survives a reload**, keyed on the repo's root commit, and a
+**"Where next?" panel** walks you through the deck without ever serving the same answer key twice
+running. 45 KiB of JS, zero runtime dependencies, first paint ~150 ms. `npx ark index .` produces a
+valid ~98 KiB atlas in ~290 ms.
 
 The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
 and are not open: truth is the unbounded transitive dependent set, the generator maintains
@@ -280,11 +281,11 @@ byte-identical atlas, and a headless browser smoke test that plays a challenge, 
 fails on any console error.
 
 The kill point passed on the strength of the reveal, **with a caveat recorded in `CHANGELOG.md`**:
-32 of 40 answer keys are exactly 6 files, 5 pairs of subjects have identical answer keys, and the
-co-change distractor strategy has never fired because this repo has 23 commits. Read that entry
-before deciding what M3's remaining rungs are worth.
+most answer keys are exactly 6 files and several pairs of subjects have identical ones. The selector
+now stops those being served back to back, and the co-change distractor strategy has started firing
+now that the repo has 24 commits — but the underlying sameness is a *generation* artifact and the
+deeper fix is a generator-side dedupe, which belongs to its own session.
 
-Next action: **M3 rung 2 — the progression selector.** ADR-0011 decision 4 fixes the rule and the
-measurements behind it; it is the thing that stops near-identical answer keys being served back to
-back. Rung 3 is the field-notes panel. If Blast Radius stops being interesting before those land,
-stop and rethink the verb rather than adding a second one.
+Next action: **M3 rung 3 — the field-notes panel**, over `livePasses()` and honest about sampled
+answer keys per ADR-0011 decision 3. If Blast Radius stops being interesting before it lands, stop
+and rethink the verb rather than adding a second one.

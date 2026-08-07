@@ -348,3 +348,53 @@ One line per iteration: what changed, and what to do next.
   one whose region matches. Both constraints were measured on ark and vite before being written; (a)
   fixes the repetition defect, (b) buys the tour. Then rung 3, the field-notes panel — which is why
   `livePasses()` already returns the narrowed pass rather than just a boolean.
+
+- **M3 rung 2 — the progression selector, and the deck stops repeating itself.** A "Where next?"
+  panel offers the next question by ADR-0011 decision 4's rule. It **takes you to a landmark; it
+  does not open a question** — §4's loop is "pick a landmark", and the ADR calls suggested-next an
+  affordance rather than a mode, so the button pans the map, selects the subject and leaves the
+  existing "answer this" control one keystroke away. Sending the player straight into a modal is the
+  first step towards the quiz deck nothing in the spec licenses.
+  **The rule is unchanged in behaviour and is now one lexicographic minimum over
+  `(attempts, sameTruth, sameRegion, tier, difficulty, id)`.** Three measurements forced that
+  shape, and ADR-0011 decision 4 is amended with all of them. (1) Written literally as a relaxation
+  ladder, the *drop-the-truth-constraint* rung **never executed** on either repo under any player
+  model — the landmine about machinery that never fires, arriving on schedule. As a ranking there is
+  no such rung: the key is total. (2) "A session-scoped attempted set" was one sentence hiding a
+  defect — as a hard filter it falls through to "serve the first unanswered" the moment every open
+  question has been tried, which is routine in the endgame: **79 consecutive identical answer keys
+  out of 120 servings** for an always-failing player on this repo. As the outermost rank component
+  the deck rotates instead, every question served equally often. (3) A least-recently-attempted
+  rotation was the reviewed alternative and measured **worse** — it drops both constraints once
+  everything has been tried, and that costs 4 consecutive identical keys on ark and 3 on vite
+  against 1 for the ranking. A perfect player gets the same result under all three, which is why the
+  ADR's original table still stands.
+  **A surviving mutation, reported rather than papered over.** Swapping `attempts` and `sameTruth`
+  in the key changes **no choice at all** — 0 divergences across full playthroughs of both repos at
+  two failure rates — so there is deliberately no test pinning it, and the code says why. A test
+  asserting a distinction the product never exhibits is the same mistake as a fallback that never
+  fires. `attempts` above `sameRegion` *is* load-bearing and is tested: below it, the selector
+  re-serves a question the player already failed in order to move region, spending a fresh question
+  to buy variety it could have had free. That mutation was caught only after the first attempt at a
+  discriminating test failed to discriminate.
+  **`tests/atlas/selector.test.ts` is the permanent instrument**, playing this repo's real 40-card
+  deck through three player models. It asserts the defect is *present* — the plain sort must still
+  produce consecutive identical keys here — so the constraint below it can never pass vacuously.
+  One repeat survives a half-failing playthrough and is not a defect: with one question left and
+  just failed, every possible rule re-serves it, so the test asserts the honest property, no repeat
+  *while an alternative exists*.
+  **Two unrelated things surfaced.** Adding `selector.ts` pushed the repo to 24 commits and the
+  **co-change distractor strategy fired for the first time** (5 wrong answers) — the caveat recorded
+  at the M2 kill point is now closed. And the Ctrl+F gate declined its first subject on this repo,
+  which broke `atlas.test.ts`'s "every subject with a radius ships a question". That assertion was
+  too strong — the guardrails are *allowed* to refuse. It now asserts what actually matters: nothing
+  goes missing silently, so shipped + refused = subjects with a radius, and `noDependents` is
+  separated out as "no radius to ask about" rather than counted as a refusal.
+  Verified: 336 unit + 81 atlas tests, byte-identical atlas, e2e clean — the browser run now clicks
+  the suggestion, fails if it opens a modal, if it lands somewhere the name is not drawn, if it
+  offers the question just answered, or if the caption still points elsewhere after arriving.
+  **Next**: M3 rung 3 — the field-notes panel, over `livePasses()`, honest about sampled keys per
+  ADR-0011 decision 3. Also noticed and *not* fixed: node labels near the top edge draw underneath
+  the inspector and HUD panels. `placeLabels` already accepts `occupied` boxes for exactly this, so
+  the fix is feeding it the overlay rects — it needs main.ts to measure DOM for the canvas, which is
+  a real change and its own rung.

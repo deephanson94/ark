@@ -43,6 +43,65 @@ export interface Hud {
   update(coverage: Coverage, level: string, stats: string, questionsLeft: number): void;
 }
 
+export interface GuideView {
+  /** `null` when every question has been passed. */
+  readonly next: Challenge | null;
+  /** The suggestion's display name. */
+  readonly path: string | null;
+  /** True when the player is already standing on the suggestion. */
+  readonly arrived: boolean;
+  readonly questionsLeft: number;
+}
+
+export interface Guide {
+  readonly root: HTMLElement;
+  update(view: GuideView): void;
+}
+
+/**
+ * "Where next?" — the progression affordance.
+ *
+ * It **takes you to a landmark; it does not open a question**. §4's loop is
+ * "pick a landmark", and ADR-0011 is explicit that suggested-next is an
+ * affordance and not a mode: sending the player straight into a modal would
+ * quietly turn a cartography game into a quiz deck, which nothing in the spec
+ * licenses. So the button pans the map, selects the subject, and leaves the
+ * existing "answer this" control one keystroke away.
+ *
+ * The exhausted state is **recomputed every frame, never latched**. A pass can
+ * decay (ADR-0011 decision 3) and a reindex can resurrect its question, so a
+ * stored "done" would go on lying.
+ */
+export function createGuide(onSuggest: () => void): Guide {
+  const button = el('button', 'guide-action');
+  button.type = 'button';
+  button.addEventListener('click', onSuggest);
+  const caption = el('div', 'guide-caption');
+  const root = el('div', 'guide', [button, caption]);
+  return {
+    root,
+    update({ next, path, arrived, questionsLeft }) {
+      if (next === null) {
+        button.disabled = true;
+        button.textContent = 'every question answered';
+        // Derived, never canned: the count is the deck's, and the pointer is
+        // the only true thing left to say — a newer HEAD generates a new deck.
+        caption.textContent = 'Reindex at a newer commit for more.';
+        return;
+      }
+      button.disabled = false;
+      // Once you are standing on the suggestion the button has already done its
+      // job, and saying "next is draw.ts" while you are on draw.ts reads as a
+      // control that did nothing. It stays live — panning away and pressing it
+      // brings you back — but it stops pretending there is somewhere to go.
+      button.textContent = arrived ? 'Back to the suggestion' : 'Where next?';
+      caption.textContent = arrived
+        ? `${questionsLeft} left · you are on ${path ?? 'it'}`
+        : `${questionsLeft} left · next is ${path ?? 'somewhere'}`;
+    },
+  };
+}
+
 export function createHud(atlas: Atlas): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [

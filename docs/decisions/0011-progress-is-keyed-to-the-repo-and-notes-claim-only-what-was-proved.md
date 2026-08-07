@@ -130,6 +130,63 @@ changes the repetition numbers not at all**; what it buys is the tour — it sto
 marched through nine consecutive questions inside `src/atlas`, which is §4's "pick the next landmark"
 read as movement across the map. Neither is speculative; both fire on both repos.
 
+### Amended at implementation — the same rule, expressed as one ranking
+
+> **Added 2026-08-07, when rung 2 was built.** The rule above is unchanged in
+> behaviour and is now written as a single lexicographic minimum over
+> `(attempts, sameTruth, sameRegion, tier, difficulty, id)`. Three things forced
+> it, all measured.
+
+**The relaxation ladder had a rung nothing ever stood on.** Written literally —
+scan, drop (b), drop (a) — the "drop (a)" loop **never executed**, on either
+repo, under a perfect player, a half-failing one or an always-failing one. That
+is the landmine about machinery that never fires, arriving on schedule. As a
+ranking there is no such loop: the key is total, so a candidate that violates
+both constraints simply ranks last and wins when nothing else is open. Same
+function, no untaken branch. (For the record it now *does* fire, once on each
+repo, under a half-failing player — because folding attempts into the same key
+creates the state that reaches it.)
+
+**"A session-scoped attempted set" was one sentence hiding a defect.** As a hard
+filter it is fine until every open question has been tried, which happens
+routinely in the endgame — and then it falls through to "serve the first
+unanswered", which is the same board forever. Measured on this repo with an
+always-failing player: **79 consecutive identical answer keys out of 120
+servings**. As the outermost rank component instead, the deck rotates: every
+question served the same number of times, and the worst case is 0 consecutive
+identical.
+
+**A least-recently-attempted rotation was reviewed as the alternative and
+measured worse.** It drops both constraints once every question has been tried,
+on the argument that tour variety over a pool you have already seen protects
+nothing. It does protect something: on a half-failing player it produced 4
+consecutive identical keys on this repo and 3 on vite, against 1 for the ranking.
+Being handed the same answer key twice running does not stop being the defect
+because you failed it the first time.
+
+| rule, half-failing player | ark: consecutive identical | vite |
+|---|---:|---:|
+| hard attempted-filter (the literal reading) | 22 | 82 |
+| least-recently-attempted | 4 | 3 |
+| **rank, as implemented** | **1** | **1** |
+
+A perfect player gets the identical result under all three, which is why the
+table in the previous section still stands.
+
+**One ordering inside the key is arbitrary and is recorded as such**: swapping
+`attempts` and `sameTruth` changes no choice at all — 0 divergences across full
+playthroughs of both repos at two failure rates. There is deliberately no test
+pinning it. `attempts` above `sameRegion`, by contrast, is load-bearing and is
+tested: below it, the selector re-serves a question the player already failed in
+order to move region, spending a fresh question to buy variety it could have had
+free.
+
+**One repeat survives and is not a defect.** With one question left and that
+question just failed, every possible rule re-serves it — the alternative is
+refusing to serve, which this decision forbids and which risk #4 calls the tool
+hiding things. The test asserts the honest property: no repeat *while an
+alternative exists*.
+
 **Rejected: region round-robin**, which was this ADR's first plan. It does not work. Near-identical
 keys do *not* reliably share a region — measured at 78% on ark and **52%** on vite, and one identical
 pair on this very repo (`src/player/draw.ts`, `src/player/challenge.ts`) spans two regions. It also

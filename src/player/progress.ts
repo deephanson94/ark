@@ -210,6 +210,11 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
  * sits in that radius — but it says nothing about *its own* radius, which is a
  * different question the player has not been asked. Reading the deck off the
  * fog silently retired questions nobody had answered.
+ *
+ * **This collapses over verbs, which is correct only while there is one.** When
+ * M4's git verbs land, "answered" has to become per-`(verb, subject)` — the
+ * `Pass` record already carries the verb for exactly that reason — or a
+ * Blast Radius pass will retire a Companion question about the same file.
  */
 export function answeredSubjects(progress: Progress, liveness: Liveness): Set<NodeId> {
   return new Set(livePasses(progress, liveness).map((pass) => pass.subject));
