@@ -175,6 +175,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - **`git log` orders by *commit* date; `%ad` is the *author* date.** Even in one timezone they
   disagree after a rebase or a mailed patch, so "the log is newest-first" is not a claim you can
   make about the dates you kept. Sort explicitly and tiebreak on sha.
+- **Label propagation has no objective function, so it gets patched.** It has been patched twice
+  already (connector hold-out, small-region absorption). If a *third* structural patch looks
+  necessary, stop and write deterministic Louvain/Leiden instead — fixed visit order and
+  ascending-label tiebreaks make it deterministic, and it is ~150 lines. Patching further is how you
+  end up with an algorithm nobody can reason about.
+- **Regions are stable for a commit, not across commits.** Determinism guarantees same commit ⇒ same
+  regions. It does not guarantee that a small change to the graph leaves regions alone — label
+  propagation can reshuffle wholesale. Spatial memory across a repo's *evolution* is unaddressed in
+  the spec and will need a decision by M3.
 - **Dates are not the only thing git renders per-commit.** If a field comes from `--format`, ask
   what it depends on besides the commit.
 
@@ -221,8 +230,18 @@ npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
-npm run test:e2e           # slow — ask before running
+npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
 ```
+
+**If `test:e2e` reports `Executable doesn’t exist at .../chromium_headless_shell-NNNN/...`**, the
+installed Playwright wants a different browser build than the machine already has. Do **not** run
+`playwright install` in an environment that ships one — point at the existing binary:
+
+```bash
+PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e   # Claude Code cloud sessions
+```
+
+CI installs its own Chromium and needs no variable.
 
 ---
 
@@ -238,7 +257,11 @@ CI runs every suite on push and PR, including a three-platform check that the sa
 byte-identical atlas, and a headless browser smoke test that fails on any console error.
 
 Next action: **M2, the kill point** — Blast Radius `generate()`, the four distractor strategies
-(§8.3) and computed difficulty (§8.4). `isChallengeable()` and the graph queries already exist.
+(§8.3) and computed difficulty (§8.4). The semantics are already decided and must be followed:
+**[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)** fixes
+unbounded truth, the candidate invariant, the prompt wording, and the hover-preview rule — it also
+lists every existing file that has to change. `isChallengeable()`, the graph queries, F1 scoring and
+the grade bands already exist and are tested.
 
 Roadmap kill point is **M2** — if the Blast Radius verb isn't engaging on a repo we wrote ourselves,
 stop and rethink the verb rather than adding a second one.

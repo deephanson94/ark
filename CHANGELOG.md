@@ -83,3 +83,24 @@ One line per iteration: what changed, and what to do next.
   once challenges exist; and §8.3's "distance n±1" distractor strategy will select real dependents
   one hop past the depth bound and grade excluding them as correct, so "dependent, to what depth,
   worded how" needs pinning down first.
+
+- **ADR-0008 — M2 semantics, decided before writing M2.** The two collisions the M1 review flagged
+  are now settled, by a second-opinion review the human asked to be treated as binding.
+  **Truth becomes unbounded** and the prompt promises *dependence*, not required change: "A breaking
+  change lands in X. Which of these files depend on it — directly, or through a chain of imports?"
+  Both problems were the same defect — the prompt promising something the answer key does not hold —
+  so they get one answer, not two patches. The depth bound turned out to protect nothing measurable
+  (**depth-3 truth equals unbounded truth for every one of this repo's 69 nodes**) while planting a
+  landmine: §8.3's "distance n±1" strategy would present real dependents at hop n+1 as correct
+  exclusions. **The map now shows direct importers only**; the full radius renders only for nodes in
+  `fog.understood`, revealed when a grade lands and unlocked by passing. Depth-1 is the right thing
+  to give away because §8.4 defines `surprise` against exactly that naive guess — the map hands you
+  the baseline, the grade measures what you know beyond it, and on this repo 23 of 30 answerable
+  subjects have a full radius that differs from their direct importers. Hub subjects (`schema.ts`:
+  4 direct, 39 transitive) ship a deterministic distance-stratified sample with every unsampled
+  dependent banned from the candidate pool, which is the escape ADR-0007 already anticipated.
+  **Amended NORTH-STAR §6.1** — its sample prompt and depth-bounded ground truth are both replaced,
+  with a note pointing at the ADR, because leaving the spec disagreeing is how a future session
+  "fixes" the generator back into over-promising. **Next**: M2 itself. ADR-0008 lists the algorithm,
+  the invariant `candidates ∩ dependents(subject, ∞) = truth`, and every existing file that has to
+  change. Nothing is implemented yet.
