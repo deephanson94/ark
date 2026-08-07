@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 3**
+**Schema version: 4**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 3,
+  "version": 4,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -364,12 +364,12 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `2`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `4`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 a v2 atlas into a v1 build fails with
 
 ```
-atlas.version: this build reads atlas v1, got v2 — reindex required
+atlas.version: this build reads atlas v4, got v3 — reindex required
 ```
 
 The player must never guess at a shape.

@@ -19,7 +19,7 @@ import { visibilityOf } from './fog.js';
 import type { LabelCandidate, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
 import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
-import type { Orbit } from './orbit.js';
+import type { Column, Orbit } from './orbit.js';
 import { columns } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import { visibleEdges, visibleNodes } from './scene.js';
@@ -327,30 +327,45 @@ export function drawOrbitFrame(
   const highlighted = radius?.dependents ?? null;
 
   // ---- wires ------------------------------------------------------------
-  context.lineWidth = Math.max(0.5, 0.8 * Math.min(1, camera.scale));
+  //
+  // Split in two, above and below the columns, and the split is the whole
+  // point. Path tracing along edges is the *measured* win this view exists for
+  // (`docs/prior-art.md` §2), so the edges of the radius under inspection are
+  // drawn **after** the columns, where nothing can occlude them. Everything
+  // else goes underneath.
+  //
+  // Drawing them all underneath — as the first version did — put an occlusion
+  // cue in direct contradiction with the parallax cue: a wire between the two
+  // nearest columns vanished behind any far column that happened to overlap it.
+  // Conflicting depth information is worse than none.
   let edgesDrawn = 0;
+  const lit: { from: Column; to: Column }[] = [];
+  context.lineWidth = Math.max(0.6, Math.min(1.4, camera.scale));
   for (const edge of scene.edges) {
     const from = screenOf.get(edge.from);
     const to = screenOf.get(edge.to);
     if (from === undefined || to === undefined) continue;
-    const lit =
+    edgesDrawn++;
+    if (
       radius !== null &&
       (highlighted?.has(edge.from) === true || edge.from === radius.subject) &&
-      (highlighted?.has(edge.to) === true || edge.to === radius.subject);
+      (highlighted?.has(edge.to) === true || edge.to === radius.subject)
+    ) {
+      lit.push({ from, to });
+      continue;
+    }
     context.beginPath();
     context.moveTo(from.top.x, from.top.y);
     context.lineTo(to.top.x, to.top.y);
-    context.strokeStyle = lit ? INK.edgeHighlight : INK.edge;
-    context.globalAlpha = lit ? 1 : style.edgeAlpha * 0.7;
+    context.strokeStyle = INK.edge;
+    context.globalAlpha = radius === null ? 0.5 : 0.16;
     context.setLineDash(edge.confidence === 'probable' ? [3, 3] : []);
     context.stroke();
-    edgesDrawn++;
   }
   context.setLineDash([]);
   context.globalAlpha = 1;
 
   // ---- columns, far to near ---------------------------------------------
-  let peaksDrawn = 0;
   for (const column of ordered) {
     const { node, base, top } = column;
     const state = visibilityOf(fog, node.id);
@@ -363,8 +378,13 @@ export function drawOrbitFrame(
       context.moveTo(base.x, base.y);
       context.lineTo(top.x, top.y);
       context.strokeStyle = state === 'silhouette' ? regionSilhouette(node.regionIndex, 1) : regionColor(node.regionIndex, 1);
-      context.globalAlpha = dimmed ? 0.25 : 0.55;
-      context.lineWidth = Math.max(1, drawn * 0.5);
+      // Opaque and full-width. The stalk's *length* is the only claim this view
+      // makes — how many files depend on this one — and the first version gave
+      // it 0.55 alpha at half width while the LOC-sized disc stayed opaque on
+      // top, so the salient channel described the wrong quantity and the scene
+      // read as "the flat map with faint sticks".
+      context.globalAlpha = dimmed ? 0.3 : 0.9;
+      context.lineWidth = Math.max(1.5, drawn * 1.1);
       context.stroke();
       // A footing, so a tall column still reads as standing *somewhere* — the
       // whole reason X,Y are preserved is that the ground plan is the memory.
@@ -399,12 +419,26 @@ export function drawOrbitFrame(
       context.stroke();
       context.setLineDash([]);
     }
-    if (peaks.has(node.ref) && node.elevation > 0) peaksDrawn++;
+
     if (node === selected || node === hovered) {
       context.beginPath();
       context.arc(top.x, top.y, drawn + 5, 0, Math.PI * 2);
       context.strokeStyle = node === selected ? INK.text : INK.edgeHighlight;
       context.lineWidth = 1.5;
+      context.stroke();
+    }
+  }
+
+  // ---- the traced radius, over everything -------------------------------
+  //
+  // The one thing in this view that must never be occluded.
+  if (lit.length > 0) {
+    context.strokeStyle = INK.edgeHighlight;
+    context.lineWidth = Math.max(1.2, Math.min(2.4, camera.scale * 1.6));
+    for (const { from, to } of lit) {
+      context.beginPath();
+      context.moveTo(from.top.x, from.top.y);
+      context.lineTo(to.top.x, to.top.y);
       context.stroke();
     }
   }
@@ -447,6 +481,12 @@ export function drawOrbitFrame(
     edgesDrawn,
     labelsDrawn: placed.length,
     level,
-    peaksDrawn,
+    // **Named peaks**, not "peaks I looped past". The flat map draws summit
+    // rings and counts those; this view draws no ring, so the only thing it can
+    // honestly report is how many summits it managed to *name*. Counting
+    // membership in the peak set instead would have reported 13 while drawing
+    // nothing peak-specific at all — a "how many X" with no gate that X
+    // happened, which is the landmine this field exists to satisfy.
+    peaksDrawn: placed.length,
   };
 }

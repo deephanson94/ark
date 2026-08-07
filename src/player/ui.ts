@@ -117,8 +117,11 @@ export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
   const counts = el('div', 'hud-counts');
   const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
+  // A feature reachable only by reading the source does not exist. `f` was
+  // already undiscoverable; `o` would have shipped the same way.
+  const keys = el('div', 'hud-keys', ['f fit · o orbit · enter ask']);
 
-  const root = el('div', 'hud', [title, head, progress, counts, quests, detail, ...extra]);
+  const root = el('div', 'hud', [title, head, progress, counts, quests, detail, keys, ...extra]);
 
   return {
     root,

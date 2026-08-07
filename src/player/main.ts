@@ -21,7 +21,7 @@ import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Fog } from './fog.js';
 import { coverage, landmarks } from './fog.js';
 import type { Orbit } from './orbit.js';
-import { DEFAULT_ORBIT, turn } from './orbit.js';
+import { DEFAULT_ORBIT, pickColumn, turn } from './orbit.js';
 import type { Progress } from './progress.js';
 import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
@@ -91,6 +91,21 @@ function start(scene: Scene, root: HTMLElement): void {
   let orbit: Orbit | null = null;
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
+
+  /**
+   * What is under the pointer, in whichever view is on screen.
+   *
+   * One function, used by hover and by click, because the two paths disagreeing
+   * about which projection is in force is precisely the defect this replaced:
+   * orbit shipped with the flat inverse still driving both, so the inspector
+   * described one file while the cursor sat on another — and the click wrote
+   * that wrong file into the saved `surveyed` set.
+   */
+  const pickAt = (local: { x: number; y: number }): SceneNode | null => {
+    if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
+    const world = screenToWorld(camera, viewport, local);
+    return pick(scene, world.x, world.y, camera.scale);
+  };
 
   const remember = (next: Progress): void => {
     progress = next;
@@ -337,9 +352,7 @@ function start(scene: Scene, root: HTMLElement): void {
       invalidate();
       return;
     }
-    const local = localPoint(event);
-    const world = screenToWorld(camera, viewport, local);
-    const found = pick(scene, world.x, world.y, camera.scale);
+    const found = pickAt(localPoint(event));
     if (found === hovered) return;
     hovered = found;
     // Hovering previews the question — "change this, what imports it?" — at the
@@ -360,9 +373,7 @@ function start(scene: Scene, root: HTMLElement): void {
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     if (moved > DRAG_THRESHOLD) return;
 
-    const local = localPoint(event);
-    const world = screenToWorld(camera, viewport, local);
-    const found = pick(scene, world.x, world.y, camera.scale);
+    const found = pickAt(localPoint(event));
     selected = found;
     if (found !== null) {
       remember(recordSurvey(progress, [found.id]));
@@ -382,7 +393,18 @@ function start(scene: Scene, root: HTMLElement): void {
     (event) => {
       event.preventDefault();
       const factor = Math.exp(-event.deltaY * 0.0015);
-      camera = zoomAt(camera, viewport, localPoint(event), factor);
+      // In orbit, zoom about the viewport centre rather than the pointer.
+      // `zoomAt` keeps the world point *under the cursor* fixed, and it works
+      // that out with the flat inverse — which in a rotated, foreshortened view
+      // names a different place than the one being pointed at, so the map slides
+      // out from under the wheel. Centre-anchored zoom is the honest version
+      // until the camera itself carries the projection.
+      camera = zoomAt(
+        camera,
+        viewport,
+        orbit === null ? localPoint(event) : { x: viewport.width / 2, y: viewport.height / 2 },
+        factor,
+      );
       invalidate();
     },
     { passive: false },

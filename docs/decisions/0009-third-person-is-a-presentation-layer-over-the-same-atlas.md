@@ -1,9 +1,11 @@
 # ADR-0009 — Third person is a presentation layer over the same atlas, and it is blocked
 
-- **Status**: **accepted in principle — blocked, and not scheduled.** The decision is that this
-  direction is *allowed* and on what terms. Nothing about it is on the roadmap, and no
-  implementation work starts before the preconditions below are met, which cannot be earlier than
-  after M5.
+- **Status**: **accepted in principle — partly opened, 2026-08-07.** The decision is that this
+  direction is *allowed* and on what terms. This line originally read "blocked, and not scheduled …
+  cannot be earlier than after M5"; the owner has since opened rungs 0–2 and the orbit view has
+  merged. **Read the [Owner's note](#owners-note--2026-08-07-the-rung-ladder-and-what-it-does-and-does-not-open)
+  before acting on anything below** — it says exactly what is open, what it cost, and what is still
+  shut, and it is the authority a later section's "blocked" does not override.
 - **Date**: 2026-08-07
 - **Amends**: NORTH-STAR §9 ("v1 is 2D"), §10 (render row), and Appendix B ("3D world"). All three
   point here. `CLAUDE.md`'s map-interaction budget row too.
@@ -315,7 +317,18 @@ What this does **not** open:
   caution: the measured 3D win is *exocentric*, and the two studies closest to a walkable world are
   the ones it lost. Before Trace, the product asks no question that walking answers better than
   orbiting. A session reaching rung 3 must stop and say so.
-- The invariant, the design constraints and the ship criterion below are untouched.
+- **The invariant and the design constraints are untouched. The ship criterion is not, and saying
+  otherwise was wrong.** An earlier draft of this note claimed S1 was untouched. It is not: S1 says
+  *"before any third-person code merges, a written experiment design is committed"*, and the orbit
+  view — which this ADR's own "first experiment" section places squarely inside its scope — merged
+  with no experiment design in the repo. Recorded as a **breach, not a waiver**, because S1's own
+  wording is that it is "failed, not waived", and because the correction was found by review rather
+  than by the session that caused it.
+  What follows from that: **the orbit view may not be described as having met S1, in the CHANGELOG,
+  the README or anywhere else** — it is unmeasured, and `docs/prior-art.md` §2's closing point is
+  that no study in this literature has ever measured retained structural knowledge after the tool
+  was taken away. The experiment design is now a blocking precondition on the *next* rung of this
+  direction rather than on the last one, and nothing further merges until it is written.
 
 ### The first experiment is the fly-through, not the avatar
 

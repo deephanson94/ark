@@ -769,3 +769,70 @@ One line per iteration: what changed, and what to do next.
   entirely — 0% / 64.6% / 2.4% of the top 2%), the **phenomenon catalogue**, and **map rotation
   between challenges**, which `docs/prior-art.md` §4.4 calls the highest-leverage lowest-cost item in
   the whole writeup. Also unresolved and now more visible: `npm run raster` on real hardware.
+
+- **Rungs 0–2 reviewed after shipping, and one of the findings was a defect that corrupted saved
+  state.** A Fable review of the merged code, not the plan. Five things it found, ranked as it
+  ranked them.
+  **1. Every interaction in the orbit view targeted the wrong file — and persisted it.** Hover and
+  click still ran the *flat* inverse (`screenToWorld` → `pick`) while the screen showed rotated,
+  foreshortened, lifted positions. So the inspector described one file while the cursor sat on
+  another, and clicking wrote **that wrong file** into the player's saved `surveyed` set: a stored
+  falsehood, keyed to the repo, surviving reload, in the one structure whose entire claim is that it
+  records only what you actually did. Nothing tested a click in orbit — the e2e drags past the
+  threshold, so `endDrag` bailed before picking, and the pixel hash was happy. **`pickColumn` hit-
+  tests the column *tops* in screen space** rather than inverting the projection, because the top
+  disc is what a player can see and aim at and an inverse would have to choose a height to invert
+  *at* — the ground gives one answer, the roof another. Nearest wins a tie, which is painter's order
+  read backwards. Both pointer paths now go through one `pickAt`, so they cannot disagree about
+  which projection is in force, and wheel-zoom anchors on the viewport centre in orbit rather than
+  sliding the map out from under the cursor.
+  **2. Binding loopback does not stop DNS rebinding.** `serve.ts` was open to it: a page you are
+  browsing points `evil.example` at 127.0.0.1 and reads `atlas.json` same-origin, and the port is a
+  sequential probe from 4180. The atlas of a private repo is paths, export names, commit subjects
+  and co-change pairs — derived-from-source data, which is exactly what pillar 5 says never leaves
+  the machine. This is the hole that bit Vite and webpack-dev-server. `isLocalHost` now checks the
+  name the client used and returns **421** otherwise, with cases for the subdomain bypass
+  (`127.0.0.1.evil.example`), the wildcard-DNS bypass (`a.127.0.0.1.nip.io`), the IPv4-mapped IPv6
+  literal, and a right name on a wrong port.
+  **3. Three assertions proved nothing, and one was mutation-verified as dead by the reviewer.**
+  The `cos(pitch)` factor on the lift was untested: `OVERHEAD` sets `rise: 0`, so *"height
+  contributes nothing from overhead, however tall"* was testing `0 × anything`, and deleting the
+  factor passed all ten orbit tests. The state a player actually reaches — pitch dragged to the
+  clamp with `rise` still 26 — was covered by nothing. The e2e's "tallest" check computed a filename
+  and then asserted the canvas was visible. And `serve.test.ts`'s *"binds loopback only"* checked a
+  URL string the code fabricates, so binding every interface passed it; it now reads
+  `server.address().address`. All three now fail when the thing they name is broken.
+  **4. `peaksDrawn` was counting in a view that draws no peaks.** The orbit incremented it per
+  peak-set member while drawing nothing peak-specific — a "how many X" with no gate that X happened,
+  which is the exact landmine the field was added to satisfy. It now reports summits actually
+  *named*, which is the only thing that view can honestly claim.
+  **5. The rendering contradicted the evidence it cites.** Wires were drawn under every column, so a
+  wire between the two nearest ones vanished behind any far column overlapping it — an occlusion cue
+  fighting the parallax cue, which is worse than no cue. The **traced radius now draws over
+  everything**, unoccludable, because path tracing along edges is the measured win this whole view
+  exists for. And the stalk — whose *length* is the only claim the view makes — had 0.55 alpha at
+  half width under an opaque LOC-sized disc, so the salient channel described the wrong quantity and
+  the scene read as "the flat map with faint sticks". Stalks are now opaque and full width.
+  **Two documents were lying.** `docs/atlas-format.md` still said "Schema version: 3" in its
+  headline, `"version": 3` in its example and *"`version` is `2`"* in §4, against `ATLAS_VERSION = 4`
+  — and one of those was already stale before tonight. And **ADR-0009's status line still read
+  "blocked, and not scheduled… cannot be earlier than after M5"** two hundred lines above a note
+  opening rungs 0–2: the "two paragraphs disagree" failure the ADR names in its own rejected-
+  alternatives section.
+  **The S1 correction, which is the one worth reading.** My owner's note claimed *"the ship criterion
+  is untouched"*. It was not. S1 says a written experiment design is committed **before any
+  third-person code merges**, and the orbit view merged without one. That is now recorded as a
+  **breach, not a waiver** — S1's own wording is that it is failed rather than waived — with the
+  consequence stated: the orbit view **may not be described as having met S1 anywhere**, it is
+  unmeasured, and the experiment design is a blocking precondition on the next rung of this
+  direction. The review found this; the session that caused it did not.
+  Also fixed: `o` was undiscoverable, so the HUD now prints `f fit · o orbit · enter ask`. Verified:
+  394 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean. Every fix
+  above was mutation-checked, and one new test was rewritten when a mutation survived it — the
+  overlap case hedged with a conditional instead of *constructing* an overlap, so it asserted
+  nothing; it now solves `Δy = Δelevation · rise / tan(pitch)` and checks the premise first.
+  **Still open and now written down**: `ark play` resolves `dist/player` against the CWD, so it works
+  only from an Ark checkout; a private repo's atlas is left at rest in `dist/player/` until the next
+  build; `computeElevations` is O(N·E) and only ever measured on repos of this shape; and elevation
+  leaks answer-key *size buckets* from first paint on low-elevation subjects, which ADR-0013 recorded
+  generically but not in that sharp form.

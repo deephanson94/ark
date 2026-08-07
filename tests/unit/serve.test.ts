@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { get } from 'node:http';
 import { resolve } from 'node:path';
 
-import { resolveWithin, serveDirectory } from '../../src/indexer/serve.js';
+import { isLocalHost, resolveWithin, serveDirectory } from '../../src/indexer/serve.js';
 
 const ROOT = resolve('/srv/player');
 
@@ -103,6 +103,11 @@ describe('serveDirectory', () => {
     try {
       expect(served.port).toBeGreaterThanOrEqual(4271);
       expect(served.url).toBe(`http://127.0.0.1:${served.port}/`);
+      // **The bind address, from the socket.** This test carried the phrase
+      // "binds loopback only" in its name while checking a url string the code
+      // fabricates — so binding every interface passed it. The one
+      // security-relevant property in the title was the one not asserted.
+      expect(served.address).toBe('127.0.0.1');
     } finally {
       await served.close();
     }
@@ -130,6 +135,60 @@ describe('serveDirectory', () => {
     } finally {
       await first.close();
       await second.close();
+    }
+  });
+});
+
+
+describe('isLocalHost — the DNS-rebinding guard', () => {
+  it('accepts the names this server is actually reachable by', () => {
+    for (const host of ['127.0.0.1:4180', 'localhost:4180', '[::1]:4180', '127.0.0.1', 'LocalHost:4180']) {
+      expect(isLocalHost(host, 4180), host).toBe(true);
+    }
+  });
+
+  it('refuses a name that merely resolves here', () => {
+    // The attack: a page you are browsing points `evil.example` at 127.0.0.1
+    // and reads the atlas same-origin. Loopback binding does not stop it;
+    // checking the name the client used does. The atlas of a private repo is
+    // derived-from-source data, and pillar 5 says that never leaves the machine.
+    for (const host of [
+      'evil.example:4180',
+      'attacker.test',
+      'a.127.0.0.1.nip.io:4180',
+      '127.0.0.1.evil.example:4180',
+      '0.0.0.0:4180',
+      '[::ffff:127.0.0.1]:4180',
+      undefined,
+      '',
+    ]) {
+      expect(isLocalHost(host, 4180), String(host)).toBe(false);
+    }
+  });
+
+  it('refuses a right name carrying the wrong port', () => {
+    // A second server of ours on another port is a different origin, and a
+    // mismatched port is a sign the request was routed rather than addressed.
+    expect(isLocalHost('127.0.0.1:4181', 4180)).toBe(false);
+  });
+
+  it('turns a rebound request away over the wire', async () => {
+    const served = await serveDirectory(resolve('dist/player'), 4291);
+    try {
+      expect((await fetchStatus(`${served.url}atlas.json`)).status).toBe(200);
+      const spoofed = await new Promise<number>((ok, fail) => {
+        const request = get(
+          { host: '127.0.0.1', port: served.port, path: '/atlas.json', headers: { host: 'evil.example' } },
+          (response) => {
+            response.resume();
+            ok(response.statusCode ?? 0);
+          },
+        );
+        request.on('error', fail);
+      });
+      expect(spoofed).toBe(421);
+    } finally {
+      await served.close();
     }
   });
 });

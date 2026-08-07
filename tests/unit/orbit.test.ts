@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 import { worldToScreen } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
-import { DEFAULT_ORBIT, OVERHEAD, columns, project, turn } from '../../src/player/orbit.js';
+import { DEFAULT_ORBIT, OVERHEAD, columns, pickColumn, project, turn } from '../../src/player/orbit.js';
 
 const camera: Camera = { x: 40, y: -15, scale: 1.7 };
 const viewport: Viewport = { width: 900, height: 600 };
@@ -46,6 +46,19 @@ describe('project', () => {
       expect(top.x).toBeCloseTo(flat.x, 10);
       expect(top.y).toBeCloseTo(flat.y, 10);
     }
+  });
+
+  it('flattens a tall column from overhead even when the rise is non-zero', () => {
+    // The assertion above looked like it covered this and did not: `OVERHEAD`
+    // sets `rise: 0`, so "height contributes nothing" was testing 0 × anything.
+    // A mutation deleting the `cos(pitch)` factor from the lift survived the
+    // whole file. This is the state a player actually reaches — drag the pitch
+    // to the clamp and `rise` is still 26.
+    const straightDown = { yaw: 0, pitch: Math.PI / 2, rise: 26 };
+    const tall = node(30, -20, 9);
+    const { base, top } = project(camera, viewport, straightDown, tall);
+    expect(top.y).toBeCloseTo(base.y, 6);
+    expect(top.y).toBeCloseTo(worldToScreen(camera, viewport, tall).y, 6);
   });
 
   it('lifts a taller file further from its own footing', () => {
@@ -149,5 +162,65 @@ describe('columns', () => {
     const forwards = columns([a, b], camera, viewport, DEFAULT_ORBIT).map((c) => c.node.id);
     const backwards = columns([b, a], camera, viewport, DEFAULT_ORBIT).map((c) => c.node.id);
     expect(forwards).toEqual(backwards);
+  });
+});
+
+
+describe('pickColumn', () => {
+  const orbit = DEFAULT_ORBIT;
+
+  it('finds the column whose top the pointer is on', () => {
+    const target = node(50, 20, 4, 'n:00000000000a');
+    const { top } = project(camera, viewport, orbit, target);
+    expect(pickColumn([target], camera, viewport, orbit, top)?.id).toBe('n:00000000000a');
+  });
+
+  it('does not hit the footing of a tall column — you click what you see', () => {
+    // The defect this function replaced, in one assertion. The flat inverse
+    // resolves the pointer to a *ground* position, so aiming at a tall column's
+    // base used to select it; the disc the player can actually see and aim at
+    // is the top. A pointer on the base of a raised column hits nothing.
+    const tall = node(50, 20, 6, 'n:00000000000a');
+    const { base, top } = project(camera, viewport, orbit, tall);
+    expect(base.y).not.toBeCloseTo(top.y, 1);
+    expect(pickColumn([tall], camera, viewport, orbit, base)).toBeNull();
+  });
+
+  it('picks the nearest column when two overlap, not whichever came first', () => {
+    // Painter's order read backwards: the column drawn last is on top, so it is
+    // the one the click belongs to.
+    //
+    // The overlap is **constructed, not hoped for**. A tall near column and a
+    // short far one land on the same pixel exactly when
+    // `Δy · sin(pitch) = Δelevation · rise · cos(pitch)`, i.e.
+    // `Δy = Δelevation · rise / tan(pitch)`. The first draft of this test
+    // hedged with a conditional instead and therefore asserted nothing — a
+    // mutation reversing the tie-break survived it.
+    const centred: Camera = { x: 0, y: 0, scale: 1 };
+    const gap = (4 * orbit.rise) / Math.tan(orbit.pitch);
+    const far = node(0, 0, 0, 'n:00000000000b');
+    const near = node(0, gap, 4, 'n:00000000000a');
+    const farTop = project(centred, viewport, orbit, far).top;
+    const nearTop = project(centred, viewport, orbit, near).top;
+    // The premise: they really do coincide, or the assertion below is vacuous.
+    expect(Math.hypot(nearTop.x - farTop.x, nearTop.y - farTop.y)).toBeLessThan(0.001);
+    expect(pickColumn([far, near], centred, viewport, orbit, farTop)?.id).toBe('n:00000000000a');
+    // ...and the input order must not decide it either.
+    expect(pickColumn([near, far], centred, viewport, orbit, farTop)?.id).toBe('n:00000000000a');
+  });
+
+  it('returns null on empty space, rather than the closest thing anywhere', () => {
+    const only = node(0, 0, 3);
+    const { top } = project(camera, viewport, orbit, only);
+    expect(pickColumn([only], camera, viewport, orbit, { x: top.x + 400, y: top.y + 300 })).toBeNull();
+  });
+
+  it('agrees with the flat map when the camera is overhead', () => {
+    // The two pickers must not disagree at the position where the two views are
+    // the same picture, or `o` would change what a click means.
+    const straightDown = { yaw: 0, pitch: Math.PI / 2, rise: 26 };
+    const target = node(12, -7, 5, 'n:00000000000a');
+    const flat = worldToScreen(camera, viewport, target);
+    expect(pickColumn([target], camera, viewport, straightDown, flat)?.id).toBe('n:00000000000a');
   });
 });

@@ -33,7 +33,35 @@ const TYPES: Readonly<Record<string, string>> = {
 export interface Served {
   readonly url: string;
   readonly port: number;
+  /** The interface actually bound. Loopback, and asserted rather than assumed. */
+  readonly address: string;
   close(): Promise<void>;
+}
+
+/**
+ * Is this request addressed to *this* server, or to a name that merely resolves
+ * here?
+ *
+ * **Binding loopback does not stop DNS rebinding.** A page you are browsing
+ * points `evil.example` at 127.0.0.1, then reads `http://evil.example:4180/atlas.json`
+ * — same origin by the browser's rules, served by us, and the atlas of a
+ * private repo is paths, export names, commit subjects and co-change pairs.
+ * That is derived-from-source data leaving the machine, which is the one thing
+ * pillar 5 promises cannot happen. The port range is a sequential probe from
+ * 4180, so guessing it is not a barrier either. This is the hole that bit both
+ * Vite and webpack-dev-server, and the fix is to check the name the client
+ * used: a rebinding attack cannot send `Host: 127.0.0.1` and still reach us
+ * from another origin.
+ */
+export function isLocalHost(host: string | undefined, port: number): boolean {
+  if (host === undefined) return false;
+  // IPv6 literals arrive bracketed: `[::1]:4180`.
+  const match = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(host.trim());
+  if (match === null) return false;
+  const name = (match[1] ?? '').toLowerCase();
+  const stated = match[2];
+  if (stated !== undefined && Number(stated) !== port) return false;
+  return name === '127.0.0.1' || name === 'localhost' || name === '[::1]';
 }
 
 /**
@@ -61,7 +89,12 @@ export function resolveWithin(root: string, urlPath: string): string | null {
 
 /** Serve `root` on the first free port at or above `preferred`, loopback only. */
 export async function serveDirectory(root: string, preferred = 4180): Promise<Served> {
+  let bound = preferred;
   const server: Server = createServer((request, response) => {
+    if (!isLocalHost(request.headers.host, bound)) {
+      response.writeHead(421).end('this server answers to 127.0.0.1 only');
+      return;
+    }
     const target = resolveWithin(root, request.url ?? '/');
     if (target === null) {
       response.writeHead(403).end('forbidden');
@@ -114,14 +147,17 @@ export async function serveDirectory(root: string, preferred = 4180): Promise<Se
         // The stale callback still fires; it now resolves with the same, right
         // answer, and `Promise` resolution is idempotent.
         const address = server.address();
-        ok(typeof address === 'object' && address !== null ? address.port : candidate);
+        bound = typeof address === 'object' && address !== null ? address.port : candidate;
+        ok(bound);
       });
     };
     attempt(preferred);
   });
 
+  const bindAddress = server.address();
   return {
     port,
+    address: typeof bindAddress === 'object' && bindAddress !== null ? bindAddress.address : '',
     // `127.0.0.1`, not `localhost`. We bind the IPv4 loopback explicitly, and
     // `localhost` resolves to `::1` first on a dual-stack machine — browsers
     // fall back, Node's `fetch` does not, so a printed `localhost` url is a url

@@ -101,6 +101,12 @@ body {
   opacity: 0.72;
 }
 
+.hud-keys {
+  margin-top: 6px;
+  opacity: 0.45;
+  letter-spacing: 0.02em;
+}
+
 /* ---- legend ------------------------------------------------------------ */
 
 .legend {

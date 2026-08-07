@@ -47,7 +47,10 @@ import type { SceneNode } from './scene.js';
 
 /** Where the eye is. `yaw` turns the world; `pitch` tips it toward overhead. */
 export interface Orbit {
-  /** Radians. 0 looks along +Y, and the flat map's north stays north. */
+  /**
+   * Radians. At 0 the eye sits on the +Y side looking back toward −Y, so the
+   * flat map's north stays north and nothing a player has learned moves.
+   */
   readonly yaw: number;
   /**
    * Radians, 0..π/2. π/2 is straight down — which reproduces the flat map
@@ -88,7 +91,14 @@ export interface Column {
   readonly node: SceneNode;
   readonly base: Point;
   readonly top: Point;
-  /** Distance from the eye along the view axis. Larger is further away. */
+  /**
+   * Position along the view axis after yaw. **Larger is *nearer* the eye** —
+   * it projects lower on the screen, which is what "closer" means in a tipped
+   * view — so ascending `depth` is far-to-near, which is the order to draw in.
+   * (This comment said the opposite until a review caught it; the code and the
+   * sort were always right, and the next reader of this file will be writing an
+   * inverse projection from these words.)
+   */
   readonly depth: number;
 }
 
@@ -120,8 +130,6 @@ export function project(
   return {
     base: { x: screenX, y: flattened },
     top: { x: screenX, y: flattened - lift * Math.cos(orbit.pitch) * camera.scale },
-    // Painter's order. Nearer the eye means *larger* `away` after rotation, so
-    // ascending `away` is far-to-near, which is the order to draw in.
     depth: away,
   };
 }
@@ -146,4 +154,45 @@ export function columns(
   });
   built.sort((a, b) => a.depth - b.depth || (a.node.id < b.node.id ? -1 : 1));
   return built;
+}
+
+
+/**
+ * Which column the pointer is on.
+ *
+ * **This is the inverse of the view, and it exists because its absence was a
+ * real defect rather than a rough edge.** Rung 2 shipped with the flat map's
+ * `screenToWorld` still driving hover and click while the screen showed
+ * rotated, foreshortened, lifted positions — so the inspector described one
+ * file while the cursor sat on another, and clicking wrote **the wrong node**
+ * into the player's saved `surveyed` set. A stored falsehood keyed to the repo,
+ * surviving reload, in the one structure whose whole claim is that it records
+ * only what you actually did.
+ *
+ * Hit-testing happens in screen space against the column *tops*, not by
+ * inverting the projection into world space. That is deliberate: the top disc
+ * is the thing the player can see and aim at, and an inverse would have to pick
+ * a height to invert *at* — the ground gives one answer, the roof another, and
+ * neither is where the eye was pointed. Nearest-to-the-eye wins a tie, which is
+ * exactly the painter's order read backwards: the column drawn last is the one
+ * on top.
+ */
+export function pickColumn(
+  nodes: readonly SceneNode[],
+  camera: Camera,
+  viewport: Viewport,
+  orbit: Orbit,
+  point: Point,
+): SceneNode | null {
+  let best: Column | null = null;
+  for (const column of columns(nodes, camera, viewport, orbit)) {
+    const reach = Math.max(column.node.radius * camera.scale, 8);
+    const dx = column.top.x - point.x;
+    const dy = column.top.y - point.y;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    // `columns` is far-to-near, so simply keeping the last match takes the
+    // nearest — the one whose disc is actually on top of the others.
+    best = column;
+  }
+  return best?.node ?? null;
 }

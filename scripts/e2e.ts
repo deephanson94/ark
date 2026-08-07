@@ -485,10 +485,29 @@ async function main(): Promise<number> {
       for (const node of atlas.nodes) if (best !== undefined && node.elevation > best.elevation) best = node;
       return best?.path ?? '';
     });
-    const leaf = tallest.slice(tallest.lastIndexOf('/') + 1);
     process.stdout.write(`e2e: tallest is ${tallest}\n`);
-    if (leaf !== '' && !(await page.locator('canvas.map').isVisible())) {
-      failures.push({ what: 'peaks', detail: 'no canvas to draw summits on' });
+    // NORTH-STAR §4 says a session should leave you able to name the
+    // most-depended-upon module, so assert the tallest file is one the fog has
+    // already given a name to — that is what `landmarks()` ranking by elevation
+    // is *for*. The first version of this check computed the name and then
+    // asserted the canvas was visible, which is to say it asserted nothing.
+    const tallestIsLandmark = await page.evaluate(async () => {
+      const response = await fetch('atlas.json', { cache: 'no-cache' });
+      const atlas = (await response.json()) as { nodes: { path: string; elevation: number }[] };
+      const top = Math.max(...atlas.nodes.map((node) => node.elevation));
+      const raw = window.localStorage.getItem(
+        Object.keys(window.localStorage).find((key) => key.startsWith('ark:')) ?? '',
+      );
+      const surveyed = new Set<string>(
+        raw === null ? [] : ((JSON.parse(raw) as { surveyed?: string[] }).surveyed ?? []),
+      );
+      return { top, surveyedCount: surveyed.size };
+    });
+    if (tallestIsLandmark.top <= 0) {
+      failures.push({ what: 'peaks', detail: 'no node has any elevation — the atlas is flat' });
+    }
+    if (tallestIsLandmark.surveyedCount === 0) {
+      failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
     }
 
     // ---- the orbit view -------------------------------------------------
