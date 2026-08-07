@@ -27,8 +27,13 @@ One line per iteration: what changed, and what to do next.
   `test:atlas`, which conflated correctness with means. Size is enforced **per file** as well as
   absolutely — 5 MB against a 28 KiB atlas would pass forever; 577 B/file against a 2,621 B ceiling
   will not. Index time stays advisory: at 4.2 ms/file against a 5 ms ceiling it is dominated by
-  fixed startup cost and would flake on a shared runner. Fixed one portability bug found by reading
-  for the Windows leg: `GIT_CONFIG_GLOBAL` was hard-coded to `/dev/null`, which does not exist on
-  Windows, so git would have silently fallen back to the user's real global config — now
-  `os.devNull`. Added `.gitattributes` pinning `eol=lf` so checkouts agree across platforms.
-  **Next**: M1 — the map render. Every node carries `layout` and `region` and nothing draws them.
+  fixed startup cost and would flake on a shared runner. Added `.gitattributes` pinning `eol=lf` so
+  checkouts agree across platforms. **The platform check found a real bug on its first run**: Linux
+  and macOS agreed, Windows produced an atlas 2,478 bytes smaller with the same 51 nodes and 82
+  edges — the same graph with its git history missing. Cause was `GIT_CONFIG_GLOBAL` pointing at a
+  null device; `/dev/null` does not exist on Windows and `os.devNull` (`\\.\nul`) is not read as a
+  config file either, so git fell back to the user's real global config, reintroducing exactly the
+  machine dependence that setting removes. It now points at a real empty file in a temp directory,
+  which means the same thing everywhere. All three platforms now emit byte-identical atlases, so
+  ADR-0006's "bit-identical across engines" is checked rather than asserted. **Next**: M1 — the map
+  render. Every node carries `layout` and `region` and nothing draws them.
