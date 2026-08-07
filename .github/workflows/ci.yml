@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  # Only the default branch on push. A branch with an open PR would otherwise
+  # run the whole matrix twice for one commit — once for the push, once for the
+  # pull_request — which doubles the queue and halves the signal.
+  push:
+    branches: [master]
+  pull_request:
+
+# A superseded run tells you nothing; cancel it and keep the queue short.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  check:
+    name: build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The indexer reads git history — churn, co-change, rename lineage.
+          # The default shallow clone would hand it a one-commit repo and every
+          # history-derived field would be quietly wrong.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run build
+
+      - name: unit tests
+        run: npm run test:unit
+
+      - name: atlas integrity
+        run: npm run test:atlas
+
+      # The canary. Indexes this repo twice in two separate processes and
+      # requires byte-identical output. See CLAUDE.md — if this fails, fix the
+      # nondeterminism, never the test.
+      - name: determinism
+        run: npm run test:determinism
+
+      - name: budgets
+        run: npm run budget
+
+  fingerprint:
+    name: atlas fingerprint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      # One platform disagreeing is the finding. Let the others report too.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: index and fingerprint
+        run: npx tsx scripts/atlas-hash.ts --out fingerprint.txt --atlas atlas.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fingerprint-${{ matrix.os }}
+          path: |
+            fingerprint.txt
+            atlas.json
+
+  agree:
+    name: platforms agree
+    needs: fingerprint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fingerprint-*
+          path: fingerprints
+
+      # ADR-0006 claims the layout is bit-identical across engines because it
+      # uses no transcendental functions. `test:determinism` runs both passes on
+      # one machine and cannot check that. This can.
+      - name: compare fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'sha256                                                           bytes nodes edges commits head'
+          for file in fingerprints/*/fingerprint.txt; do
+            platform="$(basename "$(dirname "$file")")"
+            printf '%s  <- %s\n' "$(tr -d '\n' < "$file")" "${platform#fingerprint-}"
+          done
+
+          distinct="$(cat fingerprints/*/fingerprint.txt | sort -u | wc -l)"
+          if [ "$distinct" -eq 1 ]; then
+            echo
+            echo "all platforms agree"
+            exit 0
+          fi
+
+          # Show the actual disagreement. Guessing at a hash mismatch from the
+          # hash is exactly the sort of thing this job exists to make unnecessary.
+          reference="$(ls -d fingerprints/*/ | head -1)"
+          echo
+          echo "Baseline: $(basename "$reference")"
+          for dir in fingerprints/*/; do
+            [ "$dir" = "$reference" ] && continue
+            if ! diff -q "$reference/atlas.json" "$dir/atlas.json" >/dev/null; then
+              echo
+              echo "--- differences vs $(basename "$dir") (first 40 lines) ---"
+              diff -u "$reference/atlas.json" "$dir/atlas.json" | head -40 || true
+            fi
+          done
+
+          echo
+          echo "The same commit produced $distinct different atlases across platforms."
+          echo "Same repo must mean the same map on every machine (NORTH-STAR §7),"
+          echo "so this is a real defect, not a CI quirk. Usual suspects: a"
+          echo "transcendental Math call in the layout, a path separator leaking"
+          echo "into a node id, line-ending normalisation, or git config that"
+          echo "differs by platform."
+          exit 1

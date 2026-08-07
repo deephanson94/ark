@@ -1,0 +1,130 @@
+/**
+ * Fixture atlases for tests that need a graph but not a repo.
+ *
+ * Everything built here goes through `validateAtlas` before it is returned, so
+ * a fixture can never quietly drift out of schema and make a test pass for the
+ * wrong reason.
+ */
+
+import type { Atlas, AtlasEdge, AtlasNode, Challenge, Lang } from '../../src/atlas/index.js';
+import { ATLAS_VERSION, byteCompare, edgeOrder, nodeIdFor, validateAtlas } from '../../src/atlas/index.js';
+
+const LANG_BY_EXTENSION: Readonly<Record<string, Lang>> = {
+  ts: 'ts',
+  tsx: 'tsx',
+  js: 'js',
+  json: 'json',
+  md: 'md',
+};
+
+function langOf(path: string): Lang {
+  const extension = path.slice(path.lastIndexOf('.') + 1);
+  return LANG_BY_EXTENSION[extension] ?? 'other';
+}
+
+export type NodeMapper = (node: AtlasNode) => AtlasNode;
+export type EdgeMapper = (edge: AtlasEdge, fromPath: string, toPath: string) => AtlasEdge;
+
+/**
+ * Build a minimal valid atlas from paths and `[importer, imported]` pairs.
+ * All nodes land in one region, positions are a line, and there is no history.
+ */
+export function atlasWith(
+  paths: readonly string[],
+  links: readonly (readonly [string, string])[] = [],
+  mapNode: NodeMapper = (node) => node,
+  mapEdge: EdgeMapper = (edge) => edge,
+): Atlas {
+  const ordered = [...paths].sort((a, b) => byteCompare(nodeIdFor(a), nodeIdFor(b)));
+  const refByPath = new Map(ordered.map((path, ref) => [path, ref]));
+
+  const nodes: AtlasNode[] = ordered.map((path, ref) =>
+    mapNode({
+      id: nodeIdFor(path),
+      path,
+      originPath: path,
+      kind: 'file',
+      lang: langOf(path),
+      loc: 10,
+      bytes: 100,
+      layout: [ref * 10, 0],
+      region: 'test',
+      exports: [],
+      unresolved: [],
+      externals: [],
+      churn: 0,
+      authors: 0,
+      firstSeen: null,
+      lastSeen: null,
+    }),
+  );
+
+  const edges: AtlasEdge[] = [];
+  for (const [fromPath, toPath] of links) {
+    const from = refByPath.get(fromPath);
+    const to = refByPath.get(toPath);
+    if (from === undefined || to === undefined) {
+      throw new Error(`fixture links an unknown path: ${fromPath} -> ${toPath}`);
+    }
+    edges.push(mapEdge({ from, to, kind: 'import', confidence: 'certain', weight: 1 }, fromPath, toPath));
+  }
+  edges.sort(edgeOrder);
+
+  const languages = [...new Set(nodes.map((node) => node.lang))].sort(byteCompare);
+
+  return validateAtlas({
+    version: ATLAS_VERSION,
+    repo: {
+      name: 'fixture',
+      head: null,
+      headDate: null,
+      languages,
+      fileCount: nodes.length,
+      tool: 'ark@test',
+    },
+    nodes,
+    edges,
+    regions: [{ id: 'test', label: 'test', nodeCount: nodes.length, centroid: [0, 0] }],
+    history: {
+      present: false,
+      commitsWalked: 0,
+      commitsRetained: 0,
+      window: null,
+      coChange: [],
+      commits: [],
+    },
+    challenges: [],
+    report: { truncations: [], skipped: [] },
+  });
+}
+
+/**
+ * A valid challenge over the first four nodes of `atlas`: node 0 is the
+ * subject, nodes 1–3 the choice set, node 1 the answer.
+ */
+export function challengeFor(atlas: Atlas, overrides: Partial<Challenge> = {}): Challenge {
+  const ids = atlas.nodes.map((node) => node.id);
+  const [subject, ...rest] = ids;
+  if (subject === undefined || rest.length < 2) {
+    throw new Error('challengeFor needs an atlas with at least three nodes');
+  }
+  const candidates = [...rest].sort(byteCompare);
+  const answer = candidates[0];
+  if (answer === undefined) throw new Error('unreachable');
+  return {
+    id: 'fixture-01',
+    verb: 'blastRadius',
+    tier: 3,
+    difficulty: 0.5,
+    subject,
+    candidates,
+    truth: [answer],
+    evidence: { kind: 'importGraph', depth: 2 },
+    ...overrides,
+  };
+}
+
+/** The same atlas with one challenge attached. */
+export function atlasWithChallenge(atlas: Atlas, overrides: Partial<Challenge> = {}): Atlas {
+  return validateAtlas({ ...atlas, challenges: [challengeFor(atlas, overrides)] });
+}

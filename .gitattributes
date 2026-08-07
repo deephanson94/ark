@@ -1,0 +1,7 @@
+# Line endings are normalised to LF in the working tree on every platform.
+#
+# Without this, Git for Windows checks files out with CRLF by default, which
+# changes every file's byte count — and therefore every `node.bytes` in the
+# atlas. The cross-platform atlas fingerprint check in CI would then fail on
+# Windows for a reason that has nothing to do with the indexer.
+* text=auto eol=lf
