@@ -202,6 +202,36 @@ body {
   word-break: break-word;
 }
 
+.inspector-action {
+  /* The inspector is inert so it never swallows a drag over the map; the one
+     control inside it opts back in. */
+  pointer-events: auto;
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 214, 130, 0.42);
+  border-radius: 6px;
+  background: rgba(255, 214, 130, 0.12);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inspector-action:hover {
+  background: rgba(255, 214, 130, 0.2);
+}
+
+.inspector-hint {
+  margin-top: 5px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 .inspector-warn {
   margin-top: 10px;
   padding: 7px 9px;
@@ -211,6 +241,280 @@ body {
   font-size: 11px;
   line-height: 1.5;
   color: #ffcf9a;
+}
+
+/* ---- challenge console -------------------------------------------------
+
+   A modal *over* the map (NORTH-STAR §9). The scrim is deliberately weak: the
+   world stays visible and alive behind it, because the whole value of a fixed
+   layout is the spatial context you keep while you think. */
+
+.console-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 12, 0.55);
+  backdrop-filter: blur(1.5px);
+  z-index: 10;
+}
+
+.console-scrim[hidden] {
+  display: none;
+}
+
+.console-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 100%);
+  max-height: min(88vh, 780px);
+  border: 1px solid rgba(140, 165, 200, 0.28);
+  border-radius: 12px;
+  background: rgba(14, 19, 28, 0.97);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.console-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 20px 0;
+}
+
+.console-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.console-verb {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.console-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(120, 140, 170, 0.24);
+}
+
+.pip.is-on {
+  background: var(--accent);
+}
+
+.console-close {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.console-close:hover {
+  color: var(--text);
+}
+
+.console-question {
+  margin: 10px 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.console-instruction,
+.console-evidence {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.console-evidence {
+  color: var(--text);
+}
+
+.console-choices,
+.console-notes {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.choice-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice-button:hover {
+  background: rgba(140, 165, 200, 0.08);
+}
+
+.choice-box {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border: 1px solid rgba(140, 165, 200, 0.45);
+  border-radius: 3px;
+}
+
+.choice-button.is-picked {
+  background: rgba(255, 214, 130, 0.1);
+}
+
+.choice-button.is-picked .choice-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.choice-path {
+  word-break: break-all;
+}
+
+.console-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  margin-inline: -20px;
+  border-top: 1px solid rgba(120, 140, 170, 0.14);
+  background: rgba(9, 12, 18, 0.7);
+}
+
+.console-tally {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.console-submit {
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 214, 130, 0.5);
+  border-radius: 6px;
+  background: rgba(255, 214, 130, 0.16);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.console-submit:disabled {
+  border-color: rgba(120, 140, 170, 0.24);
+  background: none;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.console-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.score-band {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: rgba(255, 214, 130, 0.16);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.console-score.band-incomplete .score-band {
+  background: rgba(140, 165, 200, 0.14);
+  color: var(--text-dim);
+}
+
+.score-value {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.score-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.note {
+  display: flex;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.note-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.note-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.note-path {
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.note-why {
+  color: var(--text-dim);
+}
+
+.note-missed {
+  background: rgba(255, 170, 90, 0.08);
+}
+
+.note-missed .note-mark {
+  color: #ffbe74;
+}
+
+.note-spurious .note-mark {
+  color: #8b95a6;
+}
+
+.note-correct .note-mark {
+  color: #7ed6a5;
 }
 
 /* ---- fatal ------------------------------------------------------------- */

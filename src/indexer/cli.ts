@@ -14,7 +14,8 @@ import { pathToFileURL } from 'node:url';
 
 import { serializeAtlas } from '../atlas/index.js';
 import type { Atlas } from '../atlas/index.js';
-import { buildAtlas, indexOptions } from './build.js';
+import type { GenerationResult } from '../verbs/blastRadius/index.js';
+import { buildIndex, indexOptions } from './build.js';
 
 interface Args {
   readonly root: string;
@@ -57,7 +58,12 @@ export function parseArgs(argv: readonly string[]): Args | null {
   return { root: rootPath, out: resolve(out ?? `${rootPath}/atlas.json`), quiet };
 }
 
-function summarise(atlas: Atlas, bytes: number, milliseconds: number): string {
+function summarise(
+  atlas: Atlas,
+  generation: GenerationResult,
+  bytes: number,
+  milliseconds: number,
+): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
   const lines = [
@@ -66,9 +72,22 @@ function summarise(atlas: Atlas, bytes: number, milliseconds: number): string {
     `edges       ${atlas.edges.length} imports (${probable} needed a guess)`,
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
-    `challenges  ${atlas.challenges.length}`,
+    `challenges  ${atlas.challenges.length} of ${generation.report.subjectsConsidered} subjects with a radius`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
   ];
+  // Which questions we refused to ship, and how much of each choice set came
+  // from a principled distractor strategy rather than padding. Both are
+  // measurements about answer-key quality, and a generator that quietly
+  // declines half a repo reads as success unless it says so (CLAUDE.md).
+  for (const [reason, count] of generation.report.skipped) {
+    if (reason === 'noDependents') continue; // not a refusal — nothing imports it
+    lines.push(`declined    ${count} subject(s): ${reason}`);
+  }
+  const mix = generation.report.distractorMix
+    .filter(([, count]) => count > 0)
+    .map(([strategy, count]) => `${strategy} ${count}`)
+    .join(', ');
+  if (mix.length > 0) lines.push(`distractors ${mix}`);
   for (const truncation of atlas.report.truncations) {
     lines.push(`truncated   ${truncation.what}: kept ${truncation.kept}, dropped ${truncation.dropped}`);
   }
@@ -86,7 +105,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const started = Date.now();
-  const atlas = await buildAtlas(indexOptions(args.root));
+  const { atlas, generation } = await buildIndex(indexOptions(args.root));
   const text = serializeAtlas(atlas);
   // The player's `public/` directory is generated and gitignored, so on a fresh
   // clone it does not exist yet and `--out` into it would fail with ENOENT.
@@ -94,7 +113,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   await writeFile(args.out, text, 'utf8');
 
   if (!args.quiet) {
-    process.stdout.write(`${summarise(atlas, Buffer.byteLength(text), Date.now() - started)}\n`);
+    process.stdout.write(
+      `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started)}\n`,
+    );
     process.stdout.write(`written     ${args.out}\n`);
   }
   return 0;

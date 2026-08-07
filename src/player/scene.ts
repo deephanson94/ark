@@ -146,17 +146,28 @@ export interface Radius {
   readonly subject: NodeRef;
   /** Everything that transitively imports the subject, mapped to its distance. */
   readonly dependents: ReadonlyMap<NodeRef, number>;
+  /** The bound this radius was traced to. `Infinity` for the full cone. */
   readonly maxDepth: number;
 }
 
 /**
  * The blast radius of a node: what breaks if you change it.
  *
- * This is the M2 verb's ground truth, shown on hover. Putting it on the map
- * before the challenge exists is deliberate — it teaches the shape of the
- * question the game is going to ask, and it is the single most useful thing the
- * map can tell you about a file you are pointing at.
+ * **There is no default depth, and callers must say which one they mean.**
+ * M1 defaulted to 3 and rendered it on hover, which — once challenges existed —
+ * put the complete answer on screen milliseconds before the click that opened
+ * the question, involuntarily, to a player who never chose to cheat. ADR-0008
+ * decision 1 settles it: the map shows `DIRECT_ONLY` for every node, always,
+ * and the full radius renders only for nodes the player has *proved* they
+ * understand.
+ *
+ * Depth 1 is the right thing to give away, because §8.4 defines `surprise`
+ * against exactly that naive guess — the map hands you the baseline, and the
+ * grade measures what you know beyond it.
  */
-export function blastRadius(scene: Scene, ref: NodeRef, maxDepth = 3): Radius {
+export const DIRECT_ONLY = 1;
+export const FULL_RADIUS = Number.POSITIVE_INFINITY;
+
+export function blastRadius(scene: Scene, ref: NodeRef, maxDepth: number): Radius {
   return { subject: ref, dependents: dependents(scene.graph, ref, maxDepth), maxDepth };
 }

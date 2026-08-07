@@ -11,6 +11,7 @@
  * are meant to remember the position of.
  */
 
+import type { NodeRef } from '../atlas/index.js';
 import type { Camera, Viewport } from './camera.js';
 import { visibleBounds, worldToScreen } from './camera.js';
 import type { Fog } from './fog.js';
@@ -30,6 +31,8 @@ export interface FrameInput {
   readonly hovered: SceneNode | null;
   readonly selected: SceneNode | null;
   readonly radius: Radius | null;
+  /** Nodes carrying a question the player has not passed yet. */
+  readonly questions: ReadonlySet<NodeRef>;
 }
 
 export interface FrameStats {
@@ -43,7 +46,7 @@ const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
 const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius } = input;
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions } = input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
 
@@ -112,6 +115,26 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       context.stroke();
     }
     context.globalAlpha = 1;
+  }
+
+  // ---- question rings ---------------------------------------------------
+  // §4's loop is "pick a landmark", and a landmark you cannot see is not one.
+  // A node carrying an unanswered question wears a broken accent ring: legible
+  // at a glance across the whole map, and gone the moment you pass it, so the
+  // map doubles as the progress display.
+  if (questions.size > 0) {
+    context.strokeStyle = INK.question;
+    context.lineWidth = 1.6;
+    context.setLineDash([2.5, 3.5]);
+    for (const node of nodes) {
+      if (!questions.has(node.ref)) continue;
+      const point = project(node);
+      const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+      context.beginPath();
+      context.arc(point.x, point.y, drawn + 3.5, 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.setLineDash([]);
   }
 
   // ---- subject and hover rings -----------------------------------------

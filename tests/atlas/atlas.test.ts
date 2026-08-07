@@ -14,8 +14,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Atlas } from '../../src/atlas/index.js';
 import {
   buildGraph,
+  canImport,
   dependents,
+  isChallengeable,
+  nodeAt,
   parseAtlas,
+  refOf,
   serializeAtlas,
   validateAtlas,
 } from '../../src/atlas/index.js';
@@ -209,6 +213,20 @@ describe('the map reads as clustered', () => {
   });
 });
 
+describe('regions', () => {
+  it('gives every region a label no other region claims', () => {
+    // The legend prints labels. Two regions sharing one makes the legend say
+    // two different colours are the same place, which is a false statement
+    // about the map (pillar 4) — and it happened for real the moment
+    // `src/verbs/blastRadius/` arrived, because both it and `src/verbs/` have a
+    // hub called `index.ts`.
+    const labels = atlas.regions.map((region) => region.label);
+    expect(new Set(labels).size, `duplicate region label in ${labels.join(', ')}`).toBe(
+      labels.length,
+    );
+  });
+});
+
 describe('challenges', () => {
   it('every challenge answer key is a proper subset of what the player sees', () => {
     for (const challenge of atlas.challenges) {
@@ -226,10 +244,82 @@ describe('challenges', () => {
     }
   });
 
-  it('ships none yet — generation lands with the Blast Radius verb at M2', () => {
-    // Stated as an assertion so that when M2 lands, this test fails and forces
-    // the checks above to stop being vacuous.
-    expect(atlas.challenges).toHaveLength(0);
+  it('ships a challenge for most of the repo, so the checks above are not vacuous', () => {
+    const withRadius = atlas.nodes.filter(
+      (_, ref) => dependents(buildGraph(atlas), ref, Number.POSITIVE_INFINITY).size > 0,
+    ).length;
+    expect(atlas.challenges.length).toBeGreaterThan(20);
+    // Every subject with a radius should carry a question on a repo with zero
+    // unresolved imports. If this starts failing, the CLI's `declined` lines
+    // say which guardrail refused and why.
+    expect(atlas.challenges.length).toBe(withRadius);
+  });
+
+  it('holds the answer-key invariant against a freshly recomputed graph', () => {
+    // ADR-0008's whole algorithm: candidates ∩ dependents(subject, ∞) = truth.
+    // Recomputed here from the atlas rather than trusted from the generator —
+    // a generator that agrees with itself has proved nothing.
+    const graph = buildGraph(atlas);
+    expect(atlas.challenges.length).toBeGreaterThan(0);
+    for (const challenge of atlas.challenges) {
+      const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
+      const reachedIds = new Set([...reached.keys()].map((ref) => nodeAt(graph, ref).id));
+      const intersection = challenge.candidates.filter((id) => reachedIds.has(id));
+      expect(intersection, `${challenge.id}`).toEqual([...challenge.truth]);
+    }
+  });
+
+  it('states a measured depth, not a bound', () => {
+    const graph = buildGraph(atlas);
+    for (const challenge of atlas.challenges) {
+      const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
+      let furthest = 0;
+      for (const id of challenge.truth) furthest = Math.max(furthest, reached.get(refOf(graph, id)) ?? 0);
+      expect(challenge.evidence.kind).toBe('importGraph');
+      if (challenge.evidence.kind === 'importGraph') {
+        expect(challenge.evidence.depth, `${challenge.id}`).toBe(furthest);
+      }
+    }
+  });
+
+  it('never ships a question whose ground truth is uncertain', () => {
+    // Guardrail 4, checked on the exact set the player is shown, unbounded.
+    const graph = buildGraph(atlas);
+    for (const challenge of atlas.challenges) {
+      const refs = challenge.candidates.map((id) => refOf(graph, id));
+      const verdict = isChallengeable(
+        graph,
+        refOf(graph, challenge.subject),
+        refs,
+        Number.POSITIVE_INFINITY,
+      );
+      expect(verdict.ok, `${challenge.id}: ${verdict.ok ? '' : verdict.reason}`).toBe(true);
+    }
+  });
+
+  it('offers only files that could have been dependents', () => {
+    // A `.md` file cannot import anything, so putting one in a choice set makes
+    // the question easier rather than harder. Padding is not a distractor.
+    const graph = buildGraph(atlas);
+    for (const challenge of atlas.challenges) {
+      for (const id of challenge.candidates) {
+        const node = nodeAt(graph, refOf(graph, id));
+        expect(canImport(node.lang), `${challenge.id} offers ${node.path}`).toBe(true);
+      }
+    }
+  });
+
+  it('computes a difficulty that spans the range rather than clustering', () => {
+    const difficulties = atlas.challenges.map((challenge) => challenge.difficulty);
+    for (const value of difficulties) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+    const lowest = Math.min(...difficulties);
+    const highest = Math.max(...difficulties);
+    // A generator that emitted one difficulty for everything would satisfy
+    // "0..1" and be useless for progression, so the spread is the assertion.
+    expect(highest - lowest, `difficulty spread ${lowest}..${highest}`).toBeGreaterThan(0.4);
   });
 });
 

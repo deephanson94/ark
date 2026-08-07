@@ -89,9 +89,14 @@ export function gradeSet(challenge: Challenge, answer: SetAnswer): Grade {
 
 function explain(challenge: Challenge, result: SetScore): string {
   const found = `${result.correct.length} of ${challenge.truth.length}`;
+  // `evidence.depth` is the *measured* furthest hop in this answer key, not a
+  // bound the generator imposed — there is no bound (ADR-0008) — so the claim
+  // here is a fact about the question rather than a description of the tool.
   const scope =
     challenge.evidence.kind === 'importGraph'
-      ? `traced through the import graph to depth ${challenge.evidence.depth}`
+      ? `traced through the import graph; the furthest is ${challenge.evidence.depth} ${
+          challenge.evidence.depth === 1 ? 'hop' : 'hops'
+        } away`
       : `drawn from files that changed together at least ${challenge.evidence.minCount} times`;
 
   const parts = [`Found ${found} (${scope}).`];

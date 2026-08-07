@@ -32,6 +32,23 @@ export type IsoDate = string;
 
 export type Lang = 'ts' | 'tsx' | 'js' | 'jsx' | 'mjs' | 'cjs' | 'json' | 'md' | 'other';
 
+/**
+ * Languages the scanner parses for imports. Sorted.
+ *
+ * The complement — `json`, `md`, `other` — is terrain: mapped, sized and
+ * clustered like everything else, but structurally inert. A file that cannot
+ * import anything cannot be a wrong answer worth offering, which is why the
+ * challenge generator uses this to decide who may appear in a choice set.
+ *
+ * Kept next to `Lang` rather than in the indexer because it is a fact about the
+ * enum, and both sides of the wall need it.
+ */
+export const IMPORTING_LANGS: readonly Lang[] = ['cjs', 'js', 'jsx', 'mjs', 'ts', 'tsx'];
+
+export function canImport(lang: Lang): boolean {
+  return IMPORTING_LANGS.includes(lang);
+}
+
 export type NodeKind = 'file';
 
 /**
@@ -150,7 +167,17 @@ export interface History {
 export type VerbId = 'blastRadius';
 
 export type Evidence =
-  | { readonly kind: 'importGraph'; readonly depth: number }
+  | {
+      readonly kind: 'importGraph';
+      /**
+       * The **measured** furthest hop in this challenge's answer key — not a
+       * bound the generator imposed. There is no bound: truth is the unbounded
+       * transitive dependent set (ADR-0008), so this is a fact about the
+       * question rather than a description of the tool, and `explain()` may
+       * state it as one.
+       */
+      readonly depth: number;
+    }
   | { readonly kind: 'coChange'; readonly minCount: number };
 
 export interface Challenge {
@@ -161,7 +188,14 @@ export interface Challenge {
   /** Computed, never authored. NORTH-STAR §8.4. */
   readonly difficulty: number;
   readonly subject: NodeId;
-  /** The choice set shown to the player. Sorted; never contains `subject`. */
+  /**
+   * The choice set shown to the player. Sorted; never contains `subject`.
+   *
+   * For `blastRadius` this obeys `candidates ∩ dependents(subject, ∞) = truth`
+   * — every candidate that depends on the subject at any depth is in the answer
+   * key, and any dependent that is not is absent from the board entirely. That
+   * is what lets a hub ship a sampled answer key without lying (ADR-0008).
+   */
   readonly candidates: readonly NodeId[];
   /** The correct subset. Non-empty, sorted, always a subset of `candidates`. */
   readonly truth: readonly NodeId[];

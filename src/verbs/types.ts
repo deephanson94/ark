@@ -33,17 +33,37 @@ export interface SetAnswer {
 export interface GenerateOptions {
   /** Upper bound on challenges emitted for this verb. */
   readonly maxChallenges: number;
-  /** How far propagation is traced, in graph hops. */
-  readonly depth: number;
   /** Target size of the choice set shown to the player. */
   readonly candidateCount: number;
 }
 
+/**
+ * There is deliberately no `depth` here. Propagation is traced without a
+ * bound: a depth bound made §8.3's "distance n±1" distractor strategy present
+ * real dependents as correct exclusions, and it protected nothing measurable
+ * (ADR-0008).
+ */
 export const DEFAULT_GENERATE_OPTIONS: GenerateOptions = {
   maxChallenges: 40,
-  depth: 3,
   candidateCount: 20,
 };
+
+/**
+ * What the console shows above the choice set.
+ *
+ * A verb owns its own wording, because "adding a verb must not require editing
+ * the console" (CLAUDE.md) is only true if the console never has to know what
+ * this verb is asking. Repo-specific content is still forbidden (guardrail 2):
+ * the only thing substituted in is a path the atlas already contains.
+ */
+export interface Prompt {
+  /** The verb's question type, e.g. `blast radius`. */
+  readonly title: string;
+  /** The question itself, with the subject substituted in. */
+  readonly question: string;
+  /** How to answer. Must never claim the choice set is exhaustive. */
+  readonly instruction: string;
+}
 
 export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
   readonly id: VerbId;
@@ -51,6 +71,11 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
   generate(atlas: Atlas, options: GenerateOptions): readonly C[];
   /** Pure and self-contained. */
   grade(challenge: C, answer: A): Grade;
+  /**
+   * The wording, given a way to turn a node id into its display path. Pure —
+   * the verb never sees the atlas here, only the one name it needs.
+   */
+  prompt(challenge: C, pathOf: (id: NodeId) => string): Prompt;
 }
 
 /**

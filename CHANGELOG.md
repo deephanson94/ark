@@ -104,3 +104,49 @@ One line per iteration: what changed, and what to do next.
   "fixes" the generator back into over-promising. **Next**: M2 itself. ADR-0008 lists the algorithm,
   the invariant `candidates ∩ dependents(subject, ∞) = truth`, and every existing file that has to
   change. Nothing is implemented yet.
+
+- **M2 — the Blast Radius verb.** The kill point, and the first iteration where the thing is a game.
+  `src/verbs/blastRadius/` ships `generate()`, the four §8.3 distractor strategies, computed
+  difficulty per §8.4, and a `reveal()` that turns a grade into the reason each pick was or was not
+  in the radius. `npx ark index .` now emits **37 challenges, one per subject with a non-empty
+  radius**, and the player has a challenge console over the map: partial credit, derived evidence,
+  and `understand()` finally doing the job it was written for at M1 — passing a question lifts the
+  fog on the subject and on the files you actually got right, and unlocks its full radius on the map.
+  Everything ADR-0008 fixed is implemented as written: unbounded truth, the invariant
+  `candidates ∩ dependents(subject, ∞) = truth`, a prompt that promises dependence rather than
+  required change, and direct-importers-only on hover until you have earned the rest.
+  **Kill-point verdict: continue, with a caveat.** The strongest part is the reveal — being told
+  that `tests/unit/ignore.test.ts` reaches `src/atlas/serialize.ts` in three hops *through
+  `src/atlas/index.ts`* is a true, non-obvious, useful fact about this repo, and it is the moment
+  §4 promises. The distractors carry it: on a question about `src/atlas/schema.ts`, `order.ts` and
+  `identity.ts` sit in the same directory, are imported by the same files, and import nothing from
+  it — you have to reason to reject them. The caveat is that **the evidence is thin and partly
+  negative**. 30 of 37 answer keys are exactly 6 files, which is a tell an attentive player would
+  learn; 5 pairs of subjects have byte-identical answer keys because their cones genuinely are
+  identical; and two of the four strategies are nearly dry here (`nameSimilar` found 2 wrong answers
+  in 37 questions, `coChange` found **0**, because 14 commits produce no co-change signal and
+  because files with confusable names in a small disciplined repo usually really do import each
+  other). 96% of the wrong answers came from two strategies. So the loop works, but *this repo
+  cannot tell us whether it stays interesting* — that needs a bigger codebase with real history,
+  which is also the only thing that will exercise §8.3's best strategy.
+  **Three things measurement caught that reading would not.** (1) Ranking a hub's sampled answer key
+  by in-degree — "hubs are memorable" — produced seven groups of subjects with identical answer keys,
+  every `src/indexer/` module answering the same five files plus its own unit test, which collapses
+  the question into "which test shares this name": pillar 3's Ctrl+F failure reached from the other
+  side. Ranking by *smallest transitive dependency set* instead — prefer the dependent that
+  discriminates — cut that to five. (2) Generation took **15.3 s on a 2,000-file fixture** while
+  scoring a comfortable 2.93 ms/file on this one, because it is superlinear and the budget script
+  only extrapolated linearly; certifying every considered subject rather than the shortlist cost 7 s
+  of that, and tokenising filenames inside the per-subject loop cost the rest. Now **1.8 s**, and
+  `npm run budget` measures it on a synthetic 2,000-node graph rather than projecting it. (3) Two
+  regions were both labelled `src/verbs/index`, so the legend claimed two different colours were the
+  same place — refinement now uses the hub's path below the shared name, and an atlas test asserts
+  labels are unique. Atlas grew 40 → 83 KiB (1067 B/file against a 2621 B ceiling). 266 unit tests,
+  62 atlas tests. Every new assertion was checked by breaking the thing it claims to check: three of
+  them could not fail and were rewritten — the flagship-distractor test passed with the flagship
+  disabled, the sampling test used an even sample size where round-robin is direction-blind, and the
+  inert-file test put its `.md` files where no strategy would have offered them anyway.
+  **Next**: M3 — progression, field notes and localStorage — and the first thing it should fix is
+  the repetition above: never serve two near-identical answer keys in a row, and rank by difficulty
+  rather than by whatever the player clicks. Also worth doing before M4: point the indexer at a
+  large repo with real history and re-read this entry, because `coChange` has still never fired.

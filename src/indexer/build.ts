@@ -42,6 +42,10 @@ import { loadProjectConfig, resolveSpecifier } from './resolve.js';
 import { scanModule } from './scan.js';
 import { DEFAULT_WALK_OPTIONS, walk } from './walk.js';
 import type { WalkOptions } from './walk.js';
+import type { GenerationResult } from '../verbs/blastRadius/index.js';
+import { generateWithReport } from '../verbs/blastRadius/index.js';
+import type { GenerateOptions } from '../verbs/index.js';
+import { DEFAULT_GENERATE_OPTIONS } from '../verbs/index.js';
 
 /**
  * Identifies the indexer build that produced an atlas. Bump alongside
@@ -58,6 +62,7 @@ export interface IndexOptions {
   readonly walk: Omit<WalkOptions, 'root'>;
   readonly history: HistoryLimits;
   readonly layout: LayoutOptions;
+  readonly generate: GenerateOptions;
   /** Upper bound on commits read from git, before retention. */
   readonly maxCommitsWalked: number;
 }
@@ -66,8 +71,15 @@ export const DEFAULT_INDEX_OPTIONS: Omit<IndexOptions, 'root'> = {
   walk: DEFAULT_WALK_OPTIONS,
   history: DEFAULT_HISTORY_LIMITS,
   layout: DEFAULT_LAYOUT_OPTIONS,
+  generate: DEFAULT_GENERATE_OPTIONS,
   maxCommitsWalked: 20000,
 };
+
+export interface IndexResult {
+  readonly atlas: Atlas;
+  /** What generation shipped and what it refused to. Printed by the CLI. */
+  readonly generation: GenerationResult;
+}
 
 export function indexOptions(root: string, overrides: Partial<IndexOptions> = {}): IndexOptions {
   return { root, ...DEFAULT_INDEX_OPTIONS, ...overrides };
@@ -81,7 +93,7 @@ interface PendingEdge {
   readonly specifiers: Set<string>;
 }
 
-export async function buildAtlas(options: IndexOptions): Promise<Atlas> {
+export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   const walked = await walk({ root: options.root, ...options.walk });
   const config = await loadProjectConfig(options.root);
   const paths = walked.files.map((file) => file.path);
@@ -281,7 +293,7 @@ export async function buildAtlas(options: IndexOptions): Promise<Atlas> {
   const languages = [...new Set(nodes.map((node) => node.lang))].sort(byteCompare) as Lang[];
   const skipped: SkipCount[] = [...walked.skipped];
 
-  const atlas: Atlas = {
+  const draft: Atlas = {
     version: ATLAS_VERSION,
     repo: {
       name: config.name ?? basename(options.root),
@@ -302,14 +314,25 @@ export async function buildAtlas(options: IndexOptions): Promise<Atlas> {
       coChange,
       commits,
     },
-    // M0 ships the schema and the verb contracts; generation lands with the
-    // Blast Radius verb at M2. An empty set is valid and honest.
+    // Filled in below. Generation reads the finished graph, so it needs an
+    // atlas to run against — and running it against a *validated* draft means
+    // a bug in the graph surfaces before it can reach an answer key.
     challenges: [],
     report: { truncations, skipped },
   };
 
   // Fail here rather than in the player (guardrail 5).
-  return validateAtlas(atlas);
+  const validated = validateAtlas(draft);
+  const generation = generateWithReport(validated, options.generate);
+  return {
+    atlas: validateAtlas({ ...validated, challenges: generation.challenges }),
+    generation,
+  };
+}
+
+/** The atlas alone, for callers that do not care how generation went. */
+export async function buildAtlas(options: IndexOptions): Promise<Atlas> {
+  return (await buildIndex(options)).atlas;
 }
 
 function push(map: Map<string, string[]>, key: string, value: string): void {

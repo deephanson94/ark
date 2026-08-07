@@ -247,22 +247,27 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M1 delivered.** M0's atlas format, indexer and verb contracts, plus the player: `src/player/`
-renders the map on a canvas with fog of war, semantic zoom, and blast-radius highlighting on hover.
-23 KiB of JS, zero runtime dependencies, first paint ~100 ms. `npx ark index .` produces a valid
-~40 KiB atlas for this repo in ~140 ms; `npm run dev` serves the player. `challenges` is still
-`[]` — generation lands with the Blast Radius verb at M2.
+**M2 delivered — the loop is playable.** M0's atlas format and verb contracts, M1's map, and now the
+Blast Radius verb: `src/verbs/blastRadius/` generates 37 challenges for this repo, the four §8.3
+distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player has a
+challenge console over the map with partial credit, a derived per-file reveal, and fog that lifts on
+what you prove. 40 KiB of JS, zero runtime dependencies, first paint ~300 ms. `npx ark index .`
+produces a valid ~83 KiB atlas in ~250 ms.
+
+The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
+and are not open: truth is the unbounded transitive dependent set, the generator maintains
+`candidates ∩ dependents(subject, ∞) = truth`, the prompt promises dependence rather than required
+change, and the map shows direct importers only until a node is in `fog.understood`.
 
 CI runs every suite on push and PR, including a three-platform check that the same commit yields a
-byte-identical atlas, and a headless browser smoke test that fails on any console error.
+byte-identical atlas, and a headless browser smoke test that plays a challenge and fails on any
+console error.
 
-Next action: **M2, the kill point** — Blast Radius `generate()`, the four distractor strategies
-(§8.3) and computed difficulty (§8.4). The semantics are already decided and must be followed:
-**[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)** fixes
-unbounded truth, the candidate invariant, the prompt wording, and the hover-preview rule — it also
-lists every existing file that has to change. `isChallengeable()`, the graph queries, F1 scoring and
-the grade bands already exist and are tested.
+The kill point passed on the strength of the reveal, **with a caveat recorded in `CHANGELOG.md`**:
+30 of 37 answer keys are exactly 6 files, 5 pairs of subjects have identical answer keys, and the
+co-change distractor strategy has never fired because this repo has 14 commits. Read that entry
+before deciding M3 is the obvious next move.
 
-Roadmap kill point is **M2** — if the Blast Radius verb isn't engaging on a repo we wrote ourselves,
-stop and rethink the verb rather than adding a second one.
+Next action: **M3 — progression, field notes, localStorage.** The first thing it should fix is
+serving near-identical answer keys back to back.
 stop and rethink the verb rather than adding a second one.

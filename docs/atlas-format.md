@@ -144,8 +144,11 @@ There is no `uncertain`. An import we could not resolve produces **no edge**, an
 importing node's `unresolved` list instead.
 
 A challenge may only be built where the answer key does not depend on a guess. `isChallengeable()`
-in [`src/atlas/graph.ts`](../src/atlas/graph.ts) refuses when, within the depth bound, any candidate
-— or anything on its outgoing side — has an unresolved import, or is reached over a `probable` edge.
+in [`src/atlas/graph.ts`](../src/atlas/graph.ts) refuses when any candidate — or anything on its
+outgoing side, to the depth the caller states — has an unresolved import, or is reached over a
+`probable` edge. Blast Radius states `Infinity`, because a bounded check would certify a distractor
+that reaches the subject one hop past the bound. `taintedRefs()` is the same verdict computed once
+for the whole graph.
 The asymmetry that makes this the right rule (unknown edges can only *add* reachability, so the
 truth set is sound and only the distractors are at risk) is set out in
 [ADR-0003](decisions/0003-unresolved-imports-produce-no-edge.md).
@@ -224,8 +227,34 @@ A challenge should also not be passable by selecting everything. That requires
 `isGameable()` at generation time rather than by the validator, because it is game-design policy
 rather than data integrity.
 
-> **Status at M0**: the schema and the verb contracts ship; `challenges` is `[]`. Generation lands
-> with the Blast Radius verb at M2.
+#### `evidence.depth` is measured, not prescribed
+
+For `kind: "importGraph"` it is the **furthest hop the answer key actually reaches**, computed from
+the subject's dependent tree. It is not a bound the generator applied: Blast Radius has no depth
+bound at all. The validator only requires an integer ≥ 1, so nothing about the shape changed when
+the bound went away.
+
+#### The generator's invariant
+
+`blastRadius` maintains, for every challenge it emits:
+
+```
+candidates ∩ dependents(subject, ∞) = truth
+```
+
+Every candidate that depends on the subject at any depth is in `truth`, and any dependent that is
+not in `truth` never appears in `candidates`. That is what makes a *sampled* answer key honest on a
+hub — the files left out are not on the board, and the prompt says "which of these", never "which
+files". The reasoning, and why the prompt promises dependence rather than required change:
+[ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md).
+
+Choice sets contain only nodes whose `lang` is in `IMPORTING_LANGS`. A `.md` or `.json` file cannot
+import anything, so offering one as a wrong answer makes the question easier rather than harder —
+padding is not a distractor (NORTH-STAR §8.3).
+
+> **Status at M2**: `blastRadius` generates. On this repo that is one challenge per subject with a
+> non-empty radius. The CLI prints how many it declined and why, and how much of each choice set
+> came from a principled distractor strategy rather than from `distant` padding.
 
 ### 3.7 `report`
 

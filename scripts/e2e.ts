@@ -23,6 +23,7 @@ import { chromium } from 'playwright';
 import type { ConsoleMessage } from 'playwright';
 import { build, preview } from 'vite';
 
+import type { Atlas } from '../src/atlas/index.js';
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 
@@ -46,17 +47,24 @@ interface Failure {
   readonly detail: string;
 }
 
-async function indexForPlayer(): Promise<number> {
+async function indexForPlayer(): Promise<Atlas> {
   const atlas = await buildAtlas(indexOptions(ROOT));
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
   await writeFile(ATLAS_OUT, serializeAtlas(atlas), 'utf8');
-  return atlas.nodes.length;
+  return atlas;
 }
 
 async function main(): Promise<number> {
   const failures: Failure[] = [];
-  const nodeCount = await indexForPlayer();
-  process.stdout.write(`e2e: indexed ${nodeCount} nodes\n`);
+  const atlas = await indexForPlayer();
+  const nodeCount = atlas.nodes.length;
+  const pathById = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+  process.stdout.write(
+    `e2e: indexed ${nodeCount} nodes, ${atlas.challenges.length} challenges\n`,
+  );
+  if (atlas.challenges.length === 0) {
+    failures.push({ what: 'challenges', detail: 'the indexer generated none' });
+  }
 
   await build({ root: join(ROOT, 'src/player'), logLevel: 'warn' });
   const server = await preview({ root: join(ROOT, 'src/player'), logLevel: 'warn' });
@@ -138,12 +146,20 @@ async function main(): Promise<number> {
     // Find a node by hit-testing a grid, which exercises the real pick() path.
     const box = await page.locator('canvas.map').boundingBox();
     if (box === null) throw new Error('canvas has no bounding box');
+    const subjects = new Set(
+      atlas.challenges.map((challenge) => pathById.get(challenge.subject) ?? ''),
+    );
     const hits: { x: number; y: number; path: string }[] = [];
     const seenPaths = new Set<string>();
-    for (let row = 1; row < 12 && hits.length < 6; row++) {
-      for (let column = 1; column < 18 && hits.length < 6; column++) {
-        const x = box.x + (box.width * column) / 18;
-        const y = box.y + (box.height * row) / 12;
+    // Fine enough to be reliable rather than lucky: an earlier version sampled
+    // an 18×12 grid, found two discs, and neither carried a question — so the
+    // whole M2 half of this script silently did not run. The scan now stops on
+    // a condition it can state, not on a count that happened to be enough.
+    const enough = (): boolean => hits.length >= 6 && hits.some((h) => subjects.has(h.path));
+    for (let row = 1; row < 26 && !enough(); row++) {
+      for (let column = 1; column < 40 && !enough(); column++) {
+        const x = box.x + (box.width * column) / 40;
+        const y = box.y + (box.height * row) / 26;
         await page.mouse.move(x, y);
         if ((await page.locator('.inspector-path').count()) === 0) continue;
         const path = (await page.locator('.inspector-path').innerText()).trim();
@@ -152,6 +168,9 @@ async function main(): Promise<number> {
         hits.push({ x, y, path });
       }
     }
+    // Answer the question on the biggest available subject, so the screenshot
+    // shows a choice set rather than a one-line answer key.
+    hits.sort((a, b) => Number(subjects.has(b.path)) - Number(subjects.has(a.path)));
     const hit = hits[0] ?? null;
 
     if (hit === null) {
@@ -190,6 +209,105 @@ async function main(): Promise<number> {
 
     await mkdir(SHOT_DIR, { recursive: true });
     await page.screenshot({ path: join(SHOT_DIR, 'map-fit.png') });
+
+    // ---- the loop ------------------------------------------------------
+    // Everything above tests the map. This tests the game: find a node that
+    // carries a question, answer it, and check that a grade came back and that
+    // the fog moved. It is the only automated check that the M2 loop is wired
+    // end to end, and it is deliberately played *as a player* — clicking discs
+    // and buttons — rather than by calling into the module graph.
+    const understoodAtStart = Number.parseInt(
+      /(\d+) understood/.exec(await page.locator('.hud-counts').innerText())?.[1] ?? '0',
+      10,
+    );
+    if (understoodAtStart !== 0) {
+      failures.push({ what: 'fog', detail: `${understoodAtStart} understood before answering anything` });
+    }
+
+    let opened: { x: number; y: number; path: string } | null = null;
+    for (const entry of hits) {
+      await page.mouse.click(entry.x, entry.y);
+      if ((await page.locator('.inspector-action').count()) === 0) continue;
+      await page.locator('.inspector-action').click();
+      opened = entry;
+      break;
+    }
+
+    if (opened === null) {
+      failures.push({ what: 'challenge', detail: 'no node under the cursor grid carried a question' });
+    } else {
+      await page.waitForSelector('.console-panel', { timeout: 5000 });
+      const question = (await page.locator('.console-question').innerText()).trim();
+      process.stdout.write(`e2e: challenge → ${question}\n`);
+      if (!question.includes('depend on it')) {
+        // ADR-0008 fixes the wording; the graph proves dependence, not that a
+        // file will need to change.
+        failures.push({ what: 'prompt', detail: `unexpected wording: "${question}"` });
+      }
+      const choices = await page.locator('.choice-button').count();
+      if (choices < 4) {
+        failures.push({ what: 'challenge', detail: `only ${choices} choices offered` });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'challenge.png') });
+
+      // Answer it correctly, on purpose. A wrong answer would exercise the
+      // grade but not the *unlock*, and the unlock is the whole of ADR-0008
+      // decision 1: passing is what turns the map's depth-1 preview into the
+      // full radius. The answer comes from the atlas this script just built —
+      // it is checking that the panel grades what the indexer wrote, not that
+      // the player can play.
+      const subject = opened.path;
+      const challenge = atlas.challenges.find((entry) => pathById.get(entry.subject) === subject);
+      if (!question.includes(subject)) {
+        failures.push({ what: 'prompt', detail: `asked about ${subject} but says "${question}"` });
+      }
+      if (challenge === undefined) {
+        failures.push({ what: 'challenge', detail: `no challenge in the atlas for ${subject}` });
+      } else {
+        const wanted = new Set(challenge.truth.map((id) => pathById.get(id) ?? ''));
+        let clicked = 0;
+        for (let i = 0; i < choices; i++) {
+          const button = page.locator('.choice-button').nth(i);
+          if (!wanted.has((await button.innerText()).trim())) continue;
+          await button.click();
+          clicked++;
+        }
+        if (clicked !== challenge.truth.length) {
+          failures.push({
+            what: 'challenge',
+            detail: `${clicked} of ${challenge.truth.length} answer files were on the board`,
+          });
+        }
+      }
+
+      await page.locator('.console-submit').click();
+      await page.waitForSelector('.console-score', { timeout: 5000 });
+      const score = (await page.locator('.console-score').innerText()).replace(/\s+/g, ' ').trim();
+      const evidence = (await page.locator('.console-evidence').innerText()).trim();
+      process.stdout.write(`e2e: graded ${score} — ${evidence}\n`);
+      if (!score.includes('100%')) {
+        failures.push({ what: 'grade', detail: `the atlas's own answer key scored "${score}"` });
+      }
+      if ((await page.locator('.note').count()) === 0) {
+        failures.push({ what: 'reveal', detail: 'the grade named no files' });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
+
+      await page.locator('.console-submit').click(); // "back to the map"
+      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+
+      // The fog has to have moved, or `understand()` is still the unused
+      // function it was at M1.
+      const understood = Number.parseInt(
+        /(\d+) understood/.exec(await page.locator('.hud-counts').innerText())?.[1] ?? '0',
+        10,
+      );
+      process.stdout.write(`e2e: fog after one pass → ${understood} understood\n`);
+      if (understood === 0) {
+        failures.push({ what: 'fog', detail: 'passing a challenge lifted no fog' });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
+    }
 
     // Zoomed in, to check semantic zoom actually promotes detail.
     for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -240);

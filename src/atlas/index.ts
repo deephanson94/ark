@@ -6,7 +6,7 @@
  * pure functions over that data.
  */
 
-export { ATLAS_VERSION } from './schema.js';
+export { ATLAS_VERSION, IMPORTING_LANGS, canImport } from './schema.js';
 export type {
   Atlas,
   AtlasEdge,
@@ -46,10 +46,13 @@ export type { Challengeability, Direction, Graph } from './graph.js';
 export {
   buildGraph,
   dependencies,
+  dependentRoutes,
   dependents,
   idOf,
+  routeTo,
   isChallengeable,
   nodeAt,
   reach,
   refOf,
+  taintedRefs,
 } from './graph.js';
