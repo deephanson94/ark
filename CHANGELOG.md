@@ -623,3 +623,45 @@ One line per iteration: what changed, and what to do next.
   Then **orbit**: derived Z over frozen X,Y, quantised (freedom in the third dimension is what
   Cockburn measured degrading), survey view one keystroke away, landmarks over terrain. The avatar
   stays behind P1′ and P4.
+
+- **Rung 0 — `ark play <repo>`, and the player is deployable.** The gap was not playability, it was
+  hand-off: trying Ark meant cloning it, knowing an internal CLI path and starting a dev server,
+  which spends most of pillar 6's ten minutes before the map draws. Now one command indexes any repo
+  and serves it: `npm run play -- /path/to/repo`. A **`.github/workflows/pages.yml`** publishes the
+  player with Ark's own atlas — the bootstrap fixture, a public repo whose map we can vouch for —
+  and **refuses to publish an atlas with zero challenges**, because a map with no game on it should
+  fail the deploy rather than go up quietly. Nothing in the workflow can index anything else; a
+  workflow that took a repo URL would be the first crack in pillar 5.
+  **The server is 60 lines of `node:http`, not a dependency.** The player's runtime-dependency budget
+  is three and it has spent none; serving four files is not where the first one goes. It binds
+  loopback only. `vite.config.ts` gains `base: './'` so one build works both at the root (where
+  `ark play` serves it) and under `/<repo>/` (where Pages does) — verified by actually serving the
+  build under a subpath and fetching the html, the bundle and the atlas.
+  **Three real defects, all found by tests that failed before they passed.** (1) `listen(port, host,
+  cb)` registers `cb` as a **one-time 'listening' listener**, so a callback that never fired stays
+  attached: after an `EADDRINUSE` the stale one fires when the retry succeeds and resolved the
+  promise with the port we *failed* to get — `ark play` would print a url nothing was listening on.
+  (2) We bound `127.0.0.1` and printed `localhost`, which resolves to `::1` first on a dual-stack
+  machine; browsers fall back, `fetch` does not. (3) The first draft of the traversal tests asserted
+  `toBeNull()` and **three of them failed** — not because the guard was weak but because `normalize`
+  clamps `..` at an absolute path's root, so `/../../etc/passwd` lands harmlessly inside the served
+  directory. They were asserting an implementation detail; they now assert the property (never
+  resolves outside the root) plus the case the guard is genuinely load-bearing for, a **relative**
+  request path, where `join` walks straight out.
+  **And one piece of over-engineering deleted on measurement.** The port bug had two independent
+  fixes — remove the stale listener, and read the port from `server.address()` — and with both in
+  place **each mutation survived, because the other masked it**. Two defences, neither verifiable.
+  The `address()` one is kept (it is the measured value rather than the assumed one, and it is what
+  makes an OS-assigned port work at all); the listener removal is gone; both mutations are now
+  caught. Also noted in the test: `fetch` hangs against a local server inside a vitest worker while
+  working fine from a plain script, so the assertion uses `node:http` — the same module the server
+  is written in.
+  Verified: 362 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean.
+  Measured on the way past — **`honojs/hono` is the best third-party repo to play**: 425 nodes at
+  2.51 edges/node (Ark itself is 2.66), 18 unresolved imports of 1,067, and the only outside repo
+  where the generator had *more* supply than the deck cap allowed (95 `capped`). **Promptasy is a
+  poor subject and interestingly so** — it resolves perfectly, 0 unresolved, but **52 of its 70
+  askable files produce a duplicate answer key** because its graph is a flat hub-and-spoke around
+  `main.js`. Ark rewards layered codebases; a deliberately flat one has nothing to predict.
+  **Next**: rung 1 — `layout` gains a derived, quantised Z (height = transitive dependent count),
+  rendered first as contours in the existing 2D map.
