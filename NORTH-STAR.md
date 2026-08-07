@@ -370,6 +370,17 @@ geography because a curriculum has no natural shape; a codebase does.
 
 3D is an earned upgrade, not a v1 goal. If it happens, the layout must still derive from the graph.
 
+> **Amended 2026-08-07 — the north star is changing here, deliberately.** A **third-person view** is
+> now accepted as a future presentation layer, which this section previously ruled out. It is
+> *gated*, not scheduled: it starts only after the prior-art research risk #6 asks for is actually
+> done, after M3 and M4 prove the questions hold up on a large repo with real history, and only if it
+> beats the flat map on measured cold recall. The invariant is that **the world is a rendering of the
+> atlas, never the reverse** — the third dimension must be derived from the graph exactly as
+> `layout` is today, and pillar 4 is not suspended for it. "v1 is 2D" above still stands, and the
+> reasoning in this section is still the reasoning; the ADR is the conditions under which it is
+> revisited, and the costs of doing so.
+> [`docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md`](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md).
+
 ---
 
 ## 10. Tech stack
@@ -476,7 +487,7 @@ focused weekends.
 
 | Pattern | Why not |
 |---|---|
-| 3D world | Codebases have intrinsic topology; imposed geography fights it (pillar 4) |
+| 3D world | Codebases have intrinsic topology; imposed geography fights it (pillar 4). **Amended 2026-08-07**: a gated third-person view is now accepted as a later presentation layer — the objection here is unchanged and becomes the constraint it must satisfy. [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) |
 | Hand-authored curriculum | Directly violates pillar 2 — the whole point is that it generalises |
 | Procedural art / zero assets | Irrelevant. Our visual output is a graph, and it should look like one |
 | Vanilla JS | We want types here; the atlas format and verb contracts are exactly what a type system is for |
