@@ -230,8 +230,18 @@ npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
-npm run test:e2e           # slow — ask before running
+npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
 ```
+
+**If `test:e2e` reports `Executable doesn’t exist at .../chromium_headless_shell-NNNN/...`**, the
+installed Playwright wants a different browser build than the machine already has. Do **not** run
+`playwright install` in an environment that ships one — point at the existing binary:
+
+```bash
+PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e   # Claude Code cloud sessions
+```
+
+CI installs its own Chromium and needs no variable.
 
 ---
 
