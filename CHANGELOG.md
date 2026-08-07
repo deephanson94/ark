@@ -398,3 +398,43 @@ One line per iteration: what changed, and what to do next.
   the inspector and HUD panels. `placeLabels` already accepts `occupied` boxes for exactly this, so
   the fix is feeding it the overlay rects — it needs main.ts to measure DOM for the canvas, which is
   a real change and its own rung.
+
+- **M3 rung 3 — field notes, which claim only what was proved.** §9's codex, over the map on the
+  same scrim the challenge console uses, so reading what you know never costs the spatial context
+  you built it from. A note reads: *"You proved 6 files that depend on
+  `src/verbs/blastRadius/difficulty.ts` — …, …, … — the farthest 5 hops away."* and, in a dimmer
+  second line, *"Its full radius — 24 files — is revealed on your map."*
+  **That split is the whole rung.** §9's own example — "You know that `engine.ts` has 14
+  dependents" — is not provable and ADR-0011 decision 3 amends it: under ADR-0008 a hub's answer key
+  is a deterministic *sample*, so a player who passes has proved some members, never the count. The
+  count was **shown** to them in the reveal, which is the `surveyed` side of the very line §9 calls
+  the product. So the claim names the files; the radius appears only in a line labelled *revealed*,
+  visually and grammatically apart. Correct exclusions get no note at all — `progress.ts` already
+  declines to promote a box you left unticked, and a note must not claim more than the fog does.
+  **Prose is derived at render, never stored**, from templates that mention no repo (guardrail 2) —
+  a test tokenises the output and asserts every `/`-containing word came from the atlas. Names
+  resolve `NodeId → path` through the atlas currently loaded, so a note follows a rename, which is
+  ADR-0002 doing the job it was written for. Nothing is cached: a claim can decay between sessions,
+  and a cached sentence would go on asserting something the graph stopped supporting.
+  **Two mutations survived and both said the same thing**: `notes.ts`'s own "drop a decayed member"
+  and "skip an empty note" guards are *unreachable*, because `livePasses` already applied that rule
+  upstream. Rather than delete guards the types need, or keep two implementations of one rule, the
+  code now says which layer owns it and why the guards remain — and the tests say they assert an
+  end-to-end property enforced a layer up, so a future reader does not mistake `notes.ts` for the
+  filter. Five other mutations were caught, including the one that matters: claiming the radius
+  instead of the proved count.
+  **A class-name collision, found by looking at the screenshot.** The new panel's `.note` picked up
+  the challenge console's existing `.note { display: flex }`, so the revealed line rendered *beside*
+  the claim instead of beneath it. Renamed to `.field-note*`, and the e2e's reveal assertion is now
+  scoped to `.console-notes .note` — it had silently become ambiguous between the two lists.
+  Verified: 348 unit + 81 atlas tests, byte-identical atlas, build clean, e2e clean — the browser
+  run opens the notebook, fails if a note does not start "You proved", if its count disagrees with
+  the answer key just proved, or if the radius is stated as knowledge rather than as revealed.
+  **M3 is complete**: progression, field notes and a localStorage save that survives a reload.
+  **Next**: the honest choice is between two things, and the CHANGELOG should not pretend otherwise.
+  (a) **Generator-side dedupe** — identical answer keys are ultimately a *generation* artifact, those
+  pairs are arguably one question wearing two subjects, and the selector only stops them being
+  adjacent. (b) **Labels versus the overlay panels** — node labels near the top edge draw underneath
+  the inspector and HUD, which is a legibility defect on the pillar the map exists for;
+  `placeLabels` already accepts `occupied` boxes, so the work is feeding it the panel rects, which
+  needs main.ts to measure DOM for the canvas. (a) is worth more; (b) is more visible.

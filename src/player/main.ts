@@ -27,7 +27,15 @@ import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
-import { createError, createGuide, createHud, createInspector, createLegend } from './ui.js';
+import { fieldNotes } from './notes.js';
+import {
+  createError,
+  createGuide,
+  createHud,
+  createInspector,
+  createLegend,
+  createNotebook,
+} from './ui.js';
 import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
@@ -147,12 +155,22 @@ function start(scene: Scene, root: HTMLElement): void {
     });
   };
 
-  const hud = createHud(scene.atlas);
+  // Notes are re-derived on every open, never cached: a claim can decay between
+  // sessions and a cached sentence would go on asserting something the graph has
+  // stopped supporting (ADR-0011 decision 3).
+  const notebook = createNotebook();
+  const refreshNotes = (): void => {
+    notebook.update(fieldNotes(scene.graph, progress, liveness));
+  };
+  notebook.toggle.addEventListener('click', refreshNotes);
+
+  const hud = createHud(scene.atlas, [notebook.toggle]);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade) {
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
       retally();
+      refreshNotes();
       // Both paths into a challenge converge here, which is why the selector's
       // history is updated here and nowhere else: a map-click answer shapes the
       // next suggestion exactly as a suggested one does, because a byte-identical
@@ -210,6 +228,7 @@ function start(scene: Scene, root: HTMLElement): void {
     createLegend(scene),
     inspector.root,
     guide.root,
+    notebook.root,
     challengePanel.root,
   );
 
@@ -343,7 +362,11 @@ function start(scene: Scene, root: HTMLElement): void {
       challengePanel.close();
       return;
     }
-    if (challengePanel.isOpen()) return;
+    if (event.key === 'Escape' && notebook.isOpen()) {
+      notebook.close();
+      return;
+    }
+    if (challengePanel.isOpen() || notebook.isOpen()) return;
     if (event.key === 'f') {
       camera = fit(scene.bounds, viewport);
       invalidate();
@@ -370,6 +393,9 @@ function start(scene: Scene, root: HTMLElement): void {
   });
   observer.observe(canvas);
 
+  // A restored session may already have notes; the toggle has to say so before
+  // it is ever clicked.
+  refreshNotes();
   resize();
   camera = fit(scene.bounds, viewport);
   frame();

@@ -288,7 +288,7 @@ async function main(): Promise<number> {
       if (!score.includes('100%')) {
         failures.push({ what: 'grade', detail: `the atlas's own answer key scored "${score}"` });
       }
-      if ((await page.locator('.note').count()) === 0) {
+      if ((await page.locator('.console-notes .note').count()) === 0) {
         failures.push({ what: 'reveal', detail: 'the grade named no files' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
@@ -406,6 +406,44 @@ async function main(): Promise<number> {
         failures.push({ what: 'guide', detail: `after arriving the caption still reads "${actual}"` });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'suggested.png') });
+
+      // ---- field notes --------------------------------------------------
+      // §9's codex, and the one place the surveyed/understood distinction can
+      // be quietly broken by writing a sentence stronger than what was earned.
+      const notesLabel = (await page.locator('.hud-notes').innerText()).trim();
+      process.stdout.write(`e2e: notes toggle → ${notesLabel}\n`);
+      if (!/\(\d+\)/.test(notesLabel)) {
+        failures.push({ what: 'notes', detail: `toggle shows no count after a pass: "${notesLabel}"` });
+      }
+      await page.locator('.hud-notes').click();
+      await page.waitForSelector('.notes-panel', { timeout: 5000 });
+      const noteCount = await page.locator('.field-note').count();
+      if (noteCount === 0) {
+        failures.push({ what: 'notes', detail: 'passed a challenge and the notebook is empty' });
+      } else {
+        const claim = (await page.locator('.field-note-claim').first().innerText()).trim();
+        const revealed = await page.locator('.field-note-revealed').first().count();
+        process.stdout.write(`e2e: note → ${claim}\n`);
+        if (!claim.startsWith('You proved')) {
+          failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+        }
+        if (challenge !== undefined && !claim.includes(String(challenge.truth.length))) {
+          failures.push({
+            what: 'notes',
+            detail: `note claims a different count than the ${challenge.truth.length} files proved`,
+          });
+        }
+        // The full radius may appear, but only in the line labelled as revealed.
+        if (revealed > 0) {
+          const shown = (await page.locator('.field-note-revealed').first().innerText()).trim();
+          if (!shown.includes('revealed')) {
+            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown}"` });
+          }
+        }
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'field-notes.png') });
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.notes-scrim', { state: 'hidden', timeout: 5000 });
     }
 
     // Zoomed in, to check semantic zoom actually promotes detail.

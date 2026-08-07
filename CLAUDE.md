@@ -256,13 +256,14 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 delivered, M3 in progress — rungs 1 and 2 of 3 landed.** M0's atlas format and verb contracts, M1's
+**M2 and M3 delivered.** M0's atlas format and verb contracts, M1's
 map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 40 challenges for this repo, the four
 §8.3 distractor strategies pick the wrong answers, difficulty is computed per §8.4, and the player
 has a challenge console over the map with partial credit, a derived per-file reveal, and fog that
 lifts on what you prove. **Progress survives a reload**, keyed on the repo's root commit, and a
 **"Where next?" panel** walks you through the deck without ever serving the same answer key twice
-running. 45 KiB of JS, zero runtime dependencies, first paint ~150 ms. `npx ark index .` produces a
+running. **Field notes** record what you proved — never what you were shown. 47 KiB of JS, zero
+runtime dependencies, first paint ~150 ms. `npx ark index .` produces a
 valid ~98 KiB atlas in ~290 ms.
 
 The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
@@ -286,6 +287,10 @@ now stops those being served back to back, and the co-change distractor strategy
 now that the repo has 24 commits — but the underlying sameness is a *generation* artifact and the
 deeper fix is a generator-side dedupe, which belongs to its own session.
 
-Next action: **M3 rung 3 — the field-notes panel**, over `livePasses()` and honest about sampled
-answer keys per ADR-0011 decision 3. If Blast Radius stops being interesting before it lands, stop
-and rethink the verb rather than adding a second one.
+Next action: **choose between two, and say which in the CHANGELOG.** (a) A **generator-side dedupe**
+— identical answer keys are a generation artifact and those pairs are arguably one question wearing
+two subjects; the selector only stops them being adjacent. (b) **Labels versus the overlay panels** —
+node labels near the top edge draw underneath the inspector and HUD, which is a legibility defect on
+the pillar the map exists for. (a) is worth more; (b) is more visible. If Blast Radius stops being
+interesting, stop and rethink the verb rather than adding a second one — M4's git verbs are not a
+way to avoid that question.

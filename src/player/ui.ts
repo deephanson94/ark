@@ -12,6 +12,8 @@
  */
 
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
+import type { FieldNote } from './notes.js';
+import { noteProse } from './notes.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -102,7 +104,7 @@ export function createGuide(onSuggest: () => void): Guide {
   };
 }
 
-export function createHud(atlas: Atlas): Hud {
+export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
     atlas.repo.head === null
@@ -116,7 +118,7 @@ export function createHud(atlas: Atlas): Hud {
   const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
 
-  const root = el('div', 'hud', [title, head, progress, counts, quests, detail]);
+  const root = el('div', 'hud', [title, head, progress, counts, quests, detail, ...extra]);
 
   return {
     root,
@@ -269,4 +271,76 @@ export function createLegend(scene: Scene): HTMLElement {
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
   ]);
+}
+
+export interface Notebook {
+  readonly root: HTMLElement;
+  readonly toggle: HTMLElement;
+  isOpen(): boolean;
+  close(): void;
+  /** Re-render from the current record. Notes are derived, never cached. */
+  update(notes: readonly FieldNote[]): void;
+}
+
+/**
+ * Field notes — NORTH-STAR §9's codex, over the map.
+ *
+ * Same scrim pattern as the challenge console, for the same reason: the world
+ * stays visible and alive behind it, so reading what you know never costs you
+ * the spatial context you built it from.
+ *
+ * Everything here is **re-derived on open**. Nothing about a note is cached,
+ * because a claim can decay between sessions and a cached sentence would go on
+ * asserting something the graph stopped supporting (ADR-0011 decision 3).
+ */
+export function createNotebook(): Notebook {
+  const list = el('ul', 'notes-list');
+  const empty = el('div', 'notes-empty', [
+    'Nothing proved yet. Answer a question and what you establish is written down here — ',
+    'only what you proved, never what you were shown.',
+  ]);
+  const heading = el('div', 'notes-title', ['FIELD NOTES']);
+  const close = el('button', 'console-close', ['✕']);
+  close.type = 'button';
+  const head = el('div', 'notes-head', [heading, close]);
+  const panel = el('div', 'notes-panel', [head, empty, list]);
+  const root = el('div', 'notes-scrim', [panel]);
+  root.hidden = true;
+
+  const toggle = el('button', 'hud-notes');
+  toggle.type = 'button';
+  toggle.textContent = 'field notes';
+
+  // Tracked here rather than read back off `root.hidden`, whose DOM type also
+  // admits the string `"until-found"`.
+  let open = false;
+  const setOpen = (next: boolean): void => {
+    open = next;
+    root.hidden = !next;
+  };
+  close.addEventListener('click', () => setOpen(false));
+  root.addEventListener('click', (event) => {
+    if (event.target === root) setOpen(false);
+  });
+  toggle.addEventListener('click', () => setOpen(!open));
+
+  return {
+    root,
+    toggle,
+    isOpen: () => open,
+    close: () => setOpen(false),
+    update(notes) {
+      toggle.textContent = notes.length === 0 ? 'field notes' : `field notes (${notes.length})`;
+      empty.hidden = notes.length > 0;
+      const items = notes.map((note) => {
+        const { claim, revealed } = noteProse(note);
+        const children: Node[] = [el('div', 'field-note-claim', [claim])];
+        // Kept visually and grammatically apart from the claim: one is
+        // knowledge, the other is something the map showed you.
+        if (revealed !== null) children.push(el('div', 'field-note-revealed', [revealed]));
+        return el('li', 'field-note', children);
+      });
+      list.replaceChildren(...items);
+    },
+  };
 }
