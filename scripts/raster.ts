@@ -203,17 +203,36 @@ async function main(): Promise<number> {
     // where 2,000 nodes render as a sub-pixel smudge and a pan changes no
     // pixels at all — which reads as "the map is not moving" and is really
     // "there is nothing left to see".
+    // The fourth pass is the orbit view at the district zoom the third pass
+    // just left, so flat-district and orbit are measured on the same scene,
+    // back to back, on the same machine. **The ratio between them is the number
+    // that survives being taken on a software rasteriser** — the absolute
+    // figures here are a floor and ADR-0009's P1′ says they may not be used to
+    // decide anything, but "orbit costs N× flat" is a property of the draw
+    // work, not of the GPU, and it is what decides whether the orbit needs a
+    // frustum cull or a different renderer before it can carry a real repo.
     for (const [wanted, wheels] of [
       ['territory', -3],
       ['district', 4],
       ['street', 6],
+      ['orbit', 0],
     ] as const) {
+      if (wanted === 'orbit') {
+        // Back to district — the level the flat run's second row measured — then
+        // stand the world up, so the comparison is like for like.
+        for (let i = 0; i < 6; i++) {
+          await page.mouse.move(720, 450);
+          await page.mouse.wheel(0, 240);
+        }
+        await page.keyboard.press('o');
+        await page.waitForTimeout(250);
+      }
       for (let i = 0; i < Math.abs(wheels); i++) {
         await page.mouse.move(720, 450);
         await page.mouse.wheel(0, wheels > 0 ? -240 : 240);
       }
       const reported = (await page.locator('.hud-detail').innerText()).trim().split(' ')[0] ?? '?';
-      if (reported !== wanted) {
+      if (reported !== wanted && wanted !== 'orbit') {
         process.stdout.write(`  note  aimed for ${wanted}, landed on ${reported}\n`);
       }
 
@@ -287,6 +306,16 @@ async function main(): Promise<number> {
   // Advisory, not fatal: frame timing on a shared CI runner is noisy, and a
   // budget that fails at random teaches people to ignore budgets. The point of
   // this script is that the number stops being unknown.
+  // What the orbit costs, as a ratio against the flat map on the same scene.
+  const flatDistrict = samples.find((sample) => sample.level.startsWith('district'));
+  const orbitSample = samples.find((sample) => sample.level.startsWith('orbit'));
+  if (flatDistrict !== undefined && orbitSample !== undefined && flatDistrict.p95 > 0) {
+    process.stdout.write(
+      `\n  orbit costs ${(orbitSample.p95 / flatDistrict.p95).toFixed(2)}× the flat map at p95, ` +
+        `same scene, same machine\n`,
+    );
+  }
+
   const over = samples.filter((sample) => sample.p95 > FRAME_BUDGET_MS);
   process.stdout.write(
     over.length === 0

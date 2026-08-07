@@ -836,3 +836,14 @@ One line per iteration: what changed, and what to do next.
   build; `computeElevations` is O(N·E) and only ever measured on repos of this shape; and elevation
   leaks answer-key *size buckets* from first paint on low-elevation subjects, which ADR-0013 recorded
   generically but not in that sharp form.
+
+- **The orbit costs 1.31× the flat map, measured.** `npm run raster` gains a fourth pass: the orbit
+  view at the same district zoom the third pass just measured, on the same synthetic 2,000-node
+  scene, back to back on the same machine. **The ratio is the part that survives a software
+  rasteriser** — the absolute figures remain a floor and ADR-0009's P1′ still says they may not
+  decide anything, but "orbit costs N× flat" is a property of the draw work rather than of the GPU.
+  At 1.31× the orbit is not a performance cliff: whatever real hardware does for the flat map, it
+  does within a third of that for the orbit, so **nothing planned needs a frustum cull or WebGL**,
+  and P1′'s real-hardware measurement gates a renderer *change* rather than any next rung. The flat
+  map itself measured 45/49/50 fps at p95, unchanged by rung 1's summit rings — a regression check
+  worth having taken.
