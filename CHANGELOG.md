@@ -548,3 +548,78 @@ One line per iteration: what changed, and what to do next.
   the top edge draw underneath the inspector and HUD panels — `placeLabels` already takes `occupied`
   boxes, so the work is feeding it the overlay rects from `main.ts`. Ahead of both, if this is to be
   a world you walk: **re-measure `npm run raster` on real hardware.**
+
+- **P1 closed — the prior art, four milestones late, and it says the direction is right and the
+  destination was two different things.** `docs/prior-art.md`; ADR-0009's P1 is struck through with
+  the verdict, risk #6 is closed in `NORTH-STAR.md`. Four parallel tracks: why the tools died, what
+  the empirical literature says about 3D, what Promptasy actually does as a *game*, and a Fable
+  design consult on the world. **Caveat recorded at the top of the writeup and repeated here: the
+  egress proxy blocked ACM, IEEE, ScienceDirect, Springer, arXiv, and the vendors' own sites**, so
+  almost every figure reached us through a search engine that read the page for us. The shape of the
+  literature is well attested; the decimal places need re-verifying from an unblocked machine.
+  **P1 is not triggered, and P1 was the wrong gate.** No tool in the category died of 3D
+  legibility — category (a) has no members. Sourcetrail was the flagship **2D** tool, exactly what
+  you would build if you thought 3D was the problem, and it died of maintenance burden and weak
+  demand after giving itself away because *"not all developers saw the value"*. CodeSee died of
+  business. CodeCity, Code Park, CodeMetropolis and Softwarenaut were research prototypes that
+  decayed. Gource is a viewer by choice. CodeCharta — a 3D city metaphor — is alive and commercial.
+  So the historically attested killer is **maintenance burden**, which a 3D layer multiplies. P1 is
+  replaced by **P1′** (re-measure raster on real hardware, state the CI/platform cost, weigh against
+  a *measured* comprehension gain).
+  **The finding that changes the destination: the evidence splits on viewpoint, not dimension.**
+  *Exocentric* 3D — rotating a structure you stay outside of — wins, and wins on **Ark's exact
+  task**: path tracing in node-link graphs, Ware 1996 (~55 → ~160 comprehensible nodes at fixed
+  error; **motion parallax +120% beat stereo +60%**, so no headset), replicated 2005, and a
+  **preregistered** 2023 study that beat a 2D baseline carrying edge routing *and* interactive
+  highlighting. *Egocentric* 3D — inside it — is the condition that **lost** in the two studies
+  closest to the walkable proposal: spatial memory for item locations degraded **monotonically** with
+  dimensional freedom (Cockburn & McKenzie, n=69, in *physical* environments too, so not a rendering
+  artifact), and traversing a virtual building was the worst of map / real navigation / VE. **Spin
+  the repo is supported; walk the repo is not**, and new gate **P4** says the avatar additionally
+  waits for the Trace verb, because before Trace the product asks no question walking answers better.
+  Also corrected: **CodeCity's +24%/−12% does not license 3D** — its control was Eclipse plus a
+  spreadsheet, not a 2D visualization, and the gain concentrated on *overview* tasks.
+  **The differentiator survives, and the irony is sharp.** No tool in ~30 years verified
+  comprehension as a product feature — yet Wettel, Code Park and Merino all built exactly that
+  instrument to publish a paper and then shipped the tool without it. Retrieval practice is the
+  best-evidenced thing in the document (g = 0.51 vs restudy, and **multiple-choice practice 0.70 beat
+  short-answer 0.48**, endorsing the select-a-subset format), and Karpicke & Blunt is pointed at a
+  product whose one-liner is *learn it by mapping it*: **being tested on structure beat building a
+  diagram of it, including on inference.** Transfer is **d = 0.40** — that is the number risk #1's
+  playtest must be powered for, not the headline.
+  **Three measurements this session changed decisions.** (1) **The coverage metric was wrong.**
+  "91% of svelte can never appear on a board" weights every file equally against a power law where
+  hotspots are 2–3% of code and 25–70% of defects. By *mass*: svelte's 6.9% of files carry **63.9% of
+  transitive-dependent mass** and 90.2% of the top hubs; ark's 70.8% carry **98.9%**. Two real
+  problems survive the reframing — **vite is genuinely uniform** (10.5% files, 11.1% mass, 3.9% LOC,
+  2.4% of churn hotspots), and **churn hotspots are missed on all three** (0% / 64.6% / 2.4%), which
+  is a measured argument that the git verbs cover *complementary* ground rather than more of the
+  same. (2) Every node on all three repos has churn > 0, so the git verbs' ceiling is 100% and what
+  limits them is **our own `maxCommitFiles` cap**, not the repos. (3) The phenomenon catalogue has
+  supply: cycles 0/29/6, hubs 4/41/92, barrels 2/14/3, **co-change ghosts 62/717/98**, churn hotspots
+  7/116/341, broken piers 0/305/125 — and ark having *zero* cycles is itself a teachable fact.
+  **The Promptasy read produced the sentence this project needed: its atom is a *concept*, ours is a
+  *node*.** A concept has a name, a definition, prerequisites, named misconceptions; it is collected,
+  it gates, and it **transfers to another repo**. A node has a path and a degree and can only be
+  asked about. That is why our answer keys keep colliding — Promptasy hit the identical wall at v1.0
+  (*"`assignsTask` in 26 of 26 levels"*) and fixed it with a 130-skill authored catalogue, which
+  pillar 2 forbids us copying. The available substitute is a **repo-independent catalogue of
+  structural phenomena** — hub, cycle, barrel, layering violation, god-file, co-change ghost, frozen
+  core, broken pier — ~30–60 entries, authored **once**, never per repo. It is vocabulary, not
+  content, and it attacks risk #1 head on: a codex of phenomena transfers; *"`engine.ts` has 14
+  dependents"* does not.
+  **A correction I made mid-session and should keep in the record**: I claimed the world's skeleton
+  was already in the atlas because Ark derives what Promptasy hand-places. True of the schema,
+  misleading about legibility — Promptasy is walkable because its geography is a hand-drawn tree of
+  **12** buckets with 7 bridges; we derive **82–123** regions from a real graph. I overstated it.
+  **Next**, in the order the evidence supports and not the order that sounds most exciting.
+  (a) **Rotate the 2D map between challenges** — map-derived spatial memory is *orientation-locked*
+  (Presson & Hazelrigg; Shelton & McNamara; König), our map is north-up forever, and Blast Radius
+  picks an arbitrary subject each time, so we want orientation-flexible knowledge. One session,
+  testable, no 3D, and it is the highest-leverage lowest-cost item in the whole writeup. (b) **The
+  negative witness** — a wrong pick already has a known reason class (sibling, name-alike, distance
+  n±1, co-change ghost) and we never say it; Promptasy hand-wrote 713 of these and we get ours for
+  free. (c) **The phenomenon catalogue**, which is the real fix for the repeated-question problem.
+  Then **orbit**: derived Z over frozen X,Y, quantised (freedom in the third dimension is what
+  Cockburn measured degrading), survey view one keystroke away, landmarks over terrain. The avatar
+  stays behind P1′ and P4.

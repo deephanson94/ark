@@ -170,12 +170,49 @@ design constraints and one ship criterion. It is not scheduled, and the roadmap 
 
 ### Preconditions — met before any implementation work
 
-**P1. Prior art, done properly.** Risk #6, closed: write up why Sourcetrail, CodeSee, CodeCity and
+**P1. Prior art, done properly.** ~~Risk #6, closed: write up why Sourcetrail, CodeSee, CodeCity and
 Gource failed, classifying each primary cause among *3D legibility*, *generality before the loop*,
 *absence of an assessment loop*, *business or maintenance*, *other*. **If 3D legibility is a primary
-cause for any comprehension-focused tool, this ADR is superseded and we say so.** Any other outcome
-passes P1 and is recorded. (The first draft posed this as a binary — "3D or generality" — which the
-likely answer does not fit.)
+cause for any comprehension-focused tool, this ADR is superseded and we say so.**~~
+
+> **CLOSED 2026-08-07 — [`docs/prior-art.md`](../prior-art.md). Not superseded, and P1 is retired as
+> a gate because it asked the wrong question.**
+>
+> **No tool in the category died of 3D legibility.** Sourcetrail — the flagship *2D* tool, exactly
+> what you would build if you thought 3D was the problem — died of business and maintenance burden.
+> CodeSee died of business. CodeCity, Code Park, CodeMetropolis and Softwarenaut were research
+> prototypes that decayed. Gource is a viewer by choice. And CodeCharta, a 3D city-metaphor tool, is
+> alive and commercial today. Category (a) has no members.
+>
+> **What the writeup found instead is that "3D" is two different interventions with opposite
+> evidence, and this ADR had them conflated.** The literature splits on **viewpoint**, not on
+> dimension. *Exocentric* 3D — rotating a structure you stay outside of — wins, and wins on Ark's
+> exact task: path tracing in node-link graphs, replicated 1996 → 2005 → a **preregistered** 2023
+> study that beat a 2D baseline carrying edge routing *and* interactive highlighting. Motion
+> parallax carries more of that effect than stereo, so no headset is implied. *Egocentric* 3D —
+> being inside it — is the condition that **lost** in the two studies closest to the walkable
+> proposal: spatial memory for item locations degraded monotonically with dimensional freedom
+> (Cockburn & McKenzie, n=69, in physical environments as well as virtual), and traversing a virtual
+> building was the worst of map / real navigation / VE (Richardson et al. 1999).
+>
+> Also corrected: **CodeCity's +24%/−12% does not license 3D.** Its control was Eclipse plus a
+> spreadsheet, not a 2D visualization, and the gain concentrated on *overview* tasks — the flat
+> map's home turf. The three VR follow-ups produced speed and affect gains with correctness null.
+>
+> Two consequences are recorded as new gates below: **P1′** and **P4**.
+
+**P1′. The maintenance-budget gate — P1's replacement.** The history attests that this category dies
+of maintenance burden and weak demand, not of illegibility, and a 3D layer is a large multiplier on
+exactly that burden. So before any renderer change ships: `npm run raster` re-measured **on real
+hardware** (45/33/43 fps is a headless software-raster floor, not a desktop number), plus a stated
+estimate of the CI, review and platform surface the layer adds, weighed against a *measured*
+comprehension gain rather than an assumed one.
+
+**P4. Orbit before avatar, and the avatar needs a route-shaped verb.** The measured win is
+exocentric, so the orbit is not a stepping stone toward the real thing — it *is* the intervention
+with evidence. The walkable avatar is additionally gated on the **Trace** verb existing (M6):
+before Trace, the product asks no question that walking answers better than orbiting. This is
+stricter than the original staging and it comes from the evidence, not from caution.
 
 **P2. The content question is answered.** M3 and M4 ship, and Ark is pointed at a large repo with
 real history — the one thing that will finally exercise the co-change distractor strategy. If the
