@@ -18,7 +18,9 @@
  */
 
 import { execFile } from 'node:child_process';
-import { devNull } from 'node:os';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -67,10 +69,26 @@ export const NO_HISTORY: GitHistory = {
   totalCommits: 0,
 };
 
-async function git(root: string, args: readonly string[]): Promise<string> {
-  const { stdout } = await run('git', [...BASE_ARGS, ...args], {
-    cwd: root,
-    maxBuffer: MAX_BUFFER,
+interface Isolation {
+  readonly env: NodeJS.ProcessEnv;
+  cleanup(): Promise<void>;
+}
+
+/**
+ * An environment in which git reads no configuration but the repo's own.
+ *
+ * `GIT_CONFIG_GLOBAL` points at a real empty file in a temp directory rather
+ * than at a null device. `/dev/null` does not exist on Windows, and
+ * `os.devNull` there is `\\.\nul`, which git does not read as a config file —
+ * either way it can fall back to the user's real global config, silently
+ * reintroducing the machine dependence this exists to remove. An empty regular
+ * file means the same thing on every platform.
+ */
+async function isolate(): Promise<Isolation> {
+  const directory = await mkdtemp(join(tmpdir(), 'ark-git-'));
+  const emptyConfig = join(directory, 'gitconfig');
+  await writeFile(emptyConfig, '', 'utf8');
+  return {
     env: {
       ...process.env,
       // Locale and timezone both leak into git's output formatting.
@@ -78,20 +96,29 @@ async function git(root: string, args: readonly string[]): Promise<string> {
       LANG: 'C',
       TZ: 'UTC',
       GIT_CONFIG_NOSYSTEM: '1',
-      // `os.devNull`, not a hard-coded `/dev/null`: on Windows that path does
-      // not exist, and git would fall back to reading the user's real global
-      // config — quietly reintroducing the machine dependence this is here to
-      // remove, on the one platform we cannot test locally.
-      GIT_CONFIG_GLOBAL: devNull,
+      GIT_CONFIG_GLOBAL: emptyConfig,
       GIT_TERMINAL_PROMPT: '0',
     },
+    cleanup: () => rm(directory, { recursive: true, force: true }),
+  };
+}
+
+async function git(root: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<string> {
+  const { stdout } = await run('git', [...BASE_ARGS, ...args], {
+    cwd: root,
+    maxBuffer: MAX_BUFFER,
+    env,
   });
   return stdout;
 }
 
-async function tryGit(root: string, args: readonly string[]): Promise<string | null> {
+async function tryGit(
+  root: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> {
   try {
-    return await git(root, args);
+    return await git(root, args, env);
   } catch {
     return null;
   }
@@ -103,41 +130,52 @@ async function tryGit(root: string, args: readonly string[]): Promise<string | n
  * (NORTH-STAR risk #7), so this is a normal outcome, not an error.
  */
 export async function readGitHistory(root: string, maxCommits: number): Promise<GitHistory> {
-  const gitDir = await tryGit(root, ['rev-parse', '--git-dir']);
-  if (gitDir === null) return NO_HISTORY;
+  const isolation = await isolate();
+  try {
+    const { env } = isolation;
 
-  const countText = await tryGit(root, ['rev-list', '--count', 'HEAD']);
-  if (countText === null) return NO_HISTORY;
-  const totalCommits = Number.parseInt(countText.trim(), 10);
-  if (!Number.isFinite(totalCommits) || totalCommits === 0) return NO_HISTORY;
+    const gitDir = await tryGit(root, ['rev-parse', '--git-dir'], env);
+    if (gitDir === null) return NO_HISTORY;
 
-  const log = await tryGit(root, [
-    'log',
-    '-z',
-    '-M',
-    '--numstat',
-    // `short` renders each commit in *its own* recorded timezone, so a repo
-    // with contributors in two zones produces dates that do not decrease along
-    // the log, and two commits made at the same instant get different dates.
-    // `short-local` renders them all in TZ, which we pin to UTC above.
-    '--date=short-local',
-    `--format=${RECORD}%H${UNIT}%ad${UNIT}%an${UNIT}%s`,
-    '-n',
-    String(maxCommits),
-  ]);
-  if (log === null) return NO_HISTORY;
+    const countText = await tryGit(root, ['rev-list', '--count', 'HEAD'], env);
+    if (countText === null) return NO_HISTORY;
+    const totalCommits = Number.parseInt(countText.trim(), 10);
+    if (!Number.isFinite(totalCommits) || totalCommits === 0) return NO_HISTORY;
 
-  const commits = parseLog(log);
-  const head = commits[0];
-  if (head === undefined) return NO_HISTORY;
+    const log = await tryGit(
+      root,
+      [
+        'log',
+        '-z',
+        '-M',
+        '--numstat',
+        // `short` renders each commit in *its own* recorded timezone, so a repo
+        // with contributors in two zones produces dates that do not decrease
+        // along the log, and two commits made at the same instant get different
+        // dates. `short-local` renders them all in TZ, pinned to UTC above.
+        '--date=short-local',
+        `--format=${RECORD}%H${UNIT}%ad${UNIT}%an${UNIT}%s`,
+        '-n',
+        String(maxCommits),
+      ],
+      env,
+    );
+    if (log === null) return NO_HISTORY;
 
-  return {
-    present: true,
-    head: head.sha,
-    headDate: head.date,
-    commits,
-    totalCommits,
-  };
+    const commits = parseLog(log);
+    const head = commits[0];
+    if (head === undefined) return NO_HISTORY;
+
+    return {
+      present: true,
+      head: head.sha,
+      headDate: head.date,
+      commits,
+      totalCommits,
+    };
+  } finally {
+    await isolation.cleanup();
+  }
 }
 
 interface MutableCommit {

@@ -22,20 +22,36 @@ import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
+function flag(argv: readonly string[], ...names: readonly string[]): string | null {
+  const index = argv.findIndex((arg) => names.includes(arg));
+  return index === -1 ? null : (argv[index + 1] ?? null);
+}
+
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
-  const outIndex = argv.findIndex((arg) => arg === '--out' || arg === '-o');
-  const out = outIndex === -1 ? null : argv[outIndex + 1];
+  const out = flag(argv, '--out', '-o');
+  const atlasOut = flag(argv, '--atlas');
 
   const atlas = await buildAtlas(indexOptions(ROOT));
   const text = serializeAtlas(atlas);
   const digest = createHash('sha256').update(text, 'utf8').digest('hex');
 
-  // Node and edge counts travel with the hash so that a mismatch says *what*
-  // differs, not just that something did.
-  const line = `${digest} ${Buffer.byteLength(text)} ${atlas.nodes.length} ${atlas.edges.length}`;
+  // Counts travel with the hash so a mismatch narrows itself before anyone
+  // opens a log: same nodes and edges but different bytes means the *graph*
+  // agreed and something else did not.
+  const line = [
+    digest,
+    Buffer.byteLength(text),
+    atlas.nodes.length,
+    atlas.edges.length,
+    atlas.history.commitsRetained,
+    atlas.repo.head?.slice(0, 12) ?? 'none',
+  ].join(' ');
+
   process.stdout.write(`${line}\n`);
-  if (out !== undefined && out !== null) await writeFile(out, `${line}\n`, 'utf8');
+  if (out !== null) await writeFile(out, `${line}\n`, 'utf8');
+  // The atlas itself, so a mismatch can be diffed rather than theorised about.
+  if (atlasOut !== null) await writeFile(atlasOut, text, 'utf8');
   return 0;
 }
 

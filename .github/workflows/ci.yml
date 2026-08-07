@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # Only the default branch on push. A branch with an open PR would otherwise
+  # run the whole matrix twice for one commit — once for the push, once for the
+  # pull_request — which doubles the queue and halves the signal.
   push:
-    branches: ['**']
+    branches: [master]
   pull_request:
 
 # A superseded run tells you nothing; cancel it and keep the queue short.
@@ -73,12 +76,14 @@ jobs:
       - run: npm ci
 
       - name: index and fingerprint
-        run: npx tsx scripts/atlas-hash.ts --out fingerprint.txt
+        run: npx tsx scripts/atlas-hash.ts --out fingerprint.txt --atlas atlas.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: fingerprint-${{ matrix.os }}
-          path: fingerprint.txt
+          path: |
+            fingerprint.txt
+            atlas.json
 
   agree:
     name: platforms agree
@@ -98,21 +103,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo 'sha256                                                           bytes nodes edges  platform'
+          echo 'sha256                                                           bytes nodes edges commits head'
           for file in fingerprints/*/fingerprint.txt; do
             platform="$(basename "$(dirname "$file")")"
-            printf '%s  %s\n' "$(tr -d '\n' < "$file")" "${platform#fingerprint-}"
+            printf '%s  <- %s\n' "$(tr -d '\n' < "$file")" "${platform#fingerprint-}"
           done
+
           distinct="$(cat fingerprints/*/fingerprint.txt | sort -u | wc -l)"
-          if [ "$distinct" -ne 1 ]; then
+          if [ "$distinct" -eq 1 ]; then
             echo
-            echo "The same commit produced $distinct different atlases across platforms."
-            echo "Same repo must mean the same map on every machine (NORTH-STAR §7),"
-            echo "so this is a real defect, not a CI quirk. Usual suspects: a"
-            echo "transcendental Math call in the layout, a path separator leaking"
-            echo "into a node id, line-ending normalisation, or git config that"
-            echo "differs by platform."
-            exit 1
+            echo "all platforms agree"
+            exit 0
           fi
+
+          # Show the actual disagreement. Guessing at a hash mismatch from the
+          # hash is exactly the sort of thing this job exists to make unnecessary.
+          reference="$(ls -d fingerprints/*/ | head -1)"
           echo
-          echo "all platforms agree"
+          echo "Baseline: $(basename "$reference")"
+          for dir in fingerprints/*/; do
+            [ "$dir" = "$reference" ] && continue
+            if ! diff -q "$reference/atlas.json" "$dir/atlas.json" >/dev/null; then
+              echo
+              echo "--- differences vs $(basename "$dir") (first 40 lines) ---"
+              diff -u "$reference/atlas.json" "$dir/atlas.json" | head -40 || true
+            fi
+          done
+
+          echo
+          echo "The same commit produced $distinct different atlases across platforms."
+          echo "Same repo must mean the same map on every machine (NORTH-STAR §7),"
+          echo "so this is a real defect, not a CI quirk. Usual suspects: a"
+          echo "transcendental Math call in the layout, a path separator leaking"
+          echo "into a node id, line-ending normalisation, or git config that"
+          echo "differs by platform."
+          exit 1
