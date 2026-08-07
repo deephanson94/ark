@@ -153,15 +153,26 @@ how it is graded. **v1 ships one verb well rather than six badly.**
 
 ### 6.1 Blast Radius — the v1 verb
 
-> *"You're changing the signature of `parseConfig()` in `src/config/parse.ts`. Select every file that
-> will need to change."*
+> *"A breaking change lands in `src/config/parse.ts`. Which of these files depend on it — directly,
+> or through a chain of imports?"*
 
-- **Ground truth**: transitive dependents in the import/call graph, depth-bounded.
+- **Ground truth**: transitive dependents in the import/call graph, unbounded.
 - **Why this one first**: it is the single clearest separator between someone who has *read* a
   codebase and someone who *knows* it. It's gradeable with only an import graph — the cheapest
   possible analysis. And it's the question people actually ask at work.
 - **Distractors**: siblings in the directory tree, nodes at similar graph distance, files with
   confusingly similar names. Distractor quality is the hard part — see §8.3.
+
+> **Amended 2026-08-07.** This prompt originally read *"Select every file that will need to
+> change"*, and the ground truth was depth-bounded. Both are changed above, for one reason: the
+> challenge must promise exactly what the graph proves. Import reachability *overapproximates*
+> required change — a file importing a different symbol, or importing only a type, may need no edit
+> — so the old wording would mark players wrong on files that provably need no change. And a depth
+> bound makes §8.3's "distance n±1" distractor strategy present real dependents at hop n+1 as
+> correct exclusions, marking a player who knows the codebase wrong. The bound also protected
+> nothing measurable: on this repo, depth-3 truth equals unbounded truth for every node.
+> Reasoning, rejected alternatives, and the consequences for `generate()`:
+> [`docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md`](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md).
 
 ### 6.2 Backlog
 
