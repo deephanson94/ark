@@ -55,6 +55,16 @@ export interface GitHistory {
   readonly present: boolean;
   readonly head: string | null;
   readonly headDate: string | null;
+  /**
+   * The repo's first commit — its identity, as opposed to `head`, which is its
+   * state. The player keys saved progress on it (ADR-0011), so it has to be a
+   * sha that does not move when the repo does.
+   *
+   * Null for a repo with no history *and* for a shallow clone, where the
+   * oldest reachable commit is a graft boundary that moves on every fetch. See
+   * `readRootCommit`.
+   */
+  readonly root: string | null;
   /** Newest first. */
   readonly commits: readonly GitCommit[];
   /** Total commits reachable from HEAD, even if we only walked `commits`. */
@@ -65,6 +75,7 @@ export const NO_HISTORY: GitHistory = {
   present: false,
   head: null,
   headDate: null,
+  root: null,
   commits: [],
   totalCommits: 0,
 };
@@ -125,6 +136,31 @@ async function tryGit(
 }
 
 /**
+ * The sha of the first commit on HEAD's first-parent chain, or null.
+ *
+ * `--first-parent` is not decoration. Without it, `--max-parents=0` lists
+ * *every* root in the repo, and a subtree merge or an imported history adds
+ * one — so a repo that had a single root last week can have two today, and any
+ * "pick one" rule that reads the whole list can change its mind. The
+ * first-parent walk from HEAD is a linear chain, so exactly one commit on it
+ * has no parent: the root of this repo's own mainline. Merging someone else's
+ * history in does not move it.
+ *
+ * Null for a **shallow clone**, where the oldest reachable commit is a graft
+ * boundary rather than a root: it looks parentless, but it moves on every
+ * `fetch --deepen` and differs between two clones of the same repo. Keying a
+ * save on it would silently rotate the save. Not a corner case — of the repos
+ * this was measured against, both large ones were `--depth` clones.
+ */
+async function readRootCommit(root: string, env: NodeJS.ProcessEnv): Promise<string | null> {
+  const shallow = await tryGit(root, ['rev-parse', '--is-shallow-repository'], env);
+  if (shallow === null || shallow.trim() !== 'false') return null;
+  const roots = await tryGit(root, ['rev-list', '--max-parents=0', '--first-parent', 'HEAD'], env);
+  const first = roots?.split('\n')[0]?.trim() ?? '';
+  return /^[0-9a-f]{40}$/.test(first) ? first : null;
+}
+
+/**
  * Read history. Returns `NO_HISTORY` for a directory that is not a repo, or a
  * repo with no commits — tiers 1–4 must stay fully playable without git
  * (NORTH-STAR risk #7), so this is a normal outcome, not an error.
@@ -180,6 +216,7 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
       present: true,
       head: head.sha,
       headDate: head.date,
+      root: await readRootCommit(root, env),
       commits,
       totalCommits,
     };

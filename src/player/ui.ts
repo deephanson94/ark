@@ -12,6 +12,8 @@
  */
 
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
+import type { FieldNote } from './notes.js';
+import { noteProse } from './notes.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -43,7 +45,66 @@ export interface Hud {
   update(coverage: Coverage, level: string, stats: string, questionsLeft: number): void;
 }
 
-export function createHud(atlas: Atlas): Hud {
+export interface GuideView {
+  /** `null` when every question has been passed. */
+  readonly next: Challenge | null;
+  /** The suggestion's display name. */
+  readonly path: string | null;
+  /** True when the player is already standing on the suggestion. */
+  readonly arrived: boolean;
+  readonly questionsLeft: number;
+}
+
+export interface Guide {
+  readonly root: HTMLElement;
+  update(view: GuideView): void;
+}
+
+/**
+ * "Where next?" — the progression affordance.
+ *
+ * It **takes you to a landmark; it does not open a question**. §4's loop is
+ * "pick a landmark", and ADR-0011 is explicit that suggested-next is an
+ * affordance and not a mode: sending the player straight into a modal would
+ * quietly turn a cartography game into a quiz deck, which nothing in the spec
+ * licenses. So the button pans the map, selects the subject, and leaves the
+ * existing "answer this" control one keystroke away.
+ *
+ * The exhausted state is **recomputed every frame, never latched**. A pass can
+ * decay (ADR-0011 decision 3) and a reindex can resurrect its question, so a
+ * stored "done" would go on lying.
+ */
+export function createGuide(onSuggest: () => void): Guide {
+  const button = el('button', 'guide-action');
+  button.type = 'button';
+  button.addEventListener('click', onSuggest);
+  const caption = el('div', 'guide-caption');
+  const root = el('div', 'guide', [button, caption]);
+  return {
+    root,
+    update({ next, path, arrived, questionsLeft }) {
+      if (next === null) {
+        button.disabled = true;
+        button.textContent = 'every question answered';
+        // Derived, never canned: the count is the deck's, and the pointer is
+        // the only true thing left to say — a newer HEAD generates a new deck.
+        caption.textContent = 'Reindex at a newer commit for more.';
+        return;
+      }
+      button.disabled = false;
+      // Once you are standing on the suggestion the button has already done its
+      // job, and saying "next is draw.ts" while you are on draw.ts reads as a
+      // control that did nothing. It stays live — panning away and pressing it
+      // brings you back — but it stops pretending there is somewhere to go.
+      button.textContent = arrived ? 'Back to the suggestion' : 'Where next?';
+      caption.textContent = arrived
+        ? `${questionsLeft} left · you are on ${path ?? 'it'}`
+        : `${questionsLeft} left · next is ${path ?? 'somewhere'}`;
+    },
+  };
+}
+
+export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
     atlas.repo.head === null
@@ -56,8 +117,11 @@ export function createHud(atlas: Atlas): Hud {
   const counts = el('div', 'hud-counts');
   const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
+  // A feature reachable only by reading the source does not exist. `f` was
+  // already undiscoverable; `o` would have shipped the same way.
+  const keys = el('div', 'hud-keys', ['f fit · o orbit · enter ask']);
 
-  const root = el('div', 'hud', [title, head, progress, counts, quests, detail]);
+  const root = el('div', 'hud', [title, head, progress, counts, quests, detail, keys, ...extra]);
 
   return {
     root,
@@ -210,4 +274,76 @@ export function createLegend(scene: Scene): HTMLElement {
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
   ]);
+}
+
+export interface Notebook {
+  readonly root: HTMLElement;
+  readonly toggle: HTMLElement;
+  isOpen(): boolean;
+  close(): void;
+  /** Re-render from the current record. Notes are derived, never cached. */
+  update(notes: readonly FieldNote[]): void;
+}
+
+/**
+ * Field notes — NORTH-STAR §9's codex, over the map.
+ *
+ * Same scrim pattern as the challenge console, for the same reason: the world
+ * stays visible and alive behind it, so reading what you know never costs you
+ * the spatial context you built it from.
+ *
+ * Everything here is **re-derived on open**. Nothing about a note is cached,
+ * because a claim can decay between sessions and a cached sentence would go on
+ * asserting something the graph stopped supporting (ADR-0011 decision 3).
+ */
+export function createNotebook(): Notebook {
+  const list = el('ul', 'notes-list');
+  const empty = el('div', 'notes-empty', [
+    'Nothing proved yet. Answer a question and what you establish is written down here — ',
+    'only what you proved, never what you were shown.',
+  ]);
+  const heading = el('div', 'notes-title', ['FIELD NOTES']);
+  const close = el('button', 'console-close', ['✕']);
+  close.type = 'button';
+  const head = el('div', 'notes-head', [heading, close]);
+  const panel = el('div', 'notes-panel', [head, empty, list]);
+  const root = el('div', 'notes-scrim', [panel]);
+  root.hidden = true;
+
+  const toggle = el('button', 'hud-notes');
+  toggle.type = 'button';
+  toggle.textContent = 'field notes';
+
+  // Tracked here rather than read back off `root.hidden`, whose DOM type also
+  // admits the string `"until-found"`.
+  let open = false;
+  const setOpen = (next: boolean): void => {
+    open = next;
+    root.hidden = !next;
+  };
+  close.addEventListener('click', () => setOpen(false));
+  root.addEventListener('click', (event) => {
+    if (event.target === root) setOpen(false);
+  });
+  toggle.addEventListener('click', () => setOpen(!open));
+
+  return {
+    root,
+    toggle,
+    isOpen: () => open,
+    close: () => setOpen(false),
+    update(notes) {
+      toggle.textContent = notes.length === 0 ? 'field notes' : `field notes (${notes.length})`;
+      empty.hidden = notes.length > 0;
+      const items = notes.map((note) => {
+        const { claim, revealed } = noteProse(note);
+        const children: Node[] = [el('div', 'field-note-claim', [claim])];
+        // Kept visually and grammatically apart from the claim: one is
+        // knowledge, the other is something the map showed you.
+        if (revealed !== null) children.push(el('div', 'field-note-revealed', [revealed]));
+        return el('li', 'field-note', children);
+      });
+      list.replaceChildren(...items);
+    },
+  };
 }

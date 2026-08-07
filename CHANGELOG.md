@@ -290,3 +290,560 @@ One line per iteration: what changed, and what to do next.
   **Next**: M3 — progression, field notes, localStorage. We now know what progression has to fix,
   because it was measured rather than assumed: order by difficulty, and never serve two
   near-identical answer keys back to back.
+
+- **M3 rung 1 — progress survives a reload, keyed on the repo's identity rather than its state.**
+  Answering a question and pressing F5 no longer resets the map. `ADR-0011` settles the whole stored
+  shape first, because all three M3 rungs write into the same object and deciding it three times
+  would guarantee three different answers.
+  **The key is `repo.root`, a new atlas field — the sha of the first commit on HEAD's first-parent
+  chain.** NORTH-STAR §10 said "keyed by repo + HEAD", and that cannot stand next to ADR-0002 (node
+  identity survives renames *so that* fog and field notes survive a refactor): HEAD moves on every
+  commit, so a HEAD-keyed save is wiped by every reindex. `root` is identity, `head` is staleness;
+  the north star row is amended and points at the ADR. `--first-parent` is not decoration —
+  `--max-parents=0` alone lists *every* root, and a subtree merge adds one, so a "pick one from the
+  list" rule can change its mind and rotate every player's save. **It is null for a shallow clone**,
+  where the oldest reachable commit is a graft boundary that moves on every fetch: not a corner
+  case, since both large repos measured in the last two rungs were `--depth` clones. That falls back
+  to `ark:name:<name>`, which is documented as weaker rather than hidden — `NodeId` hashes
+  `originPath` and is therefore repo-*independent*, so two repos under one key would share
+  `understood` promotions, and an `understood` node unlocks its full radius on hover, silently
+  reopening the leak ADR-0008 closed. `ATLAS_VERSION` 2 → 3, `docs/atlas-format.md` §3.1 in the same
+  commit.
+  **`Progress` is now the state and `Fog` is a view of it.** Only `{surveyed, passes}` is stored;
+  `understood` is derived at load, because storing it alongside the passes that justify it would be
+  two representations of one fact that disagree after a reindex. A pass is keyed by `(verb, subject)`
+  — never by `challenge.id`, which the format promises is stable only *within* an atlas. That
+  collapses the restore path into the live path: the same function that renders a fresh session
+  renders a restored one, so a save that restored wrongly would break a test the session already runs
+  hundreds of times. Two passes on one hub union rather than replace, because answer keys are sampled
+  and guardrail 6 forbids the second attempt taking away what the first earned.
+  **A restored claim is re-checked before it is rendered as knowledge.** Provenance is immutable —
+  you did prove it — but each proved member is re-validated against `dependents(subject, ∞)` on load,
+  and a pair the graph no longer supports is dropped; a fully decayed pass demotes its subject and
+  the map re-fogs. Stored ids that name nothing are ignored at render and **kept in storage**, so
+  reverting a deletion restores your map.
+  **Two defects, found two different ways, neither by reading the code.**
+  *Mutation testing* (16 mutations, each reverted after) found the harness itself was lying first:
+  `--reporter=basic` is not a vitest 4 flag, so every run exited non-zero and every mutation read as
+  "caught". With that fixed, two survived — `--first-parent` was untested because the fixture repo
+  had one root, and the root-sha shape check had no test at all. Both now have one: a repo with a
+  vendored second root dated *later* than the mainline, so a naive `rev-list` returns the wrong sha
+  first, and a validator case for each half of the head/root nullability rule (they are deliberately
+  **not** symmetric — a shallow clone has a head and no root).
+  *Looking at an e2e screenshot* found the other: the HUD read **38 questions after one pass**, not
+  39. Deriving the deck from `fog.understood` retired a question nobody had answered — picking a file
+  correctly in someone else's question proves you know it sits in that radius, and proves nothing
+  about its own. The deck now reads `answeredSubjects()`, which is the subjects of surviving passes.
+  The assertion that catches it fails against the old rule.
+  **`survey()`, `understand()` and `CLEAR_FOG` are deleted.** With the fog derived, they were reached
+  only by their own tests — the landmine about code and test surface asserting a behaviour the
+  product does not have. `fog.ts` now owns the vocabulary and none of the state.
+  Verified: 319 unit + 72 atlas tests, byte-identical atlas across two runs, all hard budgets inside
+  ceiling (index 271 ms, generate@2000 2.9 s, 0 runtime deps), e2e clean with first paint 148 ms —
+  and the e2e now **reloads the page**, asserts the key is the root sha and not HEAD, and fails if
+  either the fog or the deck comes back empty. That assertion was itself checked by breaking
+  `loadProgress`.
+  **Next**: M3 rung 2 — the progression selector, per ADR-0011 decision 4: ascending
+  `(tier, difficulty, id)`, skipping a challenge whose truth is byte-equal to the last served, then
+  one whose region matches. Both constraints were measured on ark and vite before being written; (a)
+  fixes the repetition defect, (b) buys the tour. Then rung 3, the field-notes panel — which is why
+  `livePasses()` already returns the narrowed pass rather than just a boolean.
+
+- **M3 rung 2 — the progression selector, and the deck stops repeating itself.** A "Where next?"
+  panel offers the next question by ADR-0011 decision 4's rule. It **takes you to a landmark; it
+  does not open a question** — §4's loop is "pick a landmark", and the ADR calls suggested-next an
+  affordance rather than a mode, so the button pans the map, selects the subject and leaves the
+  existing "answer this" control one keystroke away. Sending the player straight into a modal is the
+  first step towards the quiz deck nothing in the spec licenses.
+  **The rule is unchanged in behaviour and is now one lexicographic minimum over
+  `(attempts, sameTruth, sameRegion, tier, difficulty, id)`.** Three measurements forced that
+  shape, and ADR-0011 decision 4 is amended with all of them. (1) Written literally as a relaxation
+  ladder, the *drop-the-truth-constraint* rung **never executed** on either repo under any player
+  model — the landmine about machinery that never fires, arriving on schedule. As a ranking there is
+  no such rung: the key is total. (2) "A session-scoped attempted set" was one sentence hiding a
+  defect — as a hard filter it falls through to "serve the first unanswered" the moment every open
+  question has been tried, which is routine in the endgame: **79 consecutive identical answer keys
+  out of 120 servings** for an always-failing player on this repo. As the outermost rank component
+  the deck rotates instead, every question served equally often. (3) A least-recently-attempted
+  rotation was the reviewed alternative and measured **worse** — it drops both constraints once
+  everything has been tried, and that costs 4 consecutive identical keys on ark and 3 on vite
+  against 1 for the ranking. A perfect player gets the same result under all three, which is why the
+  ADR's original table still stands.
+  **A surviving mutation, reported rather than papered over.** Swapping `attempts` and `sameTruth`
+  in the key changes **no choice at all** — 0 divergences across full playthroughs of both repos at
+  two failure rates — so there is deliberately no test pinning it, and the code says why. A test
+  asserting a distinction the product never exhibits is the same mistake as a fallback that never
+  fires. `attempts` above `sameRegion` *is* load-bearing and is tested: below it, the selector
+  re-serves a question the player already failed in order to move region, spending a fresh question
+  to buy variety it could have had free. That mutation was caught only after the first attempt at a
+  discriminating test failed to discriminate.
+  **`tests/atlas/selector.test.ts` is the permanent instrument**, playing this repo's real 40-card
+  deck through three player models. It asserts the defect is *present* — the plain sort must still
+  produce consecutive identical keys here — so the constraint below it can never pass vacuously.
+  One repeat survives a half-failing playthrough and is not a defect: with one question left and
+  just failed, every possible rule re-serves it, so the test asserts the honest property, no repeat
+  *while an alternative exists*.
+  **Two unrelated things surfaced.** Adding `selector.ts` pushed the repo to 24 commits and the
+  **co-change distractor strategy fired for the first time** (5 wrong answers) — the caveat recorded
+  at the M2 kill point is now closed. And the Ctrl+F gate declined its first subject on this repo,
+  which broke `atlas.test.ts`'s "every subject with a radius ships a question". That assertion was
+  too strong — the guardrails are *allowed* to refuse. It now asserts what actually matters: nothing
+  goes missing silently, so shipped + refused = subjects with a radius, and `noDependents` is
+  separated out as "no radius to ask about" rather than counted as a refusal.
+  Verified: 336 unit + 81 atlas tests, byte-identical atlas, e2e clean — the browser run now clicks
+  the suggestion, fails if it opens a modal, if it lands somewhere the name is not drawn, if it
+  offers the question just answered, or if the caption still points elsewhere after arriving.
+  **Next**: M3 rung 3 — the field-notes panel, over `livePasses()`, honest about sampled keys per
+  ADR-0011 decision 3. Also noticed and *not* fixed: node labels near the top edge draw underneath
+  the inspector and HUD panels. `placeLabels` already accepts `occupied` boxes for exactly this, so
+  the fix is feeding it the overlay rects — it needs main.ts to measure DOM for the canvas, which is
+  a real change and its own rung.
+
+- **M3 rung 3 — field notes, which claim only what was proved.** §9's codex, over the map on the
+  same scrim the challenge console uses, so reading what you know never costs the spatial context
+  you built it from. A note reads: *"You proved 6 files that depend on
+  `src/verbs/blastRadius/difficulty.ts` — …, …, … — the farthest 5 hops away."* and, in a dimmer
+  second line, *"Its full radius — 24 files — is revealed on your map."*
+  **That split is the whole rung.** §9's own example — "You know that `engine.ts` has 14
+  dependents" — is not provable and ADR-0011 decision 3 amends it: under ADR-0008 a hub's answer key
+  is a deterministic *sample*, so a player who passes has proved some members, never the count. The
+  count was **shown** to them in the reveal, which is the `surveyed` side of the very line §9 calls
+  the product. So the claim names the files; the radius appears only in a line labelled *revealed*,
+  visually and grammatically apart. Correct exclusions get no note at all — `progress.ts` already
+  declines to promote a box you left unticked, and a note must not claim more than the fog does.
+  **Prose is derived at render, never stored**, from templates that mention no repo (guardrail 2) —
+  a test tokenises the output and asserts every `/`-containing word came from the atlas. Names
+  resolve `NodeId → path` through the atlas currently loaded, so a note follows a rename, which is
+  ADR-0002 doing the job it was written for. Nothing is cached: a claim can decay between sessions,
+  and a cached sentence would go on asserting something the graph stopped supporting.
+  **Two mutations survived and both said the same thing**: `notes.ts`'s own "drop a decayed member"
+  and "skip an empty note" guards are *unreachable*, because `livePasses` already applied that rule
+  upstream. Rather than delete guards the types need, or keep two implementations of one rule, the
+  code now says which layer owns it and why the guards remain — and the tests say they assert an
+  end-to-end property enforced a layer up, so a future reader does not mistake `notes.ts` for the
+  filter. Five other mutations were caught, including the one that matters: claiming the radius
+  instead of the proved count.
+  **A class-name collision, found by looking at the screenshot.** The new panel's `.note` picked up
+  the challenge console's existing `.note { display: flex }`, so the revealed line rendered *beside*
+  the claim instead of beneath it. Renamed to `.field-note*`, and the e2e's reveal assertion is now
+  scoped to `.console-notes .note` — it had silently become ambiguous between the two lists.
+  Verified: 348 unit + 81 atlas tests, byte-identical atlas, build clean, e2e clean — the browser
+  run opens the notebook, fails if a note does not start "You proved", if its count disagrees with
+  the answer key just proved, or if the radius is stated as knowledge rather than as revealed.
+  **M3 is complete**: progression, field notes and a localStorage save that survives a reload.
+  **Next**: the honest choice is between two things, and the CHANGELOG should not pretend otherwise.
+  (a) **Generator-side dedupe** — identical answer keys are ultimately a *generation* artifact, those
+  pairs are arguably one question wearing two subjects, and the selector only stops them being
+  adjacent. (b) **Labels versus the overlay panels** — node labels near the top edge draw underneath
+  the inspector and HUD, which is a legibility defect on the pillar the map exists for;
+  `placeLabels` already accepts `occupied` boxes, so the work is feeding it the panel rects, which
+  needs main.ts to measure DOM for the canvas. (a) is worth more; (b) is more visible.
+
+- **Direction recorded, and ADR-0009's precondition P3 closed — the interaction budget is measured,
+  and it is missed.** The human stated that a **third-person explorable world** (Zelda, Assassin's
+  Creed) is the intended final form of the product, not merely an allowed one. That is a north-star
+  change and is written into `NORTH-STAR.md` §9 and the head of ADR-0009 as such. It changes the
+  destination and therefore the standard every 2D decision is held to — a choice that reads well
+  flat but cannot survive being walked through is now the worse choice. It changes **none** of
+  ADR-0009's gates: the invariant, three preconditions, three design constraints and the recall
+  experiment all stand, and the roadmap still has no slot for it. A destination is not a schedule,
+  and the honest way to serve it is to close the preconditions — work with its own payoff in 2D.
+  So: **P3**, which ADR-0009 assigns to M3 and M3 shipped without. `npm run raster` drives the built
+  player in a real browser against a 2,000-node atlas positioned by the *real* layout — a grid of
+  evenly spaced dots would understate overdraw, which is the cost being measured — and reports frame
+  time at three zoom levels. **45 / 33 / 43 fps at p95 (territory / district / street), against a
+  ≥ 50 fps target. Below target at every level.** Stated plainly per CLAUDE.md: a silently blown
+  budget reads as success.
+  **What that does and does not license.** It closes P3 — the number is no longer unknown, so a
+  future renderer can be compared against something. It does **not** on its own license WebGL: the
+  run is headless and software-rasterised in a container with no GPU, so it is a *floor*, not what a
+  desktop sees. The right next step is re-measuring on real hardware, not rewriting the renderer
+  against a container's numbers.
+  **The instrument is worth more than the number, and it caught itself lying twice.** Version one
+  reported a confident 33 / 49 / 35 fps — measured against a map that **was not moving at all**,
+  because synthetic pointer events did not drive the drag in that harness. Version two, after
+  switching to real input, still measured nothing: wheeling out to reach the `territory` zoom drove
+  the scale into `clampScale`'s floor, where 2,000 nodes render as a sub-pixel smudge and a pan
+  changes no pixels. Both were caught by a liveness gate that hashes the whole canvas before and
+  after the drag and **refuses to print timings when they are identical**. A third bug — three
+  `requestAnimationFrame` chains accumulating into one buffer after the recorder was re-installed
+  per level — showed up as p50 deltas of 0.0 ms. Without the gate, P3 would have been recorded as
+  met on fiction, which is worse than leaving it open.
+  Also recorded, twice bitten: `page.evaluate` bodies must contain no `const f = () => …`, because
+  tsx transpiles this repo with esbuild's `keepNames` and the injected `__name` helper does not
+  exist in the page.
+  **Next**: unchanged from the previous entry — generator-side dedupe of identical answer keys is
+  worth more; labels drawing underneath the overlay panels is more visible. Ahead of both, if this
+  is to be a world you walk: **re-measure `npm run raster` on real hardware**, because every renderer
+  decision after this one leans on that number.
+
+- **Generator-side dedupe — an answer key is issued once, and the deck stops asking the same
+  question twice.** M3's selector kept byte-identical answer keys apart; this removes them at the
+  source, where they are made. `ADR-0012` records it.
+  **Measured on four repos before deciding anything, and the numbers moved the decision twice.**
+  ark 40 challenges / 35 distinct keys; vite 163/122; **svelte 350/138 — 61% of the deck was
+  repeats**; vue/core 7/7. The causes were separated first, because they want opposite treatment:
+  *identical cones* (one question wearing two subjects) versus *different cones whose six-file
+  sample collided*. Every duplicate on ark, vite and vue is the first; svelte has 6 of the second in
+  23 groups. So diversifying the sampling — one of the three options on the table — could not have
+  fixed 41 of the 46 redundant challenges on ark+vite, and skipping alone would have thrown away
+  real content where the cone has room to spare. Both, then: **a colliding subject is re-asked with
+  the next disjoint window of its own ranked dependents; if the cone is entirely inside the key
+  there is no second question to ask and it is refused as `duplicateKey`.** Windows tile rather than
+  slide, because a key differing by one file is the same thing taught twice and byte-equality would
+  not even see it. Result: **no repo loses a distinct question.** ark 35 → 39 distinct, vite 122 →
+  122, svelte 138 → 153; redundant keys 5/41/212 → **0/0/0**. Re-asking fires 3 times here, 15 on
+  svelte, 0 on vite, and `report.reasked` prints the count on every run so the branch cannot quietly
+  die.
+  **I supplied Fable a wrong number and it built a whole objection on it, which is worth recording.**
+  The first reading measured *raw* cones and found svelte classes of 63 subjects sharing a
+  2,745-file cone — vast spare supply. The generator may only sample **certain** dependents, and
+  those classes have cones of **3, 19 and 115**. The review's sharpest point ("62 disjoint windows of
+  one cone rebuilds the defect one level up") was answering a repo that does not exist. `generate.ts`
+  and the ADR both carry the correction in-line rather than quietly using the right number.
+  **Three things the review got right that measurement then decided.** (1) *The representative was
+  picked on `difficulty`, which is normalised by repo-wide maxima* — so an edit anywhere could swap
+  which twin survives, and since the save is keyed by `(verb, subject)` a swap re-serves a question
+  the player already answered wearing the other name. It is now an unnormalised local count: how many
+  answer-key files are **not** direct importers, i.e. how many answers the map's hover has not already
+  given away. The flip is derivable but **not observed** — the two rules agree on ark and svelte and
+  differ on one vite group — so a test pins the rule's direction and nothing pins the choice of
+  quantity, deliberately. (2) *Refusing a duplicate costs coverage, silently.* `progress.ts` promotes
+  a node only as a subject or a picked answer, so a dropped twin in nobody else's key can never leave
+  the fog: **ark 69 → 68 provable nodes, vite 245 → 213, svelte 391 → 282**. `report.unprovableNodes`
+  now carries it and the CLI prints it. (3) *Exact dedupe fixes the metric, not the whole defect* —
+  true, and only on this repo: pairwise J ≥ 0.5 falls 14.6% → 2.6% on svelte and 1.5% → 0.45% on
+  vite, but barely moves here, 12.6% → 11.2%.
+  **So ADR-0011 decision 4 loses its first constraint and gains a better one.** `sameTruth` was a
+  byte-equality flag guarding against something the generator now cannot emit — a branch that can
+  never be taken, arriving by the usual route of fixing a cause and leaving the symptom fix behind.
+  It is replaced by a **continuous overlap term with no threshold**, which is why this is not the
+  Jaccard cutoff that ADR refused: nothing has to decide how much sharing is too much, and identical
+  keys score 1.0 as the limiting case. **Its placement was measured, not argued.** Above `difficulty`
+  it wins its own metric and loses the product — mean served overlap 0.001 on svelte, but the served
+  difficulty *falls* 39 times in 152 against 4, a tour rather than a curriculum. Below it, the
+  progression is untouched and it still fires constantly, because difficulty is rounded to two
+  decimals: it changed the actual pick 2 times in 39 here, 3 in 122 on vite, 41 in 153 on svelte.
+  **Mutation testing found four assertions that proved nothing, and two of them were mine from this
+  session.** The stability test I wrote for the representative rule passed with the rule reversed *and*
+  with it replaced by difficulty, because both twins in its fixture tied — it is now a gadget where
+  two subjects are reached by the same six files at different distances, and it catches the reversal.
+  Two selector tests picked the right challenge by **alphabetical id order** rather than by overlap,
+  passing with the whole overlap term deleted and with it collapsed back to a boolean; the fixtures
+  now name the most repetitive option so it sorts *first*. Two mutations survive and are reported
+  rather than papered over: pre-reserving every canonical key instead of only the uncontested ones
+  changes **zero** keys across three repos, and the representative quantity is unpinned as above.
+  Both say so in the code, neither has a test.
+  Also, one existing test was pinning the wrong thing: `gate.test.ts` named `a12` as its chain middle,
+  and in a chain every subject shares the same tail, so dedupe now re-asks all but three of them out
+  of existence. It asserts over *whichever* middles survive — and the synthetic chain that used to
+  generate sixteen near-identical questions now generates three with disjoint keys.
+  Verified: 354 unit + 82 atlas tests, byte-identical atlas across two runs, build clean, all hard
+  budgets inside ceiling (vite indexes in 5.2 s of 10 s), e2e clean with first paint 244 ms.
+  **Next**: the twin that gets dropped is never mentioned to the player, and `cone(A) = cone(B)` is a
+  true, derived, non-obvious fact — on vite's fixture clusters, arguably worth more than the nine
+  questions it replaces, since each of those has a depth-1 answer the map hover already gives away.
+  It would be a *shown* fact: named in the reveal, no field note, no `understood` promotion, and it is
+  the natural mitigation for the coverage cost above. Still open and more visible: node labels near
+  the top edge draw underneath the inspector and HUD panels — `placeLabels` already takes `occupied`
+  boxes, so the work is feeding it the overlay rects from `main.ts`. Ahead of both, if this is to be
+  a world you walk: **re-measure `npm run raster` on real hardware.**
+
+- **P1 closed — the prior art, four milestones late, and it says the direction is right and the
+  destination was two different things.** `docs/prior-art.md`; ADR-0009's P1 is struck through with
+  the verdict, risk #6 is closed in `NORTH-STAR.md`. Four parallel tracks: why the tools died, what
+  the empirical literature says about 3D, what Promptasy actually does as a *game*, and a Fable
+  design consult on the world. **Caveat recorded at the top of the writeup and repeated here: the
+  egress proxy blocked ACM, IEEE, ScienceDirect, Springer, arXiv, and the vendors' own sites**, so
+  almost every figure reached us through a search engine that read the page for us. The shape of the
+  literature is well attested; the decimal places need re-verifying from an unblocked machine.
+  **P1 is not triggered, and P1 was the wrong gate.** No tool in the category died of 3D
+  legibility — category (a) has no members. Sourcetrail was the flagship **2D** tool, exactly what
+  you would build if you thought 3D was the problem, and it died of maintenance burden and weak
+  demand after giving itself away because *"not all developers saw the value"*. CodeSee died of
+  business. CodeCity, Code Park, CodeMetropolis and Softwarenaut were research prototypes that
+  decayed. Gource is a viewer by choice. CodeCharta — a 3D city metaphor — is alive and commercial.
+  So the historically attested killer is **maintenance burden**, which a 3D layer multiplies. P1 is
+  replaced by **P1′** (re-measure raster on real hardware, state the CI/platform cost, weigh against
+  a *measured* comprehension gain).
+  **The finding that changes the destination: the evidence splits on viewpoint, not dimension.**
+  *Exocentric* 3D — rotating a structure you stay outside of — wins, and wins on **Ark's exact
+  task**: path tracing in node-link graphs, Ware 1996 (~55 → ~160 comprehensible nodes at fixed
+  error; **motion parallax +120% beat stereo +60%**, so no headset), replicated 2005, and a
+  **preregistered** 2023 study that beat a 2D baseline carrying edge routing *and* interactive
+  highlighting. *Egocentric* 3D — inside it — is the condition that **lost** in the two studies
+  closest to the walkable proposal: spatial memory for item locations degraded **monotonically** with
+  dimensional freedom (Cockburn & McKenzie, n=69, in *physical* environments too, so not a rendering
+  artifact), and traversing a virtual building was the worst of map / real navigation / VE. **Spin
+  the repo is supported; walk the repo is not**, and new gate **P4** says the avatar additionally
+  waits for the Trace verb, because before Trace the product asks no question walking answers better.
+  Also corrected: **CodeCity's +24%/−12% does not license 3D** — its control was Eclipse plus a
+  spreadsheet, not a 2D visualization, and the gain concentrated on *overview* tasks.
+  **The differentiator survives, and the irony is sharp.** No tool in ~30 years verified
+  comprehension as a product feature — yet Wettel, Code Park and Merino all built exactly that
+  instrument to publish a paper and then shipped the tool without it. Retrieval practice is the
+  best-evidenced thing in the document (g = 0.51 vs restudy, and **multiple-choice practice 0.70 beat
+  short-answer 0.48**, endorsing the select-a-subset format), and Karpicke & Blunt is pointed at a
+  product whose one-liner is *learn it by mapping it*: **being tested on structure beat building a
+  diagram of it, including on inference.** Transfer is **d = 0.40** — that is the number risk #1's
+  playtest must be powered for, not the headline.
+  **Three measurements this session changed decisions.** (1) **The coverage metric was wrong.**
+  "91% of svelte can never appear on a board" weights every file equally against a power law where
+  hotspots are 2–3% of code and 25–70% of defects. By *mass*: svelte's 6.9% of files carry **63.9% of
+  transitive-dependent mass** and 90.2% of the top hubs; ark's 70.8% carry **98.9%**. Two real
+  problems survive the reframing — **vite is genuinely uniform** (10.5% files, 11.1% mass, 3.9% LOC,
+  2.4% of churn hotspots), and **churn hotspots are missed on all three** (0% / 64.6% / 2.4%), which
+  is a measured argument that the git verbs cover *complementary* ground rather than more of the
+  same. (2) Every node on all three repos has churn > 0, so the git verbs' ceiling is 100% and what
+  limits them is **our own `maxCommitFiles` cap**, not the repos. (3) The phenomenon catalogue has
+  supply: cycles 0/29/6, hubs 4/41/92, barrels 2/14/3, **co-change ghosts 62/717/98**, churn hotspots
+  7/116/341, broken piers 0/305/125 — and ark having *zero* cycles is itself a teachable fact.
+  **The Promptasy read produced the sentence this project needed: its atom is a *concept*, ours is a
+  *node*.** A concept has a name, a definition, prerequisites, named misconceptions; it is collected,
+  it gates, and it **transfers to another repo**. A node has a path and a degree and can only be
+  asked about. That is why our answer keys keep colliding — Promptasy hit the identical wall at v1.0
+  (*"`assignsTask` in 26 of 26 levels"*) and fixed it with a 130-skill authored catalogue, which
+  pillar 2 forbids us copying. The available substitute is a **repo-independent catalogue of
+  structural phenomena** — hub, cycle, barrel, layering violation, god-file, co-change ghost, frozen
+  core, broken pier — ~30–60 entries, authored **once**, never per repo. It is vocabulary, not
+  content, and it attacks risk #1 head on: a codex of phenomena transfers; *"`engine.ts` has 14
+  dependents"* does not.
+  **A correction I made mid-session and should keep in the record**: I claimed the world's skeleton
+  was already in the atlas because Ark derives what Promptasy hand-places. True of the schema,
+  misleading about legibility — Promptasy is walkable because its geography is a hand-drawn tree of
+  **12** buckets with 7 bridges; we derive **82–123** regions from a real graph. I overstated it.
+  **Next**, in the order the evidence supports and not the order that sounds most exciting.
+  (a) **Rotate the 2D map between challenges** — map-derived spatial memory is *orientation-locked*
+  (Presson & Hazelrigg; Shelton & McNamara; König), our map is north-up forever, and Blast Radius
+  picks an arbitrary subject each time, so we want orientation-flexible knowledge. One session,
+  testable, no 3D, and it is the highest-leverage lowest-cost item in the whole writeup. (b) **The
+  negative witness** — a wrong pick already has a known reason class (sibling, name-alike, distance
+  n±1, co-change ghost) and we never say it; Promptasy hand-wrote 713 of these and we get ours for
+  free. (c) **The phenomenon catalogue**, which is the real fix for the repeated-question problem.
+  Then **orbit**: derived Z over frozen X,Y, quantised (freedom in the third dimension is what
+  Cockburn measured degrading), survey view one keystroke away, landmarks over terrain. The avatar
+  stays behind P1′ and P4.
+
+- **Rung 0 — `ark play <repo>`, and the player is deployable.** The gap was not playability, it was
+  hand-off: trying Ark meant cloning it, knowing an internal CLI path and starting a dev server,
+  which spends most of pillar 6's ten minutes before the map draws. Now one command indexes any repo
+  and serves it: `npm run play -- /path/to/repo`. A **`.github/workflows/pages.yml`** publishes the
+  player with Ark's own atlas — the bootstrap fixture, a public repo whose map we can vouch for —
+  and **refuses to publish an atlas with zero challenges**, because a map with no game on it should
+  fail the deploy rather than go up quietly. Nothing in the workflow can index anything else; a
+  workflow that took a repo URL would be the first crack in pillar 5.
+  **The server is 60 lines of `node:http`, not a dependency.** The player's runtime-dependency budget
+  is three and it has spent none; serving four files is not where the first one goes. It binds
+  loopback only. `vite.config.ts` gains `base: './'` so one build works both at the root (where
+  `ark play` serves it) and under `/<repo>/` (where Pages does) — verified by actually serving the
+  build under a subpath and fetching the html, the bundle and the atlas.
+  **Three real defects, all found by tests that failed before they passed.** (1) `listen(port, host,
+  cb)` registers `cb` as a **one-time 'listening' listener**, so a callback that never fired stays
+  attached: after an `EADDRINUSE` the stale one fires when the retry succeeds and resolved the
+  promise with the port we *failed* to get — `ark play` would print a url nothing was listening on.
+  (2) We bound `127.0.0.1` and printed `localhost`, which resolves to `::1` first on a dual-stack
+  machine; browsers fall back, `fetch` does not. (3) The first draft of the traversal tests asserted
+  `toBeNull()` and **three of them failed** — not because the guard was weak but because `normalize`
+  clamps `..` at an absolute path's root, so `/../../etc/passwd` lands harmlessly inside the served
+  directory. They were asserting an implementation detail; they now assert the property (never
+  resolves outside the root) plus the case the guard is genuinely load-bearing for, a **relative**
+  request path, where `join` walks straight out.
+  **And one piece of over-engineering deleted on measurement.** The port bug had two independent
+  fixes — remove the stale listener, and read the port from `server.address()` — and with both in
+  place **each mutation survived, because the other masked it**. Two defences, neither verifiable.
+  The `address()` one is kept (it is the measured value rather than the assumed one, and it is what
+  makes an OS-assigned port work at all); the listener removal is gone; both mutations are now
+  caught. Also noted in the test: `fetch` hangs against a local server inside a vitest worker while
+  working fine from a plain script, so the assertion uses `node:http` — the same module the server
+  is written in.
+  Verified: 362 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean.
+  Measured on the way past — **`honojs/hono` is the best third-party repo to play**: 425 nodes at
+  2.51 edges/node (Ark itself is 2.66), 18 unresolved imports of 1,067, and the only outside repo
+  where the generator had *more* supply than the deck cap allowed (95 `capped`). **Promptasy is a
+  poor subject and interestingly so** — it resolves perfectly, 0 unresolved, but **52 of its 70
+  askable files produce a duplicate answer key** because its graph is a flat hub-and-spoke around
+  `main.js`. Ark rewards layered codebases; a deliberately flat one has nothing to predict.
+  **Next**: rung 1 — `layout` gains a derived, quantised Z (height = transitive dependent count),
+  rendered first as contours in the existing 2D map.
+
+- **Rung 1 — the map finally says which files are load-bearing.** `AtlasNode` gains `elevation`
+  (**ATLAS_VERSION 3 → 4**), the bit length of a file's transitive dependent count: 0 dependents →
+  0, 1 → 1, 2–3 → 2, one layer up is twice as depended-upon. **ADR-0013** fixes the semantics and
+  freezes them, which is the point of writing it before any pixel: X,Y are frozen because a
+  re-layout scrambles learned maps, and *vertical* memory has the identical argument that nobody had
+  recorded. ADR-0009 lists "depth in dependency order, upstream is up" as a candidate Z — the
+  near-opposite of this one, since an entry point has maximal depth and **zero** dependents — so a
+  later rung switching quantity would invert every height the player had learned.
+  **The map was measurably silent about this.** Restricted to nodes that actually have dependents,
+  cone size correlates with what the map already draws at rho **−0.19 to 0.56 against `loc`** (the
+  disc radius) and **−0.03 to 0.77 against direct in-degree** (the label priority) — ≈ 0 on this
+  repo and on svelte. NORTH-STAR §4 says a session should end with the player able to name the
+  most-depended-upon module, and nothing on screen helped. A trap for whoever re-measures, recorded
+  in the code: over *all* nodes those correlations read 0.91–1.00 and elevation looks redundant —
+  an artifact of 50–90% of nodes tying at zero dependents *and* zero importers.
+  **The rendering is landmarks, not contours, and that was a review's correction.** Contours need a
+  *field* and an atlas has *points*: interpolating height into the space between files asserts
+  terrain where no file exists, which is inventing geography, which pillar 4 loses. A hypsometric
+  tint has no free channel either — fill already carries region hue, fog state and dimming. So
+  `fog.landmarks()` now **ranks by elevation instead of in-degree** and the picks are drawn as
+  summits: concentric rings, one per layer, visible at every zoom and drawn even on silhouettes,
+  which is risk #4's own mitigation read literally — you can always see *that* there is a mountain,
+  and its name is still withheld until you survey it.
+  **Ranking by elevation changes 8 of this repo's 13 landmarks**, and 23 of hono's 51. The reason is
+  *chokepoints* — files few things import directly but nearly everything reaches through a barrel.
+  `src/atlas/identity.ts` has **2 direct importers and 60 transitive dependents**; hono's
+  `src/utils/mime.ts` has 5 and 245; vite's `shared/constants.ts` has 10 and 178. Under in-degree
+  none of them was a landmark. They are exactly the files whose importance you cannot see by
+  looking, which is the whole product. Counted per repo: 32 / 118 / 245 / 367 chokepoints.
+  **A cap was added because a fraction does not scale**: at 12% svelte named **488** landmarks, and
+  a skyline of 488 peaks is a plateau.
+  **The schema bump is against a review's recommendation, and the reasoning is in ADR-0013 rather
+  than hidden.** Fable argued for deriving elevation in the player — it is a pure function of
+  `edges`, integer-exact on every engine so ADR-0006's float argument does not apply, ~7 ms — and
+  quoted ADR-0009's own warning: *"do not bump early. Carrying a dead Z coordinate through several
+  milestones with no renderer to use it is worse than the change itself."* Overridden for three
+  reasons, the first of which is a bet: the renderer arrives in the same session rather than several
+  milestones later; in the atlas it falls under `test:determinism` and in the player it would be
+  covered by nothing; and the atlas is the contract. **If rung 2 does not land, this was wrong and
+  the next session should revert it.**
+  **ADR-0009 gains a dated owner's note**, because the rung ladder and the ADR disagreed and the ADR
+  says a session may propose a gate is met but never decide it. It records what the owner authorised
+  (rungs 0–2), what it costs (rung 2 lands ahead of P2's M4, so the first walkthrough is of a sparse
+  world — a stated cost, not an oversight), what stays deferred (**P1′** — raster is still a headless
+  floor, so no interaction claim may be made), and what stays shut: **P4 stands, the walkable avatar
+  waits for Trace (M6)**, on evidence rather than caution.
+  Liveness, per the landmine about measuring whether new machinery fires: the HUD reports
+  `peaksDrawn` and the e2e **fails if it is zero** — a "how many X" number needs a gate proving X
+  happened. Three mutations caught on `computeElevations`, one of them by non-termination (deleting
+  the visited check hangs on a cycle, which is its own kind of caught). Two caught on the landmark
+  ranking. Verified: 374 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling
+  (1,064 B/file, 261 ms), e2e clean with 13 peaks drawn and `src/atlas/schema.ts` the tallest.
+  **Next**: rung 2 — extruded scene, orbit camera. The measured 3D win is exocentric and this is it.
+
+- **Rung 2 — the world stands up, and it turns.** `o` tips the map into an orbit view: every file is
+  a column standing on its own 2D footing, its height ADR-0013's `elevation`, wires running roof to
+  roof, and dragging turns the whole world. `o` again returns to the flat map. **Zero runtime
+  dependencies still.**
+  **The shape of this rung is the evidence, not a compromise.** `docs/prior-art.md` §2 found that the
+  literature splits on *viewpoint*, not on dimension: every result where 3D beat 2D came from motion
+  parallax over a structure the viewer stayed **outside** of — and the strongest is about this
+  product's exact task, path tracing in a node-link graph (~55 comprehensible nodes in 2D against
+  ~160 with parallax, replicated 2005, **preregistered** 2023 against a 2D baseline that had edge
+  routing *and* interactive highlighting). Parallax beat stereo in the study that separated them,
+  which is why this needs a mouse and not a headset. Every result where 3D *lost* put the viewer
+  inside. So orbiting is not a stepping stone toward the real thing — on the evidence it **is** the
+  intervention, and ADR-0009's P4 keeps the avatar behind the Trace verb.
+  **Straight down is the flat map, to the pixel** — asserted, not promised. ADR-0009's invariant is
+  that a third dimension preserves today's X,Y, and the strongest form of that is making the flat map
+  a *position of this camera*: at `pitch = π/2` the projection reduces to `worldToScreen` exactly,
+  and a unit test pins the equality. The overview is one keystroke away, which is D1.
+  **Canvas, not WebGL, and that is a measured position rather than thrift.** Columns standing on a
+  plane never interpenetrate, so painter's order is *exact* — a sort and some strokes, the work the
+  flat map already does. WebGL earns its place when per-frame reprojection stops fitting in a frame;
+  ADR-0009's P1′ says measure on real hardware before buying it, and that measurement still has not
+  happened. Runtime trigonometry is fine here and would not be in the indexer: ADR-0006 forbids
+  transcendentals in **layout** because the atlas must be byte-identical across machines, and nothing
+  in this view reaches the atlas.
+  **Liveness is a canvas hash, because this is exactly where `npm run raster` lied twice.** The e2e
+  hashes the pixels, presses `o`, hashes again, drags in eight small steps and hashes a third time,
+  and **fails if any pair is identical** — a map that did not tip, or a drag that turned nothing,
+  both used to look like success. One console warning is now suppressed and the suppression says
+  why: `getImageData` makes Chromium advise `willReadFrequently`, which is advice aimed at the test,
+  and setting that flag on the real canvas would move it off the GPU and change the very rendering
+  the gate exists to measure.
+  **Two tests were wrong before they were right.** A mutation run found nothing checked that pitch
+  *foreshortens* — the overhead test passes either way, because `sin(π/2)` is 1 — so a scene with no
+  tilt at all would have shipped green. And the "camera centre stays fixed" test failed the moment
+  headroom was added, correctly: it was pinning where the camera points as well as what turning does
+  to it, when the real property is **independence from yaw**. Headroom itself is proportional to
+  `cos(pitch)`, the same factor the lift uses, so it vanishes at overhead and the flat-map equality
+  survives — mutating it to a constant breaks two tests.
+  Verified: 384 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean with
+  the orbit gate green. Known rough edges, stated rather than hidden: the scene is not re-fitted on
+  entering orbit so a steep tilt can still crowd the top edge; only peaks are labelled in orbit (by
+  design — `docs/prior-art.md` §4.3.5); and there is no frustum cull, which is the first thing to add
+  when a raster run says so.
+  **Next**: rung 3 is the walk and **it is gated** — ADR-0009's P4 holds it behind the Trace verb
+  (M6), on evidence rather than caution. The honest next rungs are the ones that make a world worth
+  moving through: **M4's git verbs** (measured to reach the churn hotspots the import graph misses
+  entirely — 0% / 64.6% / 2.4% of the top 2%), the **phenomenon catalogue**, and **map rotation
+  between challenges**, which `docs/prior-art.md` §4.4 calls the highest-leverage lowest-cost item in
+  the whole writeup. Also unresolved and now more visible: `npm run raster` on real hardware.
+
+- **Rungs 0–2 reviewed after shipping, and one of the findings was a defect that corrupted saved
+  state.** A Fable review of the merged code, not the plan. Five things it found, ranked as it
+  ranked them.
+  **1. Every interaction in the orbit view targeted the wrong file — and persisted it.** Hover and
+  click still ran the *flat* inverse (`screenToWorld` → `pick`) while the screen showed rotated,
+  foreshortened, lifted positions. So the inspector described one file while the cursor sat on
+  another, and clicking wrote **that wrong file** into the player's saved `surveyed` set: a stored
+  falsehood, keyed to the repo, surviving reload, in the one structure whose entire claim is that it
+  records only what you actually did. Nothing tested a click in orbit — the e2e drags past the
+  threshold, so `endDrag` bailed before picking, and the pixel hash was happy. **`pickColumn` hit-
+  tests the column *tops* in screen space** rather than inverting the projection, because the top
+  disc is what a player can see and aim at and an inverse would have to choose a height to invert
+  *at* — the ground gives one answer, the roof another. Nearest wins a tie, which is painter's order
+  read backwards. Both pointer paths now go through one `pickAt`, so they cannot disagree about
+  which projection is in force, and wheel-zoom anchors on the viewport centre in orbit rather than
+  sliding the map out from under the cursor.
+  **2. Binding loopback does not stop DNS rebinding.** `serve.ts` was open to it: a page you are
+  browsing points `evil.example` at 127.0.0.1 and reads `atlas.json` same-origin, and the port is a
+  sequential probe from 4180. The atlas of a private repo is paths, export names, commit subjects
+  and co-change pairs — derived-from-source data, which is exactly what pillar 5 says never leaves
+  the machine. This is the hole that bit Vite and webpack-dev-server. `isLocalHost` now checks the
+  name the client used and returns **421** otherwise, with cases for the subdomain bypass
+  (`127.0.0.1.evil.example`), the wildcard-DNS bypass (`a.127.0.0.1.nip.io`), the IPv4-mapped IPv6
+  literal, and a right name on a wrong port.
+  **3. Three assertions proved nothing, and one was mutation-verified as dead by the reviewer.**
+  The `cos(pitch)` factor on the lift was untested: `OVERHEAD` sets `rise: 0`, so *"height
+  contributes nothing from overhead, however tall"* was testing `0 × anything`, and deleting the
+  factor passed all ten orbit tests. The state a player actually reaches — pitch dragged to the
+  clamp with `rise` still 26 — was covered by nothing. The e2e's "tallest" check computed a filename
+  and then asserted the canvas was visible. And `serve.test.ts`'s *"binds loopback only"* checked a
+  URL string the code fabricates, so binding every interface passed it; it now reads
+  `server.address().address`. All three now fail when the thing they name is broken.
+  **4. `peaksDrawn` was counting in a view that draws no peaks.** The orbit incremented it per
+  peak-set member while drawing nothing peak-specific — a "how many X" with no gate that X happened,
+  which is the exact landmine the field was added to satisfy. It now reports summits actually
+  *named*, which is the only thing that view can honestly claim.
+  **5. The rendering contradicted the evidence it cites.** Wires were drawn under every column, so a
+  wire between the two nearest ones vanished behind any far column overlapping it — an occlusion cue
+  fighting the parallax cue, which is worse than no cue. The **traced radius now draws over
+  everything**, unoccludable, because path tracing along edges is the measured win this whole view
+  exists for. And the stalk — whose *length* is the only claim the view makes — had 0.55 alpha at
+  half width under an opaque LOC-sized disc, so the salient channel described the wrong quantity and
+  the scene read as "the flat map with faint sticks". Stalks are now opaque and full width.
+  **Two documents were lying.** `docs/atlas-format.md` still said "Schema version: 3" in its
+  headline, `"version": 3` in its example and *"`version` is `2`"* in §4, against `ATLAS_VERSION = 4`
+  — and one of those was already stale before tonight. And **ADR-0009's status line still read
+  "blocked, and not scheduled… cannot be earlier than after M5"** two hundred lines above a note
+  opening rungs 0–2: the "two paragraphs disagree" failure the ADR names in its own rejected-
+  alternatives section.
+  **The S1 correction, which is the one worth reading.** My owner's note claimed *"the ship criterion
+  is untouched"*. It was not. S1 says a written experiment design is committed **before any
+  third-person code merges**, and the orbit view merged without one. That is now recorded as a
+  **breach, not a waiver** — S1's own wording is that it is failed rather than waived — with the
+  consequence stated: the orbit view **may not be described as having met S1 anywhere**, it is
+  unmeasured, and the experiment design is a blocking precondition on the next rung of this
+  direction. The review found this; the session that caused it did not.
+  Also fixed: `o` was undiscoverable, so the HUD now prints `f fit · o orbit · enter ask`. Verified:
+  394 unit + 82 atlas tests, byte-identical atlas, budgets inside ceiling, e2e clean. Every fix
+  above was mutation-checked, and one new test was rewritten when a mutation survived it — the
+  overlap case hedged with a conditional instead of *constructing* an overlap, so it asserted
+  nothing; it now solves `Δy = Δelevation · rise / tan(pitch)` and checks the premise first.
+  **Still open and now written down**: `ark play` resolves `dist/player` against the CWD, so it works
+  only from an Ark checkout; a private repo's atlas is left at rest in `dist/player/` until the next
+  build; `computeElevations` is O(N·E) and only ever measured on repos of this shape; and elevation
+  leaks answer-key *size buckets* from first paint on low-elevation subjects, which ADR-0013 recorded
+  generically but not in that sharp form.
+
+- **The orbit costs 1.31× the flat map, measured.** `npm run raster` gains a fourth pass: the orbit
+  view at the same district zoom the third pass just measured, on the same synthetic 2,000-node
+  scene, back to back on the same machine. **The ratio is the part that survives a software
+  rasteriser** — the absolute figures remain a floor and ADR-0009's P1′ still says they may not
+  decide anything, but "orbit costs N× flat" is a property of the draw work rather than of the GPU.
+  At 1.31× the orbit is not a performance cliff: whatever real hardware does for the flat map, it
+  does within a third of that for the orbit, so **nothing planned needs a frustum cull or WebGL**,
+  and P1′'s real-hardware measurement gates a renderer *change* rather than any next rung. The flat
+  map itself measured 45/49/50 fps at p95, unchanged by rung 1's summit rings — a regression check
+  worth having taken.

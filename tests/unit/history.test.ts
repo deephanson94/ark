@@ -21,6 +21,7 @@ function history(commits: readonly GitCommit[]): GitHistory {
     present: true,
     head: commits[0]?.sha ?? null,
     headDate: commits[0]?.date ?? null,
+    root: commits[commits.length - 1]?.sha ?? null,
     commits,
     totalCommits: commits.length,
   };

@@ -38,6 +38,8 @@ export interface SceneNode {
   readonly regionIndex: number;
   /** In-degree. Used to rank which labels are worth the space. */
   readonly dependentCount: number;
+  /** ADR-0013: bit length of the transitive dependent count. How tall it is. */
+  readonly elevation: number;
 }
 
 export interface SceneEdge {
@@ -94,6 +96,7 @@ export function prepare(atlas: Atlas): Scene {
     radius: radiusFor(node.loc),
     regionIndex: regionIndexById.get(node.region) ?? 0,
     dependentCount: (graph.in[ref] ?? []).length,
+    elevation: node.elevation,
   }));
 
   const edges: SceneEdge[] = atlas.edges.map((edge: AtlasEdge) => ({

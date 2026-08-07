@@ -101,6 +101,12 @@ body {
   opacity: 0.72;
 }
 
+.hud-keys {
+  margin-top: 6px;
+  opacity: 0.45;
+  letter-spacing: 0.02em;
+}
+
 /* ---- legend ------------------------------------------------------------ */
 
 .legend {
@@ -540,4 +546,154 @@ body {
   line-height: 1.6;
   white-space: pre-wrap;
   color: #ffc9c9;
+}
+
+/* ---- the progression affordance ---------------------------------------- */
+
+.guide {
+  /* Bottom-right: the inspector owns the top-right column and can grow to the
+     full viewport height, so anything sharing that corner eventually collides
+     with it. */
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 268px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+}
+
+.guide-action {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 214, 130, 0.42);
+  border-radius: 6px;
+  background: rgba(255, 214, 130, 0.12);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.guide-action:hover:not(:disabled) {
+  background: rgba(255, 214, 130, 0.2);
+}
+
+.guide-action:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.guide-caption {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* ---- field notes -------------------------------------------------------- */
+
+.hud-notes {
+  /* The HUD is inert so it never swallows a drag; this control opts back in. */
+  pointer-events: auto;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hud-notes:hover {
+  border-color: rgba(255, 214, 130, 0.42);
+  color: var(--accent);
+}
+
+.notes-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 12, 0.55);
+  backdrop-filter: blur(1.5px);
+  z-index: 10;
+}
+
+.notes-scrim[hidden] {
+  display: none;
+}
+
+.notes-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: min(84vh, 720px);
+  padding: 16px 20px 18px;
+  border: 1px solid rgba(140, 165, 200, 0.28);
+  border-radius: 12px;
+  background: rgba(14, 19, 28, 0.97);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.notes-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notes-title {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+
+.notes-empty {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.notes-empty[hidden] {
+  display: none;
+}
+
+.notes-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.field-note {
+  padding: 10px 0;
+  border-top: 1px solid rgba(120, 140, 170, 0.12);
+}
+
+.field-note-claim {
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.field-note-revealed {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }

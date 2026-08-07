@@ -7,8 +7,8 @@
  * are written against, and printing them is how a regression gets noticed.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -16,25 +16,40 @@ import { serializeAtlas } from '../atlas/index.js';
 import type { Atlas } from '../atlas/index.js';
 import type { GenerationResult } from '../verbs/blastRadius/index.js';
 import { buildIndex, indexOptions } from './build.js';
+import { serveDirectory } from './serve.js';
+
+/**
+ * `index` writes an atlas and stops. `play` writes one into the built player
+ * and serves it, which is the whole command a person needs.
+ */
+export type Command = 'index' | 'play';
 
 interface Args {
+  readonly command: Command;
   readonly root: string;
   readonly out: string;
   readonly quiet: boolean;
 }
 
-const USAGE = `ark — map a repo into an atlas
+const USAGE = `ark — map a repo into an atlas, and play it
 
 usage:
-  ark index <path> [--out <file>] [--quiet]
+  ark play  <path>                     index a repo and open it in a browser
+  ark index <path> [--out <file>]      write an atlas and stop
 
-  <path>          repo to index (default: the current directory)
+  <path>          repo to work on (default: the current directory)
   --out, -o       where to write the atlas (default: <path>/atlas.json)
   --quiet, -q     print nothing but errors
+
+"play" needs the player built once: npm run build
 `;
 
+/** Where `npm run build` puts the player. `play` serves this directory. */
+const PLAYER_DIST = 'dist/player';
+
 export function parseArgs(argv: readonly string[]): Args | null {
-  const rest = argv[0] === 'index' ? argv.slice(1) : [...argv];
+  const command: Command = argv[0] === 'play' ? 'play' : 'index';
+  const rest = argv[0] === 'index' || argv[0] === 'play' ? argv.slice(1) : [...argv];
   let root: string | null = null;
   let out: string | null = null;
   let quiet = false;
@@ -55,7 +70,10 @@ export function parseArgs(argv: readonly string[]): Args | null {
   }
 
   const rootPath = resolve(root ?? '.');
-  return { root: rootPath, out: resolve(out ?? `${rootPath}/atlas.json`), quiet };
+  // `play` writes the atlas where the built player will look for it, so the
+  // person running it never has to know that `atlas.json` is the seam.
+  const fallback = command === 'play' ? join(PLAYER_DIST, 'atlas.json') : `${rootPath}/atlas.json`;
+  return { command, root: rootPath, out: resolve(out ?? fallback), quiet };
 }
 
 function summarise(
@@ -83,6 +101,17 @@ function summarise(
     if (reason === 'noDependents') continue; // not a refusal — nothing imports it
     lines.push(`declined    ${count} subject(s): ${reason}`);
   }
+  if (generation.report.reasked > 0) {
+    lines.push(
+      `re-asked    ${generation.report.reasked} subject(s) with a second, disjoint answer key`,
+    );
+  }
+  // The cost of every refusal above, in the currency the player feels: how much
+  // of the map can never come out of the fog, because `progress.ts` promotes a
+  // node only as a subject or as a picked answer.
+  lines.push(
+    `unprovable  ${generation.report.unprovableNodes} of ${atlas.nodes.length} node(s) no question can reveal`,
+  );
   const mix = generation.report.distractorMix
     .filter(([, count]) => count > 0)
     .map(([strategy, count]) => `${strategy} ${count}`)
@@ -118,6 +147,46 @@ export async function main(argv: readonly string[]): Promise<number> {
     );
     process.stdout.write(`written     ${args.out}\n`);
   }
+  if (args.command === 'index') return 0;
+
+  // `play`: serve the built player next to the atlas we just wrote.
+  //
+  // The build is *not* run from here on purpose. Shelling out to vite would
+  // make the indexer depend on the player's toolchain, and the two halves of
+  // this product are deliberately independent (NORTH-STAR §7) — the player is a
+  // pure function of the atlas and the indexer must never need to know how it
+  // is bundled. So this checks, and says exactly what to run.
+  const distributionRoot = dirname(args.out);
+  try {
+    await access(join(distributionRoot, 'index.html'));
+  } catch {
+    process.stderr.write(
+      `the player is not built yet — run \`npm run build\` once, then \`ark play\` again\n` +
+        `  (looked for ${join(distributionRoot, 'index.html')})\n`,
+    );
+    return 1;
+  }
+
+  const served = await serveDirectory(distributionRoot);
+  process.stdout.write(`\nplaying ${atlas.repo.name} — ${served.url}\n`);
+  if (atlas.challenges.length === 0) {
+    // Better to say it than to hand someone a map with no game on it. On a
+    // Python or Go repo this is the expected outcome until M5: the scanner is
+    // ES-modules only (§7.2), so there are no edges and therefore no radius.
+    process.stderr.write(
+      `note: this repo produced no challenges. If it is not JavaScript or\n` +
+        `TypeScript, that is expected — the v1 scanner reads ES modules only.\n`,
+    );
+  }
+  process.stdout.write(`press ctrl-c to stop\n`);
+  // Resolve only when the process is interrupted, so the server stays up.
+  await new Promise<void>((stop) => {
+    const shutdown = (): void => {
+      void served.close().then(stop);
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
   return 0;
 }
 

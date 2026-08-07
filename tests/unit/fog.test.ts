@@ -1,63 +1,68 @@
+/**
+ * The fog vocabulary.
+ *
+ * `progress.ts` derives a `Fog` from the player's record and owns every rule
+ * about *how* a node gets promoted; this file covers what the words mean once
+ * it has — which visibility a node reads as, and that coverage counts what was
+ * proved rather than what was looked at.
+ */
+
 import { describe, expect, it } from 'vitest';
 
-import { CLEAR_FOG, coverage, landmarks, survey, understand, visibilityOf } from '../../src/player/fog.js';
+import type { Fog } from '../../src/player/fog.js';
+import { coverage, landmarks, visibilityOf } from '../../src/player/fog.js';
 
 const A = 'n:aaaaaaaaaaaa';
 const B = 'n:bbbbbbbbbbbb';
 const C = 'n:cccccccccccc';
 
+const NOTHING: Fog = { surveyed: new Set(), understood: new Set() };
+const fogOf = (surveyed: string[], understood: string[] = []): Fog => ({
+  surveyed: new Set([...surveyed, ...understood]),
+  understood: new Set(understood),
+});
+
 describe('fog', () => {
   it('starts with nothing revealed', () => {
-    expect(visibilityOf(CLEAR_FOG, A)).toBe('silhouette');
-    expect(coverage(CLEAR_FOG, 10).fraction).toBe(0);
+    expect(visibilityOf(NOTHING, A)).toBe('silhouette');
+    expect(coverage(NOTHING, 10).fraction).toBe(0);
   });
 
   it('surveying reveals identity but not understanding', () => {
-    const fog = survey(CLEAR_FOG, A);
+    const fog = fogOf([A]);
     expect(visibilityOf(fog, A)).toBe('surveyed');
     // The distinction that is the whole product: looking is not knowing.
     expect(coverage(fog, 10).understood).toBe(0);
     expect(coverage(fog, 10).fraction).toBe(0);
   });
 
-  it('understanding implies having surveyed', () => {
-    const fog = understand(CLEAR_FOG, [A]);
+  it('understanding outranks surveying', () => {
+    const fog = fogOf([], [A]);
     expect(visibilityOf(fog, A)).toBe('understood');
     expect(fog.surveyed.has(A)).toBe(true);
   });
 
   it('measures coverage by what was understood, not what was looked at', () => {
-    const fog = understand(survey(survey(CLEAR_FOG, A), B), [C]);
-    const seen = coverage(fog, 4);
+    const seen = coverage(fogOf([A, B], [C]), 4);
     expect(seen.surveyed).toBe(3);
     expect(seen.understood).toBe(1);
     expect(seen.fraction).toBe(0.25);
   });
 
-  it('does not mutate the fog it was given', () => {
-    const before = survey(CLEAR_FOG, A);
-    const after = survey(before, B);
-    expect(before.surveyed.has(B)).toBe(false);
-    expect(after.surveyed.has(B)).toBe(true);
-  });
-
-  it('returns the same object when nothing changes', () => {
-    const fog = survey(CLEAR_FOG, A);
-    expect(survey(fog, A)).toBe(fog);
-  });
-
   it('handles an empty atlas without dividing by zero', () => {
-    expect(coverage(CLEAR_FOG, 0).fraction).toBe(0);
+    expect(coverage(NOTHING, 0).fraction).toBe(0);
   });
 });
 
 describe('landmarks', () => {
+  // `elevation` is the bit length of the *transitive* cone (ADR-0013);
+  // `dependentCount` is the direct in-degree.
   const nodes = [
-    { id: 'n:000000000001', dependentCount: 0, radius: 20 },
-    { id: 'n:000000000002', dependentCount: 9, radius: 4 },
-    { id: 'n:000000000003', dependentCount: 3, radius: 8 },
-    { id: 'n:000000000004', dependentCount: 0, radius: 3 },
-    { id: 'n:000000000005', dependentCount: 5, radius: 5 },
+    { id: 'n:000000000001', elevation: 0, dependentCount: 0, radius: 20 },
+    { id: 'n:000000000002', elevation: 4, dependentCount: 9, radius: 4 },
+    { id: 'n:000000000003', elevation: 2, dependentCount: 3, radius: 8 },
+    { id: 'n:000000000004', elevation: 0, dependentCount: 0, radius: 3 },
+    { id: 'n:000000000005', elevation: 3, dependentCount: 5, radius: 5 },
   ];
 
   it('picks the most depended-upon files', () => {
@@ -65,11 +70,39 @@ describe('landmarks', () => {
     expect(landmarks(nodes, 0.6, 1)).toEqual(['n:000000000002', 'n:000000000005', 'n:000000000003']);
   });
 
-  it('breaks ties by size, then id, so the choice is the same everywhere', () => {
+  it('ranks a chokepoint above a file with more direct importers', () => {
+    // The reason ranking moved from in-degree to elevation, as a fixture. The
+    // chokepoint has **one** direct importer and reaches sixty files through a
+    // barrel; the popular file is imported by twenty and reaches nobody else.
+    // In-degree ranks them backwards, and it is the chokepoint a newcomer needs
+    // named — its importance is precisely what looking cannot tell you. Real
+    // instance: `src/atlas/identity.ts`, 2 direct importers, 60 dependents.
+    const pair = [
+      { id: 'n:0000000000aa', elevation: 6, dependentCount: 1, radius: 4 },
+      { id: 'n:0000000000bb', elevation: 5, dependentCount: 20, radius: 9 },
+    ];
+    expect(landmarks(pair, 1, 1)).toEqual(['n:0000000000aa', 'n:0000000000bb']);
+  });
+
+  it('caps the count, because a skyline of 488 peaks is a plateau', () => {
+    // A fraction does not scale: at 12% svelte names 488 landmarks. The
+    // prior-art writeup's §4.3.5 is that a few globally visible landmarks beat
+    // any amount of terrain, so the count is capped rather than grown.
+    const many = Array.from({ length: 400 }, (_, i) => ({
+      id: `n:${i.toString(16).padStart(12, '0')}`,
+      elevation: i % 7,
+      dependentCount: i,
+      radius: 5,
+    }));
+    expect(landmarks(many, 0.12, 3)).toHaveLength(24);
+    expect(landmarks(many, 0.12, 3, 5)).toHaveLength(5);
+  });
+
+  it('breaks ties by in-degree, then size, then id, so the choice is the same everywhere', () => {
     const tied = [
-      { id: 'n:00000000000b', dependentCount: 2, radius: 5 },
-      { id: 'n:00000000000a', dependentCount: 2, radius: 5 },
-      { id: 'n:00000000000c', dependentCount: 2, radius: 9 },
+      { id: 'n:00000000000b', elevation: 2, dependentCount: 2, radius: 5 },
+      { id: 'n:00000000000a', elevation: 2, dependentCount: 2, radius: 5 },
+      { id: 'n:00000000000c', elevation: 2, dependentCount: 2, radius: 9 },
     ];
     expect(landmarks(tied, 1, 1)).toEqual(['n:00000000000c', 'n:00000000000a', 'n:00000000000b']);
   });

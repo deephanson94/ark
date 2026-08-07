@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 2**
+**Schema version: 4**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 2,
+  "version": 4,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -72,6 +72,7 @@ to mean something without a lookup table.
 | `name` | `string` | `package.json` name, falling back to the directory name. |
 | `head` | `string \| null` | Full 40-char sha. `null` when the repo has no commits, or is not a repo. |
 | `headDate` | `"YYYY-MM-DD" \| null` | HEAD's commit date. Null exactly when `head` is null. |
+| `root` | `string \| null` | Full 40-char sha of the repo's **first** commit. See below. |
 | `languages` | `Lang[]` | Sorted, unique. Every node's `lang` appears here. |
 | `fileCount` | `number` | Equals `nodes.length`. Redundant on purpose — it is a cheap integrity check. |
 | `tool` | `string` | The indexer build, e.g. `ark@0.1.0`. |
@@ -80,6 +81,28 @@ There is no `indexedAt`. See [ADR-0001](decisions/0001-no-wall-clock-time-in-the
 
 **The indexer reads the working tree, not `HEAD`.** `repo.head` names the commit the working tree
 is based on and nothing stronger — an atlas can describe a dirty checkout, and usually will.
+
+#### `root` is identity; `head` is staleness
+
+They answer different questions and must not be collapsed into one. `head` tells you *whether this
+atlas is current*: it is stale exactly when it is not the repo's HEAD. `root` tells you *which repo
+this is*, and the player keys saved progress on it — a HEAD-keyed save would be wiped by every
+reindex, which is the opposite of what [ADR-0002](decisions/0002-node-identity-survives-renames.md)
+and NORTH-STAR §7 exist to protect.
+
+It is the first commit on HEAD's **first-parent chain**, not simply a parentless commit. A subtree
+merge or an imported history adds a second root, so "any commit with no parents" is not a stable
+answer; the first-parent walk is linear and has exactly one.
+
+`root` is `null` in two cases, and `null` is not an error — the player falls back to a weaker,
+name-derived key:
+
+- the repo has no commits, or is not a repo (`head` is null too);
+- the clone is **shallow**, where the oldest reachable commit is a graft boundary that looks
+  parentless but moves on every `fetch --deepen`. Here `head` is set and `root` is not, so the two
+  are *not* null together.
+
+Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md).
 
 ### 3.2 `nodes`
 
@@ -95,6 +118,7 @@ is based on and nothing stronger — an atlas can describe a dirty checkout, and
 | `loc` | `number` | Physical lines. |
 | `bytes` | `number` | File size. |
 | `layout` | `[number, number]` | Precomputed, deterministic, 2dp. |
+| `elevation` | `number` | Layer index — how load-bearing the file is. See below. |
 | `region` | `string` | A `regions[].id`. |
 | `exports` | `string[]` | Sorted. `"default"` for a default export, `"*"` for `export * from`. |
 | `unresolved` | `string[]` | Sorted. Import specifiers we could **not** pin down. Drives guardrail 4. |
@@ -102,6 +126,31 @@ is based on and nothing stronger — an atlas can describe a dirty checkout, and
 | `churn` | `number` | Commits touching this file, following renames. `0` without history. |
 | `authors` | `number` | Distinct commit authors. |
 | `firstSeen`, `lastSeen` | `"YYYY-MM-DD" \| null` | Null without history. |
+
+#### `elevation` — the third coordinate
+
+**The bit length of the file's transitive dependent count.** 0 dependents → `0`, 1 → `1`, 2–3 → `2`,
+4–7 → `3`, and so on. One layer up means twice as depended-upon, and a layer number means the same
+thing in every repo — layer 8 is 128–255 dependents, here and anywhere.
+
+It is **not** a third entry in `layout`, deliberately. `layout` is the force simulation's output: a
+seeded, iterative, whole-graph computation whose stability rests on [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+`elevation` is a pure per-node graph query that depends on the node's own cone and nothing else in
+the repo — different provenance, different stability. It is an *attribute*, like `loc` and `churn`,
+and a renderer decides which visual channel it drives. That is what
+[ADR-0009](decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)'s "additive,
+preserving today's X,Y" asks for: adding it changes no existing coordinate.
+
+Quantised rather than continuous because spatial memory for item locations degrades as freedom in a
+third dimension grows, and quantised **by bit length** rather than by rank or percentile because a
+rank is a function of every *other* node's cone — one new file would restack the landscape, and the
+save is keyed to the repo rather than to the commit ([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)).
+Every edge kind counts, including `type` and `probable`: this is the shape of the place, not an
+answer key, and guardrail 4 governs what may be *asked*, never what may be *drawn*. Reasoning and
+measurements: [`docs/prior-art.md`](prior-art.md) §4.3, `src/indexer/elevation.ts`.
+
+The distribution is lumpy, and that is terrain rather than a defect — 56% of this repo, 74% of
+`vite` and 90% of `svelte` sit at layer 0 because nothing imports them.
 
 #### Identity across renames
 
@@ -246,6 +295,12 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 `truth` sits here in plaintext, deliberately. This is a learning tool, not an exam; anyone who opens
 devtools to read the answer has opted out of the product. Do not obfuscate it.
 
+**`id` is stable within an atlas and nowhere else.** It is a convenience for ordering and lookup, not
+an identity that survives a reindex — the generator may renumber freely when the deck changes. So
+nothing outside the atlas may key on it: the player's save records a pass by `(verb, subject)`,
+because `subject` is a `NodeId` and *that* is stable by construction
+([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)).
+
 A challenge should also not be passable by selecting everything. That requires
 `|candidates| > 3·|truth|`, which follows from the 0.5 pass threshold —
 [ADR-0007](decisions/0007-pass-threshold-and-the-three-to-one-choice-set.md). It is checked by
@@ -282,9 +337,22 @@ every candidate in the subject's directory", or "select every candidate sharing 
 is pillar 3's *"answerable by Ctrl+F"* made computable, scored with the same `scoreSet` the player is
 graded by. [ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
 
-> **Status at M2**: `blastRadius` generates. On this repo that is one challenge per subject with a
-> non-empty radius. The CLI prints how many it declined and why, and how much of each choice set
-> came from a principled distractor strategy rather than from `distant` padding.
+**No two `blastRadius` challenges in one atlas have the same `truth` set.** Subjects whose certain
+dependent sets are equal would otherwise produce byte-identical answer keys — one question wearing
+two subjects, and 61% of `sveltejs/svelte`'s deck before this rule. A colliding subject is re-asked
+with a disjoint window of its own dependents where the cone allows one, and refused as
+`duplicateKey` where it does not.
+[ADR-0012](decisions/0012-an-answer-key-is-issued-once.md).
+
+This is a **within-verb** property, deliberately not a schema rule the validator enforces: two
+different verbs may honestly share an answer set, because they are asking different questions about
+the same files.
+
+> **Status at M3**: `blastRadius` generates. On this repo that is one challenge per subject with a
+> non-empty radius, minus what the guardrails refuse. The CLI prints how many it declined and why,
+> how many subjects it re-asked with a second key, how much of each choice set came from a
+> principled distractor strategy rather than from `distant` padding, and **how many nodes no
+> question can ever reveal** — the coverage a refusal costs, which a deck count alone hides.
 
 ### 3.7 `report`
 
@@ -296,12 +364,12 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `2`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `4`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 a v2 atlas into a v1 build fails with
 
 ```
-atlas.version: this build reads atlas v1, got v2 — reindex required
+atlas.version: this build reads atlas v4, got v3 — reindex required
 ```
 
 The player must never guess at a shape.

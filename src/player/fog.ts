@@ -11,9 +11,13 @@
  *               against ground truth.
  *
  * That distinction *is* the product (§9: field notes accumulate facts you have
- * proven you know, not facts you were shown). At M1 nothing can move a node
- * into `understood`, because challenge generation lands at M2 — so the counter
- * reads `0 understood` and that is the truthful number, not a stub.
+ * proven you know, not facts you were shown).
+ *
+ * **This module owns the vocabulary, not the state.** A `Fog` is derived from
+ * the player's stored record by `progress.ts` — there is one source of truth
+ * and it is the record, because `understood` stored alongside the passes that
+ * justify it would be two representations of one fact, and after a reindex they
+ * would disagree (ADR-0011).
  *
  * Risk #4 says fog must never read as "the tool is hiding things from me", so
  * an unsurveyed node is still drawn — position, size and region shape are all
@@ -28,27 +32,6 @@ export type Visibility = 'silhouette' | 'surveyed' | 'understood';
 export interface Fog {
   readonly surveyed: ReadonlySet<NodeId>;
   readonly understood: ReadonlySet<NodeId>;
-}
-
-export const CLEAR_FOG: Fog = { surveyed: new Set(), understood: new Set() };
-
-export function survey(fog: Fog, id: NodeId): Fog {
-  if (fog.surveyed.has(id)) return fog;
-  return { surveyed: new Set([...fog.surveyed, id]), understood: fog.understood };
-}
-
-/**
- * Promote nodes the player has proven they understand. Understanding implies
- * having surveyed — you cannot know a file you have never seen named.
- */
-export function understand(fog: Fog, ids: Iterable<NodeId>): Fog {
-  const understood = new Set(fog.understood);
-  const surveyed = new Set(fog.surveyed);
-  for (const id of ids) {
-    understood.add(id);
-    surveyed.add(id);
-  }
-  return { surveyed, understood };
 }
 
 export function visibilityOf(fog: Fog, id: NodeId): Visibility {
@@ -80,18 +63,44 @@ export interface Coverage {
  * called. It tells you nothing about what depends on it — which is the question
  * the game is going to ask, and which still has to be earned.
  *
- * Ranked by in-degree, then size, then id, so the choice is derived from the
- * graph and identical on every machine.
+ * **Ranked by `elevation` first** — ADR-0013's transitive dependent count —
+ * then by in-degree, size and id, so the choice is derived from the graph and
+ * identical on every machine.
+ *
+ * Elevation rather than in-degree, because in-degree is a proxy and it is wrong
+ * in exactly the interesting places. A *chokepoint* is a file few things import
+ * directly but nearly everything reaches through a barrel: `src/atlas/identity.ts`
+ * has **2 direct importers and 60 transitive dependents**, `hono`'s
+ * `src/utils/mime.ts` has 5 and 245. Measured, ranking by elevation replaces
+ * **8 of this repo's 13 landmarks** and 23 of hono's 51 — and those are the
+ * files a newcomer most needs named, because their importance is the thing you
+ * cannot see by looking.
+ *
+ * `limit` exists because a fraction does not scale. At 12% svelte would name
+ * **488** landmarks, and a skyline of 488 peaks is a plateau: the prior-art
+ * writeup's §4.3.5 says three or four globally visible landmarks outperform any
+ * amount of terrain, so the count is capped rather than grown.
  */
 export function landmarks(
-  ranked: readonly { readonly id: NodeId; readonly dependentCount: number; readonly radius: number }[],
+  ranked: readonly {
+    readonly id: NodeId;
+    readonly elevation: number;
+    readonly dependentCount: number;
+    readonly radius: number;
+  }[],
   fraction = 0.12,
   minimum = 3,
+  limit = 24,
 ): NodeId[] {
-  const count = Math.min(ranked.length, Math.max(minimum, Math.ceil(ranked.length * fraction)));
+  const count = Math.min(
+    ranked.length,
+    limit,
+    Math.max(minimum, Math.ceil(ranked.length * fraction)),
+  );
   return [...ranked]
     .sort(
       (a, b) =>
+        b.elevation - a.elevation ||
         b.dependentCount - a.dependentCount ||
         b.radius - a.radius ||
         (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),

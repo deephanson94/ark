@@ -1,9 +1,11 @@
 # ADR-0009 — Third person is a presentation layer over the same atlas, and it is blocked
 
-- **Status**: **accepted in principle — blocked, and not scheduled.** The decision is that this
-  direction is *allowed* and on what terms. Nothing about it is on the roadmap, and no
-  implementation work starts before the preconditions below are met, which cannot be earlier than
-  after M5.
+- **Status**: **accepted in principle — partly opened, 2026-08-07.** The decision is that this
+  direction is *allowed* and on what terms. This line originally read "blocked, and not scheduled …
+  cannot be earlier than after M5"; the owner has since opened rungs 0–2 and the orbit view has
+  merged. **Read the [Owner's note](#owners-note--2026-08-07-the-rung-ladder-and-what-it-does-and-does-not-open)
+  before acting on anything below** — it says exactly what is open, what it cost, and what is still
+  shut, and it is the authority a later section's "blocked" does not override.
 - **Date**: 2026-08-07
 - **Amends**: NORTH-STAR §9 ("v1 is 2D"), §10 (render row), and Appendix B ("3D world"). All three
   point here. `CLAUDE.md`'s map-interaction budget row too.
@@ -15,6 +17,20 @@
   psychology claim that, checked, points the other way. All three are corrected below rather than
   quietly edited out, because an ADR that got its own measurements wrong is a useful warning to the
   session that reads it next.
+
+## Direction update, 2026-08-07
+
+**The human has stated that a third-person explorable world is the intended final form of the
+product**, naming Zelda and Assassin's Creed as the reference. This ADR was written when the question
+was "is this allowed?"; the answer to that is now moot, and the question is "when, and on what
+terms?".
+
+Nothing below is weakened by this. The preconditions exist because a third-person view built on an
+unmeasured renderer, an unvalidated loop, or unexamined prior art would be built on nothing — and
+that is *more* true when the view is the destination rather than an experiment. The status line
+stays as it is: **accepted in principle, blocked, not scheduled.** What changes is the priority of
+closing P1–P3, which is ordinary work with its own payoff, and the standard 2D decisions are held
+to: a choice that reads well flat but cannot survive being walked through is now the worse choice.
 
 ## Context
 
@@ -156,21 +172,77 @@ design constraints and one ship criterion. It is not scheduled, and the roadmap 
 
 ### Preconditions — met before any implementation work
 
-**P1. Prior art, done properly.** Risk #6, closed: write up why Sourcetrail, CodeSee, CodeCity and
+**P1. Prior art, done properly.** ~~Risk #6, closed: write up why Sourcetrail, CodeSee, CodeCity and
 Gource failed, classifying each primary cause among *3D legibility*, *generality before the loop*,
 *absence of an assessment loop*, *business or maintenance*, *other*. **If 3D legibility is a primary
-cause for any comprehension-focused tool, this ADR is superseded and we say so.** Any other outcome
-passes P1 and is recorded. (The first draft posed this as a binary — "3D or generality" — which the
-likely answer does not fit.)
+cause for any comprehension-focused tool, this ADR is superseded and we say so.**~~
+
+> **CLOSED 2026-08-07 — [`docs/prior-art.md`](../prior-art.md). Not superseded, and P1 is retired as
+> a gate because it asked the wrong question.**
+>
+> **No tool in the category died of 3D legibility.** Sourcetrail — the flagship *2D* tool, exactly
+> what you would build if you thought 3D was the problem — died of business and maintenance burden.
+> CodeSee died of business. CodeCity, Code Park, CodeMetropolis and Softwarenaut were research
+> prototypes that decayed. Gource is a viewer by choice. And CodeCharta, a 3D city-metaphor tool, is
+> alive and commercial today. Category (a) has no members.
+>
+> **What the writeup found instead is that "3D" is two different interventions with opposite
+> evidence, and this ADR had them conflated.** The literature splits on **viewpoint**, not on
+> dimension. *Exocentric* 3D — rotating a structure you stay outside of — wins, and wins on Ark's
+> exact task: path tracing in node-link graphs, replicated 1996 → 2005 → a **preregistered** 2023
+> study that beat a 2D baseline carrying edge routing *and* interactive highlighting. Motion
+> parallax carries more of that effect than stereo, so no headset is implied. *Egocentric* 3D —
+> being inside it — is the condition that **lost** in the two studies closest to the walkable
+> proposal: spatial memory for item locations degraded monotonically with dimensional freedom
+> (Cockburn & McKenzie, n=69, in physical environments as well as virtual), and traversing a virtual
+> building was the worst of map / real navigation / VE (Richardson et al. 1999).
+>
+> Also corrected: **CodeCity's +24%/−12% does not license 3D.** Its control was Eclipse plus a
+> spreadsheet, not a 2D visualization, and the gain concentrated on *overview* tasks — the flat
+> map's home turf. The three VR follow-ups produced speed and affect gains with correctness null.
+>
+> Two consequences are recorded as new gates below: **P1′** and **P4**.
+
+**P1′. The maintenance-budget gate — P1's replacement.** The history attests that this category dies
+of maintenance burden and weak demand, not of illegibility, and a 3D layer is a large multiplier on
+exactly that burden. So before any renderer change ships: `npm run raster` re-measured **on real
+hardware** (45/33/43 fps is a headless software-raster floor, not a desktop number), plus a stated
+estimate of the CI, review and platform surface the layer adds, weighed against a *measured*
+comprehension gain rather than an assumed one.
+
+**P4. Orbit before avatar, and the avatar needs a route-shaped verb.** The measured win is
+exocentric, so the orbit is not a stepping stone toward the real thing — it *is* the intervention
+with evidence. The walkable avatar is additionally gated on the **Trace** verb existing (M6):
+before Trace, the product asks no question that walking answers better than orbiting. This is
+stricter than the original staging and it comes from the evidence, not from caution.
 
 **P2. The content question is answered.** M3 and M4 ship, and Ark is pointed at a large repo with
 real history — the one thing that will finally exercise the co-change distractor strategy. If the
 loop is not interesting in 2D on a real codebase, a camera will not rescue it.
 
-**P3. The interaction budget is no longer unmeasured.** `npm run budget` currently reports map
-interaction as **UNMEASURED** for raster cost. Closing that hole is small, belongs in M3, and must
+**P3. The interaction budget is no longer unmeasured.** ~~`npm run budget` currently reports map
+interaction as **UNMEASURED** for raster cost.~~ Closing that hole is small, belongs in M3, and must
 happen *before* a new renderer arrives — otherwise we cannot tell whether 3D regressed something we
 never measured.
+
+> **MET, 2026-08-07 — and the answer is not the comfortable one.** `npm run raster` drives the built
+> player in a real browser against a 2,000-node atlas laid out by the real layout, and reports
+> **45 / 33 / 43 fps at p95** (territory / district / street) against a ≥ 50 fps target. That is
+> **below target at every zoom level** — the budget is missed, not met.
+>
+> Two things this does and does not license. It **does** close P3: the number is no longer unknown,
+> so a future renderer can be compared against something. It does **not** by itself license WBGL —
+> the run is headless and software-rasterised in a container with no GPU, which makes it a *floor*
+> rather than the number a desktop sees, and the right next step is re-measuring on real hardware
+> rather than rewriting the renderer against a container's numbers.
+>
+> The instrument is worth more than the number. Its first two versions produced **plausible,
+> confidently wrong** results — 33/49/35 fps measured against a map that was not moving at all,
+> because synthetic pointer events did not drive the drag and, later, because wheeling out drove the
+> scale into `clampScale`'s floor where 2,000 nodes are a sub-pixel smudge and panning changes no
+> pixels. Both were caught by a liveness gate that hashes the canvas before and after the drag and
+> refuses to report timings when they are identical. Without it this precondition would have been
+> recorded as met on fiction.
 
 ### Design constraints — hold throughout, not checked once
 
@@ -210,6 +282,53 @@ than reinterpreted.**
 precondition is met; it may not decide it. This project is run by sessions that read a status line
 and act on it, and the failure mode this clause exists to prevent is a future session
 self-certifying "gates basically met" from the word "accepted".
+
+### Owner's note — 2026-08-07: the rung ladder, and what it does and does not open
+
+**Recorded by a session, quoting the owner, because the clause above says an agent may propose and
+not decide — and because a plan that contradicts this document would be correctly refused by the
+next session that reads it.**
+
+The owner stated, after reading `docs/prior-art.md` and its P1 verdict:
+
+> *"lets follow your rung plans … you can proceed all the rungs, without my intervention."*
+
+The ladder that refers to is: **rung 0** `ark play` and a deploy (shipped); **rung 1** a derived
+`elevation` rendered in the existing 2D map; **rung 2** an extruded scene with an orbit camera;
+**rung 3** the walkable avatar.
+
+What this opens:
+
+- **Rungs 0 and 1 were never gated.** Neither touches a renderer. Rung 1 is a derived metric drawn
+  on the flat map, which is the same class of change as sizing a disc by `loc`.
+- **Rung 2 (orbit) is authorised ahead of P2**, which required M3 *and M4*. M3 shipped; M4 has not.
+  The owner has accepted the exchange knowingly: `docs/prior-art.md` measured that the content
+  density M4 provides is what makes a world worth moving through, and building the camera first
+  means the first walkthrough will be of a sparse world. That is a stated cost, not an oversight.
+- **P1′ is deferred, not met.** `npm run raster` has still not been re-measured on real hardware;
+  45/33/43 fps remains a headless software floor. Rung 2 may be built against it, but **no claim
+  about interaction performance may be made from it**, and P1′ still gates any decision to change
+  renderer technology.
+
+What this does **not** open:
+
+- **P4 stands. Rung 3 — the walkable avatar — remains gated on the Trace verb (M6)** and on the
+  orbit's own measured results. `docs/prior-art.md` §2 is the reason and it is evidence rather than
+  caution: the measured 3D win is *exocentric*, and the two studies closest to a walkable world are
+  the ones it lost. Before Trace, the product asks no question that walking answers better than
+  orbiting. A session reaching rung 3 must stop and say so.
+- **The invariant and the design constraints are untouched. The ship criterion is not, and saying
+  otherwise was wrong.** An earlier draft of this note claimed S1 was untouched. It is not: S1 says
+  *"before any third-person code merges, a written experiment design is committed"*, and the orbit
+  view — which this ADR's own "first experiment" section places squarely inside its scope — merged
+  with no experiment design in the repo. Recorded as a **breach, not a waiver**, because S1's own
+  wording is that it is "failed, not waived", and because the correction was found by review rather
+  than by the session that caused it.
+  What follows from that: **the orbit view may not be described as having met S1, in the CHANGELOG,
+  the README or anywhere else** — it is unmeasured, and `docs/prior-art.md` §2's closing point is
+  that no study in this literature has ever measured retained structural knowledge after the tool
+  was taken away. The experiment design is now a blocking precondition on the *next* rung of this
+  direction rather than on the last one, and nothing further merges until it is written.
 
 ### The first experiment is the fly-through, not the avatar
 

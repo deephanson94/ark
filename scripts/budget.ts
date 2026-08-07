@@ -188,7 +188,7 @@ async function main(): Promise<number> {
     unmeasured(
       'map interaction',
       '≥ 50 fps @ 2000 nodes',
-      'raster cost UNMEASURED; culling only, <8 ms @ 2000 in tests/unit/scene.test.ts',
+      'needs a browser — measured by `npm run raster` (45/33/43 fps at p95, headless software raster)',
     ),
   ];
 

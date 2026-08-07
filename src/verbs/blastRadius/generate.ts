@@ -64,11 +64,36 @@ export type SkipReason =
    * Pillar 3: a structure-blind heuristic passed the board and no arrangement
    * of the available distractors could stop it. See `gate.ts`.
    */
-  | 'ctrlF';
+  | 'ctrlF'
+  /**
+   * Another subject already asks this exact answer key, and this one has no
+   * dependents left over to ask a different question with. See `dedupe()`.
+   */
+  | 'duplicateKey';
 
 export interface GenerationReport {
   readonly subjectsConsidered: number;
   readonly generated: number;
+  /**
+   * How many challenges `dedupe` had to re-ask with a different window of the
+   * same cone, because another subject already asked their canonical key.
+   *
+   * Reported rather than inferred, because the alternative is a session reading
+   * the re-window code and assuming it does something. It fires 3 times here,
+   * 15 on svelte and 0 on vite: if this ever reads 0 everywhere, the branch is
+   * dead and CLAUDE.md says to delete it rather than keep testing it.
+   */
+  readonly reasked: number;
+  /**
+   * Nodes that no challenge can ever promote to `understood` — they are neither
+   * a subject nor a member of any answer key, so their fog can never lift.
+   *
+   * This is the price of refusing a duplicate, stated out loud: dropping a twin
+   * that appears in nobody else's key lowers the ceiling on how much of the map
+   * a player can reveal. Measured cost of dedupe: 1 node here, 32 on vite, 114
+   * on svelte. Silent truncation reads as success.
+   */
+  readonly unprovableNodes: number;
   /** Sorted by reason. Never silent — CLAUDE.md. */
   readonly skipped: readonly (readonly [SkipReason, number])[];
   /** How many wrong answers each §8.3 strategy actually produced, repo-wide. */
@@ -78,6 +103,231 @@ export interface GenerationReport {
 export interface GenerationResult {
   readonly challenges: readonly Challenge[];
   readonly report: GenerationReport;
+}
+
+/** One assembled board, before the cap and the authoritative guardrail check. */
+interface Built {
+  readonly challenge: Challenge;
+  readonly subject: NodeRef;
+  readonly candidateRefs: readonly NodeRef[];
+  readonly mix: readonly DistractorChoice[];
+  /**
+   * How many answer-key files are *not* direct importers of the subject —
+   * §8.4's `surprise` before it is divided by anything. `dedupe` picks a group's
+   * representative with it, because unlike `difficulty` it depends on nothing
+   * outside the subject's own neighbourhood and therefore does not move when
+   * some unrelated file changes the repo-wide normalisers.
+   */
+  readonly nonObvious: number;
+}
+
+/** A subject that survived generation, plus what `dedupe` needs to re-ask it. */
+interface Pending {
+  readonly subject: NodeRef;
+  readonly reached: ReadonlyMap<NodeRef, number>;
+  readonly clean: ReadonlyMap<NodeRef, number>;
+  /** Every certain dependent, best first. `built` holds the head of it. */
+  readonly ranked: readonly NodeRef[];
+  readonly size: number;
+  readonly built: Built;
+}
+
+type Assemble = (
+  subject: NodeRef,
+  reached: ReadonlyMap<NodeRef, number>,
+  clean: ReadonlyMap<NodeRef, number>,
+  pool: ReadonlySet<NodeRef>,
+  truthRefs: readonly NodeRef[],
+) => Built | SkipReason;
+
+/**
+ * The choice set's raw material: everything eligible that does *not* depend on
+ * the subject, and is not tainted.
+ *
+ * One function rather than two matching loops, because `dedupe` rebuilds a board
+ * for a subject the main loop already built one for, and a pool assembled by a
+ * slightly different rule would break the invariant in the half of the deck
+ * nothing re-checks.
+ */
+function nonDependents(
+  eligible: ReadonlySet<NodeRef>,
+  reached: ReadonlyMap<NodeRef, number>,
+  tainted: ReadonlySet<NodeRef>,
+  subject: NodeRef,
+): Set<NodeRef> {
+  const pool = new Set<NodeRef>();
+  for (const ref of eligible) {
+    if (ref !== subject && !reached.has(ref) && !tainted.has(ref)) pool.add(ref);
+  }
+  return pool;
+}
+
+/**
+ * The key two challenges are the same question under.
+ *
+ * Sorted ids joined on a byte no id contains — `NodeId` is `n:` + hex. This is
+ * the same comparison the player-side selector makes on `challenge.truth`, and
+ * it is deliberately byte-equality rather than a similarity threshold: a Jaccard
+ * cutoff would be a magic number with no objective function.
+ */
+function keyOf(ids: readonly string[]): string {
+  return [...ids].sort(byteCompare).join('\n');
+}
+
+/**
+ * **No answer key is issued twice.**
+ *
+ * Two subjects can produce a byte-identical answer key, and the M3 selector only
+ * stopped them being served back to back. The cause is here. Measured across
+ * four repos, every duplicated key came from subjects whose *certain* dependent
+ * sets were equal or differed by one file — they are one question wearing two
+ * subjects, and on `sveltejs/svelte` 212 of 350 shipped challenges were repeats.
+ *
+ * There are two populations underneath that symptom and they want opposite
+ * treatment, which is why this is not simply a filter:
+ *
+ *  - **The certain cone is bigger than the key.** The collision is an artifact
+ *    of sampling six files out of more. There is unspent supply, so the second
+ *    subject is asked about a *different, disjoint* window of its own ranking —
+ *    two questions teaching twelve files instead of one fact twice. This fires
+ *    3 times on this repo, 15 on svelte and **0 on vite**, and `report.reasked`
+ *    counts it on every run so a future session can see it is still alive.
+ *  - **The certain cone is the key.** Nothing was sampled away, so there is no
+ *    other question to ask — `playground/hmr/hmr.ts` really is the entire
+ *    radius of ten different files in `vitejs/vite`. One representative survives
+ *    and the rest are refused as `duplicateKey`, counted and printed like every
+ *    other refusal. Guardrail 4's logic applies to redundancy too: a question
+ *    that teaches nothing costs nothing to leave out.
+ *
+ * **Beware the raw cone when reading this.** Svelte's duplicate classes look
+ * like they have thousands of dependents and hundreds of spare windows; their
+ * *certain* cones are 3, 19 and 115 files, because taint removes the rest and
+ * only certain dependents may be sampled. The first draft of this comment
+ * claimed a 2,745-file class with room for 63 disjoint keys. It has 3.
+ *
+ * The representative is the member whose key is **least obvious** — the most
+ * answer-key files that are not direct importers of the subject, tie-broken on
+ * id. The map gives depth 1 away on hover by design (ADR-0008), so that is
+ * literally the count of answers the map has not already supplied, and a test
+ * pins the direction.
+ *
+ * Unnormalised is deliberate, and here is exactly how far the evidence goes.
+ * `difficultyOf` divides by repo-wide maxima, so ranking a group by difficulty
+ * lets an edit *anywhere* reorder it and swap which twin survives; since the
+ * save is keyed by `(verb, subject)` (ADR-0011), a swap re-serves a question the
+ * player already answered wearing the other subject's name. That flip is
+ * derivable — a member ahead on depth and behind on surprise loses its lead as
+ * `maxDepth` grows — but it is **not observed**: the two rules choose the same
+ * representative on this repo and on svelte and differ on one vite group. So
+ * there is deliberately no test pinning the choice of quantity, only its
+ * direction. A test asserting a distinction the product does not exhibit is the
+ * same mistake as a fallback that never fires.
+ *
+ * Every group's canonical key is reserved *before* any re-windowing, so a
+ * re-sampled board can never take a key another subject was already going to
+ * ask. **Measured to change nothing** — zero differing keys across ark, vite and
+ * svelte against reserving only the uncontested ones — so it too has no test. It
+ * is here because the alternative leaves which group re-windows decided by
+ * iteration order, and an asymmetry nobody chose is worth one line to remove.
+ *
+ * The whole function is a no-op on the part of the deck that was never
+ * duplicated: on all four repos every non-colliding challenge is byte-identical
+ * to what the generator produced before this existed.
+ */
+function dedupe(
+  pending: readonly Pending[],
+  assemble: Assemble,
+  eligible: ReadonlySet<NodeRef>,
+  tainted: ReadonlySet<NodeRef>,
+  note: (reason: SkipReason) => void,
+): { kept: Built[]; reasked: number } {
+  const groups = new Map<string, Pending[]>();
+  for (const entry of pending) {
+    const key = keyOf(entry.built.challenge.truth);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [entry]);
+    else group.push(entry);
+  }
+
+  // Every canonical key is reserved up front, contested or not. Reserving only
+  // the uncontested ones would let an early group's re-windowed board take a key
+  // a later group was about to ask under, pushing *that* group into a re-window
+  // it did not need — an asymmetry with no justification other than iteration
+  // order.
+  const issued = new Set(groups.keys());
+  const kept: Built[] = [];
+  const contested: Pending[][] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1 && group[0] !== undefined) kept.push(group[0].built);
+    else contested.push(group);
+  }
+  // Deterministic across groups as well as within them: `pending` is in node
+  // order, which is id order, so the first member's id totally orders the groups.
+  contested.sort((a, b) =>
+    byteCompare(a[0]?.built.challenge.id ?? '', b[0]?.built.challenge.id ?? ''),
+  );
+
+  let reasked = 0;
+  for (const group of contested) {
+    const ordered = [...group].sort(
+      (a, b) =>
+        b.built.nonObvious - a.built.nonObvious ||
+        byteCompare(a.built.challenge.id, b.built.challenge.id),
+    );
+    const [representative, ...rest] = ordered;
+    if (representative === undefined) continue;
+    kept.push(representative.built);
+    for (const entry of rest) {
+      const rebuilt = reask(entry, assemble, eligible, tainted, issued);
+      if (rebuilt === null) {
+        note('duplicateKey');
+        continue;
+      }
+      issued.add(keyOf(rebuilt.challenge.truth));
+      reasked++;
+      kept.push(rebuilt);
+    }
+  }
+  return { kept, reasked };
+}
+
+/**
+ * Ask the same subject about a later slice of its own ranking.
+ *
+ * Windows are disjoint and taken in rank order, so window 1 is the best answer
+ * key that shares no file with window 0 — the collision is resolved by moving
+ * *outward* through the cone rather than by perturbing the sample, which would
+ * produce two keys differing in one file and teach the second thing twice.
+ *
+ * Only whole windows are used. A short tail would silently shrink the answer key
+ * below the size ADR-0007's 3:1 rule was checked at, and a board that cannot be
+ * built to the same standard is one we do not ship.
+ */
+function reask(
+  entry: Pending,
+  assemble: Assemble,
+  eligible: ReadonlySet<NodeRef>,
+  tainted: ReadonlySet<NodeRef>,
+  issued: ReadonlySet<string>,
+): Built | null {
+  const { ranked, size, subject, reached, clean } = entry;
+  const windows = Math.floor(ranked.length / size);
+  if (windows < 2) return null;
+  const pool = nonDependents(eligible, reached, tainted, subject);
+  for (let window = 1; window < windows; window++) {
+    const truthRefs = ranked.slice(window * size, window * size + size);
+    const outcome = assemble(subject, reached, clean, pool, truthRefs);
+    // A refused window says nothing about the next one, so the search continues
+    // rather than giving up. **Measured to never fire**: across ark, vite,
+    // svelte and vue no re-asked board was ever refused by the gate or the
+    // sizing rule, because a later window of the same cone faces the same pool.
+    // It is here because `assemble` returns a union and the case must be
+    // handled, not because it is a rescue path — there are no tests around it.
+    if (typeof outcome === 'string') continue;
+    if (issued.has(keyOf(outcome.challenge.truth))) continue;
+    return outcome;
+  }
+  return null;
 }
 
 /**
@@ -104,10 +354,9 @@ export interface GenerationResult {
  * test file shares this name" — pillar 3's Ctrl+F failure, arrived at from the
  * other direction.
  */
-export function sampleByDistance(
+export function rankByDistance(
   graph: Graph,
   reached: ReadonlyMap<NodeRef, number>,
-  size: number,
   breadth: ReadonlyMap<NodeRef, number>,
 ): NodeRef[] {
   const buckets = new Map<number, NodeRef[]>();
@@ -126,19 +375,34 @@ export function sampleByDistance(
     );
   }
 
-  const picked: NodeRef[] = [];
-  for (let round = 0; picked.length < size; round++) {
+  const ranked: NodeRef[] = [];
+  for (let round = 0; ; round++) {
     let progressed = false;
     for (const distance of distances) {
-      if (picked.length >= size) break;
       const ref = buckets.get(distance)?.[round];
       if (ref === undefined) continue;
-      picked.push(ref);
+      ranked.push(ref);
       progressed = true;
     }
     if (!progressed) break;
   }
-  return picked;
+  return ranked;
+}
+
+/**
+ * The best `size` dependents to ask about — the head of `rankByDistance`.
+ *
+ * `dedupe()` takes *later* windows of the same order when two subjects would
+ * otherwise ship the same answer key, which is why the ranking is a separate,
+ * total function rather than a truncating one.
+ */
+export function sampleByDistance(
+  graph: Graph,
+  reached: ReadonlyMap<NodeRef, number>,
+  size: number,
+  breadth: ReadonlyMap<NodeRef, number>,
+): NodeRef[] {
+  return rankByDistance(graph, reached, breadth).slice(0, size);
 }
 
 /**
@@ -222,12 +486,97 @@ export function generateWithReport(
     }
   }
 
-  const built: {
-    challenge: Challenge;
-    subject: NodeRef;
-    candidateRefs: readonly NodeRef[];
-    mix: readonly DistractorChoice[];
-  }[] = [];
+  /**
+   * Everything a subject needs to be asked about, once its cone is known.
+   *
+   * `assemble` is called twice for a colliding subject — once for the canonical
+   * answer key and again for a later window of the same ranking — so the board,
+   * the distractors, the Ctrl+F gate and the computed difficulty all live in one
+   * place. A second code path that built a board slightly differently is exactly
+   * how an answer key goes wrong.
+   */
+  const assemble = (
+    subject: NodeRef,
+    reached: ReadonlyMap<NodeRef, number>,
+    clean: ReadonlyMap<NodeRef, number>,
+    pool: ReadonlySet<NodeRef>,
+    truthRefs: readonly NodeRef[],
+  ): Built | SkipReason => {
+    const size = truthRefs.length;
+    const context = {
+      graph,
+      corpus,
+      subject,
+      pool: new Set(pool),
+      coChange: coChange.get(subject) ?? new Map(),
+    };
+    const want = Math.min(pool.size, options.candidateCount - size);
+
+    // Assemble, then check the board against the structure-blind heuristics
+    // (ADR-0010 decision 4, `gate.ts`).
+    //
+    // There is no repair pass, and that is a measured decision rather than an
+    // omission. One was written: on a beaten board, re-mix with the quota
+    // weighted toward whichever strategy punishes the heuristic that won. It
+    // **rescued zero boards on both this repo and vitejs/vite**, because §8.3's
+    // default mix already *is* the repair — it spends 25% on tree-siblings and
+    // 20% on name-alikes precisely to defeat these two guesses. A board they
+    // still beat is one where that supply does not exist, and re-weighting an
+    // empty supply changes nothing. The loop was deleted rather than shipped
+    // untested.
+    const distractors: readonly DistractorChoice[] = selectDistractors(context, want);
+    const verdict = gradeHeuristics(
+      graph,
+      subject,
+      [...truthRefs, ...distractors.map((choice) => choice.ref)],
+      truthRefs,
+    );
+    if (!verdict.passed) return 'ctrlF';
+
+    const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];
+    const idOfRef = (ref: NodeRef): string => nodeAt(graph, ref).id;
+    const truth = truthRefs.map(idOfRef).sort(byteCompare);
+    const candidates = candidateRefs.map(idOfRef).sort(byteCompare);
+    const candidateSet = new Set(candidates);
+
+    // `evidence.depth` is measured, not prescribed (ADR-0008 §5): the furthest
+    // the answer key actually travels, so `explain()` can state it as fact.
+    let depth = 1;
+    for (const ref of truthRefs) depth = Math.max(depth, clean.get(ref) ?? 1);
+
+    // §8.4's naive guess: what you would answer knowing only the direct
+    // importers — which is exactly what the map gives away on hover.
+    const naive: string[] = [];
+    for (const edge of graph.in[subject] ?? []) {
+      const id = idOfRef(edge.from);
+      if (candidateSet.has(id)) naive.push(id);
+    }
+
+    return {
+      subject,
+      candidateRefs,
+      nonObvious: truth.length - naive.length,
+      challenge: {
+        id: `blast-${nodeAt(graph, subject).id.slice(2)}`,
+        verb: 'blastRadius',
+        tier: TIER,
+        difficulty: difficultyOf({
+          fanOut: reached.size,
+          maxFanOut,
+          depth,
+          maxDepth,
+          surprise: surpriseOf(truth, naive),
+        }),
+        subject: idOfRef(subject),
+        candidates,
+        truth,
+        evidence: { kind: 'importGraph', depth },
+      },
+      mix: distractors,
+    };
+  };
+
+  const pending: Pending[] = [];
   let considered = 0;
 
   for (const subject of atlas.nodes.keys()) {
@@ -265,12 +614,7 @@ export function generateWithReport(
     // Every dependent is banned from the choice set unless it is in the answer
     // key. This is the invariant, and it is enforced here rather than checked
     // later, because "check afterwards" is how an answer key goes wrong.
-    const pool = new Set<NodeRef>();
-    for (const ref of eligible) {
-      if (ref !== subject && !reached.has(ref) && !tainted.has(ref)) pool.add(ref);
-    }
-
-    const context = { graph, corpus, subject, pool, coChange: coChange.get(subject) ?? new Map() };
+    const pool = nonDependents(eligible, reached, tainted, subject);
 
     // Size the answer key downward until the choice set can be made large
     // enough that selecting everything fails (ADR-0007: |candidates| > 3·|truth|,
@@ -289,75 +633,17 @@ export function generateWithReport(
       continue;
     }
 
-    const truthRefs =
-      clean.size <= size ? [...clean.keys()] : sampleByDistance(graph, clean, size, breadth);
-    const want = Math.min(pool.size, options.candidateCount - size);
-
-    // Assemble, then check the board against the structure-blind heuristics
-    // (ADR-0010 decision 4, `gate.ts`).
-    //
-    // There is no repair pass, and that is a measured decision rather than an
-    // omission. One was written: on a beaten board, re-mix with the quota
-    // weighted toward whichever strategy punishes the heuristic that won. It
-    // **rescued zero boards on both this repo and vitejs/vite**, because §8.3's
-    // default mix already *is* the repair — it spends 25% on tree-siblings and
-    // 20% on name-alikes precisely to defeat these two guesses. A board they
-    // still beat is one where that supply does not exist, and re-weighting an
-    // empty supply changes nothing. The loop was deleted rather than shipped
-    // untested.
-    const distractors: readonly DistractorChoice[] = selectDistractors(context, want);
-    const verdict = gradeHeuristics(
-      graph,
-      subject,
-      [...truthRefs, ...distractors.map((choice) => choice.ref)],
-      truthRefs,
-    );
-    if (!verdict.passed) {
-      note('ctrlF');
+    const ranked = rankByDistance(graph, clean, breadth);
+    const outcome = assemble(subject, reached, clean, pool, ranked.slice(0, size));
+    if (typeof outcome === 'string') {
+      note(outcome);
       continue;
     }
-
-    const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];
-    const idOfRef = (ref: NodeRef): string => nodeAt(graph, ref).id;
-    const truth = truthRefs.map(idOfRef).sort(byteCompare);
-    const candidates = candidateRefs.map(idOfRef).sort(byteCompare);
-    const candidateSet = new Set(candidates);
-
-    // `evidence.depth` is measured, not prescribed (ADR-0008 §5): the furthest
-    // the answer key actually travels, so `explain()` can state it as fact.
-    let depth = 1;
-    for (const ref of truthRefs) depth = Math.max(depth, clean.get(ref) ?? 1);
-
-    // §8.4's naive guess: what you would answer knowing only the direct
-    // importers — which is exactly what the map gives away on hover.
-    const naive: string[] = [];
-    for (const edge of graph.in[subject] ?? []) {
-      const id = idOfRef(edge.from);
-      if (candidateSet.has(id)) naive.push(id);
-    }
-
-    built.push({
-      subject,
-      candidateRefs,
-      challenge: {
-        id: `blast-${nodeAt(graph, subject).id.slice(2)}`,
-        verb: 'blastRadius',
-        tier: TIER,
-        difficulty: difficultyOf({
-          fanOut: reached.size,
-          maxFanOut,
-          depth,
-          maxDepth,
-          surprise: surpriseOf(truth, naive),
-        }),
-        subject: idOfRef(subject),
-        candidates,
-        truth,
-        evidence: { kind: 'importGraph', depth },
-      },
-      mix: distractors,
-    });
+    pending.push({ subject, reached, clean, ranked, size, built: outcome });
   }
+
+
+  const { kept: built, reasked } = dedupe(pending, assemble, eligible, tainted, note);
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
   const shortlist = retain(built, limit);
@@ -394,6 +680,15 @@ export function generateWithReport(
     }
   }
 
+  // What a player can ever prove they know. `progress.ts` promotes a node only
+  // as the subject of a passed challenge or as a correctly picked member of some
+  // answer key, so anything in neither position is permanently fogged.
+  const provable = new Set<string>();
+  for (const entry of kept) {
+    provable.add(entry.challenge.subject);
+    for (const id of entry.challenge.truth) provable.add(id);
+  }
+
   return {
     challenges: kept
       .map((entry) => entry.challenge)
@@ -401,6 +696,8 @@ export function generateWithReport(
     report: {
       subjectsConsidered: considered,
       generated: kept.length,
+      reasked,
+      unprovableNodes: atlas.nodes.length - provable.size,
       skipped: [...skipped].sort(([a], [b]) => byteCompare(a, b)),
       distractorMix: [...totals].sort(([a], [b]) => byteCompare(a, b)),
     },

@@ -12,18 +12,33 @@
  * the repo at all.
  */
 
-import type { Atlas, Challenge, NodeRef } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeId, NodeRef } from '../atlas/index.js';
 import { parseAtlas } from '../atlas/index.js';
 import type { Camera } from './camera.js';
-import { fit, pan, screenToWorld, zoomAt } from './camera.js';
+import { centreOn, fit, pan, screenToWorld, zoomAt } from './camera.js';
 import { createConsole } from './challenge.js';
-import { drawFrame } from './draw.js';
+import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Fog } from './fog.js';
-import { CLEAR_FOG, coverage, landmarks, survey } from './fog.js';
-import { applyGrade } from './progress.js';
+import { coverage, landmarks } from './fog.js';
+import type { Orbit } from './orbit.js';
+import { DEFAULT_ORBIT, pickColumn, turn } from './orbit.js';
+import type { Progress } from './progress.js';
+import { answeredSubjects, applyGrade, deriveFog, livenessOf, recordSurvey } from './progress.js';
+import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
-import { createError, createHud, createInspector, createLegend } from './ui.js';
+import type { SelectorState } from './selector.js';
+import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
+import { fieldNotes } from './notes.js';
+import {
+  createError,
+  createGuide,
+  createHud,
+  createInspector,
+  createLegend,
+  createNotebook,
+} from './ui.js';
+import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
 /** Pointer movement below this is a click, not a drag. */
@@ -51,7 +66,53 @@ function start(scene: Scene, root: HTMLElement): void {
 
   let viewport = { width: 0, height: 0 };
   let camera: Camera = { x: 0, y: 0, scale: 1 };
-  let fog: Fog = { surveyed: new Set(landmarks(scene.nodes)), understood: CLEAR_FOG.understood };
+
+  // `progress` is the state; `fog` is a view of it (ADR-0011). Everything the
+  // player earns is written to the record and the fog is re-derived, so there
+  // is exactly one place a promotion can happen and the reload path is the same
+  // code as the live one — a save that restores wrongly would be a bug in a
+  // function the whole session already exercised.
+  const store = browserStore();
+  const saveKey = storageKeyFor(scene.atlas.repo);
+  const liveness = livenessOf(scene.graph);
+  const shore = landmarks(scene.nodes);
+  // The same set the fog gives away for free, drawn as summits. One rule, two
+  // consequences: what you start knowing the name of, and what dominates the
+  // skyline, are the same files — which is what makes "pick a landmark" a real
+  // instruction rather than a hint you have to hunt for.
+  const peaks = new Set(
+    shore.map((id) => scene.graph.refById.get(id)).filter((ref): ref is number => ref !== undefined),
+  );
+  // The orbit view. `null` is the flat map, which stays the default and the
+  // arrival state — ADR-0009's D1 says the overview survives, and the evidence
+  // in `docs/prior-art.md` §2 says the flat map is what teaches survey
+  // knowledge. Turning the world is an *addition*, one keystroke away and one
+  // keystroke back.
+  let orbit: Orbit | null = null;
+  let progress: Progress = loadProgress(store, saveKey);
+  let fog: Fog = deriveFog(progress, liveness, shore);
+
+  /**
+   * What is under the pointer, in whichever view is on screen.
+   *
+   * One function, used by hover and by click, because the two paths disagreeing
+   * about which projection is in force is precisely the defect this replaced:
+   * orbit shipped with the flat inverse still driving both, so the inspector
+   * described one file while the cursor sat on another — and the click wrote
+   * that wrong file into the saved `surveyed` set.
+   */
+  const pickAt = (local: { x: number; y: number }): SceneNode | null => {
+    if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
+    const world = screenToWorld(camera, viewport, local);
+    return pick(scene, world.x, world.y, camera.scale);
+  };
+
+  const remember = (next: Progress): void => {
+    progress = next;
+    fog = deriveFog(progress, liveness, shore);
+    saveProgress(store, saveKey, progress);
+  };
+
   let hovered: SceneNode | null = null;
   let selected: SceneNode | null = null;
   let radius: Radius | null = null;
@@ -66,10 +127,35 @@ function start(scene: Scene, root: HTMLElement): void {
   // HUD's counter both read.
   const challengeById = new Map(scene.atlas.challenges.map((c) => [c.subject, c]));
   const unanswered = new Set<NodeRef>();
-  for (const [id] of challengeById) {
-    const ref = scene.graph.refById.get(id);
-    if (ref !== undefined) unanswered.add(ref);
-  }
+  // Session-scoped, never persisted: ADR-0011 decision 2 forbids storing a
+  // cursor, and a position in the rotation is a cursor.
+  let selector: SelectorState = NO_HISTORY;
+  const retally = (): void => {
+    // Derived from the record, not tracked alongside it, so a restored session
+    // starts with the deck it left with — and a pass whose claim has decayed
+    // puts its question back, which is the honest outcome.
+    //
+    // Read off `answeredSubjects` rather than `fog.understood`: a file you
+    // picked correctly in someone else's question is understood, but its *own*
+    // radius is a question you have not been asked.
+    const answered = answeredSubjects(progress, liveness);
+    unanswered.clear();
+    for (const [id] of challengeById) {
+      const ref = scene.graph.refById.get(id);
+      if (ref !== undefined && !answered.has(id)) unanswered.add(ref);
+    }
+    // The selector reads the *same* set, so the HUD counter, the map's rings
+    // and the button can never disagree about what is left.
+    selector = { ...selector, answered };
+  };
+  retally();
+
+  const regionOf = (subject: NodeId): string => {
+    const ref = scene.graph.refById.get(subject);
+    return ref === undefined ? '' : (scene.atlas.nodes[ref]?.region ?? '');
+  };
+  const nextUp = (): Challenge | null =>
+    suggestNext(scene.atlas.challenges, regionOf, selector);
 
   /**
    * How far a node's radius may be drawn.
@@ -99,14 +185,35 @@ function start(scene: Scene, root: HTMLElement): void {
     });
   };
 
-  const hud = createHud(scene.atlas);
+  // Notes are re-derived on every open, never cached: a claim can decay between
+  // sessions and a cached sentence would go on asserting something the graph has
+  // stopped supporting (ADR-0011 decision 3).
+  const notebook = createNotebook();
+  const refreshNotes = (): void => {
+    notebook.update(fieldNotes(scene.graph, progress, liveness));
+  };
+  notebook.toggle.addEventListener('click', refreshNotes);
+
+  const hud = createHud(scene.atlas, [notebook.toggle]);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade) {
-      const progression = applyGrade(fog, challenge, grade);
-      fog = progression.fog;
+      const progression = applyGrade(progress, challenge, grade);
+      remember(progression.progress);
+      retally();
+      refreshNotes();
+      // Both paths into a challenge converge here, which is why the selector's
+      // history is updated here and nowhere else: a map-click answer shapes the
+      // next suggestion exactly as a suggested one does, because a byte-identical
+      // answer key is felt the same however the question arrived.
+      selector = {
+        ...selector,
+        previous: challenge,
+        attempts: progression.unlocked
+          ? selector.attempts
+          : noteAttempt(selector.attempts, challenge.subject),
+      };
       const ref = scene.graph.refById.get(challenge.subject);
       if (ref !== undefined) {
-        if (progression.unlocked) unanswered.delete(ref);
         // The reveal fires on every grade, pass or fail — guardrail 6 says a
         // wrong answer never takes anything away, so seeing the true shape is
         // not a reward, it is the point of having answered at all.
@@ -121,7 +228,39 @@ function start(scene: Scene, root: HTMLElement): void {
     },
   });
   const inspector = createInspector(scene, (challenge) => challengePanel.open(challenge));
-  root.replaceChildren(canvas, hud.root, createLegend(scene), inspector.root, challengePanel.root);
+
+  /**
+   * Take the player to the next landmark. Deliberately does **not** open the
+   * question: §4's loop is "pick a landmark", and ADR-0011 calls suggested-next
+   * an affordance rather than a mode. The map stays the frame; the existing
+   * "answer this" control is one keystroke away once you arrive.
+   */
+  const guide = createGuide(() => {
+    const challenge = nextUp();
+    if (challenge === null) return;
+    const ref = scene.graph.refById.get(challenge.subject);
+    const node = ref === undefined ? undefined : scene.nodes[ref];
+    if (node === undefined) return;
+    selected = node;
+    hovered = null;
+    remember(recordSurvey(progress, [node.id]));
+    // Far enough in that the destination's name is drawn — arriving at an
+    // unlabelled dot is arriving nowhere.
+    camera = centreOn(camera, node, DISTRICT_SCALE);
+    radius = blastRadius(scene, node.ref, depthFor(node));
+    describe(node);
+    invalidate();
+  });
+
+  root.replaceChildren(
+    canvas,
+    hud.root,
+    createLegend(scene),
+    inspector.root,
+    guide.root,
+    notebook.root,
+    challengePanel.root,
+  );
 
   function resize(): void {
     const ratio = window.devicePixelRatio || 1;
@@ -136,7 +275,7 @@ function start(scene: Scene, root: HTMLElement): void {
   function frame(): void {
     if (dirty) {
       dirty = false;
-      const stats = drawFrame(context, {
+      const frameInput = {
         scene,
         camera,
         viewport,
@@ -145,13 +284,32 @@ function start(scene: Scene, root: HTMLElement): void {
         selected,
         radius,
         questions: unanswered,
-      });
+        peaks,
+      };
+      const stats =
+        orbit === null
+          ? drawFrame(context, frameInput)
+          : drawOrbitFrame(context, frameInput, orbit);
       hud.update(
         coverage(fog, scene.nodes.length),
-        stats.level,
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels`,
+        orbit === null ? stats.level : 'orbit',
+        // `peaks` is in the HUD because it is the only measured proof that
+        // ADR-0013's elevation reaches a pixel. CLAUDE.md: a measurement of
+        // "how many X" needs a gate proving X happened, and the e2e reads this.
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks`,
         unanswered.size,
       );
+      // Recomputed, never latched: a pass can decay and a reindex can resurrect
+      // its question, so a stored "you are finished" would go on lying.
+      const upcoming = nextUp();
+      const upcomingRef =
+        upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+      guide.update({
+        next: upcoming,
+        path: upcomingRef === undefined ? null : (scene.nodes[upcomingRef]?.label ?? null),
+        arrived: upcoming !== null && selected?.id === upcoming.subject,
+        questionsLeft: unanswered.size,
+      });
     }
     requestAnimationFrame(frame);
   }
@@ -182,13 +340,19 @@ function start(scene: Scene, root: HTMLElement): void {
       moved += Math.abs(dx) + Math.abs(dy);
       lastX = event.clientX;
       lastY = event.clientY;
-      camera = pan(camera, dx, dy);
+      if (orbit === null) {
+        camera = pan(camera, dx, dy);
+      } else {
+        // Drag turns the world. This is the whole intervention: motion parallax
+        // over a structure you stay outside of is what the measured 3D win is
+        // made of, and it beat stereo in the study that separated them
+        // (`docs/prior-art.md` §2).
+        orbit = turn(orbit, dx * 0.006, -dy * 0.004);
+      }
       invalidate();
       return;
     }
-    const local = localPoint(event);
-    const world = screenToWorld(camera, viewport, local);
-    const found = pick(scene, world.x, world.y, camera.scale);
+    const found = pickAt(localPoint(event));
     if (found === hovered) return;
     hovered = found;
     // Hovering previews the question — "change this, what imports it?" — at the
@@ -209,12 +373,10 @@ function start(scene: Scene, root: HTMLElement): void {
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     if (moved > DRAG_THRESHOLD) return;
 
-    const local = localPoint(event);
-    const world = screenToWorld(camera, viewport, local);
-    const found = pick(scene, world.x, world.y, camera.scale);
+    const found = pickAt(localPoint(event));
     selected = found;
     if (found !== null) {
-      fog = survey(fog, found.id);
+      remember(recordSurvey(progress, [found.id]));
       radius = blastRadius(scene, found.ref, depthFor(found));
     } else {
       radius = null;
@@ -231,7 +393,18 @@ function start(scene: Scene, root: HTMLElement): void {
     (event) => {
       event.preventDefault();
       const factor = Math.exp(-event.deltaY * 0.0015);
-      camera = zoomAt(camera, viewport, localPoint(event), factor);
+      // In orbit, zoom about the viewport centre rather than the pointer.
+      // `zoomAt` keeps the world point *under the cursor* fixed, and it works
+      // that out with the flat inverse — which in a rotated, foreshortened view
+      // names a different place than the one being pointed at, so the map slides
+      // out from under the wheel. Centre-anchored zoom is the honest version
+      // until the camera itself carries the projection.
+      camera = zoomAt(
+        camera,
+        viewport,
+        orbit === null ? localPoint(event) : { x: viewport.width / 2, y: viewport.height / 2 },
+        factor,
+      );
       invalidate();
     },
     { passive: false },
@@ -242,9 +415,20 @@ function start(scene: Scene, root: HTMLElement): void {
       challengePanel.close();
       return;
     }
-    if (challengePanel.isOpen()) return;
+    if (event.key === 'Escape' && notebook.isOpen()) {
+      notebook.close();
+      return;
+    }
+    if (challengePanel.isOpen() || notebook.isOpen()) return;
     if (event.key === 'f') {
       camera = fit(scene.bounds, viewport);
+      invalidate();
+    }
+    if (event.key === 'o') {
+      // One key there, the same key back. ADR-0009's D1 — the overview survives
+      // — is only a real promise if leaving it costs one keystroke, so the flat
+      // map is never more than `o` away and it is what the player arrives in.
+      orbit = orbit === null ? DEFAULT_ORBIT : null;
       invalidate();
     }
     if (event.key === 'Enter') {
@@ -269,6 +453,9 @@ function start(scene: Scene, root: HTMLElement): void {
   });
   observer.observe(canvas);
 
+  // A restored session may already have notes; the toggle has to say so before
+  // it is ever clicked.
+  refreshNotes();
   resize();
   camera = fit(scene.bounds, viewport);
   frame();

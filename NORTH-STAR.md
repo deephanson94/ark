@@ -368,7 +368,35 @@ geography because a curriculum has no natural shape; a codebase does.
 - **Field notes**: the codex equivalent. Accumulates facts you have *proven* you know, not facts you
   were shown. "You know that `engine.ts` has 14 dependents." That distinction is the whole product.
 
+> **Amended 2026-08-07 — the example above is wrong on its own terms, and is corrected here.** Under
+> [ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) a hub's
+> answer key is a deterministic *sample* of its dependents, so a player who passes has proved some of
+> them, never the count. The number 14 was **shown** to them in the reveal — which is the `surveyed`
+> side of the very line this bullet says is the whole product. A note may therefore claim only what
+> was proved ("you proved 4 files that depend on `engine.ts`"), and may state the full radius only
+> when it is labelled as revealed rather than known. Provenance is immutable; the claim about *today*
+> is re-checked at render, and a claim the graph no longer supports is dropped rather than shown
+> stale. [ADR-0011](./docs/decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md).
+
 3D is an earned upgrade, not a v1 goal. If it happens, the layout must still derive from the graph.
+
+> **Direction, stated by the human 2026-08-07 and recorded here because it changes what "finished"
+> means.** The intended final form of this product is a **third-person world you explore** — the
+> reference points given were Zelda and Assassin's Creed: you are *in* the repo, walking it, rather
+> than looking down at a diagram of it. That is a stronger claim than
+> [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)
+> carried: the ADR accepted third person as *allowed*; the direction is now that it is *intended*.
+>
+> **What this changes**: the destination, and therefore the standard every 2D decision is held to —
+> a choice that reads well flat but cannot survive being walked through is now a worse choice than
+> it was yesterday.
+>
+> **What this does not change**: any of ADR-0009's gates. The invariant (*the world is a rendering
+> of the atlas, never the reverse*), the three preconditions, the three design constraints and the
+> recall experiment all stand exactly as written, and the roadmap still contains no slot for it.
+> A destination is not a schedule. The honest way to serve this direction is to close the
+> preconditions in order — which is work with its own payoff in 2D — rather than to start building
+> a camera.
 
 > **Amended 2026-08-07 — the north star is changing here, deliberately.** A **third-person view** is
 > now *allowed* as a future presentation layer, which this section previously ruled out. It is
@@ -395,7 +423,7 @@ geography because a curriculum has no natural shape; a codebase does.
 | Layout | `d3-force` or `webcola`, **run in the indexer** | Determinism |
 | Player render | Canvas 2D or SVG. **Not** WebGL for v1 | A few thousand nodes doesn't need it. Revisit above ~5k — or under [ADR-0009](./docs/decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)'s preconditions, which are the *only* other reason to change renderer. |
 | UI | Plain DOM + a small overlay factory | Same reasoning as Promptasy — imperative UI at interaction rates doesn't need a reconciler |
-| Persistence | localStorage, keyed by repo + HEAD | No account, no backend |
+| Persistence | localStorage, keyed by the repo's **root commit** | No account, no backend. **Amended 2026-08-07**: this row read "repo + HEAD", which cannot stand — HEAD moves on every commit, so a HEAD-keyed save is wiped by every reindex, defeating ADR-0002 and §7. `root` is identity, `head` is staleness. [ADR-0011](./docs/decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md) |
 | Deploy | Static | Player is a pure function of the atlas |
 
 ---
@@ -457,7 +485,7 @@ focused weekends.
 | 3 | **Dynamic languages** | Import graph ≠ call graph. Python/JS with dynamic dispatch will produce a partially wrong ground truth. | Be explicit in-product about confidence. A challenge with uncertain truth must not be generated. |
 | 4 | **Fog frustration** | Fog of war can read as "the tool is hiding things from me." | Always show the *silhouette* of unexplored regions — you can see there's something there, just not what |
 | 5 | **Distractor quality** | Bad distractors make every question trivial and the product pointless. | §8.3 is a real subsystem, not a helper function. Budget accordingly. |
-| 6 | **Prior art** | Sourcetrail, CodeSee, CodeCity, Gource all attacked adjacent ground; several are dead. | **Do this research before M1.** They were all *tools* and all tried to be general immediately. Verify that's the actual failure mode before betting against it. |
+| 6 | **Prior art** | Sourcetrail, CodeSee, CodeCity, Gource all attacked adjacent ground; several are dead. | **CLOSED 2026-08-07** — [`docs/prior-art.md`](./docs/prior-art.md). The guess above was half right. They were all *viewers*: **no tool in ~30 years ever verified comprehension as a product feature**, though the research experiments all built the instrument and threw it away. But generality was not the killer — Sourcetrail and CodeSee died of **business and maintenance burden**, and the flagship was 2D. Three findings changed decisions: measure covered *mass* not file count (power law); map-derived spatial memory is **orientation-locked**, so rotate the map; and 3D's evidence splits on *viewpoint*, not dimension — orbit wins, walking loses. |
 | 7 | **Repos without history** | A fresh repo or a squashed-history import has no git signal. | Tiers 1–4 must be fully playable with zero commits |
 
 ---

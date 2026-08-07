@@ -13,6 +13,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'src/player',
   publicDir: 'public',
+  // Relative asset urls, so one build works from any path: `ark play` serves
+  // `dist/player` at the root, GitHub Pages serves a project site under
+  // `/<repo>/`. An absolute base would 404 every asset on one of the two, and
+  // the atlas is already fetched relatively (`main.ts`'s `ATLAS_URL`).
+  base: './',
   build: {
     outDir: '../../dist/player',
     emptyOutDir: true,

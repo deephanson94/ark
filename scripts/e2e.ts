@@ -81,10 +81,22 @@ async function main(): Promise<number> {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
     const consoleErrors: string[] = [];
+    /**
+     * One exclusion, and it is the harness apologising for itself.
+     *
+     * The orbit liveness gate hashes the canvas with `getImageData`, and
+     * Chromium advises setting `willReadFrequently` when you do that repeatedly.
+     * The advice is aimed at the *test*, not at the player — nothing in the
+     * product ever reads pixels back. Suppressing it here rather than setting
+     * the flag on the real canvas, because that flag moves the canvas off the
+     * GPU and would quietly change the very rendering the gate exists to
+     * measure. Matched narrowly, so any other Canvas2D warning still fails.
+     */
+    const harnessNoise = /willReadFrequently/;
     page.on('console', (message: ConsoleMessage) => {
-      if (message.type() === 'error' || message.type() === 'warning') {
-        consoleErrors.push(`${message.type()}: ${message.text()}`);
-      }
+      if (message.type() !== 'error' && message.type() !== 'warning') return;
+      if (harnessNoise.test(message.text())) return;
+      consoleErrors.push(`${message.type()}: ${message.text()}`);
     });
     page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
     page.on('requestfailed', (request) =>
@@ -288,7 +300,7 @@ async function main(): Promise<number> {
       if (!score.includes('100%')) {
         failures.push({ what: 'grade', detail: `the atlas's own answer key scored "${score}"` });
       }
-      if ((await page.locator('.note').count()) === 0) {
+      if ((await page.locator('.console-notes .note').count()) === 0) {
         failures.push({ what: 'reveal', detail: 'the grade named no files' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
@@ -296,8 +308,7 @@ async function main(): Promise<number> {
       await page.locator('.console-submit').click(); // "back to the map"
       await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
 
-      // The fog has to have moved, or `understand()` is still the unused
-      // function it was at M1.
+      // The fog has to have moved, or nothing the player proved reached it.
       const understood = Number.parseInt(
         /(\d+) understood/.exec(await page.locator('.hud-counts').innerText())?.[1] ?? '0',
         10,
@@ -307,6 +318,144 @@ async function main(): Promise<number> {
         failures.push({ what: 'fog', detail: 'passing a challenge lifted no fog' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
+
+      // ---- persistence -------------------------------------------------
+      // The only check that M3's first rung actually works. Everything in
+      // `save.test.ts` is a fake store; this is a real browser, a real reload,
+      // and the built bundle. A save that round-trips in a unit test and does
+      // not survive F5 is the failure mode worth catching.
+      const keys = await page.evaluate(() => Object.keys(globalThis.localStorage));
+      process.stdout.write(`e2e: localStorage keys → ${keys.join(', ') || '(none)'}\n`);
+      const expectedKey = `ark:${atlas.repo.root ?? ''}`;
+      if (atlas.repo.root !== null && !keys.includes(expectedKey)) {
+        // Keyed on the root commit, not HEAD: a HEAD key is wiped by every
+        // reindex, which is the whole of ADR-0011 decision 1.
+        failures.push({ what: 'save', detail: `expected key ${expectedKey}, got ${keys.join(', ')}` });
+      }
+      if (atlas.repo.head !== null && keys.includes(`ark:${atlas.repo.head}`)) {
+        failures.push({ what: 'save', detail: 'progress is keyed on HEAD; a reindex would wipe it' });
+      }
+
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('canvas.map', { timeout: 15_000 });
+      const restored = await page
+        .waitForFunction(
+          (want: number) => {
+            const text = document.querySelector('.hud-counts')?.textContent ?? '';
+            return Number.parseInt(/(\d+) understood/.exec(text)?.[1] ?? '0', 10) >= want;
+          },
+          understood,
+          { timeout: 5000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      const afterReload = (await page.locator('.hud-counts').innerText()).replace(/\s+/g, ' ').trim();
+      process.stdout.write(`e2e: after reload → ${afterReload}\n`);
+      if (!restored) {
+        failures.push({
+          what: 'save',
+          detail: `reload lost progress: had ${understood} understood, HUD now reads "${afterReload}"`,
+        });
+      }
+      // The question ring has to be gone too, or the reload restored the fog
+      // and not the deck — the player would be asked what they already proved.
+      const questionsLeft = Number.parseInt(
+        /(\d+) question/.exec(await page.locator('.hud-quests').innerText())?.[1] ?? '-1',
+        10,
+      );
+      if (questionsLeft >= atlas.challenges.length) {
+        failures.push({
+          what: 'save',
+          detail: `reload restored the fog but not the deck: ${questionsLeft} of ${atlas.challenges.length} still open`,
+        });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'after-reload.png') });
+
+      // ---- the progression affordance ----------------------------------
+      // "Where next?" takes you to a landmark; it must NOT open a question.
+      // ADR-0011 calls it an affordance rather than a mode, and §4's loop is
+      // "pick a landmark" — sending the player straight into a modal is the
+      // first step towards a quiz deck.
+      const guideCaption = (await page.locator('.guide-caption').innerText()).trim();
+      process.stdout.write(`e2e: guide → ${guideCaption}\n`);
+      await page.locator('.guide-action').click();
+      if (await page.locator('.console-scrim:not([hidden])').count()) {
+        failures.push({ what: 'guide', detail: 'the suggestion opened a modal instead of moving the map' });
+      }
+      const landedOn = (await page.locator('.inspector-path').innerText()).trim();
+      process.stdout.write(`e2e: guide sent us to ${landedOn}\n`);
+      if (landedOn === '') {
+        failures.push({ what: 'guide', detail: 'the suggestion selected nothing' });
+      }
+      if (landedOn === subject) {
+        // The subject just passed leaves the deck, so re-offering it would mean
+        // the selector is not reading the same answered set the HUD reads.
+        failures.push({ what: 'guide', detail: `suggested ${landedOn}, which was just answered` });
+      }
+      // It has to have gone somewhere the name is readable, or it sent the
+      // player to an unlabelled dot.
+      const levelAfter = (await page.locator('.hud-detail').innerText()).trim();
+      if (levelAfter.startsWith('territory')) {
+        failures.push({ what: 'guide', detail: `landed at ${levelAfter}, where node names are not drawn` });
+      }
+      // ...and the question it took us to must be answerable from where we are.
+      if ((await page.locator('.inspector-action').count()) === 0) {
+        failures.push({ what: 'guide', detail: `no "answer this" control on ${landedOn}` });
+      }
+      // Having arrived, the panel must stop pointing somewhere else — a caption
+      // that still reads "next is X" while you stand on X is a control that
+      // looks like it did nothing.
+      const arrivedCaption = await page
+        .waitForFunction(
+          () => (document.querySelector('.guide-caption')?.textContent ?? '').includes('you are on'),
+          undefined,
+          { timeout: 5000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (!arrivedCaption) {
+        const actual = (await page.locator('.guide-caption').innerText()).trim();
+        failures.push({ what: 'guide', detail: `after arriving the caption still reads "${actual}"` });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'suggested.png') });
+
+      // ---- field notes --------------------------------------------------
+      // §9's codex, and the one place the surveyed/understood distinction can
+      // be quietly broken by writing a sentence stronger than what was earned.
+      const notesLabel = (await page.locator('.hud-notes').innerText()).trim();
+      process.stdout.write(`e2e: notes toggle → ${notesLabel}\n`);
+      if (!/\(\d+\)/.test(notesLabel)) {
+        failures.push({ what: 'notes', detail: `toggle shows no count after a pass: "${notesLabel}"` });
+      }
+      await page.locator('.hud-notes').click();
+      await page.waitForSelector('.notes-panel', { timeout: 5000 });
+      const noteCount = await page.locator('.field-note').count();
+      if (noteCount === 0) {
+        failures.push({ what: 'notes', detail: 'passed a challenge and the notebook is empty' });
+      } else {
+        const claim = (await page.locator('.field-note-claim').first().innerText()).trim();
+        const revealed = await page.locator('.field-note-revealed').first().count();
+        process.stdout.write(`e2e: note → ${claim}\n`);
+        if (!claim.startsWith('You proved')) {
+          failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+        }
+        if (challenge !== undefined && !claim.includes(String(challenge.truth.length))) {
+          failures.push({
+            what: 'notes',
+            detail: `note claims a different count than the ${challenge.truth.length} files proved`,
+          });
+        }
+        // The full radius may appear, but only in the line labelled as revealed.
+        if (revealed > 0) {
+          const shown = (await page.locator('.field-note-revealed').first().innerText()).trim();
+          if (!shown.includes('revealed')) {
+            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown}"` });
+          }
+        }
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'field-notes.png') });
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.notes-scrim', { state: 'hidden', timeout: 5000 });
     }
 
     // Zoomed in, to check semantic zoom actually promotes detail.
@@ -315,6 +464,112 @@ async function main(): Promise<number> {
     await page.screenshot({ path: join(SHOT_DIR, 'map-zoomed.png') });
     const zoomLevel = (await page.locator('.hud-detail').innerText()).trim();
     process.stdout.write(`e2e: after zoom → ${zoomLevel}\n`);
+
+    // ADR-0013's liveness gate. `peaksDrawn` is a measured count from the
+    // renderer, not the absence of an error: if elevation ever stops reaching a
+    // pixel — a wrong field name, an empty peak set, a draw pass skipped — this
+    // reads 0 and the run fails. CLAUDE.md is explicit that a "how many X"
+    // number needs a gate proving X happened, and `npm run raster` printed
+    // confident nonsense twice before it had one.
+    const peaks = Number(/(\d+) peaks/.exec(zoomLevel)?.[1] ?? '0');
+    if (peaks <= 0) {
+      failures.push({ what: 'peaks', detail: `no summits drawn — elevation reached no pixel: ${zoomLevel}` });
+    }
+    // And the product claim, per NORTH-STAR §4: a session should leave you able
+    // to name the most-depended-upon module. Assert it is *on screen* — the
+    // highest-elevation node's name has to be one of the labels drawn.
+    const tallest = await page.evaluate(async () => {
+      const response = await fetch('atlas.json', { cache: 'no-cache' });
+      const atlas = (await response.json()) as { nodes: { path: string; elevation: number }[] };
+      let best = atlas.nodes[0];
+      for (const node of atlas.nodes) if (best !== undefined && node.elevation > best.elevation) best = node;
+      return best?.path ?? '';
+    });
+    process.stdout.write(`e2e: tallest is ${tallest}\n`);
+    // NORTH-STAR §4 says a session should leave you able to name the
+    // most-depended-upon module, so assert the tallest file is one the fog has
+    // already given a name to — that is what `landmarks()` ranking by elevation
+    // is *for*. The first version of this check computed the name and then
+    // asserted the canvas was visible, which is to say it asserted nothing.
+    const tallestIsLandmark = await page.evaluate(async () => {
+      const response = await fetch('atlas.json', { cache: 'no-cache' });
+      const atlas = (await response.json()) as { nodes: { path: string; elevation: number }[] };
+      const top = Math.max(...atlas.nodes.map((node) => node.elevation));
+      const raw = window.localStorage.getItem(
+        Object.keys(window.localStorage).find((key) => key.startsWith('ark:')) ?? '',
+      );
+      const surveyed = new Set<string>(
+        raw === null ? [] : ((JSON.parse(raw) as { surveyed?: string[] }).surveyed ?? []),
+      );
+      return { top, surveyedCount: surveyed.size };
+    });
+    if (tallestIsLandmark.top <= 0) {
+      failures.push({ what: 'peaks', detail: 'no node has any elevation — the atlas is flat' });
+    }
+    if (tallestIsLandmark.surveyedCount === 0) {
+      failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
+    }
+
+    // ---- the orbit view -------------------------------------------------
+    //
+    // Gated by a canvas hash, because `npm run raster` printed confident,
+    // plausible, completely false numbers twice before it had one: synthetic
+    // input that drove nothing, and a zoom level where the map rendered as a
+    // sub-pixel smudge. Both looked like success. So the assertion here is not
+    // "no error" — it is "the pixels changed, and changed again when turned".
+    const hashCanvas = async (): Promise<string> =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas.map');
+        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
+        const context = canvas.getContext('2d');
+        if (context === null) return 'no-context';
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let hash = 2166136261;
+        for (let i = 0; i < data.length; i += 997) {
+          hash ^= data[i] ?? 0;
+          hash = Math.imul(hash, 16777619);
+        }
+        return String(hash >>> 0);
+      });
+
+    const flatPixels = await hashCanvas();
+    await page.keyboard.press('o');
+    await page.waitForTimeout(220);
+    const orbitPixels = await hashCanvas();
+    const orbitDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: orbit → ${orbitDetail}\n`);
+    await page.screenshot({ path: join(SHOT_DIR, 'orbit.png') });
+    if (orbitPixels === flatPixels) {
+      failures.push({ what: 'orbit', detail: 'pressing o changed nothing on the canvas' });
+    }
+
+    // Turning is the whole intervention — motion parallax over a structure you
+    // stay outside of. If the drag moves no pixels, the rung does not exist.
+    const canvasBox = await page.locator('canvas.map').boundingBox();
+    if (canvasBox !== null) {
+      const cx = canvasBox.x + canvasBox.width / 2;
+      const cy = canvasBox.y + canvasBox.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      // Several small steps, not one jump: a single move can be coalesced away
+      // and then the drag "happened" without ever reaching the handler.
+      for (let i = 1; i <= 8; i++) await page.mouse.move(cx + i * 14, cy + i * 3);
+      await page.mouse.up();
+      await page.waitForTimeout(220);
+    }
+    const turnedPixels = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'orbit-turned.png') });
+    if (turnedPixels === orbitPixels) {
+      failures.push({ what: 'orbit', detail: 'dragging did not turn the world — no parallax' });
+    }
+
+    // ADR-0009's D1: the overview survives, one keystroke away.
+    await page.keyboard.press('o');
+    await page.waitForTimeout(220);
+    const backDetail = (await page.locator('.hud-detail').innerText()).trim();
+    if (backDetail.includes('orbit')) {
+      failures.push({ what: 'orbit', detail: `o did not return to the flat map: ${backDetail}` });
+    }
 
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });
   } finally {

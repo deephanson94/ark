@@ -105,6 +105,18 @@ export function fit(bounds: Bounds, viewport: Viewport, margin = 64): Camera {
   };
 }
 
+/**
+ * Centre the view on a point, zooming in only as far as `minScale` requires.
+ *
+ * Never zooms *out*: a player who has zoomed in to read a neighbourhood should
+ * not be yanked back out because something across the map was suggested. The
+ * floor exists so the destination arrives at a zoom level where its name is
+ * actually drawn — being sent to an unlabelled dot is being sent nowhere.
+ */
+export function centreOn(camera: Camera, point: Point, minScale = 0): Camera {
+  return { x: point.x, y: point.y, scale: clampScale(Math.max(camera.scale, minScale)) };
+}
+
 /** The world-space rectangle currently on screen, grown by `padding` px. */
 export function visibleBounds(camera: Camera, viewport: Viewport, padding = 0): Bounds {
   const halfWidth = (viewport.width / 2 + padding) / camera.scale;
