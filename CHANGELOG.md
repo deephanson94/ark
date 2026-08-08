@@ -1480,3 +1480,52 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: the Archaeology ADR itself, from these numbers rather than from the sentence they
   replace. Then the **negative witness**, then the **phenomenon catalogue** for risk #1.
+
+- **ADR-0019: Archaeology asks a place what happened to it — the decision, and no generator.** §6.2's
+  *"what problem kept recurring?"* is not gradeable, so the reduction is **recognition instead of
+  generation**: subject a **file**, board **commits**, truth the commits whose own recorded file list
+  names it. You are never asked to articulate the recurring problem; the answer key *is* it. That is
+  the transpose of Placement, which is stated rather than glossed — it is where the remaining supply
+  is, because every file→file history relation git supports is either co-change (Companion) or a date
+  comparison the inspector prints for free.
+
+  **Two decisions came out of measurement and neither was the plan.**
+
+  **The date window is a pool filter, not a distractor strategy.** The inspector prints first-seen and
+  last-seen; every candidate row shows a date; so "tick everything inside the range" has **recall 1.0
+  by construction** and clears band A at precision 0.64. Unfiltered it is the dominant guess — best
+  0.77 on hono with **17 boards scoring 0.70–0.78**, the edge of a cliff rather than a plateau.
+  Constrain every candidate to the subject's own lifetime and the same guess selects the *whole
+  board*: it becomes ADR-0007's select-everything exploit, measured max **0.46** against a 0.5
+  threshold. **A gate heuristic retired by arithmetic** — one rule where there would have been two.
+
+  **A fact an earlier reveal already stated is not an answer**, and this is the finding that changed
+  the design. Placement's reveal names the files a commit touched, which is exactly a member of those
+  files' Archaeology keys: **55.6% of this repo's key members were already disclosed, and 15 of 66
+  boards were disclosed entirely** (16.0% and 1 of 172 on hono — the bootstrap repo is the worst case,
+  because its Placement deck covers 39 of 46 eligible commits against hono's 54 of 475). Excluding
+  them costs **13 boards here and none on hono**. The counter-argument nearly won — recall is not
+  Ctrl+F, and remembering a reveal *is* learning the repo — and lost to §9's own line: a note claims
+  what was **proved**, never what was **shown**. This generalises ADR-0012 from answer keys to the
+  facts inside them, and it is the first time one verb's output constrains another's.
+
+  Supply, measured on both repos as decided: **27 boards here** (supply binds, 40 without decision 7)
+  and **54 on hono** (the cap binds), keys of 2–6 commits, lifting 1 of this repo's 16 unprovable
+  nodes and 14 of hono's 154. Tier **5**, so it is served after tier 3 and before Placement.
+
+  **Two of my own numbers were wrong before they were right, both in the direction that gets
+  believed.** The counterfactual table's first draft measured every row with decision 7 *off*, so it
+  described a shape the document does not propose — the identical error ADR-0018 records twice, caught
+  only by re-reading my own table. And the probe that justified decision 7 filtered the toucher list
+  *before* computing membership, dropping excluded commits into the distractor pool: **a wrong answer
+  key inside the counterfactual that was about to justify the rule.** Re-measured; the conclusions
+  held, which is luck rather than method. Also corrected: CHANGELOG's own "0 issue numbers on ark" is
+  now **16**, all distinct PR-merge subjects — still a 1:1 lookup, so the verdict survives a figure
+  that stopped being true within one milestone.
+
+  **Next**: build it. First task is the verb-blind disclosure accumulator decision 7 needs — each verb
+  declares the facts its reveal gives away, `build.ts` accumulates in generation order — because
+  without it nothing else can be correct. Then the member widening: `candidates`/`truth` admit a
+  commit id (`ATLAS_VERSION` 6 → 7, `docs/atlas-format.md` in the same commit), and six places assume
+  a *member* is a file — the worst is `save.ts`'s `asIds`, whose own comment states the false rule in
+  words, **the third instance of that class in that one file**.
