@@ -20,10 +20,9 @@
  * whatever it scored.
  */
 
-import type { Challenge, NodeId } from '../atlas/index.js';
-import { nodeAt } from '../atlas/index.js';
+import type { AtlasId, Challenge } from '../atlas/index.js';
 import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
-import { VERBS, bandFor } from '../verbs/index.js';
+import { VERBS, bandFor, memberLabel } from '../verbs/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -58,10 +57,16 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
   let open: Challenge | null = null;
 
-  const pathOf = (id: NodeId): string => {
-    const ref = scene.graph.refById.get(id);
-    return ref === undefined ? id : nodeAt(scene.graph, ref).path;
-  };
+  /**
+   * What to print for an id — a file's path, or a commit's date and message.
+   *
+   * Verb-blind, by prefix. This was `pathOf`, a `refById` lookup falling back to
+   * the raw id, which for an Archaeology board means twenty rows reading
+   * `c:1a2b3c4d5e6f`. Choosing the format by *id kind* rather than by verb is
+   * ADR-0018 decision 1 applied to display: the console still does not know what
+   * any verb asks.
+   */
+  const labelOf = (id: AtlasId): string => memberLabel(scene.graph, id);
 
   const close = (): void => {
     open = null;
@@ -76,12 +81,17 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
   function renderQuestion(challenge: Challenge): void {
     const verb = VERBS[challenge.verb];
-    const prompt = verb.prompt(challenge, pathOf);
-    const picked = new Set<NodeId>();
+    const prompt = verb.prompt(challenge, labelOf);
+    const picked = new Set<AtlasId>();
 
+    // Sorted by the label, which means alphabetically for files and — because a
+    // commit label leads with its date — chronologically for commits. That is
+    // the ordering a list of events is read in, and it is not a giveaway kept
+    // by accident: every row shows its date whatever the order, so the "tick the
+    // oldest K" guess exists either way and `oldestK` scores and refuses it.
     const rows = [...challenge.candidates]
-      .map((id) => ({ id, path: pathOf(id) }))
-      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+      .map((id) => ({ id, label: labelOf(id) }))
+      .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
     const submit = el('button', 'console-submit', ['Submit']);
     submit.type = 'button';
@@ -97,7 +107,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     for (const row of rows) {
       const box = el('span', 'choice-box');
       const item = el('li', 'choice');
-      const button = el('button', 'choice-button', [box, el('span', 'choice-path', [row.path])]);
+      const button = el('button', 'choice-button', [box, el('span', 'choice-path', [row.label])]);
       button.type = 'button';
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {
@@ -146,7 +156,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     done.addEventListener('click', close);
 
     body.replaceChildren(
-      header(verb.prompt(challenge, pathOf).title, challenge.difficulty),
+      header(verb.prompt(challenge, labelOf).title, challenge.difficulty),
       el('h2', 'console-question', [reveal.subject]),
       score,
       // `evidence` is assembled from the measured result inside `grade()`, so
@@ -169,7 +179,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
             note.kind === 'correct' ? '✓' : note.kind === 'missed' ? '↯' : '✗',
           ]),
           el('span', 'note-text', [
-            el('span', 'note-path', [note.path]),
+            el('span', 'note-path', [note.label]),
             el('span', 'note-why', [note.note]),
           ]),
         ]),

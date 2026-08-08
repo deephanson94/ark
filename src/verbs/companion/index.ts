@@ -29,7 +29,7 @@
  * subset-selection verb reduces to one `Grade`.
  */
 
-import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
+import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
 import { disclosesNothing } from '../disclosure.js';
@@ -110,18 +110,18 @@ export const companion: Verb = {
    * earned at: ADR-0011 stores what was proved, not what it was proved against,
    * and re-deriving a threshold the save never recorded would invent a fact.
    */
-  stillHolds(graph: Graph, subject: SubjectId, member: NodeId) {
+  stillHolds(graph: Graph, subject: AtlasId, member: NodeId) {
     const ref = graph.refById.get(subject);
     const memberRef = graph.refById.get(member);
     if (ref === undefined || memberRef === undefined) return false;
     return indexCoChange(graph.atlas).rows.get(ref)?.has(memberRef) === true;
   },
-  subjectLabel(graph: Graph, subject: SubjectId) {
+  subjectLabel(graph: Graph, subject: AtlasId) {
     const ref = graph.refById.get(subject);
     return ref === undefined ? null : nodeAt(graph, ref).path;
   },
   /** Shared commits. The population is every partner the matrix records. */
-  noteWeights(graph: Graph, subject: SubjectId): NoteWeights {
+  noteWeights(graph: Graph, subject: AtlasId): NoteWeights {
     const weights = new Map<NodeId, number>();
     const ref = graph.refById.get(subject);
     if (ref === undefined) return weights;
@@ -132,7 +132,7 @@ export const companion: Verb = {
   },
   noteProse(facts: NoteFacts): NoteProse {
     const count = facts.proved.length;
-    const names = facts.proved.map((file) => file.path).join(', ');
+    const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
       `You proved ${count} ${plural(count, 'file', 'files')} that ` +
       `${plural(count, 'changes', 'change')} with ${facts.subjectLabel} — ${names} — ` +
@@ -158,5 +158,5 @@ export { indexCoChange, rankCompanions } from './cochange.js';
 export type { DistractorChoice, StrategyId } from './distractors.js';
 export { TARGET_MIX, mixOf, quotas, selectDistractors } from './distractors.js';
 export type { GenerationReport, GenerationResult, SkipReason } from './generate.js';
-export { generateCompanion, generateWithReport, truthCap } from './generate.js';
+export { generateCompanion, generateWithReport } from './generate.js';
 export { revealOf } from './reveal.js';

@@ -10,25 +10,37 @@
  * testable, and structurally incapable of having a model in the path.
  */
 
-import type { Atlas, Challenge, Graph, NodeId, SubjectId, VerbId } from '../atlas/index.js';
+import type { Atlas, AtlasId, Challenge, Graph, VerbId } from '../atlas/index.js';
 import type { DisclosedFact } from './disclosure.js';
 
+/**
+ * **Every id below is an `AtlasId`, not a `NodeId`, and none of that widening
+ * was visible to the compiler.**
+ *
+ * A member of a choice set is a place *or* an event since ADR-0019 — Archaeology
+ * boards commits. `NodeId` and `CommitId` are both aliases of `string`, so the
+ * fields here type-checked unchanged while every reader downstream went on
+ * assuming a file: the save dropped members it could not parse, the fog put
+ * commit ids in a set of squares, and the field notes resolved a member through
+ * `refById` and `continue`d on the miss. The alias is a comment; the assumptions
+ * it licenses live in its readers (ADR-0018's lesson, one field over).
+ */
 export interface Grade {
   /** 0..1. Never negative — a wrong pick teaches, it does not subtract. */
   readonly score: number;
   /** picked ∩ truth, sorted. */
-  readonly correct: readonly NodeId[];
+  readonly correct: readonly AtlasId[];
   /** truth \ picked, sorted. */
-  readonly missed: readonly NodeId[];
+  readonly missed: readonly AtlasId[];
   /** picked \ truth, sorted. */
-  readonly spurious: readonly NodeId[];
+  readonly spurious: readonly AtlasId[];
   /** Why, derived from the measured result. Never a canned string. */
   readonly evidence: string;
 }
 
 /** The answer shape for every "select the right subset" verb. */
 export interface SetAnswer {
-  readonly picked: readonly NodeId[];
+  readonly picked: readonly AtlasId[];
 }
 
 export interface GenerateOptions {
@@ -123,7 +135,7 @@ export interface Prompt {
  * is how a Placement note would have come to say "all of them direct
  * importers" about a commit.
  */
-export type NoteWeights = ReadonlyMap<NodeId, number>;
+export type NoteWeights = ReadonlyMap<AtlasId, number>;
 
 /** A field note's two sentences: what was proved, and what was merely shown. */
 export interface NoteProse {
@@ -133,9 +145,16 @@ export interface NoteProse {
   readonly revealed: string | null;
 }
 
-/** One proved member of a note, with its weight in the verb's own unit. */
-export interface ProvedFile {
-  readonly path: string;
+/**
+ * One proved member of a note, with its weight in the verb's own unit.
+ *
+ * `label`, not `path`: a member is a file for three verbs and a **commit** for
+ * Archaeology, and `path` was the field name asserting otherwise. `notes.ts`
+ * resolves it verb-blindly by prefix (`memberLabel`), so the sentence a verb
+ * writes never has to ask which kind it was handed.
+ */
+export interface ProvedMember {
+  readonly label: string;
   readonly weight: number;
 }
 
@@ -143,8 +162,8 @@ export interface ProvedFile {
 export interface NoteFacts {
   /** The subject's display name — a path, or a commit's own label. */
   readonly subjectLabel: string;
-  /** Sorted by weight, then path. Never empty. */
-  readonly proved: readonly ProvedFile[];
+  /** Sorted by weight, then label. Never empty. */
+  readonly proved: readonly ProvedMember[];
   /** The largest `weight` among `proved`. */
   readonly farthest: number;
   /** The size of the subject's full population **today**. Revealed, not proved. */
@@ -155,8 +174,9 @@ export type NoteKind = 'correct' | 'missed' | 'spurious';
 
 /** One line of the reveal: a pick, and the measured reason it was right or wrong. */
 export interface RevealNote {
-  readonly id: NodeId;
-  readonly path: string;
+  readonly id: AtlasId;
+  /** What to call it on screen: a file's path, or a commit's date and message. */
+  readonly label: string;
   readonly kind: NoteKind;
   /**
    * The chain of files the verb traced to justify `note`, as paths, or empty
@@ -270,10 +290,15 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
   /** Pure and self-contained. */
   grade(challenge: C, answer: A): Grade;
   /**
-   * The wording, given a way to turn a node id into its display path. Pure —
-   * the verb never sees the atlas here, only the one name it needs.
+   * The wording, given a way to turn an id into its display name. Pure — the
+   * verb never sees the atlas here, only the one name it needs.
+   *
+   * Total over `AtlasId`: a node resolves to its path, a commit to its date and
+   * message. A verb asking for the wrong kind therefore gets a wrong-looking
+   * string rather than an id, which is the honest failure — but no verb needs
+   * to, since each knows what its own subject is.
    */
-  prompt(challenge: C, pathOf: (id: NodeId) => string): Prompt;
+  prompt(challenge: C, labelOf: (id: AtlasId) => string): Prompt;
   /**
    * Why each pick was right or wrong. On the contract rather than imported from
    * one verb's directory, which is what the console did until M4 — it reached
@@ -287,11 +312,17 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * ADR-0011 decision 3: provenance is immutable, but the claim about *today*
    * is re-checked before it renders as knowledge. The check is **per verb**
    * because the claims differ — "still depends on" for Blast Radius, "still
-   * changes with" for Companion, "was still in that commit" for Placement —
-   * and applying one verb's rule to another's pass would drop true claims and
-   * keep false ones.
+   * changes with" for Companion, "was still in that commit" for Placement,
+   * "still landed on that file" for Archaeology — and applying one verb's rule
+   * to another's pass would drop true claims and keep false ones.
+   *
+   * `member` is an `AtlasId` since ADR-0019: Archaeology's members are commits.
+   * A verb is asked only about its own passes, so each may assume the kind its
+   * own boards carry, and a mismatched id falls out as `false` rather than
+   * throwing — which is what `livenessOf` wants when a save names a verb's
+   * member from an older atlas shape.
    */
-  stillHolds(graph: Graph, subject: SubjectId, member: NodeId): boolean;
+  stillHolds(graph: Graph, subject: AtlasId, member: AtlasId): boolean;
   /**
    * What to call this subject on screen, or null when the atlas no longer has
    * it.
@@ -303,7 +334,7 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * simply never appear, with nothing anywhere to say it had gone. That is the
    * same silent-drop failure `weightsFor` was written to stop, one field over.
    */
-  subjectLabel(graph: Graph, subject: SubjectId): string | null;
+  subjectLabel(graph: Graph, subject: AtlasId): string | null;
   /**
    * How far each member of the subject's population sits from it, in this
    * verb's own unit — and, by its key set, **what that population is today**.
@@ -311,7 +342,7 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * Recomputed from the atlas rather than stored, so a note follows a rename
    * and decays when the repo does (ADR-0011 decision 3).
    */
-  noteWeights(graph: Graph, subject: SubjectId): NoteWeights;
+  noteWeights(graph: Graph, subject: AtlasId): NoteWeights;
   /**
    * A field note in words. Repo-agnostic templates only (guardrail 2) — every
    * specific string must have come out of the atlas.

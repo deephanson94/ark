@@ -12,8 +12,8 @@
  * the repo at all.
  */
 
-import type { Atlas, Challenge, NodeId, NodeRef, SubjectId } from '../atlas/index.js';
-import { isNodeId, parseAtlas } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
+import { challengeOrder, isNodeId, parseAtlas } from '../atlas/index.js';
 import type { Camera, Point } from './camera.js';
 import {
   NORTH,
@@ -321,6 +321,16 @@ function start(scene: Scene, root: HTMLElement): void {
     if (bucket === undefined) challengesById.set(challenge.subject, [challenge]);
     else bucket.push(challenge);
   }
+  // **Ordered by tier, explicitly, and that is a fix rather than a flourish.**
+  // `scene.atlas.challenges` is sorted by challenge **id**, and an id begins
+  // with its verb's name — so `archaeology-…` sorts before `blast-…`, and a
+  // click on a disc would have opened the tier-5 history question before the
+  // tier-3 import one, on every subject carrying both. §5's tiers *are* the
+  // curriculum, and `selector.ts` calls this path the primary one; inheriting an
+  // alphabetical accident here would invert the progression everywhere the
+  // suggestion button is not used, and falsify `challengeFor`'s own comment
+  // below. ADR-0019 decision 8.
+  for (const bucket of challengesById.values()) bucket.sort(challengeOrder);
   const unanswered = new Set<NodeRef>();
   /**
    * How many questions are left **in the deck**, which is not the same number as
@@ -364,7 +374,7 @@ function start(scene: Scene, root: HTMLElement): void {
   // Wires a restored save has already earned, before the first frame.
   retie();
 
-  const regionOf = (subject: SubjectId): string | null => {
+  const regionOf = (subject: AtlasId): string | null => {
     const ref = scene.graph.refById.get(subject);
     return ref === undefined ? null : (scene.atlas.nodes[ref]?.region ?? null);
   };
@@ -406,10 +416,11 @@ function start(scene: Scene, root: HTMLElement): void {
   /**
    * Which question a click on this node opens.
    *
-   * The first one the player has not passed, in the atlas's own order, so a
-   * node carrying both verbs offers Blast Radius until it is answered and then
-   * Companion. Falling back to the first challenge when everything is answered
-   * keeps the inspector able to say what the node was asked about.
+   * The first one the player has not passed, **in tier order**, so a node
+   * carrying several verbs offers the tier-3 import question first and the
+   * tier-5 history question after it. Falling back to the first challenge when
+   * everything is answered keeps the inspector able to say what the node was
+   * asked about.
    */
   const challengeFor = (node: SceneNode | null): Challenge | null => {
     if (node === null) return null;

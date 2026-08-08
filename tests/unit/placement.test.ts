@@ -18,12 +18,9 @@ import {
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet } from '../../src/verbs/index.js';
-import {
-  commitSupply,
-  generateWithReport,
-  placement,
-  spread,
-} from '../../src/verbs/placement/index.js';
+import { spread } from '../../src/verbs/sample.js';
+import { commitSupply } from '../../src/verbs/commits.js';
+import { generateWithReport, placement } from '../../src/verbs/placement/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /**
@@ -524,7 +521,7 @@ describe('a stored pass decays with the atlas, not with the repo', () => {
     expect([...weights.values()]).toEqual(CHANGED.map(() => 1));
     const prose = placement.noteProse({
       subjectLabel: 'abc — "x"',
-      proved: [{ path: 'lib/alpha.ts', weight: 1 }],
+      proved: [{ label: 'lib/alpha.ts', weight: 1 }],
       farthest: 1,
       population: 4,
     });
@@ -556,9 +553,14 @@ describe('the supply report says what it refused', () => {
   });
 });
 
-describe('the registry holds three verbs and names none of them anywhere else', () => {
+describe('the registry holds four verbs and names none of them anywhere else', () => {
   it('registers placement', () => {
-    expect(Object.keys(VERBS).sort()).toEqual(['blastRadius', 'companion', 'placement']);
+    expect(Object.keys(VERBS).sort()).toEqual([
+      'archaeology',
+      'blastRadius',
+      'companion',
+      'placement',
+    ]);
     expect(VERBS.placement.id).toBe('placement');
   });
 });

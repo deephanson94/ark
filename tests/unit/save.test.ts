@@ -210,8 +210,44 @@ describe('a commit subject survives a round trip', () => {
     expect(parseProgress(JSON.stringify(bogus)).passes).toEqual([]);
   });
 
-  it('still rejects a commit id in `proved`, because a member is always a file', () => {
-    const bogus = { ...commitPass, passes: [{ ...commitPass.passes[0], proved: ['c:0123456789ab'] }] };
-    expect(parseProgress(JSON.stringify(bogus)).passes[0]?.proved).toEqual([]);
+  /**
+   * **This test asserted the opposite until ADR-0019, and its old name stated
+   * the reason as a rule**: *"still rejects a commit id in `proved`, because a
+   * member is always a file"*. Archaeology's members are commits, so that
+   * sentence — which also sat in a comment beside the code — was false one verb
+   * later, and the failure it would have caused is the one this file has two
+   * other records of: a member the parser drops is gone at load and **erased by
+   * the next write**, so the pass survives its own session and dies on the
+   * second.
+   *
+   * Kept as a test rather than deleted, inverted, because the widening is
+   * exactly what has to stay true.
+   */
+  it('keeps a commit id in `proved`, because a member is a place or an event', () => {
+    const withCommit = {
+      ...commitPass,
+      passes: [{ ...commitPass.passes[0], proved: ['c:0123456789ab'] }],
+    };
+    expect(parseProgress(JSON.stringify(withCommit)).passes[0]?.proved).toEqual([
+      'c:0123456789ab',
+    ]);
+  });
+
+  it('still drops a member that is neither a node nor a commit', () => {
+    const junk = {
+      ...commitPass,
+      passes: [{ ...commitPass.passes[0], proved: ['c:0123456789ab', 'not-an-id', 42] }],
+    };
+    expect(parseProgress(JSON.stringify(junk)).passes[0]?.proved).toEqual(['c:0123456789ab']);
+  });
+
+  /**
+   * `surveyed` is the one list that really is node-only: it is the map's memory
+   * of what the player was shown, and a commit has no square. The widening above
+   * must not have leaked into it.
+   */
+  it('keeps `surveyed` node-only, because it is a set of squares on the map', () => {
+    const surveyed = { ...commitPass, surveyed: ['n:0123456789ab', 'c:0123456789ab'] };
+    expect(parseProgress(JSON.stringify(surveyed)).surveyed).toEqual(['n:0123456789ab']);
   });
 });

@@ -32,7 +32,7 @@
  * reconstructible from anything else.
  */
 
-import type { NodeId, SubjectId, VerbId } from '../atlas/index.js';
+import type { NodeId, AtlasId, VerbId } from '../atlas/index.js';
 import type { Graph } from '../atlas/index.js';
 import { byteCompare, commitIdFor, isNodeId } from '../atlas/index.js';
 import type { Challenge } from '../atlas/index.js';
@@ -60,14 +60,23 @@ export interface Pass {
    * needs to know which kind it is. That is what let Placement's key be
    * `(verb, subject)` like everyone else's.
    */
-  readonly subject: SubjectId;
-  /** The truth members the player actually picked. Sorted, unique. */
-  readonly proved: readonly NodeId[];
+  readonly subject: AtlasId;
+  /**
+   * The truth members the player actually picked. Sorted, unique.
+   *
+   * A place **or** an event, like the subject and for the same reason
+   * (ADR-0019): Archaeology's members are commits. Opaque here — the save keys,
+   * orders and compares these and never needs to know which kind they are.
+   */
+  readonly proved: readonly AtlasId[];
 }
 
 export interface Progress {
   readonly version: number;
-  /** Sorted, unique. */
+  /**
+   * Sorted, unique. **Node ids only** — this is the map's memory of what you
+   * were shown, and a commit has no square to remember.
+   */
   readonly surveyed: readonly NodeId[];
   /** Sorted by `(verb, subject)`. */
   readonly passes: readonly Pass[];
@@ -75,7 +84,7 @@ export interface Progress {
 
 export const EMPTY_PROGRESS: Progress = { version: SAVE_VERSION, surveyed: [], passes: [] };
 
-function union(existing: readonly NodeId[], added: Iterable<NodeId>): NodeId[] {
+function union<T extends string>(existing: readonly T[], added: Iterable<T>): T[] {
   return [...new Set([...existing, ...added])].sort(byteCompare);
 }
 
@@ -101,8 +110,8 @@ export function recordSurvey(progress: Progress, ids: Iterable<NodeId>): Progres
 export function recordPass(
   progress: Progress,
   verb: VerbId,
-  subject: SubjectId,
-  proved: Iterable<NodeId>,
+  subject: AtlasId,
+  proved: Iterable<AtlasId>,
 ): Progress {
   const passes = [...progress.passes];
   const at = passes.findIndex((pass) => pass.verb === verb && pass.subject === subject);
@@ -170,7 +179,7 @@ export interface Liveness {
    * verb: "is this still here?" is a fact about the atlas, and answering it by
    * prefix keeps it total for an id whose verb this build does not have.
    */
-  exists(id: SubjectId): boolean;
+  exists(id: AtlasId): boolean;
   /**
    * True when the claim `(verb, subject, member)` still holds.
    *
@@ -185,7 +194,7 @@ export interface Liveness {
    * The rule itself belongs to the verb (`Verb.stillHolds`), because only the
    * verb knows what it asserted.
    */
-  holds(verb: VerbId, subject: SubjectId, member: NodeId): boolean;
+  holds(verb: VerbId, subject: AtlasId, member: AtlasId): boolean;
 }
 
 /**
@@ -202,7 +211,7 @@ export const UNCHECKED: Liveness = { exists: () => true, holds: () => true };
  * member, and both verbs' checks are a whole-cone or whole-matrix sweep.
  */
 export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
-  const cones = new Map<string, ReadonlySet<NodeId>>();
+  const cones = new Map<string, ReadonlySet<AtlasId>>();
   const commits = new Set(graph.atlas.history.commits.map((commit) => commitIdFor(commit.sha)));
   return {
     // A commit that has slid out of the atlas's window takes its pass with it,
@@ -215,14 +224,26 @@ export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
       let cone = cones.get(key);
       if (cone === undefined) {
         const implementation = verbs[verb];
-        const found = new Set<NodeId>();
-        // Ask the verb about every node once rather than per member: the
+        const found = new Set<AtlasId>();
+        // Ask the verb about every id once rather than per member: the
         // implementations are a cone walk and a matrix lookup, and calling
         // either once per stored claim turns an O(1) question into an O(V·E)
         // one on a save with a full notebook.
+        //
+        // **Both populations, and this is a defect the compiler could not see.**
+        // The scan was `atlas.nodes` alone, on the assumption a member is a
+        // file. Archaeology's members are commits, so every one of its claims
+        // would have been absent from this set, `livePasses` would have filtered
+        // the pass to empty, and `livePasses` drops an empty pass — silently
+        // re-fogging the subject and putting the question back. Asking each verb
+        // about ids it never issues is cheap and total: a commit id is not in a
+        // cone and a node id is not in a file list, so both simply answer false.
         if (implementation !== undefined) {
           for (const node of graph.atlas.nodes) {
             if (implementation.stillHolds(graph, subject, node.id)) found.add(node.id);
+          }
+          for (const id of commits) {
+            if (implementation.stillHolds(graph, subject, id)) found.add(id);
           }
         }
         cone = found;
@@ -235,7 +256,7 @@ export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
 
 /** Just enough of `VERBS` to check a claim. Injected so this module stays pure. */
 export type VerbLookup = Readonly<Partial<Record<VerbId, { stillHolds: StillHolds }>>>;
-type StillHolds = (graph: Graph, subject: SubjectId, member: NodeId) => boolean;
+type StillHolds = (graph: Graph, subject: AtlasId, member: AtlasId) => boolean;
 
 /**
  * The stored passes that the current atlas still bears out, each narrowed to
@@ -264,7 +285,7 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
 }
 
 /** The key a challenge is "answered" under. `(verb, subject)`, never `id`. */
-export function answerKey(verb: VerbId, subject: SubjectId): string {
+export function answerKey(verb: VerbId, subject: AtlasId): string {
   return `${verb}\n${subject}`;
 }
 
@@ -365,7 +386,13 @@ export function deriveFog(
       understood.add(pass.subject);
       surveyed.add(pass.subject);
     }
+    // **Node members only, and that filter is new.** `understood` and
+    // `surveyed` are sets of *squares*; an Archaeology pass proves commits,
+    // which have none. Without this the fog would carry ids `refById` cannot
+    // resolve — invisible on the map, and counted in every "how much have I
+    // uncovered" number that reads `fog.surveyed.size`.
     for (const member of pass.proved) {
+      if (!isNodeId(member)) continue;
       understood.add(member);
       surveyed.add(member);
     }

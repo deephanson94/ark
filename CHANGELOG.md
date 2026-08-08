@@ -1543,3 +1543,87 @@ One line per iteration: what changed, and what to do next.
   commit id (`ATLAS_VERSION` 6 → 7, `docs/atlas-format.md` in the same commit), and six places assume
   a *member* is a file — the worst is `save.ts`'s `asIds`, whose own comment states the false rule in
   words, **the third instance of that class in that one file**.
+
+- **M4 closes: Archaeology ships, and a member is now a place or an event.** NORTH-STAR §6.2's
+  *"what problem kept recurring?"* is not gradeable, so the verb is
+  [ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)'s reduction —
+  **recognition instead of generation**: subject a **file**, board **commits**, truth the commits
+  whose own recorded file list names it, `candidates ∩ touchedBy(subject) = truth` for the fourth
+  time. Tier 5. `src/verbs/archaeology/`, plus the three things that had to move first.
+
+  **The member widening (`ATLAS_VERSION` 6 → 7) produced zero compiler errors, exactly as ADR-0018's
+  subject widening did**, because `NodeId` and `CommitId` are both aliases of `string`. Nine readers,
+  found by grepping every read of `challenge.candidates`, `.truth`, `grade.correct` and `pass.proved`
+  and asking *what am I assuming this names?* The worst was **`save.ts`'s `asIds`, whose own comment
+  stated the false rule in words** — *"`proved` stays node-only, because a member is always a file
+  whatever the subject is"* — and whose filter drops a member at load that the next write then
+  erases: every Archaeology pass would have survived its own session and died on the second. Third
+  instance of that class in that one file. The others: `deriveFog` putting commit ids in a set of map
+  squares; `livenessOf.holds` building a verb's population from `atlas.nodes` alone, so every
+  Archaeology claim would have decayed to nothing on restore; **`notes.ts` resolving each member
+  through `refById` and `continue`ing on the miss — ADR-0018's own defect 1, in the same function,
+  one line below the fix that was written for it**; the console rendering twenty rows of
+  `c:1a2b3c4d5e6f`; the validator; `gate.ts`'s node-only scorer; and `cli.ts`'s unprovable count,
+  where the comment one line up was right about the class and had been applied to half of it. The
+  union is `AtlasId` now — it was named `SubjectId` for the one role it had.
+
+  Step 1's disclosure accumulator — shipped last session with nothing consuming it — **finally has a
+  consumer and a test that bites**: disconnect it and `test:atlas` goes red. Decision 7 measured at
+  **58.9% of this repo's key members already stated by a Placement reveal, and 17 of 70 candidate
+  boards entirely**; excluding them costs 41 subjects here (deck 40 → 27) and 21 on hono (54, still
+  capped). The order of two lines in the generator is the whole of that rule: membership is computed
+  from the **unfiltered** toucher list, so an excluded commit leaves the board altogether rather than
+  dropping into the distractor pool — which is the wrong answer key ADR-0019's own probe shipped
+  inside the counterfactual that was about to justify the rule.
+
+  **Re-running the ADR's tables against the real generator was the first task after building it, and
+  one row inverted.** Structural figures reproduce; the window guess maxes at **0.462** against a
+  predicted 0.46, which is decision 5's arithmetic to the digit. But the gate table swapped ends:
+  `oldestK` fires **0 times on both repos** against a predicted 24 on hono, while `recentK` — left
+  out *because* it measured zero — refuses **3 hono boards**. So `recentK` is in the set, on
+  decision 6's own stated rule and on its own caveat that the exclusion held only *"under this
+  configuration"*. `oldestK` stays as a canary rather than as a live gate: both are invited by the
+  same structural fact (the key spans the date ordering, so it contains both ends), and it loses only
+  because the distractor padding is spread across the window instead of ranked — ADR-0018's `busy`
+  argument again, supply the board with the thing that makes the naive guess wrong. Measured, it is
+  one design change from firing. **`broadKnown` costs 1 board here, not 5.**
+
+  Two things the implementation found that no measurement predicted. **`uncertain` is not a refusal
+  this verb can make**: `commitSupply` already refuses every commit touching a barred node, so a
+  contested file has zero eligible touchers and never reaches the check — the branch was unreachable,
+  confirmed by mutation, and is gone. And **a 2-toucher file's key *is* both endpoints**, so on a
+  fixture with one commit per date `endpoints` refuses every such board; the first unit fixture did
+  exactly that and shipped **one board** while every assertion about choice sets passed vacuously.
+  Real repos land several commits a day, which is why keys of 2 exist on both.
+
+  Shared machinery moved up to `src/verbs/` on the precedent `gate.ts` and `paths.ts` set:
+  `commits.ts` (commit eligibility — the two history verbs read *the same record* from opposite
+  sides, so a copy would have been two rules that can drift), `sample.ts` (`spread`, `truthCap` and
+  `retain`, which existed as byte-identical copies in three verbs and would have been four), and
+  `members.ts` (what an id is called on screen, dispatched on the id and never on the verb). The map
+  orders a node's click bucket by **tier** explicitly now — `archaeology-` sorts before `blast-`, so
+  the atlas's id order would have served the tier-5 question first on the path `selector.ts` calls
+  primary, inverting the curriculum and falsifying `main.ts`'s own comment.
+
+  Measured: **27 boards here** (supply binds) and **54 on hono** (the cap binds), keys of 2–6
+  commits, lifting 1 of this repo's 21 unprovable nodes and **16** of hono's 154. Four verbs now
+  leave **20 of ark's 140** nodes unprovable where Blast Radius alone leaves 54. Atlas 249.8 KiB in
+  ~455 ms, all budgets inside their ceilings, byte-identical across two runs. The reveal states
+  relations and never identities — *"it changed a file that imports this one"*, never which — because
+  naming it would hand over that commit's Placement key, ADR-0014's finding 3 running the other way;
+  and it never prints a commit's width, which is `broadKnown`'s input. Both pinned by tests that fail
+  when mutated.
+
+  Adding Archaeology's invariant to `tests/atlas/` revealed that **Placement had never had one on the
+  real atlas** — it lived only in a unit fixture. Both are there now, with the cross-verb disclosure
+  check, which is the one property neither verb can see and which the `(verb, truth)` uniqueness rule
+  structurally cannot express, since one key holds node ids and the other commit ids.
+
+  **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
+  name-alike, structurally-near non-dependent, co-change ghost, message-mention), the generator
+  *chose* it for that reason, and no reveal says which. Decide the one design fork first: strategy
+  provenance either ships in the atlas (a schema change, so `ATLAS_VERSION` and
+  `docs/atlas-format.md` in the same commit) or is re-derived player-side from the graph, which needs
+  no bump. After that, the **phenomenon catalogue** — a repo-independent vocabulary of ~30–60
+  structural phenomena, the atom that would let anything *transfer* to another repo, which is the
+  other half of risk #1.

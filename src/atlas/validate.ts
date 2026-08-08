@@ -378,11 +378,41 @@ export function coChangeOrder(x: CoChangePair, y: CoChangePair): number {
   return y[2] - x[2] || x[0] - y[0] || x[1] - y[1];
 }
 
+/**
+ * Which section each role's ids must live in, derived from the evidence kind.
+ *
+ * The evidence kind is the shape declaration: `commit` evidence describes an
+ * event, `history` evidence describes a file's history and therefore boards
+ * events. So subject-kind and member-kind are not extra facts the validator has
+ * to be told — they are the same claim written twice, and a disagreement is a
+ * dangling reference in disguise (Appendix A). Without this a challenge with a
+ * node subject and commit evidence validated cleanly and rendered as
+ * `On  a commit landed: ""`, which is the player guessing at a shape.
+ *
+ * Note this is **not** the validator knowing what a verb asks: it never reads
+ * `verb`, and a fifth verb reusing an existing evidence kind needs no edit here.
+ */
+const ROLE_KINDS: Readonly<Record<Evidence['kind'], { subject: 'node' | 'commit'; member: 'node' | 'commit' }>> = {
+  importGraph: { subject: 'node', member: 'node' },
+  coChange: { subject: 'node', member: 'node' },
+  commit: { subject: 'commit', member: 'node' },
+  history: { subject: 'node', member: 'commit' },
+};
+
 function validateEvidence(value: unknown, at: string): Evidence {
   const r = asRecord(value, at);
-  const kind = asMember(r['kind'], `${at}.kind`, ['importGraph', 'coChange', 'commit'] as const);
+  const kind = asMember(
+    r['kind'],
+    `${at}.kind`,
+    ['importGraph', 'coChange', 'commit', 'history'] as const,
+  );
   if (kind === 'importGraph') {
     return { kind, depth: asIntAtLeast(r['depth'], `${at}.depth`, 1) };
+  }
+  if (kind === 'history') {
+    // At least 2: fewer than two commits touching a file cannot produce a key
+    // and a distractor, so a population below it could not have been sampled.
+    return { kind, touchedBy: asIntAtLeast(r['touchedBy'], `${at}.touchedBy`, 2) };
   }
   if (kind === 'commit') {
     const subject = asString(r['subject'], `${at}.subject`);
@@ -415,26 +445,34 @@ function validateChallenge(
   const id = asString(r['id'], `${at}.id`);
   if (id.length === 0) fail(`${at}.id`, 'must not be empty');
 
-  // A subject is a place **or** an event (ADR-0018), told apart by its own
-  // prefix, and each arm is checked against the section that has to contain it.
-  // Accepting "either a node or a commit" without looking at the prefix would
-  // let a typo'd node id pass as a missing commit and vice versa — a dangling
-  // reference is exactly what this validator exists to refuse (Appendix A:
-  // "an atlas with a dangling edge must throw, not degrade").
+  // A subject **and now every member** is a place or an event (ADR-0018,
+  // ADR-0019), told apart by its own prefix, and each arm is checked against the
+  // section that has to contain it. Accepting "either a node or a commit"
+  // without looking at the prefix would let a typo'd node id pass as a missing
+  // commit and vice versa — a dangling reference is exactly what this validator
+  // exists to refuse (Appendix A: "an atlas with a dangling edge must throw, not
+  // degrade").
   const subject = asString(r['subject'], `${at}.subject`);
-  if (isCommitId(subject)) {
-    if (!commits.has(subject)) {
-      fail(`${at}.subject`, `${subject} is not a retained commit in this atlas`);
+  const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
+  const roles = ROLE_KINDS[evidence.kind];
+
+  const resolve = (id: string, where: string, expected: 'node' | 'commit'): void => {
+    const actual = isCommitId(id) ? 'commit' : 'node';
+    if (actual !== expected) {
+      fail(where, `${evidence.kind} evidence wants a ${expected} here, got ${JSON.stringify(id)}`);
     }
-  } else if (!ids.has(subject)) {
-    fail(`${at}.subject`, `${subject} is not a node in this atlas`);
-  }
+    if (expected === 'commit') {
+      if (!commits.has(id)) fail(where, `${id} is not a retained commit in this atlas`);
+    } else if (!ids.has(id)) {
+      fail(where, `${id} is not a node in this atlas`);
+    }
+  };
+
+  resolve(subject, `${at}.subject`, roles.subject);
 
   const candidates = asSortedStrings(r['candidates'], `${at}.candidates`);
   if (candidates.length === 0) fail(`${at}.candidates`, 'must not be empty');
-  for (const candidate of candidates) {
-    if (!ids.has(candidate)) fail(`${at}.candidates`, `${candidate} is not a node in this atlas`);
-  }
+  for (const candidate of candidates) resolve(candidate, `${at}.candidates`, roles.member);
   if (candidates.includes(subject)) {
     fail(`${at}.candidates`, 'must not contain the subject of the challenge');
   }
@@ -463,28 +501,20 @@ function validateChallenge(
   const tier = asIntAtLeast(r['tier'], `${at}.tier`, 1);
   if (tier > 6) fail(`${at}.tier`, `expected 1..6, got ${tier}`);
 
-  const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
-  // **The subject's kind and the evidence's kind must agree.** Not a verb rule —
-  // the validator cannot import verbs, and does not need to: `commit` evidence
-  // describes an event and a `c:` id names one, so the two are the same claim
-  // written twice and disagreeing is a dangling reference in disguise. Without
-  // it a challenge with a node subject and commit evidence validates cleanly and
-  // renders as `On  a commit landed: ""`, which is the player guessing at a
-  // shape (guardrail 5).
-  if ((evidence.kind === 'commit') !== isCommitId(subject)) {
-    fail(
-      `${at}.evidence.kind`,
-      `${evidence.kind} evidence with a ${isCommitId(subject) ? 'commit' : 'node'} subject`,
-    );
-  }
   // The answer key is a sample of the population, so it can never be larger
-  // than it. Stated here because `touched` is the number the reveal calls
+  // than it. Stated here because both counts are the number the reveal calls
   // *revealed but not proved*, and a population smaller than the proof would
   // make that sentence arithmetic nonsense.
   if (evidence.kind === 'commit' && evidence.touched < truth.length) {
     fail(
       `${at}.evidence.touched`,
       `commit touched ${evidence.touched} indexed file(s) but the answer key holds ${truth.length}`,
+    );
+  }
+  if (evidence.kind === 'history' && evidence.touchedBy < truth.length) {
+    fail(
+      `${at}.evidence.touchedBy`,
+      `${evidence.touchedBy} commit(s) touched the subject but the answer key holds ${truth.length}`,
     );
   }
 

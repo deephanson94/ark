@@ -21,7 +21,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-import type { Atlas, Challenge, SubjectId } from '../../src/atlas/index.js';
+import type { Atlas, Challenge, AtlasId } from '../../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../../src/indexer/build.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
@@ -29,7 +29,7 @@ import { answerKey } from '../../src/player/progress.js';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 let atlas: Atlas;
-let regionOf: (subject: SubjectId) => string | null;
+let regionOf: (subject: AtlasId) => string | null;
 
 beforeAll(async () => {
   atlas = await buildAtlas(indexOptions(ROOT));

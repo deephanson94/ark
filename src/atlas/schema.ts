@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 6;
+export const ATLAS_VERSION = 7;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -28,27 +28,41 @@ export type NodeId = string;
  * A commit identity: `c:` + the 12-hex abbreviated sha in `CommitRecord.sha`.
  *
  * Not interchangeable with a `NodeId` and deliberately shaped so that no code
- * can mistake one for the other — see `SubjectId`.
+ * can mistake one for the other — see `AtlasId`.
  */
 export type CommitId = string;
 
 /**
- * What a challenge is *about*: a place in the repo, or an event in its history.
+ * A place in the repo, or an event in its history — whichever role it is in.
  *
- * Until M4's third verb this was always a `NodeId`, and the whole player read it
- * as one — the fog promotes it, the map flies to it, the deck indexes questions
- * by it. Placement's subject is a **commit** (NORTH-STAR §6.2), which has no
- * position on a map and no fog to lift, so the type had to admit both.
+ * Until M4's second verb this was always a `NodeId`, and the whole player read
+ * it as one — the fog promotes it, the map flies to it, the deck indexes
+ * questions by it. Placement's subject is a **commit** (NORTH-STAR §6.2), which
+ * has no position on a map and no fog to lift, so the type had to admit both.
  *
  * The two arms are told apart by the id's own prefix (`isNodeId` /
- * `isCommitId`) rather than by a companion `subjectKind` field, and rather than
- * by asking the verb. That matters for one specific reason recorded in
- * ADR-0018: *"can this subject be drawn?"* is a question about the id, not about
- * the verb that used it, and every leak this codebase has found came from
- * verb-blind state being interpreted by verb-specific code. A prefix keeps the
- * answer verb-blind and total.
+ * `isCommitId`) rather than by a companion kind field, and rather than by asking
+ * the verb. That matters for one specific reason recorded in ADR-0018: *"can
+ * this be drawn?"* is a question about the id, not about the verb that used it,
+ * and every leak this codebase has found came from verb-blind state being
+ * interpreted by verb-specific code. A prefix keeps the answer verb-blind and
+ * total.
+ *
+ * **This was called `SubjectId` until M4's third verb, and the rename is part of
+ * ADR-0019 decision 1 rather than tidying.** It was named for the one role it
+ * had. Archaeology's *members* are commits, so the union now covers `subject`,
+ * `candidates` and `truth` alike — and a type named for a role invites exactly
+ * the *which role is this?* reasoning that produced ADR-0018's nine defects. One
+ * union, one name, no second field.
+ *
+ * **Nothing about this is checkable by the compiler.** `NodeId` and `CommitId`
+ * are both aliases of `string`, so widening a field from `NodeId` to `AtlasId`
+ * produces **zero** type errors and every assumption the old type licensed is
+ * still sitting in its readers. They are found by grepping every read and asking
+ * *what am I assuming this names?* — see ADR-0019's consequences for the list
+ * that exercise produced.
  */
-export type SubjectId = NodeId | CommitId;
+export type AtlasId = NodeId | CommitId;
 
 /** An index into `Atlas.nodes`. Used everywhere size matters. */
 export type NodeRef = number;
@@ -271,7 +285,7 @@ export interface History {
   readonly commits: readonly CommitRecord[];
 }
 
-export type VerbId = 'blastRadius' | 'companion' | 'placement';
+export type VerbId = 'archaeology' | 'blastRadius' | 'companion' | 'placement';
 
 /**
  * Every verb id, sorted. **The only list.**
@@ -284,7 +298,12 @@ export type VerbId = 'blastRadius' | 'companion' | 'placement';
  * dropped at parse and erased by the next write, so a stale list silently
  * destroys a player's progress rather than merely failing to validate.
  */
-export const VERB_IDS: readonly VerbId[] = ['blastRadius', 'companion', 'placement'];
+export const VERB_IDS: readonly VerbId[] = [
+  'archaeology',
+  'blastRadius',
+  'companion',
+  'placement',
+];
 
 export type Evidence =
   | {
@@ -361,6 +380,23 @@ export type Evidence =
        * between a note's claim and its radius.
        */
       readonly touched: number;
+    }
+  | {
+      readonly kind: 'history';
+      /**
+       * How many commits the atlas is willing to ask about touched this file
+       * **in all** — the population `truth` samples from (ADR-0019 decision 3).
+       *
+       * Measured, like every other variant's number, and stated by the *reveal*
+       * rather than by the prompt. The prompt may not state it, and the reason
+       * is specific: the inspector already prints `churn`, which counts every
+       * **walked** commit that touched the file, while this counts the
+       * **eligible** ones. Two counts of nearly the same thing, differing by
+       * whatever the guardrails refused, is a number a player would reasonably
+       * read as the answer's size and be wrong about. So the board never states
+       * either, and the reveal states this one as revealed-not-proved.
+       */
+      readonly touchedBy: number;
     };
 
 export interface Challenge {
@@ -372,9 +408,9 @@ export interface Challenge {
   readonly difficulty: number;
   /**
    * A node id for a verb that asks about a file, a commit id for one that asks
-   * about an event. Told apart by prefix — see `SubjectId`.
+   * about an event. Told apart by prefix — see `AtlasId`.
    */
-  readonly subject: SubjectId;
+  readonly subject: AtlasId;
   /**
    * The choice set shown to the player. Sorted; never contains `subject`.
    *
@@ -383,15 +419,23 @@ export interface Challenge {
    * key, and any dependent that is not is absent from the board entirely. That
    * is what lets a hub ship a sampled answer key without lying (ADR-0008).
    *
-   * `companion` and `placement` hold the same shape against their own relation:
-   * `candidates ∩ companions(subject) = truth` (ADR-0014) and
-   * `candidates ∩ files(commit) = truth` (ADR-0018). Three verbs, one rule —
-   * every candidate is either in the answer key or certified out of it, and the
-   * middle of the range is kept off the board rather than graded.
+   * The other three hold the same shape against their own relation:
+   * `candidates ∩ companions(subject) = truth` (ADR-0014),
+   * `candidates ∩ files(commit) = truth` (ADR-0018) and
+   * `candidates ∩ touchedBy(subject) = truth` (ADR-0019). Four verbs, one rule
+   * — every candidate is either in the answer key or certified out of it, and
+   * the middle of the range is kept off the board rather than graded.
+   *
+   * **A member is a place or an event, exactly as a subject is** (ADR-0019
+   * decision 1). Three verbs put node ids here; `archaeology` puts commit ids,
+   * because it asks a file which commits landed on it. Every candidate on one
+   * board is the same kind — the validator derives which from `evidence.kind`
+   * and checks it, since a board mixing files and commits would be two
+   * questions wearing one prompt.
    */
-  readonly candidates: readonly NodeId[];
+  readonly candidates: readonly AtlasId[];
   /** The correct subset. Non-empty, sorted, always a subset of `candidates`. */
-  readonly truth: readonly NodeId[];
+  readonly truth: readonly AtlasId[];
   readonly evidence: Evidence;
 }
 

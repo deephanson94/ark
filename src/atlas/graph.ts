@@ -7,7 +7,17 @@
  * code rather than as a good intention.
  */
 
-import type { Atlas, AtlasEdge, AtlasNode, NodeId, NodeRef } from './schema.js';
+import { commitIdFor } from './identity.js';
+import type {
+  Atlas,
+  AtlasEdge,
+  AtlasId,
+  AtlasNode,
+  CommitId,
+  CommitRecord,
+  NodeId,
+  NodeRef,
+} from './schema.js';
 
 export type Direction = 'dependencies' | 'dependents';
 
@@ -19,6 +29,19 @@ export interface Graph {
   readonly in: readonly (readonly AtlasEdge[])[];
   readonly refById: ReadonlyMap<NodeId, NodeRef>;
   readonly refByPath: ReadonlyMap<string, NodeRef>;
+  /**
+   * The commit each `c:` id names — `refById`'s twin for the other arm of
+   * `AtlasId`.
+   *
+   * Here rather than in a verb because *"does this atlas still hold the thing
+   * this id names?"* is a fact about the atlas, exactly like `refById.has`, and
+   * since ADR-0019 both arms can appear in `candidates`, `truth` and `subject`
+   * alike — so the console, the field notes and two verbs all need it. It
+   * replaces a `WeakMap<Atlas, …>` memo inside `placement/`, which existed only
+   * because the lookup had no home on the shared structure everyone already
+   * holds.
+   */
+  readonly commitById: ReadonlyMap<CommitId, CommitRecord>;
 }
 
 export function buildGraph(atlas: Atlas): Graph {
@@ -34,13 +57,30 @@ export function buildGraph(atlas: Atlas): Graph {
     refById.set(node.id, ref);
     refByPath.set(node.path, ref);
   }
-  return { atlas, out, in: inbound, refById, refByPath };
+  const commitById = new Map<CommitId, CommitRecord>();
+  for (const commit of atlas.history.commits) commitById.set(commitIdFor(commit.sha), commit);
+  return { atlas, out, in: inbound, refById, refByPath, commitById };
 }
 
 export function nodeAt(graph: Graph, ref: NodeRef): AtlasNode {
   const node = graph.atlas.nodes[ref];
   if (node === undefined) throw new RangeError(`no node at index ${ref}`);
   return node;
+}
+
+/**
+ * The commit an id names, or null when this atlas no longer holds it.
+ *
+ * Null is a normal outcome rather than an error: the commit window slides with
+ * every reindex, so a save earned against last month's atlas can name a commit
+ * that has fallen out of it. ADR-0011 decision 3 says a claim the atlas can no
+ * longer support is dropped rather than shown stale, and returning null is how
+ * that happens here.
+ *
+ * Total over `AtlasId` on purpose — a node id simply misses.
+ */
+export function commitAt(graph: Graph, id: AtlasId): CommitRecord | null {
+  return graph.commitById.get(id) ?? null;
 }
 
 export function refOf(graph: Graph, id: NodeId): NodeRef {

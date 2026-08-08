@@ -26,6 +26,9 @@ import {
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
+import { commitIdFor, isCommitId, isNodeId } from '../../src/atlas/index.js';
+import { touchedFact } from '../../src/verbs/index.js';
+import { placement } from '../../src/verbs/placement/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -437,6 +440,92 @@ describe('challenges', () => {
           (graph.in[ref] ?? []).length + (graph.out[ref] ?? []).length === 0;
       }),
     ).toBe(true);
+  });
+
+  /**
+   * **The two history verbs read the same record from opposite sides**, so both
+   * invariants are checked here against a freshly recomputed incidence — and
+   * neither was, before Archaeology landed. Placement's had lived only in a unit
+   * test against a fixture, which cannot see a repo that moves.
+   */
+  it('holds the placement invariant against the commits themselves', () => {
+    const graph = buildGraph(atlas);
+    const boards = atlas.challenges.filter((c) => c.verb === 'placement');
+    expect(boards.length).toBeGreaterThan(0);
+    for (const challenge of boards) {
+      const commit = atlas.history.commits.find((c) => commitIdFor(c.sha) === challenge.subject);
+      expect(commit, challenge.id).toBeDefined();
+      const touched = new Set((commit?.files ?? []).map((ref) => nodeAt(graph, ref).id));
+      const inCommit = challenge.candidates.filter((id) => touched.has(id));
+      expect(inCommit, challenge.id).toEqual([...challenge.truth]);
+    }
+  });
+
+  it('holds the archaeology invariant against the commits themselves', () => {
+    // candidates ∩ touchedBy(subject) = truth — the fourth use of one shape.
+    // Every candidate is either in the answer key or a commit whose own recorded
+    // file list does not name the subject, with nothing in between (ADR-0019).
+    const graph = buildGraph(atlas);
+    const boards = atlas.challenges.filter((c) => c.verb === 'archaeology');
+    expect(boards.length).toBeGreaterThan(0);
+    for (const challenge of boards) {
+      const ref = refOf(graph, challenge.subject);
+      const touchers = new Set(
+        atlas.history.commits
+          .filter((commit) => commit.files.includes(ref))
+          .map((commit) => commitIdFor(commit.sha)),
+      );
+      const inHistory = challenge.candidates.filter((id) => touchers.has(id));
+      expect(inHistory, challenge.id).toEqual([...challenge.truth]);
+    }
+  });
+
+  it('boards commits for archaeology and files for everyone else', () => {
+    // The member widening, asserted on the real atlas: `AtlasId` is an alias of
+    // `string`, so nothing about this is checkable by the compiler.
+    for (const challenge of atlas.challenges) {
+      const wantCommits = challenge.verb === 'archaeology';
+      for (const id of challenge.candidates) {
+        expect(isCommitId(id), `${challenge.id} offers ${id}`).toBe(wantCommits);
+      }
+      expect(isNodeId(challenge.subject)).toBe(challenge.verb !== 'placement');
+    }
+  });
+
+  it('dates every archaeology candidate inside its subject’s own lifetime', () => {
+    // ADR-0019 decision 5. Without it, "tick every commit in the range" has
+    // recall 1.0 for free; with it the guess selects the whole board, which
+    // ADR-0007's sizing rule already holds below the pass threshold.
+    const graph = buildGraph(atlas);
+    const byId = new Map(atlas.history.commits.map((c) => [commitIdFor(c.sha), c]));
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
+      const node = nodeAt(graph, refOf(graph, challenge.subject));
+      for (const id of challenge.candidates) {
+        const date = byId.get(id)?.date ?? '';
+        expect(date >= (node.firstSeen ?? ''), `${challenge.id} ${id}`).toBe(true);
+        expect(date <= (node.lastSeen ?? ''), `${challenge.id} ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it('never asks a commit-membership fact an earlier reveal already stated', () => {
+    // ADR-0019 decision 7, checked across verbs on the real deck — the one
+    // property no single verb can see, and one `test:atlas`'s own `(verb, truth)`
+    // uniqueness check structurally cannot express, since one key holds node ids
+    // and the other commit ids.
+    const stated = new Set<string>();
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'placement')) {
+      for (const fact of placement.discloses(challenge)) stated.add(fact);
+    }
+    expect(stated.size).toBeGreaterThan(0);
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
+      for (const member of challenge.truth) {
+        expect(
+          stated.has(touchedFact(member, challenge.subject)),
+          `${challenge.id} asks back a fact a placement reveal states`,
+        ).toBe(false);
+      }
+    }
   });
 
   it('computes a difficulty that spans the range rather than clustering', () => {

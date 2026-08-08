@@ -59,7 +59,7 @@
  * reading a hot region counter should know it means "one region", not "bug".
  */
 
-import type { Challenge, SubjectId } from '../atlas/index.js';
+import type { Challenge, AtlasId } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
 import { answerKey } from './progress.js';
 
@@ -184,7 +184,7 @@ function rankLess(a: Rank, b: Rank): boolean {
  */
 export function suggestNext(
   deck: readonly Challenge[],
-  regionOf: (subject: SubjectId) => string | null,
+  regionOf: (subject: AtlasId) => string | null,
   state: SelectorState,
 ): Challenge | null {
   // Null means "this subject is not anywhere on the map" — a commit (ADR-0018),

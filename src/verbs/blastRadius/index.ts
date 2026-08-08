@@ -18,7 +18,7 @@
  * which is the seam that makes adding the next verb free downstream.
  */
 
-import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
+import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
 import { disclosesNothing } from '../disclosure.js';
@@ -86,18 +86,18 @@ export const blastRadius: Verb = {
    * A Blast Radius claim is "this file reaches that one". It stops being true
    * when the import chain is deleted, so the live graph is the whole check.
    */
-  stillHolds(graph: Graph, subject: SubjectId, member: NodeId) {
+  stillHolds(graph: Graph, subject: AtlasId, member: NodeId) {
     const ref = graph.refById.get(subject);
     const memberRef = graph.refById.get(member);
     if (ref === undefined || memberRef === undefined) return false;
     return dependents(graph, ref, Number.POSITIVE_INFINITY).has(memberRef);
   },
-  subjectLabel(graph: Graph, subject: SubjectId) {
+  subjectLabel(graph: Graph, subject: AtlasId) {
     const ref = graph.refById.get(subject);
     return ref === undefined ? null : nodeAt(graph, ref).path;
   },
   /** Import hops. The population is the subject's whole transitive cone. */
-  noteWeights(graph: Graph, subject: SubjectId): NoteWeights {
+  noteWeights(graph: Graph, subject: AtlasId): NoteWeights {
     const weights = new Map<NodeId, number>();
     const ref = graph.refById.get(subject);
     if (ref === undefined) return weights;
@@ -108,7 +108,7 @@ export const blastRadius: Verb = {
   },
   noteProse(facts: NoteFacts): NoteProse {
     const count = facts.proved.length;
-    const names = facts.proved.map((file) => file.path).join(', ');
+    const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
       `You proved ${count} ${plural(count, 'file', 'files')} that ` +
       `${plural(count, 'depends', 'depend')} on ${facts.subjectLabel} — ${names} — ` +
@@ -145,6 +145,6 @@ export {
 export type { DifficultyInput } from '../difficulty.js';
 export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
 export type { GenerationReport, GenerationResult, SkipReason } from './generate.js';
-export { generateBlastRadius, generateWithReport, sampleByDistance, truthCap } from './generate.js';
+export { generateBlastRadius, generateWithReport, sampleByDistance } from './generate.js';
 export type { NoteKind, Reveal, RevealNote } from './reveal.js';
 export { revealOf } from './reveal.js';

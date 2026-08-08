@@ -36,8 +36,8 @@
  * overclaim this repo keeps having to walk back.
  */
 
-import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
-import { idOf, isCommitId, nodeAt } from '../../atlas/index.js';
+import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
+import { commitAt, idOf, isCommitId, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
 import type {
   GenerateOptions,
@@ -51,7 +51,7 @@ import type {
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { touchedFact, widthFact } from '../disclosure.js';
-import { commitOf, labelOf } from './commits.js';
+import { commitLabel } from '../members.js';
 import { generatePlacement } from './generate.js';
 import { revealOf } from './reveal.js';
 
@@ -120,14 +120,14 @@ export const placement: Verb = {
    * recorded — the same reason Companion checks matrix presence rather than the
    * bar its pass was earned at.
    */
-  stillHolds(graph: Graph, subject: SubjectId, member: NodeId) {
-    const commit = commitOf(graph.atlas, subject);
+  stillHolds(graph: Graph, subject: AtlasId, member: NodeId) {
+    const commit = commitAt(graph, subject);
     if (commit === null) return false;
     return commit.files.some((ref) => idOf(graph, ref) === member);
   },
-  subjectLabel(graph: Graph, subject: SubjectId) {
-    const commit = commitOf(graph.atlas, subject);
-    return commit === null ? null : labelOf(commit);
+  subjectLabel(graph: Graph, subject: AtlasId) {
+    const commit = commitAt(graph, subject);
+    return commit === null ? null : commitLabel(commit);
   },
   /**
    * Every file the commit touched, at weight 1.
@@ -138,16 +138,16 @@ export const placement: Verb = {
    * would put a number in front of the player that the grade never used.
    * `noteProse` below therefore never mentions `farthest`.
    */
-  noteWeights(graph: Graph, subject: SubjectId): NoteWeights {
+  noteWeights(graph: Graph, subject: AtlasId): NoteWeights {
     const weights = new Map<NodeId, number>();
-    const commit = commitOf(graph.atlas, subject);
+    const commit = commitAt(graph, subject);
     if (commit === null) return weights;
     for (const ref of commit.files) weights.set(nodeAt(graph, ref).id, 1);
     return weights;
   },
   noteProse(facts: NoteFacts): NoteProse {
     const count = facts.proved.length;
-    const names = facts.proved.map((file) => file.path).join(', ');
+    const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
       `You proved ${count} ${plural(count, 'file', 'files')} that ` +
       `${plural(count, 'changed', 'changed')} in ${facts.subjectLabel} — ${names}.`;
@@ -190,10 +190,9 @@ export const placement: Verb = {
   },
 };
 
-export type { CommitSkip, CommitSupply, EligibleCommit } from './commits.js';
-export { commitOf, commitSupply, labelOf } from './commits.js';
+
 export type { DistractorChoice, StrategyId } from './distractors.js';
 export { TARGET_MIX, mixOf, quotas, selectDistractors } from './distractors.js';
 export type { GenerationReport, GenerationResult, SkipReason } from './generate.js';
-export { generatePlacement, generateWithReport, spread, truthCap } from './generate.js';
+export { generatePlacement, generateWithReport } from './generate.js';
 export { revealOf } from './reveal.js';

@@ -1,8 +1,15 @@
 # ADR-0019 — Archaeology asks a place what happened to it
 
 - **Date**: 2026-08-08
-- **Status**: accepted — **decision only; no generator exists yet.** NORTH-STAR §6.2's wording cannot
-  be built, so this records what replaces it and what that costs, before any code.
+- **Status**: accepted, and **built** — the verb ships. Every decision below stands as written; the
+  numbers do not, and the corrections are in *[Re-measured against the real
+  generator](#re-measured-against-the-real-generator)* at the foot of this document. That section is
+  the first task this ADR set for the session that implemented it, and it changed one thing about the
+  design: **`recentK` is in the gate set and `oldestK` fires on neither repo**, which is the reverse
+  of what decision 6's table predicted.
+- **Superseded status line**: *"decision only; no generator exists yet"* — true until the verb was
+  built. NORTH-STAR §6.2's wording cannot be built, so this records what replaces it and what that
+  costs.
 - **Bumps** (when it is built): `ATLAS_VERSION` 6 → 7. `Challenge.candidates` and `Challenge.truth`
   widen from `NodeId[]` to the node-or-commit union; `Evidence` gains a `history` variant; `VerbId`
   gains `archaeology`. `docs/atlas-format.md` §2 and §3.6 in the same commit (guardrail 5).
@@ -621,3 +628,99 @@ measurement and then wrote the opposite down.** Four of the seven above are a se
 number in the same document, which is a failure mode no suite can catch and no amount of measuring
 prevents: it is what happens when the prose is written from the intention rather than re-read against
 the table.
+
+---
+
+## Re-measured against the real generator
+
+*"What this does not decide"* ended with an instruction: **no generator existed, so every deck and
+gate figure above came from a throwaway probe, and the first task after building the verb is to
+re-run these tables and correct whatever moved.** This is that pass. Measured at the commit that
+added the verb, on the same two repos.
+
+The **structural** figures reproduce. The **deck and gate** figures mostly do not, and one of them
+inverts a decision.
+
+| | ADR's probe (at `e44a823`) | real generator | note |
+|---|---|---|---|
+| ark nodes | 128 | 140 | the repo grew; ark indexes itself |
+| ark retained / walked | 51 / 67 | 54 / 71 | as above |
+| ark eligible commits | 46 (5 `wide`) | 49 (5 `wide`) | as above |
+| ark files touched ≥ 2× | 66 | 70 | as above |
+| ark subjects surviving decision 7 | 28 | 29 | |
+| **ark deck** | **22** | **27** | see `oldestK` below |
+| hono deck | 54 | 54 | the cap binds, as predicted |
+| answer keys | 2–6 | 2–6 | both repos |
+| ark `duplicateKey` | 1 | 1 | |
+| hono `duplicateKey` | 10 | 11 | |
+| ark disclosure share | 55.6% | **58.9%** (179 of 304) | |
+| ark boards fully disclosed | 15 of 66 | **17 of 70** | |
+| hono disclosure share | 16.0% | **14.4%** (132 of 917) | |
+| hono boards fully disclosed | 1 of 172 | 1 of 172 | |
+| decision 7 off → ark deck | 40 | **40** | reproduces exactly |
+| decision 7 off → hono deck | 54 | 54 | |
+| window-guess maximum | 0.46 | **0.462** | decision 5's arithmetic, to the digit |
+| nodes it lifts out of unprovable, ark | 1 of 16 | 1 (21 → 20) | |
+| nodes it lifts out of unprovable, hono | 14 of 154 | **16** (154 → 138) | |
+
+### The gate table is the one that inverted
+
+| guess | probe: ark / hono firings | real: ark / hono firings |
+|---|---|---|
+| `mentions` | 0 / 11 | **0 / 11** |
+| `endpoints` | 0 / 2 | 0 / 3 |
+| `oldestK` | 0 / **24** | 0 / **0** |
+| `recentK` | 0 / 0 — *excluded on this* | 0 / **3** |
+| `broadKnown` | **5** / 0 | **1** / 0 |
+
+`mentions` reproduces exactly and `endpoints` nearly. The other three moved, and two of them matter:
+
+**`recentK` is in `COMMIT_TRACE_HEURISTICS` now.** Decision 6 left it out on a measurement — *"it
+fires on neither repo"* — and the real generator refuses **3 hono boards** with it. Excluding it
+would ship three boards a player beats by ticking the newest rows, for no reason except that a
+superseded probe called the guess dead. Decision 6's own rule selects it, and its own text flagged
+the contingency: *"it is dead **under this configuration**"*. This is that criterion applied to
+re-measured data rather than a new decision — but it is a change to what this document decided, so it
+is stated at the top rather than buried here.
+
+**`oldestK` fires zero times on both repos**, against a predicted 24 on hono. That is not the same as
+dead, and the distinction is the one CLAUDE.md's landmine turns on. Both date guesses are invited by
+the same structural fact — decision 3 spreads the key over the date ordering, so the key always
+contains the oldest *and* the newest toucher — and `oldestK` loses because the shipped distractor
+padding is spread evenly across the window rather than ranked. That is §8.3 working exactly as
+ADR-0018's `busy` did: supply the board with the thing that makes the naive guess wrong, and score it
+anyway. Measured, it is one design change from firing (newest-first padding takes it to 1 on hono;
+dropping the window filter, to 2), and its mean is 0.169 / 0.150 against a 0.78 bar. It stays as a
+canary against a regression in the distractor mix.
+
+**`broadKnown` costs 1 board here, not 5** — so decision 6's *"cost: 5 boards here (27 → 22)"* reads
+27 → 26 today, and the shipped deck is 27 rather than 22 because the deck no longer loses those 5.
+The rule is unchanged and still fires on exactly one of the two repos, which was the argument.
+
+### Three things the implementation found that no measurement predicted
+
+**`uncertain` is not a refusal this verb can make.** Decision 4's table lists it — *"barring the
+subject, and any commit whose file list contains a barred node"* — and the second clause makes the
+first unreachable: `commitSupply` already refuses every commit touching a barred node, so a contested
+file has **zero** eligible touchers and is dropped by the fewer-than-two test before any check runs.
+Confirmed by mutation and on hono's 7 contested nodes. The guardrail is honoured more strongly by the
+supply rule than by a second copy of it, and the branch is gone.
+
+**A 2-toucher file's key *is* both endpoints**, so on a repo with one commit per date `endpoints`
+scores ~1.0 on every such board and refuses it. Real repos land several commits a day, which dilutes
+the guess — but the first unit fixture did not, and shipped **one board** while every assertion about
+choice sets passed vacuously. Named because it is a property of the verb, not of the fixture: keys of
+2 exist on both real repos precisely because their dates collide.
+
+**Placement had no invariant test on the real atlas.** Adding Archaeology's revealed that
+`candidates ∩ files(commit) = truth` had only ever been checked against a unit fixture. Both are now
+in `tests/atlas/`, together with the cross-verb disclosure check — which is the one property neither
+verb can see, and which `test:atlas`'s `(verb, truth)` uniqueness check structurally cannot express,
+since one key holds node ids and the other commit ids.
+
+### What this section does not claim
+
+Every number above is one commit of a repo that indexes itself, so all of them drift; the invariants
+do not. The ark column remains a floor rather than a plateau, for the reason the supply table already
+gives: this repo's whole history spans a handful of distinct dates, so every date-derived signal here
+is close to degenerate.

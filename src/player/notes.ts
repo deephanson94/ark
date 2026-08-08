@@ -38,18 +38,18 @@
  * that no longer exists goes dormant — retained in storage, absent here.
  */
 
-import type { Graph, SubjectId, VerbId } from '../atlas/index.js';
-import { byteCompare, nodeAt } from '../atlas/index.js';
-import type { NoteFacts, NoteProse, ProvedFile } from '../verbs/index.js';
-import { VERBS } from '../verbs/index.js';
+import type { Graph, AtlasId, VerbId } from '../atlas/index.js';
+import { byteCompare } from '../atlas/index.js';
+import type { NoteFacts, NoteProse, ProvedMember } from '../verbs/index.js';
+import { VERBS, memberLabel } from '../verbs/index.js';
 import type { Liveness, Progress } from './progress.js';
 import { livePasses } from './progress.js';
 
-export type { NoteProse, ProvedFile };
+export type { NoteProse, ProvedMember };
 
 export interface FieldNote extends NoteFacts {
   readonly verb: VerbId;
-  readonly subject: SubjectId;
+  readonly subject: AtlasId;
 }
 
 /**
@@ -68,6 +68,14 @@ export interface FieldNote extends NoteFacts {
  * `undefined` for a commit id, and the `continue` below would have dropped every
  * Placement note in silence. Wording, ruler and label are all on the `Verb`
  * contract now.
+ *
+ * **The fourth instance was the *member* resolution, and it was still here.**
+ * ADR-0018 fixed the subject; the loop below went on resolving each proved
+ * member through `refById` because a member was always a file. Archaeology's are
+ * commits, so every one of its notes would have vanished by the same
+ * `continue` — the identical bug, in the same function, one line down, surviving
+ * the fix that was written for it. `memberLabel` answers for both arms by
+ * prefix, so there is nothing left here to be wrong about.
  */
 export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness): FieldNote[] {
   const notes: FieldNote[] = [];
@@ -81,26 +89,32 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
     if (subjectLabel === null) continue;
     const weights = verb.noteWeights(graph, pass.subject);
 
-    const proved: ProvedFile[] = [];
+    const proved: ProvedMember[] = [];
     for (const member of pass.proved) {
-      const ref = graph.refById.get(member);
       const weight = weights.get(member);
-      // Both guards are **unreachable in practice**, and that is deliberate:
-      // `livePasses` has already dropped every member the current atlas no
-      // longer supports, using the same verb's own rule, so a surviving pass is
-      // non-empty and each member has a weight. Mutation testing confirmed it —
-      // disabling either changes no test. They stay because the types demand
-      // them and because `Math.max()` of an empty list is `-Infinity`, not
+      // **The name is resolved by prefix, not through `refById`.** This read
+      // `graph.refById.get(member)` and `continue`d on a miss, which for an
+      // Archaeology member — a commit — is every member: the note would simply
+      // never appear, with nothing anywhere to say it had gone. That is
+      // ADR-0018's defect 1 exactly, one field over, and the same silent-drop
+      // failure `weightsFor` was written to stop.
+      //
+      // The remaining guard is **unreachable in practice**, and that is
+      // deliberate: `livePasses` has already dropped every member the current
+      // atlas no longer supports, using the same verb's own rule, so a surviving
+      // pass is non-empty and each member has a weight. Mutation testing
+      // confirmed it — disabling it changes no test. It stays because the type
+      // demands it and because `Math.max()` of an empty list is `-Infinity`, not
       // because there are two filters. The rule lives in `livePasses` and only
       // there.
-      if (ref === undefined || weight === undefined) continue;
-      proved.push({ path: nodeAt(graph, ref).path, weight });
+      if (weight === undefined) continue;
+      proved.push({ label: memberLabel(graph, member), weight });
     }
     if (proved.length === 0) continue;
     // Ascending for hops (nearest first) and for counts alike: the ordering is
     // only there to make the sentence read the same way twice, and `farthest`
     // states which end carries the claim.
-    proved.sort((a, b) => a.weight - b.weight || byteCompare(a.path, b.path));
+    proved.sort((a, b) => a.weight - b.weight || byteCompare(a.label, b.label));
     notes.push({
       verb: pass.verb,
       subject: pass.subject,

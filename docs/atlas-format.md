@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 6,
+  "version": 7,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -55,14 +55,23 @@ Two representations, split by purpose ([ADR-0004](decisions/0004-indices-for-bul
 | reference | type | used by |
 |---|---|---|
 | `NodeRef` | integer index into `nodes` | `edges`, `history.coChange`, `history.commits[].files` |
-| `NodeId` | `"n:"` + 12 hex chars | `challenges.candidates`, `.truth`, and `.subject` for a verb that asks about a file |
-| `CommitId` | `"c:"` + the 12-hex `sha` of a retained commit | `challenges.subject` for a verb that asks about an event |
+| `NodeId` | `"n:"` + 12 hex chars | a challenge's `subject`, `candidates` and `truth` wherever it names a **file** |
+| `CommitId` | `"c:"` + the 12-hex `sha` of a retained commit | the same three fields wherever they name a **commit** |
 
-`SubjectId` is the union of the last two, and **the prefix is the discriminator** — there is no
-companion `subjectKind` field. A subject is a place or an event, and *"can this be drawn on the
-map?"* has to be answerable without knowing which verb asked, because the fog, the save and the
-deck all read a subject and only one of the two kinds belongs on a canvas.
-[ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md).
+`AtlasId` is the union of the last two, and **the prefix is the discriminator** — there is no
+companion kind field. A place or an event, and *"can this be drawn on the map?"* has to be
+answerable without knowing which verb asked, because the fog, the save, the deck and the console all
+read these ids and only one of the two kinds belongs on a canvas.
+[ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md) widened `subject`;
+[ADR-0019](decisions/0019-archaeology-asks-a-place-what-happened-to-it.md) widened `candidates` and
+`truth`, and renamed the union off `SubjectId` — it was named for the one role it had, and a type
+named for a role invites exactly the *which role is this?* reasoning that produced ADR-0018's nine
+defects.
+
+> **Nothing about that widening is checkable by a type system**, and both ADRs say so for the same
+> reason: `NodeId` and `CommitId` are both aliases of `string`. Widening a field produced **zero**
+> compiler errors on either occasion while every assumption the old type licensed sat untouched in
+> its readers. They are found by grepping each read and asking *what am I assuming this names?*
 
 Bulk arrays use indices because size dominates there. The challenge fields use ids because
 `grade(challenge, answer)` must be self-contained (NORTH-STAR §8.1) and a `Grade`'s id arrays have
@@ -319,20 +328,43 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | field | type | notes |
 |---|---|---|
 | `id` | `string` | Stable within an atlas. |
-| `verb` | `VerbId` | `blastRadius`, `companion` or `placement`. The full list is `VERB_IDS` in the schema — **the only one**. |
+| `verb` | `VerbId` | `archaeology`, `blastRadius`, `companion` or `placement`. The full list is `VERB_IDS` in the schema — **the only one**. |
 | `tier` | `1..6` | Curriculum tier, NORTH-STAR §5. |
 | `difficulty` | `number` | `0..1`. **Computed, never authored** (NORTH-STAR §8.4). Generators normalise. |
-| `subject` | `SubjectId` | What the question is about: an `n:` node for `blastRadius` and `companion`, a `c:` retained commit for `placement`. Never appears in `candidates`. |
-| `candidates` | `NodeId[]` | Sorted. The choice set. Non-empty. |
-| `truth` | `NodeId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
-| `evidence` | `Evidence` | `{kind: "importGraph", depth}`, `{kind: "coChange", minCount, wideLimit, atMost}`, or `{kind: "commit", subject, date, touched}`. |
+| `subject` | `AtlasId` | What the question is about: an `n:` node for every verb but `placement`, which asks about a `c:` retained commit. Never appears in `candidates`. |
+| `candidates` | `AtlasId[]` | Sorted. The choice set. Non-empty. **All one kind**, derived from `evidence.kind` — see below. |
+| `truth` | `AtlasId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
+| `evidence` | `Evidence` | `{kind: "importGraph", depth}`, `{kind: "coChange", minCount, wideLimit, atMost}`, `{kind: "commit", subject, date, touched}`, or `{kind: "history", touchedBy}`. |
+
+**`evidence.kind` decides what kind of id each role holds, and the validator enforces it.** It is not
+an extra fact anyone has to be told — `commit` evidence describes an event and `history` evidence
+describes a file's history, so the two are the same claim written twice and a disagreement is a
+dangling reference in disguise:
+
+| `evidence.kind` | `subject` | `candidates` / `truth` | verb |
+|---|---|---|---|
+| `importGraph` | node | nodes | `blastRadius` |
+| `coChange` | node | nodes | `companion` |
+| `commit` | commit | nodes | `placement` |
+| `history` | node | **commits** | `archaeology` |
+
+Note the validator never reads `verb` to do this, so a fifth verb reusing an existing evidence kind
+needs no edit there.
 
 Every `evidence` variant carries a **measured** quantity rather than a bound the generator imposed:
 `depth` is the furthest hop this answer key actually travels
 ([ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) §5),
 `minCount` is the weakest coupling that made this key
-([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)), and `touched` is how many
-indexed files the commit changed in all. Each verb's prompt may therefore state its own as a fact.
+([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)), `touched` is how many
+indexed files the commit changed in all, and `touchedBy` is how many eligible commits touched the
+subject file in all.
+
+Each verb's prompt may state its own as a fact — **except `touchedBy`, which only the reveal may
+state**, and the exception is the point. The inspector already prints `churn`, which counts every
+*walked* commit that touched a file, while `touchedBy` counts the *eligible* ones; two counts of
+nearly the same thing, differing by whatever the guardrails refused, is a number a player would
+reasonably read as the answer's size and be wrong about
+([ADR-0019](decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)).
 
 The `commit` variant also carries the commit's own `subject` line and `date`, because `prompt()` is
 pure over `(challenge, pathOf)` and has no atlas to look them up in — the same reason `coChange`
@@ -412,16 +444,31 @@ with nothing in between for the player to guess at:
 | `blastRadius` | `candidates ∩ dependents(subject, ∞) = truth` | reaches the subject by no import chain at all |
 | `companion` | `candidates ∩ companions(subject) = truth` | has co-changed at most `atMost` times |
 | `placement` | `candidates ∩ files(commit) = truth` | was not in that commit's recorded file list |
+| `archaeology` | `candidates ∩ touchedBy(subject) = truth` | its own recorded file list does not name the subject |
 
-The third is the only one certified from a **positive** record rather than from absence, which is
-why Placement needs neither the truncated-walk refusal nor the shallow-clone refusal ADR-0014
+The last two are the two projections of one incidence relation — *commit → which files?* and
+*file → which commits?* — so they read the same record and share `src/verbs/commits.ts`'s
+eligibility rule entirely. Both are certified from a **positive** record rather than from absence,
+which is why neither needs the truncated-walk refusal ADR-0014
 decision 6 gives Companion: how far back the walk went cannot make a commit's own file list wrong.
 What it does refuse is a commit whose list the indexer may have cut (`report.truncations` with
 `what: "commitFiles"` — the entry's `kept` **is** the limit, so the affected commits are identifiable
-exactly), a `wide` commit, and any commit touching a node with contested rename lineage.
-[ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md).
+exactly), a `wide` commit, and any commit touching a node with contested rename lineage. Both
+*do* need the shallow-clone refusal, for a mechanism the walk-window argument does not cover: a
+`--depth N` clone's oldest commit is diffed against the empty tree, so git reports it as adding the
+entire worktree. [ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md),
+[ADR-0019](decisions/0019-archaeology-asks-a-place-what-happened-to-it.md).
 
-> **Status at M4**: three verbs generate. On this repo that is one challenge per subject with a
+**Archaeology adds one rule the other three do not have: a commit may not be an answer for a file
+whose membership an *earlier verb's reveal* already stated.** Placement's reveal names the files a
+commit touched, and each of those is an atom of that file's Archaeology key read the other way —
+measured at 58.9% of this repo's key members before the rule existed. The commit is then off the
+board entirely rather than merely out of the key, because it *did* touch the file and the invariant
+above forbids a candidate that is neither. This is ADR-0012 generalised from answer *keys* to the
+facts inside them, and it is the first time one verb's output constrains another's; the coupling is a
+verb-blind set of opaque facts (`src/verbs/disclosure.ts`), so neither verb names the other.
+
+> **Status at M4**: four verbs generate. On this repo that is one challenge per subject with a
 > non-empty radius, minus what the guardrails refuse. The CLI prints how many it declined and why,
 > how many subjects it re-asked with a second key, how much of each choice set came from a
 > principled distractor strategy rather than from `distant` padding, and **how many nodes no
@@ -437,24 +484,29 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `6`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `7`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v6, got v5 — reindex required
+atlas.version: this build reads atlas v7, got v6 — reindex required
 ```
 
 The player must never guess at a shape.
 
-**v5 → v6 has no migration, and reindexing is the whole of it.** `challenges[].subject` widened from
-`NodeId` to `SubjectId` and `Evidence` gained a `commit` variant, so a v5 atlas is *readable* — every
-v5 subject is a node id and still validates — but a v5 atlas contains no Placement questions, and
-synthesising them would mean inventing an answer key. The atlas is a derived artifact with a
-one-command rebuild (`npx ark index .`), so the error above is the correct outcome rather than a
-gap. **A save survives**: `SAVE_VERSION` is independent of this number, `(verb, subject)` keys are
-unchanged for the two existing verbs, and every restored claim is re-checked against the live graph
-anyway ([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)
+**v6 → v7 has no migration, and reindexing is the whole of it** — the same shape as v5 → v6 before
+it. `challenges[].candidates` and `.truth` widened from `NodeId[]` to `AtlasId[]`, `Evidence` gained
+a `history` variant, and `VerbId` gained `archaeology`. A v6 atlas is *readable* — every v6 member is
+a node id and still validates — but it contains no Archaeology questions, and synthesising them would
+mean inventing an answer key. The atlas is a derived artifact with a one-command rebuild
+(`npx ark index .`), so the error above is the correct outcome rather than a gap.
+
+**A save survives, and this bump tested that claim rather than repeating it.** `SAVE_VERSION` is
+independent of this number and `(verb, subject)` keys are unchanged — but a stored `proved` list now
+admits commit ids, and the parser that reads it filtered members with `isNodeId`, so every
+Archaeology pass would have been dropped at load and **erased by the next write**. Widening that
+filter is part of the same change. Every restored claim is still re-checked against the live graph
+([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)
 decision 3).
 
 Changes that do **not** need a bump: adding an enum member the player already ignores safely

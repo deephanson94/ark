@@ -21,9 +21,9 @@ import {
   generateWithReport,
   sampleByDistance,
   surpriseOf,
-  truthCap,
 } from '../../src/verbs/blastRadius/index.js';
 import { DEFAULT_GENERATE_OPTIONS, isGameable, blastRadius } from '../../src/verbs/index.js';
+import { truthCap } from '../../src/verbs/sample.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /** A chain `f0 → f1 → … → fN` plus `spare` unattached files to pad choice sets. */

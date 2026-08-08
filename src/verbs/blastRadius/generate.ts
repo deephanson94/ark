@@ -35,20 +35,13 @@ import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
+import { retain, truthCap } from '../sample.js';
 import { difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
 import { PATH_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
 
 /** NORTH-STAR §5: predicting change propagation is tier 3, Coupling. */
 const TIER = 3;
 
-/**
- * The largest answer key that still satisfies ADR-0007's 3:1 rule at a given
- * choice-set size. At the default 20 candidates this is 6, which ADR-0007 notes
- * is also about as many files as a person can hold in their head at once.
- */
-export function truthCap(candidateCount: number): number {
-  return Math.max(0, Math.floor((candidateCount - 1) / 3));
-}
 
 export type SkipReason =
   /** Nothing imports it, so there is no radius to draw. */
@@ -708,31 +701,3 @@ export function generateWithReport(
   };
 }
 
-/**
- * Drop to `max` while keeping the difficulty range.
- *
- * Taking the first N by id would ship an arbitrary slice; taking the hardest N
- * would delete the on-ramp. Evenly spaced samples of the difficulty-sorted list
- * keep both ends and the middle, so the progression curve survives the cut on a
- * repo far larger than this one.
- */
-function retain<T extends { challenge: Challenge }>(entries: readonly T[], max: number): T[] {
-  if (entries.length <= max) return [...entries];
-  if (max <= 0) return [];
-  const ordered = [...entries].sort(
-    (a, b) =>
-      a.challenge.difficulty - b.challenge.difficulty ||
-      byteCompare(a.challenge.id, b.challenge.id),
-  );
-  const picked = new Set<number>();
-  for (let i = 0; i < max; i++) {
-    picked.add(max === 1 ? 0 : Math.round((i * (ordered.length - 1)) / (max - 1)));
-  }
-  // Even spacing can collide after rounding; backfill from the easy end so the
-  // count is exactly `max` whenever there is supply for it.
-  for (let i = 0; picked.size < max && i < ordered.length; i++) picked.add(i);
-  return [...picked]
-    .sort((a, b) => a - b)
-    .map((index) => ordered[index])
-    .filter((entry): entry is T => entry !== undefined);
-}
