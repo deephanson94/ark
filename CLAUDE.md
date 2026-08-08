@@ -421,12 +421,31 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the negative witness.** A wrong pick already has a known reason class — sibling,
-name-alike, distance n±1, co-change ghost — the distractor generator *chose* it for that reason, and
-the reveal never says which. The one moment the player is most ready to learn passes in silence.
+Next action: **the Placement verb** — M4's second of three, and the owner's call to close the
+milestone. Ground truth is `history.commits`: `truth` is a commit's `files`, the prompt is its
+subject. Measured at `b732e99` before anyone designs around it: 42 commits retained, **38 not wide**
+(a `wide` commit's `files` list is *truncated*, so its key is incomplete — guardrail 4), 14 with 2–6
+files, and **12 whose subject does not name one of its own files**, which is the Ctrl+F-safe supply
+against Blast Radius's 40. Two further traps are already known: the history budget (ADR-0005) was
+tuned for the co-change matrix and now silently decides this verb's deck size — `npm run budget`
+reports 12 commits dropped — and §8.3's four distractor strategies are written for a *file* subject,
+not a commit.
 
-Then **the phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that
-would give the product an atom that *transfers* to another repo, which is the other half of risk #1.
+**Then Archaeology, which cannot be built as §6.2 states it.** *"This file was rewritten three times.
+What problem kept recurring?"* is not deterministically gradeable, so guardrail 3 (no model in the
+grading path) and guardrail 4 (no uncertain ground truth) both bite. It needs reshaping into
+something git answers exactly — **revert detection is the strongest candidate** — and that is a
+decision to take in an ADR *before* any code. Do not open the session by writing a generator.
+
+Then **the negative witness**: a wrong pick already has a known reason class — sibling, name-alike,
+structurally-near non-dependent, co-change ghost — the generator *chose* it for that reason, and the
+reveal never says which. The one design fork, found before it was queued: the strategy provenance
+either ships in the atlas (a schema change, so `ATLAS_VERSION` and `docs/atlas-format.md` in the same
+commit) or is re-derived player-side from the graph, which needs no bump. Decide that first.
+
+Then the **overlapping Companion answer keys** in the generator, and after those the **phenomenon
+catalogue** — a repo-independent vocabulary of ~30–60 structural phenomena, the atom that would let
+anything *transfer* to another repo, which is the other half of risk #1.
 
 The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radius set is
 `subjectsPassed` and returns subjects only, so a file unlocks its own cone by passing its own
