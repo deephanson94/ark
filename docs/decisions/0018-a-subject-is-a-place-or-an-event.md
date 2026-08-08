@@ -218,8 +218,16 @@ same move that closed `tracedRadius`, applied before shipping rather than a mile
   54 on hono, capped by `maxChallengesFor(425)` from 232 distinct boards. Together the three verbs
   leave **16 of ark's 125 nodes** unprovable where Blast Radius alone leaves 39, and 142 of hono's
   425 where Blast Radius alone leaves 269.
-- **Index cost**: +0.36 s on hono (1.57 → 1.93 s), +23 ms here. Atlas +46 KiB here, projecting
-  3.2 MB at 2,000 files against a 5 MB ceiling.
+- **Index cost**: **not measurable.** Three runs each with the verb's deck cap at 0 and at its
+  normal value: 443–467 ms here against 458–470 ms without, and 1690–1871 ms on hono against
+  1843–1876 ms without — the without-runs are *slower* on hono, which is how you know you are
+  reading noise. (An earlier draft of this line said "+0.36 s on hono", from comparing this branch
+  against `master` — two trees with different file counts. Same error as the `busy` figure above,
+  twice in one document: **a counterfactual that changes two things measures neither.**) The
+  generator's per-commit work is `O(commits · candidates)` with the corpus and both inverted indexes
+  shared from `companion/distractors.ts`, so this is expected rather than lucky.
+- **Atlas cost**: +33.1 KiB here (175.9 → 209.0) and +48.1 KiB on hono (465.5 → 513.6), holding
+  1678 B/file against a 2,621 B ceiling — projecting 3.2 MB at 2,000 files against 5 MB.
 
 ## What this does not decide
 

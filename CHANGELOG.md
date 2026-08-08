@@ -1306,6 +1306,14 @@ One line per iteration: what changed, and what to do next.
   *spread* across a commit rather than sliced off its front changes **no** count on either repo —
   same deck, same refusals — so it is a choice about what the key teaches, not about supply.
 
+  **A third figure went the same way and is worth the space.** The ADR first said the verb cost
+  "+0.36 s on hono", from comparing this branch's index time against `master`'s — two trees with
+  different file counts. Run properly, with the deck cap at 0 against its normal value on one tree,
+  the cost is **not measurable**: 443–467 ms here against 458–470 ms without, 1690–1871 ms on hono
+  against 1843–1876 ms without, the without-runs *slower*, which is how you know you are reading
+  noise. The atlas grows 33.1 KiB here and 48.1 KiB on hono. Two bad counterfactuals in one document
+  is what made this a landmine rather than a correction.
+
   Also measured rather than assumed, because the brief suspected it: **ADR-0005's `maxCommits` is not
   what bounds this verb.** On ark the cap never fires (45 retained against 500 — the 13 "dropped" in
   `report.truncations` are commits that touched no *indexed* file, which that entry conflates), and

@@ -283,8 +283,10 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   1 to 3 — because the `distant` padding walks the churn ordering busiest-first, so high-churn wrong
   answers reach the board anyway. The prototype that produced the original figure filled boards with
   the **lowest**-churn files it could find, which manufactured the effect it then measured. It
-  changed two knobs and named one. Measuring first is not enough on its own: **say what the
-  counterfactual holds fixed, and check that it holds it.**
+  changed two knobs and named one. The same ADR did it a second time in the same session — "+0.36 s
+  of index time on hono", from comparing the branch against `master`, two trees with different file
+  counts; measured properly the cost is inside the noise. Measuring first is not enough on its own:
+  **say what the counterfactual holds fixed, and check that it holds it.**
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human

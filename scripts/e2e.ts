@@ -875,6 +875,16 @@ async function main(): Promise<number> {
             detail: `guide says ${leftBefore} left with ${placementDeck.length} Placement questions unanswered`,
           });
         }
+        // The HUD's own sentence, which is a claim about the **map**. It counted
+        // off the deck and read "36 questions ringed on the map" over a map with
+        // no rings at all, because a commit subject never joins the ring set.
+        const ringed = (await seededPage.locator('.hud-quests').innerText()).trim();
+        if (ringed.includes(`${placementDeck.length} questions ringed on the map`)) {
+          failures.push({
+            what: 'placement',
+            detail: `the HUD counts placeless questions as ringed: "${ringed}"`,
+          });
+        }
         const action = (await seededPage.locator('.guide-action').innerText()).trim();
         if (!action.toLowerCase().includes('open')) {
           failures.push({
