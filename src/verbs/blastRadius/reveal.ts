@@ -105,6 +105,9 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
     // The console used to write this sentence itself, which meant it knew what
     // a blast radius was. It belongs to the verb that sampled the key.
     summary: `Its full blast radius is ${reached.size} file${reached.size === 1 ? '' : 's'} — now drawn on the map.`,
+    // Pass or fail. The sentence above promises the map draws it, and
+    // guardrail 6 forbids a wrong answer taking that away.
+    unlocks: 'importRadius',
     notes,
   };
 }

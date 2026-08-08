@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { Atlas, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { revealOf } from '../../src/verbs/blastRadius/index.js';
-import { gradeSet } from '../../src/verbs/index.js';
+import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -81,7 +81,7 @@ function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
   };
   const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
   const reveal = revealOf(atlas, buildGraph(atlas), challenge, grade);
-  return { reveal, note: reveal.notes.find((entry) => entry.path === path) };
+  return { grade, reveal, note: reveal.notes.find((entry) => entry.path === path) };
 }
 
 describe('revealOf', () => {
@@ -151,5 +151,34 @@ describe('revealOf', () => {
     const { note } = noteFor(fixture(), ['src/a/direct.ts'], 'src/a/direct.ts');
     expect(note?.kind).toBe('correct');
     expect(note?.note).toBe('imports the subject directly.');
+  });
+});
+
+describe('what a reveal puts on the map (guardrail 6)', () => {
+  /**
+   * The regression this exists for, which was introduced by the *fix* for a
+   * leak rather than by the leak.
+   *
+   * `onGraded` used to draw `FULL_RADIUS` unconditionally, which let a
+   * Companion answer render an import cone nobody had earned. Routing it
+   * through `depthFor` closed that — and broke this: `depthFor` reads a set
+   * only a **passed** challenge writes to, so a Blast Radius answer that came
+   * apart stopped drawing the radius while the panel went on saying "now drawn
+   * on the map".
+   *
+   * So the verb declares it, and the declaration does not depend on the score.
+   */
+  it('unlocks the import radius on a failed blast-radius answer too', () => {
+    const graded = noteFor(fixture(), [], 'src/a/direct.ts');
+    expect(graded.grade.score).toBeLessThan(PASS_THRESHOLD);
+    expect(graded.reveal.unlocks).toBe('importRadius');
+    // ...and the sentence the map has to keep true.
+    expect(graded.reveal.summary).toContain('drawn on the map');
+  });
+
+  it('unlocks it on a perfect answer as well — the score is not the question', () => {
+    const perfect = noteFor(fixture(), ['src/a/direct.ts', 'src/b/distant.ts'], 'src/a/direct.ts');
+    expect(perfect.grade.score).toBe(1);
+    expect(perfect.reveal.unlocks).toBe('importRadius');
   });
 });

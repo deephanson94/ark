@@ -135,6 +135,25 @@ export interface Reveal {
   readonly summary: string;
   /** Sorted: missed first (the lesson), then spurious, then correct. */
   readonly notes: readonly RevealNote[];
+  /**
+   * What this reveal has just put on the **map**, as opposed to in the panel.
+   *
+   * `importRadius` means the subject's full transitive dependent cone may now
+   * be drawn, whatever the score — guardrail 6 says a wrong answer takes
+   * nothing away, and the reveal has already named every member in words, so
+   * withholding the picture would make `summary` a lie ("now drawn on the map"
+   * beside a map that is not drawing it).
+   *
+   * `nothing` means this verb revealed something the map has no channel for.
+   * Companion is `nothing` today: the map draws imports and has no history
+   * channel at all, which is the thing the next rung is for.
+   *
+   * On the contract rather than in the console because *"which cone may be
+   * drawn"* is a claim about a verb's own answer, and this codebase has three
+   * separate instances on record of that judgement being made outside the verb
+   * and getting it wrong.
+   */
+  readonly unlocks: 'importRadius' | 'nothing';
 }
 
 /**

@@ -967,6 +967,15 @@ One line per iteration: what changed, and what to do next.
   pins the truncation tag the two sides string-match on — rename it either side and every suite stayed
   green while the bound silently dropped to 2.
   Six more mutations on the new code, six caught, for **16 of 16** across the session.
+  **And then the fix for the leak turned out to have its own defect, in the opposite direction.**
+  Routing `onGraded` through `depthFor` closed the Companion case — and broke Blast Radius, because
+  `depthFor` reads a set only a *passed* challenge writes to. So a Blast Radius answer that came
+  apart stopped drawing the radius on the map while the panel went on saying *"now drawn on the
+  map"*: a false sentence and a guardrail-6 breach (a wrong answer takes nothing away), from one line
+  meant to close a leak. The rule is now on the `Verb` contract as `Reveal.unlocks`, so the verb says
+  what its reveal put on the map and the score does not enter into it. **Four instances of one class
+  now**, and the through-line is the same every time: a judgement about one verb's answer being made
+  somewhere that is not that verb. Two more mutations, two caught — 18 of 18.
   Known and stated rather than hidden: **a Companion pass changes nothing on the map** beyond lifting
   fog on what it proved — there is no co-change link drawn, so the verb's fog payoff is thinner than
   Blast Radius's; the choice sets on *this* repo are heavily `.md`, which is true of a 36-commit

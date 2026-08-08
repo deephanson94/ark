@@ -240,7 +240,7 @@ function start(scene: Scene, root: HTMLElement): void {
 
   const hud = createHud(scene.atlas, [notebook.toggle]);
   const challengePanel = createConsole(scene, {
-    onGraded(challenge, grade) {
+    onGraded(challenge, grade, reveal) {
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
       retally();
@@ -262,19 +262,28 @@ function start(scene: Scene, root: HTMLElement): void {
         // wrong answer never takes anything away, so seeing the true shape is
         // not a reward, it is the point of having answered at all.
         //
-        // **Through `depthFor`, not `FULL_RADIUS` directly.** Hard-coded, this
-        // drew the complete import cone after *any* grade — so answering a
-        // Companion question rendered a cone nobody had earned, and by the
-        // containment argument `depthFor` itself sets out (if D imports S then
-        // `dependents(D) ⊆ dependents(S)`) that exposes part of the open Blast
-        // Radius answer for every file below it. Passing Blast Radius still
-        // shows the full cone: `remember()` above has already promoted the
-        // subject into `tracedRadius`, so `depthFor` returns `FULL_RADIUS` on
-        // the very next line. One rule, one place — which is what the two
-        // earlier instances of this leak were missing.
+        // **The verb says what it revealed; the map draws that and nothing
+        // more.** Hard-coded to `FULL_RADIUS`, this drew the complete import
+        // cone after *any* grade — so a Companion answer rendered a cone nobody
+        // had earned, and by the containment argument `depthFor` sets out (if D
+        // imports S then `dependents(D) ⊆ dependents(S)`) that exposes part of
+        // the open Blast Radius answer for every file below it.
+        //
+        // Routing it through `depthFor` instead was the *first* fix and it was
+        // also wrong, in the other direction: `depthFor` reads a set only a
+        // **passed** challenge writes to, so a Blast Radius answer that came
+        // apart stopped drawing the radius while the panel went on saying "now
+        // drawn on the map". Guardrail 6 — a wrong answer takes nothing away —
+        // and a false sentence, from one line meant to close a leak.
         const node = scene.nodes[ref];
-        selected = node ?? selected;
-        radius = node === undefined ? radius : blastRadius(scene, ref, depthFor(node));
+        if (node !== undefined) {
+          selected = node;
+          radius = blastRadius(
+            scene,
+            ref,
+            reveal.unlocks === 'importRadius' ? FULL_RADIUS : depthFor(node),
+          );
+        }
       }
       describe(selected);
       invalidate();

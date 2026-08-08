@@ -22,7 +22,7 @@
 
 import type { Challenge, NodeId } from '../atlas/index.js';
 import { nodeAt } from '../atlas/index.js';
-import type { Grade, RevealNote } from '../verbs/index.js';
+import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
 import { VERBS, bandFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
@@ -44,7 +44,7 @@ export interface Console {
 
 export interface ConsoleHandlers {
   /** Fired once per submitted answer, before the player closes the panel. */
-  onGraded(challenge: Challenge, grade: Grade): void;
+  onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): void;
   onClose(): void;
 }
 
@@ -114,8 +114,11 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
     submit.addEventListener('click', () => {
       const grade = verb.grade(challenge, { picked: [...picked] });
-      handlers.onGraded(challenge, grade);
-      renderResult(challenge, grade);
+      // The reveal is computed once and handed on, so the map and the panel
+      // cannot disagree about what was just revealed.
+      const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
+      handlers.onGraded(challenge, grade, reveal);
+      renderResult(challenge, grade, reveal);
     });
 
     body.replaceChildren(
@@ -128,14 +131,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     refresh();
   }
 
-  function renderResult(challenge: Challenge, grade: Grade): void {
+  function renderResult(challenge: Challenge, grade: Grade, reveal: Reveal): void {
     const band = bandFor(grade.score);
     const verb = VERBS[challenge.verb];
-    // The verb explains its own grade. This used to reach into
-    // `../verbs/blastRadius/` directly, so a second verb's answer would have
-    // been described in the first verb's terms — import routes for a question
-    // about commits.
-    const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
 
     const score = el('div', `console-score band-${band}`, [
       el('span', 'score-band', [band === 'incomplete' ? '·' : band]),

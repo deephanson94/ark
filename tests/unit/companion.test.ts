@@ -292,7 +292,16 @@ describe('grading and wording', () => {
     }
     // The summary names the subject and says how much of its history the board
     // left out — the sampling admission ADR-0008 requires, in this verb's unit.
+    // The summary names the subject and says how much of its history the board
+    // left out — the sampling admission ADR-0008 requires, in this verb's unit.
     expect(reveal.summary).toContain(reveal.subject);
+    // **And it puts nothing on the map.** The map draws imports and has no
+    // co-change channel, so borrowing the import cone here would render a cone
+    // the player never earned — and, by the containment argument in `depthFor`,
+    // expose part of the open Blast Radius answer for every file under it. This
+    // is the leak that has now been produced three separate ways; the verb
+    // declaring what it revealed is what stops a fourth.
+    expect(reveal.unlocks).toBe('nothing');
   });
 });
 

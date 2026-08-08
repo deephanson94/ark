@@ -87,7 +87,10 @@ export function revealOf(
       ? `${subjectPath} has changed with ${partners} files in all — ${partners - shown} more than this board asked about.`
       : `That is every file the history records changing with ${subjectPath}.`;
 
-  return { subject: subjectPath, summary, notes };
+  // The map has no co-change channel, so this reveal puts nothing on it — and
+  // it must not borrow the *import* cone to look like it did, which is the leak
+  // this verb has already produced three times.
+  return { subject: subjectPath, summary, unlocks: 'nothing', notes };
 }
 
 function whyYes(
