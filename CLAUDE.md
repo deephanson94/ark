@@ -333,7 +333,13 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2, M3 and M4 delivered, and the first three rungs toward the third-person world are shipped.**
+**M2 and M3 delivered; M4 is one verb of three; the first three rungs toward the third-person world
+are shipped.** §13's M4 is *Companion, Placement, Archaeology* — **Companion ships and the other two
+were never built.** What M4 actually delivered was the harder half, the seam that lets a verb be
+added without editing the console, the notes or the map; the two remaining verbs are now cheap in a
+way Companion was not. This line said "M4 delivered" for two sessions, which is exactly how a
+milestone gets skipped: the roadmap lives in `NORTH-STAR.md` §13 and a session reads it first, but it
+reads *this* line for what is already done.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
 Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
