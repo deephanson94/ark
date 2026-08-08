@@ -1109,3 +1109,113 @@ One line per iteration: what changed, and what to do next.
   evidence says will not transfer. Then the **negative witness** (a wrong pick has a known reason
   class and we never say it) and the **phenomenon catalogue** for risk #1. Owner-only and still open:
   `npm run raster` on real hardware (ADR-0009's P1′) and S1's recall-experiment design.
+
+- **The map turns between challenges.** `docs/prior-art.md` §4.4 has called this the
+  highest-leverage lowest-cost item in the whole writeup for three sessions, and the reason it kept
+  being next is that it is embarrassing: **map-derived spatial memory is orientation-specific** —
+  after learning from a map, judgments are easy when aligned and measurably harder when misaligned
+  (Presson & Hazelrigg; Shelton & McNamara; König et al.) — and Ark teaches from a map that was
+  north-up forever while both verbs pick an arbitrary subject. Every question this product has ever
+  asked was answered from the one orientation the evidence says does not transfer, which is risk #1
+  wearing the mechanic's own clothes. Grading a challenge now turns the map by the golden angle,
+  animated over 620 ms as the console closes, pivoting on the file just graded so its disc holds
+  still and the world swings around it.
+  **[ADR-0017](./docs/decisions/0017-the-map-turns-between-challenges.md)**. No schema change, the
+  indexer untouched, `test:determinism` byte-identical.
+  **The schedule was decided by measurement and both candidates I brought to it were wrong.** A
+  heading hashed off `challenge.id` — the first design — fails to turn at all on **12 to 14 of 80**
+  consecutive grades (the deck is regenerated at every commit, so it is a range and not a constant;
+  the invariant is that uniform hashing collides once in K, forever): console closes, animation runs,
+  map does not move, which is the machinery-that-never-fires landmine wearing the feature's clothes. A pre-implementation review
+  killed that correctly and proposed a coprime step of 135°, which fixes the zero-turns and fails
+  the other way: three eighths of a turn is a **closed cycle**, so it visits eight headings and puts
+  **10 of 80 questions back at exactly north-up**. 90° puts back 20. The golden angle is irrational
+  in units of a turn and closes nothing: 80 distinct headings, no turn under 137.5°, none at north.
+  The review's own citation is the second argument — Shelton & McNamara found multi-view learning
+  sometimes stores *two* orientations rather than orientation-free knowledge, and eight headings are
+  eight things a player can store where eighty are not.
+  **One heading, on the camera, and `Orbit` gave up its `yaw` to get it.** Two headings for one
+  world would mean `o` snapping the view back to whatever the orbit remembered — a rule living
+  twice, which is the shape of most of what this repo has had to fix. The pin was already written:
+  `orbit.test.ts`'s "straight down reproduces the flat map to the pixel" now runs at four headings
+  instead of at north alone. The renderers stay two functions; what is shared is a value. ADR-0009's
+  S1 is not tripped — `orbit.ts` *loses* state and ships no third-person capability — and the
+  player-visible consequence is stated rather than discovered: turning in the orbit now leaves the
+  flat map at that heading.
+  **Rotation is applied to coordinates, never to the canvas**, so labels are drawn upright at turned
+  positions and there is no counter-rotation anywhere to forget — `docs/prior-art.md` §4.3's
+  constraint 8 (text readability, one of Merino's four named defects) satisfied structurally, in a
+  product whose nouns are file paths.
+  **Every consistency test I first proposed passes with the bearing ignored everywhere** — the
+  round-trip inverse, the flat≡overhead identity, the zoom anchor, all of them hold when both
+  directions ignore the heading. That was the review's sharpest finding and it named the decoy
+  exactly: the compass is CSS-rotated independently and would keep spinning over a dead map. So the
+  suite gained a liveness test, a rigidity test, a **semantic anchor** stating the sign convention in
+  a form a human can check against a screenshot (at a quarter turn, north points right and east
+  points down), and a check that the needle lands where the projection actually puts north. 16
+  mutations, 16 caught — one only after an assertion was added, because linear interpolation instead
+  of the easing passed everything and would have left `easeTurn` a tested function the product never
+  called. The single load-bearing assertion is in `test:e2e`: hash the canvas, press `n`, hash again,
+  require them to differ. Severing the turn fails it, checked before it was allowed to pass.
+  **The cull changed algorithm and that was measured too.** A world-space bounding box is the wrong
+  shape once the map can turn — measured on a 2,000-node cloud at street zoom, it admits **2.17× the
+  nodes actually on screen at 45°**, and every heading between the axes is oblique, so that would
+  have been the normal case on a renderer already under its frame budget. `visibleNodes` now culls in
+  screen space through the same projection that draws; `visibleBounds` and `contains` are deleted,
+  the cull was their only caller.
+  **Getting out is free** (guardrail 6): a compass in the HUD, `n` to face north the short way,
+  shift-drag to turn by hand, `f` fits at the current heading rather than straightening the map, and
+  `prefers-reduced-motion` arrives without the motion instead of losing the feature. The heading is
+  **never persisted** — ADR-0011 decision 2 forbids a cursor, and restoring one would re-anchor the
+  player to a single alignment, which is the thing this change exists to break. There is no counter
+  either: the turn advances from wherever the camera is, so nothing cursor-shaped exists to store.
+  **What this is not: a validated fix.** The studies demonstrate the deficit, not this cure, and
+  §2's closing point — nobody in this literature has measured retained structural knowledge after
+  the tool was taken away — applies to us. It is the evidence-directed bet §4.4 calls it.
+  **CI went red on a commit that changed only prose, and the reason is worth the landmine.** The
+  e2e checked the *first* field note against the *first* challenge it played; notes are sorted by
+  descending radius, which has nothing to do with the order you proved them in. It had passed for
+  four milestones because the two coincided. Then a documentation-only commit changed the deck — ark
+  indexes itself — the grid scan landed on a different first subject, and the assertion compared one
+  pass's note against another pass's answer key. The fix selects the note by the subject it *names*
+  and asserts the property over every row instead of the top one, which is strictly stronger;
+  mutation-checked by overstating a note's count. **`.first()` in a UI assertion is an ordering
+  assumption, and on a repo that indexes itself it is a time bomb.**
+  **A post-ship review found four defects and two false sentences, and one of them was the exact
+  decoy this feature's testing story is built on.** `northDegrees` — the function whose docstring
+  says "the compass reads this, and so does a test", written so the needle's sign could not become a
+  second implementation — had **zero production callers**: `ui.ts` had the same expression written
+  out inline, so a sign flip in the copy the player sees passed the unit test (which checks the
+  function), passed the e2e (222° is not north either), and left the dial pointing the wrong way over
+  a correctly turned map. Fixed by importing it, and the e2e now pins the *value* against
+  `GOLDEN_TURN` rather than asserting "not north". Also found: grading from the orbit pivoted on the
+  flat projection, so the turn anchored a point where nothing is drawn — the file's oldest scar in a
+  new function; and a pivoted turn rewrites `camera.x/y` every frame, so pressing **"Where next?"
+  within 620 ms of closing a console silently did nothing** while the survey record updated — every
+  non-drag camera command now lands the turn first. `prefers-reduced-motion` was a second branch that
+  skipped `bearingDuring` entirely, leaving its `duration <= 0` case dead in the product with a test
+  exercising it under that name; it is now a turn of zero length through the same code. The ADR's own
+  table said 90° visits 5 headings when it visits 4 — counting 360° and 0° as different — and its
+  north column omitted the one question every session answers north-up on arrival, which is 1 for
+  golden rather than 0.
+  **Three ADR decisions had no test at all**, and the mutations proved it: "on close, not on grade",
+  "only a grade turns", and whether the pivot ever fires. The first two are now e2e gates — and the
+  first version of the scrim gate **survived its own mutation**, because it hashed the canvas 200 ms
+  after the grade, by which time a grade-time turn had already finished; comparing the heading across
+  the whole open-panel window instead is timing-independent and fails. The pivot is *counted* rather
+  than asserted, per the landmine: over a real playthrough it anchors on **both** graded turns, with
+  the centre path used once, by `n`, by design. The cull tests all ran at scale 1, where the old
+  `radius / scale` and the new `radius * scale` agree — reverting the formula survived the whole
+  suite until an assertion at scale 4 was added.
+  **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
+  name-alike, distance n±1, co-change ghost) and the reveal never says which, so the one moment the
+  player is most ready to learn passes in silence. Then the **phenomenon catalogue**, a
+  repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that would let
+  anything *transfer* to a second repo and is the other half of risk #1. Still open and smaller:
+  ADR-0016's two recorded items (the `tracedRadius` member leak — 20 of 40 Blast Radius subjects
+  draw their full cone while their own board is open — and overlapping Companion answer keys in the
+  generator); the twins a duplicate answer key drops are never mentioned to the player; node labels
+  near the top edge draw under the HUD; the orbit does not re-fit on entry and has no frustum cull —
+  and now that the flat map has a screen-space one, it is the obvious next borrower. Owner-only:
+  `npm run raster` on real hardware (ADR-0009's P1′, and it should now measure a turned map, not
+  north-up), and S1's recall-experiment design.

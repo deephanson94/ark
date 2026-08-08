@@ -26,6 +26,7 @@ import { build, preview } from 'vite';
 import type { Atlas } from '../src/atlas/index.js';
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
+import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ATLAS_OUT = join(ROOT, 'src/player/public/atlas.json');
@@ -79,6 +80,44 @@ async function main(): Promise<number> {
   );
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    /**
+     * Wait out a turn.
+     *
+     * The map turns between challenges over `TURN_MS`, so anything that reads a
+     * pixel — or clicks a position found by an earlier scan — has to let it
+     * land first. Imported from the player rather than typed in here, because a
+     * hard-coded copy would silently stop covering the animation the day
+     * somebody lengthens it.
+     */
+    const settle = async (): Promise<void> => {
+      await page.waitForTimeout(TURN_MS + 140);
+    };
+    /** The compass's accessible name carries the heading in degrees. */
+    const heading = async (): Promise<number> =>
+      Number(/turned (\d+)°/.exec((await page.locator('.hud-compass').getAttribute('title')) ?? '')?.[1] ?? '-1');
+
+    /**
+     * A fingerprint of what is actually on the canvas.
+     *
+     * Every liveness gate in this script ends here, because `npm run raster`
+     * printed confident, plausible, completely false numbers twice before it
+     * had one. State that says the map turned is not the map having turned.
+     */
+    const hashCanvas = async (): Promise<string> =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas.map');
+        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
+        const context = canvas.getContext('2d');
+        if (context === null) return 'no-context';
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let hash = 2166136261;
+        for (let i = 0; i < data.length; i += 997) {
+          hash ^= data[i] ?? 0;
+          hash = Math.imul(hash, 16777619);
+        }
+        return String(hash >>> 0);
+      });
 
     const consoleErrors: string[] = [];
     /**
@@ -302,6 +341,7 @@ async function main(): Promise<number> {
         }
       }
 
+      const headingBeforeGrade = await heading();
       await page.locator('.console-submit').click();
       await page.waitForSelector('.console-score', { timeout: 5000 });
       const score = (await page.locator('.console-score').innerText()).replace(/\s+/g, ' ').trim();
@@ -315,9 +355,6 @@ async function main(): Promise<number> {
       }
       await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
 
-      await page.locator('.console-submit').click(); // "back to the map"
-      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
-
       // The fog has to have moved, or nothing the player proved reached it.
       const understood = Number.parseInt(
         /(\d+) understood/.exec(await page.locator('.hud-counts').innerText())?.[1] ?? '0',
@@ -328,6 +365,103 @@ async function main(): Promise<number> {
         failures.push({ what: 'fog', detail: 'passing a challenge lifted no fog' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
+
+      // ---- the map turns between challenges (ADR-0017) --------------------
+      //
+      // **The load-bearing assertion of the whole feature, and it is one
+      // comparison**: with the turn landed, hash the canvas, press `n`, hash
+      // again, and require the two to differ. That single check proves the
+      // grade turned the *map* — not a state variable, not the compass, which
+      // is CSS-rotated independently and would keep spinning over a dead map —
+      // and that the way back works, because if the grade had turned nothing
+      // the map would still be north-up and `n` would be a no-op.
+      //
+      // Everything else here is a name for the number. The pixels are the gate.
+      // **The turn must not have happened behind the scrim.** ADR-0017 argues
+      // for a paragraph that turning while the console covers the map is worth
+      // nothing — the player would close it onto a world that had silently
+      // moved — and nothing tested it.
+      //
+      // Compared across the whole open-panel window, from before the grade to
+      // after a full turn's worth of time, rather than between two hashes taken
+      // after it: the first version of this check hashed the canvas 200 ms after
+      // the score appeared, by which time a grade-time turn had already
+      // finished, so both hashes matched and moving `turnTo` into `onGraded`
+      // sailed through it. A gate whose window can close before the thing it
+      // watches for is a gate that measures nothing.
+      await page.waitForTimeout(200);
+      const duringPanel = await hashCanvas();
+      await settle();
+      const headingWhileOpen = await heading();
+      if (headingWhileOpen !== headingBeforeGrade) {
+        failures.push({
+          what: 'rotation',
+          detail: `the map turned to ${headingWhileOpen}° while the console was still open, behind the scrim`,
+        });
+      }
+      if ((await hashCanvas()) !== duringPanel) {
+        failures.push({
+          what: 'rotation',
+          detail: 'the map moved while the console was still open',
+        });
+      }
+
+      await page.locator('.console-submit').click(); // "back to the map"
+      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+      await settle();
+      // Frame the whole map at the new heading before anything scans it again:
+      // the turn pivots about the file just graded, so the camera moves as well
+      // as turns, and a later grid scan hunting a particular node needs it on
+      // screen. Exercises the bearing-aware `fit` while it is at it.
+      await page.keyboard.press('f');
+      await page.waitForTimeout(120);
+      const turnedTo = await heading();
+      // Derived from the constant the player uses, so this stays true if the
+      // schedule ever changes — and false the moment the *rendered* heading
+      // stops agreeing with it. "Not north" was too weak a claim: a sign flip
+      // in the compass reads 222° and passes it, which is the decoy instrument
+      // the needle is supposed not to be.
+      const oneTurn = Math.round(((GOLDEN_TURN * 180) / Math.PI) % 360);
+      process.stdout.write(`e2e: after one grade the map is turned ${turnedTo}° (expected ${oneTurn}°)\n`);
+      if (turnedTo !== oneTurn) {
+        failures.push({
+          what: 'rotation',
+          detail: `grading a challenge left the map at ${turnedTo}°, not the ${oneTurn}° it turns by`,
+        });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'turned.png') });
+      const turnedMapPixels = await hashCanvas();
+
+      await page.keyboard.press('n');
+      await settle();
+      const northPixels = await hashCanvas();
+      const backTo = await heading();
+      process.stdout.write(`e2e: n → ${backTo}°\n`);
+      if (northPixels === turnedMapPixels) {
+        failures.push({
+          what: 'rotation',
+          detail: 'the heading changed but the canvas did not — bearing reaches no pixel',
+        });
+      }
+      if (backTo !== 0) {
+        failures.push({ what: 'rotation', detail: `n left the map at ${backTo}° instead of north` });
+      }
+
+      // **Only a *grade* turns the map.** The pending flag exists so that
+      // opening a question and thinking better of it costs nothing; without a
+      // test, turning on every close passes everything else in this file.
+      await page.locator('.inspector-action').click();
+      await page.waitForSelector('.console-panel', { timeout: 5000 });
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+      await settle();
+      const afterEscape = await heading();
+      if (afterEscape !== backTo) {
+        failures.push({
+          what: 'rotation',
+          detail: `escaping an unanswered board turned the map to ${afterEscape}°`,
+        });
+      }
 
       // ---- history wires -------------------------------------------------
       //
@@ -401,6 +535,8 @@ async function main(): Promise<number> {
 
         await page.locator('.console-submit').click();
         await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+        // That was a second grade, so a second turn is running.
+        await settle();
         await page.waitForFunction(
           () => /(\d+) wires/.test(document.querySelector('.hud-detail')?.textContent ?? ''),
           undefined,
@@ -451,6 +587,18 @@ async function main(): Promise<number> {
         .catch(() => false);
       const afterReload = (await page.locator('.hud-counts').innerText()).replace(/\s+/g, ' ').trim();
       process.stdout.write(`e2e: after reload → ${afterReload}\n`);
+      // ADR-0011 decision 2: a cursor is never persisted, and an orientation
+      // into the rotation is one. Every session arrives at the canonical map,
+      // which is also the only heading a returning player can already have
+      // learned. The pass above turned the map; the reload must not restore it.
+      const headingAfterReload = await heading();
+      process.stdout.write(`e2e: heading after reload → ${headingAfterReload}°\n`);
+      if (headingAfterReload !== 0) {
+        failures.push({
+          what: 'rotation',
+          detail: `the heading survived a reload at ${headingAfterReload}° — it is being persisted`,
+        });
+      }
       if (!restored) {
         failures.push({
           what: 'save',
@@ -533,23 +681,39 @@ async function main(): Promise<number> {
       if (noteCount === 0) {
         failures.push({ what: 'notes', detail: 'passed a challenge and the notebook is empty' });
       } else {
-        const claim = (await page.locator('.field-note-claim').first().innerText()).trim();
-        const revealed = await page.locator('.field-note-revealed').first().count();
-        process.stdout.write(`e2e: note → ${claim}\n`);
-        if (!claim.startsWith('You proved')) {
-          failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+        // **Find the note by its subject, never by its position.** `fieldNotes`
+        // sorts by descending radius, then path, then verb — nothing to do with
+        // the order the player proved things in — so `.first()` was an ordering
+        // assumption that happened to hold. It held until a commit that changed
+        // only prose changed the deck (ark indexes itself), the grid scan landed
+        // on a different first subject, and this compared *some other pass's*
+        // note against this challenge's answer key. The check below cannot care
+        // what order the notebook is in.
+        const claims = (await page.locator('.field-note-claim').allInnerTexts()).map((text) =>
+          text.trim(),
+        );
+        const mine = claims.find((text) => text.includes(subject));
+        process.stdout.write(`e2e: note → ${mine ?? claims[0] ?? '(none)'}\n`);
+        // Every note, not just one: the surveyed/understood line is broken by
+        // any sentence stronger than what was earned, wherever it sits.
+        for (const claim of claims) {
+          if (!claim.startsWith('You proved')) {
+            failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+          }
         }
-        if (challenge !== undefined && !claim.includes(String(challenge.truth.length))) {
+        if (mine === undefined) {
+          failures.push({ what: 'notes', detail: `no note names ${subject}, which was just proved` });
+        } else if (challenge !== undefined && !mine.includes(String(challenge.truth.length))) {
           failures.push({
             what: 'notes',
-            detail: `note claims a different count than the ${challenge.truth.length} files proved`,
+            detail: `note for ${subject} claims a different count than the ${challenge.truth.length} files proved: "${mine}"`,
           });
         }
-        // The full radius may appear, but only in the line labelled as revealed.
-        if (revealed > 0) {
-          const shown = (await page.locator('.field-note-revealed').first().innerText()).trim();
+        // The full radius may appear, but only in a line labelled as revealed —
+        // and that has to hold for every one of them, not for whichever is top.
+        for (const shown of await page.locator('.field-note-revealed').allInnerTexts()) {
           if (!shown.includes('revealed')) {
-            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown}"` });
+            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown.trim()}"` });
           }
         }
       }
@@ -617,21 +781,6 @@ async function main(): Promise<number> {
     // input that drove nothing, and a zoom level where the map rendered as a
     // sub-pixel smudge. Both looked like success. So the assertion here is not
     // "no error" — it is "the pixels changed, and changed again when turned".
-    const hashCanvas = async (): Promise<string> =>
-      page.evaluate(() => {
-        const canvas = document.querySelector('canvas.map');
-        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
-        const context = canvas.getContext('2d');
-        if (context === null) return 'no-context';
-        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-        let hash = 2166136261;
-        for (let i = 0; i < data.length; i += 997) {
-          hash ^= data[i] ?? 0;
-          hash = Math.imul(hash, 16777619);
-        }
-        return String(hash >>> 0);
-      });
-
     const flatPixels = await hashCanvas();
     await page.keyboard.press('o');
     await page.waitForTimeout(220);

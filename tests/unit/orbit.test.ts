@@ -14,9 +14,10 @@ import { describe, expect, it } from 'vitest';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 import { worldToScreen } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
-import { DEFAULT_ORBIT, OVERHEAD, columns, pickColumn, project, turn } from '../../src/player/orbit.js';
+import { NORTH, rotate } from '../../src/player/camera.js';
+import { DEFAULT_ORBIT, OVERHEAD, columns, pickColumn, project, tip } from '../../src/player/orbit.js';
 
-const camera: Camera = { x: 40, y: -15, scale: 1.7 };
+const camera: Camera = { x: 40, y: -15, scale: 1.7, bearing: NORTH };
 const viewport: Viewport = { width: 900, height: 600 };
 
 function node(x: number, y: number, elevation: number, id = 'n:000000000001'): SceneNode {
@@ -35,16 +36,23 @@ function node(x: number, y: number, elevation: number, id = 'n:000000000001'): S
 }
 
 describe('project', () => {
-  it('reproduces the flat map exactly when looking straight down', () => {
-    // ADR-0009's invariant, as an equality rather than a promise.
-    for (const point of [node(0, 0, 0), node(120, -80, 6), node(-33.5, 12.25, 3)]) {
-      const flat = worldToScreen(camera, viewport, point);
-      const { base, top } = project(camera, viewport, OVERHEAD, point);
-      expect(base.x).toBeCloseTo(flat.x, 10);
-      expect(base.y).toBeCloseTo(flat.y, 10);
-      // ...and height contributes nothing from overhead, however tall.
-      expect(top.x).toBeCloseTo(flat.x, 10);
-      expect(top.y).toBeCloseTo(flat.y, 10);
+  it('reproduces the flat map exactly when looking straight down, at any heading', () => {
+    // ADR-0009's invariant, as an equality rather than a promise — and since
+    // the flat map learned to turn, at *every* heading rather than only at
+    // north. This is the assertion that earns the single shared bearing: the
+    // two views cannot disagree about which way the world is facing, because
+    // there is one number and looking straight down is the same picture.
+    for (const bearing of [0, 0.9, Math.PI / 2, -2.5]) {
+      const turned = rotate(camera, bearing);
+      for (const point of [node(0, 0, 0), node(120, -80, 6), node(-33.5, 12.25, 3)]) {
+        const flat = worldToScreen(turned, viewport, point);
+        const { base, top } = project(turned, viewport, OVERHEAD, point);
+        expect(base.x).toBeCloseTo(flat.x, 10);
+        expect(base.y).toBeCloseTo(flat.y, 10);
+        // ...and height contributes nothing from overhead, however tall.
+        expect(top.x).toBeCloseTo(flat.x, 10);
+        expect(top.y).toBeCloseTo(flat.y, 10);
+      }
     }
   });
 
@@ -54,7 +62,7 @@ describe('project', () => {
     // A mutation deleting the `cos(pitch)` factor from the lift survived the
     // whole file. This is the state a player actually reaches — drag the pitch
     // to the clamp and `rise` is still 26.
-    const straightDown = { yaw: 0, pitch: Math.PI / 2, rise: 26 };
+    const straightDown = { pitch: Math.PI / 2, rise: 26 };
     const tall = node(30, -20, 9);
     const { base, top } = project(camera, viewport, straightDown, tall);
     expect(top.y).toBeCloseTo(base.y, 6);
@@ -96,10 +104,10 @@ describe('project', () => {
   });
 
   it('turning moves the world', () => {
-    // The liveness of the whole rung in one line: if yaw changes nothing, the
-    // parallax the evidence rests on does not exist.
+    // The liveness of the whole rung in one line: if the bearing changes
+    // nothing, the parallax the evidence rests on does not exist.
     const still = project(camera, viewport, DEFAULT_ORBIT, node(120, 40, 3));
-    const turned = project(camera, viewport, turn(DEFAULT_ORBIT, 0.6, 0), node(120, 40, 3));
+    const turned = project(rotate(camera, 0.6), viewport, DEFAULT_ORBIT, node(120, 40, 3));
     expect(turned.base.x).not.toBeCloseTo(still.base.x, 3);
   });
 
@@ -113,13 +121,13 @@ describe('project', () => {
     // leaves the rotation property untouched. The test was over-specified: it
     // was pinning where the camera points as well as what turning does to it.
     const centre = node(camera.x, camera.y, 0);
-    const at = (yaw: number): { x: number; y: number } =>
-      project(camera, viewport, turn(DEFAULT_ORBIT, yaw, 0), centre).base;
+    const at = (bearing: number): { x: number; y: number } =>
+      project(rotate(camera, bearing), viewport, DEFAULT_ORBIT, centre).base;
     const reference = at(0);
     expect(reference.x).toBeCloseTo(viewport.width / 2, 8);
-    for (const yaw of [0.4, 1.9, -2.2]) {
-      expect(at(yaw).x).toBeCloseTo(reference.x, 8);
-      expect(at(yaw).y).toBeCloseTo(reference.y, 8);
+    for (const bearing of [0.4, 1.9, -2.2]) {
+      expect(at(bearing).x).toBeCloseTo(reference.x, 8);
+      expect(at(bearing).y).toBeCloseTo(reference.y, 8);
     }
     // ...and from directly overhead it is the viewport middle exactly, which is
     // the flat-map equality the first assertion in this file rests on.
@@ -127,17 +135,21 @@ describe('project', () => {
   });
 });
 
-describe('turn', () => {
+describe('tip', () => {
   it('clamps pitch so the camera never goes under the map', () => {
     let orbit = DEFAULT_ORBIT;
-    for (let i = 0; i < 50; i++) orbit = turn(orbit, 0, -1);
+    for (let i = 0; i < 50; i++) orbit = tip(orbit, -1);
     expect(orbit.pitch).toBeGreaterThan(0);
-    for (let i = 0; i < 50; i++) orbit = turn(orbit, 0, 1);
+    for (let i = 0; i < 50; i++) orbit = tip(orbit, 1);
     expect(orbit.pitch).toBeLessThanOrEqual(Math.PI / 2);
   });
 
-  it('does not clamp yaw — the world turns all the way round', () => {
-    expect(turn(DEFAULT_ORBIT, 100, 0).yaw).toBe(DEFAULT_ORBIT.yaw + 100);
+  it('has nothing to say about which way the eye faces', () => {
+    // The orbit carried its own `yaw` until the flat map learned to turn. Two
+    // headings for one world would mean `o` snapping the view back to whatever
+    // this record remembered — a rule living twice, which is the shape of most
+    // of the defects this project has had to fix. Turning is the camera's.
+    expect(Object.keys(tip(DEFAULT_ORBIT, 0.1))).toEqual(['pitch', 'rise']);
   });
 });
 
@@ -148,7 +160,7 @@ describe('columns', () => {
     // buffer and therefore no WebGL yet.
     const near = node(0, 90, 2, 'n:00000000000a');
     const far = node(0, -90, 2, 'n:00000000000b');
-    const drawn = columns([near, far], { x: 0, y: 0, scale: 1 }, viewport, DEFAULT_ORBIT);
+    const drawn = columns([near, far], { x: 0, y: 0, scale: 1, bearing: NORTH }, viewport, DEFAULT_ORBIT);
     expect(drawn.map((c) => c.node.id)).toEqual(['n:00000000000b', 'n:00000000000a']);
     // And the nearer one really is lower on screen, which is what "nearer" means
     // in a tipped view — the assertion above would pass on a reversed sort if
@@ -196,7 +208,7 @@ describe('pickColumn', () => {
     // `Δy = Δelevation · rise / tan(pitch)`. The first draft of this test
     // hedged with a conditional instead and therefore asserted nothing — a
     // mutation reversing the tie-break survived it.
-    const centred: Camera = { x: 0, y: 0, scale: 1 };
+    const centred: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
     const gap = (4 * orbit.rise) / Math.tan(orbit.pitch);
     const far = node(0, 0, 0, 'n:00000000000b');
     const near = node(0, gap, 4, 'n:00000000000a');
@@ -218,7 +230,7 @@ describe('pickColumn', () => {
   it('agrees with the flat map when the camera is overhead', () => {
     // The two pickers must not disagree at the position where the two views are
     // the same picture, or `o` would change what a click means.
-    const straightDown = { yaw: 0, pitch: Math.PI / 2, rise: 26 };
+    const straightDown = { pitch: Math.PI / 2, rise: 26 };
     const target = node(12, -7, 5, 'n:00000000000a');
     const flat = worldToScreen(camera, viewport, target);
     expect(pickColumn([target], camera, viewport, straightDown, flat)?.id).toBe('n:00000000000a');

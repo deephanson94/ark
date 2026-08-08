@@ -217,6 +217,19 @@ Consequences worth noting:
 - **Layout is computed in the indexer, not the player.** Same repo ⇒ same map, every session, on every
   machine. Spatial memory of a codebase must persist, or the whole metaphor is worthless.
 
+> **Amended 2026-08-08 — this is a north-star change and it is stated rather than assumed.** The
+> player may now **turn** the map: grading a challenge rotates the view by the golden angle
+> ([ADR-0017](./docs/decisions/0017-the-map-turns-between-challenges.md)). The sentence above is the
+> one a future session would reasonably cite against that, so: **the layout does not move and never
+> will.** `node.layout` is still computed once in the indexer, no node moves relative to any other,
+> and every session still arrives north-up at the identical picture. What turns is the camera, in the
+> same sense that zooming changes what you see without changing where anything is — pillar 4 is
+> untouched. The reason is that this sentence was protecting the wrong thing on its own: map-derived
+> spatial memory is **orientation-specific**, so a map that is only ever seen north-up teaches
+> knowledge that does not survive being asked from another angle (`docs/prior-art.md` §4.4), which is
+> risk #1. Persistence of the *layout* is what makes the memory possible; variety of *viewpoint* is
+> what makes it transfer.
+
 ### 7.1 Atlas format (sketch — v0)
 
 ```jsonc

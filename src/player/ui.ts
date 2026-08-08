@@ -15,6 +15,7 @@ import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS } from '../verbs/index.js';
+import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -43,7 +44,13 @@ function field(label: string, value: string, title?: string): HTMLElement {
 
 export interface Hud {
   readonly root: HTMLElement;
-  update(coverage: Coverage, level: string, stats: string, questionsLeft: number): void;
+  update(
+    coverage: Coverage,
+    level: string,
+    stats: string,
+    questionsLeft: number,
+    bearing: number,
+  ): void;
 }
 
 export interface GuideView {
@@ -105,7 +112,52 @@ export function createGuide(onSuggest: () => void): Guide {
   };
 }
 
-export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
+/**
+ * The compass — where north went, and the way back.
+ *
+ * The map turns between challenges (`heading.ts`), which is an intervention on
+ * the player's *memory* and must never become an intervention on their ability
+ * to find anything: guardrail 6 says a wrong answer takes nothing away, and a
+ * world that has silently rotated with no indicator would take away the map. So
+ * the dial says which way the atlas's north now points, and clicking it — or
+ * pressing `n` — turns back to it.
+ *
+ * The heading is in the accessible name as well as the dial, because a rotating
+ * needle is not a value anything can read: `npm run test:e2e` asserts on this
+ * string, and a screen reader gets the same sentence a sighted player infers.
+ */
+function createCompass(onNorth: () => void): { root: HTMLElement; update(bearing: number): void } {
+  const dial = el('div', 'compass-dial', [el('span', 'compass-north', ['N'])]);
+  const root = el('button', 'hud-compass', [dial]);
+  root.type = 'button';
+  root.addEventListener('click', onNorth);
+  return {
+    root,
+    update(bearing) {
+      // **`northDegrees`, not the same arithmetic written out again.** This line
+      // was an inline copy of it for one commit, which made the needle's sign a
+      // second implementation of the projection's — and a flip in *this* copy
+      // survived the whole suite, because the unit test that checks the needle
+      // against the map checks the function the compass was not calling. That
+      // is the decoy instrument this compass exists to not be: a dial turning
+      // confidently over a map that has not.
+      const turned = northDegrees(bearing);
+      // CSS rotation is clockwise on screen and so is the projection's, so the
+      // dial's angle *is* the bearing — the 'N' ends up where the atlas's north
+      // ends up.
+      dial.style.transform = `rotate(${turned.toFixed(1)}deg)`;
+      const label = `turned ${Math.round(turned)}° — click to face north`;
+      root.title = label;
+      root.setAttribute('aria-label', label);
+    },
+  };
+}
+
+export function createHud(
+  atlas: Atlas,
+  onNorth: () => void,
+  extra: readonly Node[] = [],
+): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
     atlas.repo.head === null
@@ -120,13 +172,25 @@ export function createHud(atlas: Atlas, extra: readonly Node[] = []): Hud {
   const detail = el('div', 'hud-detail');
   // A feature reachable only by reading the source does not exist. `f` was
   // already undiscoverable; `o` would have shipped the same way.
-  const keys = el('div', 'hud-keys', ['f fit · o orbit · enter ask']);
+  const keys = el('div', 'hud-keys', ['f fit · n north · o orbit · enter ask']);
+  const compass = createCompass(onNorth);
 
-  const root = el('div', 'hud', [title, head, progress, counts, quests, detail, keys, ...extra]);
+  const root = el('div', 'hud', [
+    title,
+    head,
+    progress,
+    counts,
+    quests,
+    detail,
+    keys,
+    compass.root,
+    ...extra,
+  ]);
 
   return {
     root,
-    update(coverage, level, stats, questionsLeft) {
+    update(coverage, level, stats, questionsLeft, bearing) {
+      compass.update(bearing);
       bar.style.width = `${(coverage.fraction * 100).toFixed(1)}%`;
       // Two numbers, deliberately separate. Surveyed is what you have looked
       // at; understood is what you have proven. Only the second lifts the fog

@@ -13,7 +13,7 @@
 
 import type { NodeRef } from '../atlas/index.js';
 import type { Camera, Viewport } from './camera.js';
-import { visibleBounds, worldToScreen } from './camera.js';
+import { worldToScreen } from './camera.js';
 import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
 import type { LabelCandidate, PlacedLabel } from './labels.js';
@@ -98,8 +98,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   context.fillStyle = INK.ground;
   context.fillRect(0, 0, viewport.width, viewport.height);
 
-  const bounds = visibleBounds(camera, viewport, 120);
-  const nodes = visibleNodes(scene, bounds, camera.scale);
+  const nodes = visibleNodes(scene, camera, viewport, 120);
   const onScreen = new Set(nodes.map((node) => node.ref));
   const edges = style.showEdges ? visibleEdges(scene, onScreen) : [];
 
