@@ -144,18 +144,54 @@ export function project(
  * a flicker between two orderings would read as a rendering bug and is exactly
  * the kind of nondeterminism this project treats as a defect.
  */
-export function columns(
+export interface Projected {
+  /** On-screen columns, furthest first. What gets drawn. */
+  readonly ordered: Column[];
+  /** **Every** node's column, on screen or not. What edges are looked up in. */
+  readonly byRef: Map<number, Column>;
+}
+
+/**
+ * Project every node, but sort and return for drawing only the ones on screen.
+ *
+ * The flat map has culled in screen space through its own projection since
+ * ADR-0017; this is the orbit borrowing it, which is what CLAUDE.md has had
+ * queued as the obvious next step. A column occupies from its `top` to its
+ * `base` at `x ± reach`, so the test is that box against the viewport.
+ *
+ * **The map keeps everything and only the draw list is cut**, which is the
+ * whole subtlety. Edges are looked up by ref, and an edge from an on-screen
+ * column to an off-screen one is a line the player can see most of — dropping
+ * it because one endpoint was culled would delete visible ink, which is what a
+ * naive cull does. `visibleEdges` makes the same distinction on the flat map
+ * ("at least one endpoint on screen") and it is worth restating because the two
+ * views hold their projections differently.
+ *
+ * The saving is the sort and the per-column draw, which is where the cost is:
+ * projection is O(n) arithmetic either way.
+ */
+export function projectAll(
   nodes: readonly SceneNode[],
   camera: Camera,
   viewport: Viewport,
   orbit: Orbit,
-): Column[] {
-  const built = nodes.map((node) => {
+  padding = 0,
+): Projected {
+  const byRef = new Map<number, Column>();
+  const ordered: Column[] = [];
+  for (const node of nodes) {
     const { base, top, depth } = project(camera, viewport, orbit, node);
-    return { node, base, top, depth };
-  });
-  built.sort((a, b) => a.depth - b.depth || (a.node.id < b.node.id ? -1 : 1));
-  return built;
+    const column = { node, base, top, depth };
+    byRef.set(node.ref, column);
+    const reach = node.radius * camera.scale + padding;
+    if (base.x + reach < 0 || base.x - reach > viewport.width) continue;
+    // `top` is above `base` by construction, so the column's vertical extent is
+    // exactly `[top.y, base.y]`.
+    if (base.y + reach < 0 || top.y - reach > viewport.height) continue;
+    ordered.push(column);
+  }
+  ordered.sort((a, b) => a.depth - b.depth || (a.node.id < b.node.id ? -1 : 1));
+  return { ordered, byRef };
 }
 
 
@@ -187,12 +223,14 @@ export function pickColumn(
   point: Point,
 ): SceneNode | null {
   let best: Column | null = null;
-  for (const column of columns(nodes, camera, viewport, orbit)) {
+  // Culled, and that is not a corner cut: the pointer is on screen by
+  // construction, so a column that is not cannot be under it.
+  for (const column of projectAll(nodes, camera, viewport, orbit).ordered) {
     const reach = Math.max(column.node.radius * camera.scale, 8);
     const dx = column.top.x - point.x;
     const dy = column.top.y - point.y;
     if (dx * dx + dy * dy > reach * reach) continue;
-    // `columns` is far-to-near, so simply keeping the last match takes the
+    // `ordered` is far-to-near, so simply keeping the last match takes the
     // nearest — the one whose disc is actually on top of the others.
     best = column;
   }

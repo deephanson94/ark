@@ -305,6 +305,26 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   screen at the same time?* The three-way alignment ADR-0014 decision 7 describes — map giveaway,
   naive guess, gate heuristic — is a checklist to run against **every** field the UI prints, not only
   the one the verb is about.
+- **CI indexes a commit that does not exist on your branch.** GitHub Actions checks out
+  `refs/pull/N/merge` — master merged with your head — so the repo ark indexes there has a *different
+  git history* from the one on your machine, and every history-derived field moves with it: churn,
+  co-change, the retained commit list, and therefore **which questions exist at all**. Any test that
+  depends on the shape of the deck can pass locally and fail in CI, deterministically, on an input
+  you never ran. Two did in one run: a **cross-verb duplicate answer key** that only the merge
+  history produced, and an e2e step whose `.find()` landed on the board another step had already
+  answered. `test:determinism` structurally cannot see this — it indexes one commit twice, and this
+  is two different commits. Reproduce before pushing with
+  `git checkout -b x origin/master && git merge <branch>`, which is the exact tree CI builds.
+- **A test can assert more than the contract, and get away with it until the data catches up.** The
+  atlas test read *"no two challenges with the same key"* while `docs/atlas-format.md` §3.6 and
+  ADR-0014 both say uniqueness is **within-verb**, in as many words — *"two different verbs may
+  honestly share an answer set, because they are asking different questions about the same files."*
+  It passed for two verbs because a cross-verb collision never happened to occur. The third verb made
+  one, and the pair is not a repeat but the best pair of questions in the deck: a Companion key, and
+  the Placement board for the commit that *caused* that coupling. The failure looked exactly like a
+  generator bug for as long as it took to read the two documents. **When a test goes red, check it
+  against the contract before you change the code** — the stricter assertion is the more likely
+  suspect, because nothing was ever checking it.
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human
@@ -502,16 +522,13 @@ The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radi
 question and by nothing else. It was a divergence from ADR-0008 decision 1 rather than an open
 question — measured at 26 of 40 boards exposable, all recovering their key byte-exact, before.
 
-Smaller and still open: **overlapping Companion answer keys** in the generator (ADR-0012 issues each
-key once but says nothing about keys that *overlap*, and the fix is to window mutual members the way
-0012 re-asks colliding subjects); the twins a duplicate answer key drops are never mentioned to the player
-(`cone(A) = cone(B)` is a true derived fact and must be *shown*, not proved — ADR-0011 decision 3);
-node labels near the top edge draw underneath the inspector and HUD; the orbit does not re-fit on
-entry and has no frustum cull — and now that the flat map culls in screen space through its own
-projection (ADR-0017), that is the obvious thing for the orbit to borrow. And one measurement only a
-human can take: **`npm run raster` on real hardware** — 45/33/43 fps is a headless software floor,
-ADR-0009's P1′ gates the renderer on it, and it should now be measured on a *turned* map, since
-oblique headings are the normal case and were never what it sampled.
+Still open, and it is a design question rather than a defect: **the twins a duplicate answer key
+drops are never mentioned to the player**. `cone(A) = cone(B)` is a true derived fact and by ADR-0011
+decision 3 it must be *shown*, never proved — so it wants a decision about where it is shown before
+any code. And one measurement only a human can take: **`npm run raster` on real hardware** —
+45/33/43 fps is a headless software floor, ADR-0009's P1′ gates the renderer on it, and it should now
+be measured on a *turned* map, since oblique headings are the normal case and were never what it
+sampled.
 
 The verb seam was the real work of M4, and the third verb measured what it is worth. `difficulty.ts`,
 `gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb; `reveal`, the reveal's

@@ -16,11 +16,11 @@ import type { Camera, Viewport } from './camera.js';
 import { worldToScreen } from './camera.js';
 import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
-import type { LabelCandidate, PlacedLabel } from './labels.js';
+import type { Box, LabelCandidate, PlaceOptions, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
 import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
-import { columns } from './orbit.js';
+import { projectAll } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import type { Tie, Ties } from './ties.js';
 import { tieWidth, tiesAt } from './ties.js';
@@ -53,6 +53,15 @@ export interface FrameInput {
   readonly ties: Ties;
   /** Whose wires draw bright rather than at rest. */
   readonly tieFocus: NodeRef | null;
+  /**
+   * Screen rectangles of the DOM panels standing over the canvas.
+   *
+   * The renderer cannot see them — they are siblings of the canvas, not pixels
+   * in it — so without this a label placed under the HUD or the inspector is
+   * drawn, counted, and invisible. Handed in rather than measured here for the
+   * same reason everything else is: this module draws what it is given.
+   */
+  readonly chrome: readonly Box[];
 }
 
 export interface FrameStats {
@@ -101,6 +110,19 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   const nodes = visibleNodes(scene, camera, viewport, 120);
   const onScreen = new Set(nodes.map((node) => node.ref));
   const edges = style.showEdges ? visibleEdges(scene, onScreen) : [];
+
+  // **One place decides that labels avoid the chrome.** Three call sites used
+  // to pass `occupied` by hand and one of them forgetting is invisible — the
+  // labels still draw, just underneath a panel. Closing over `input.chrome`
+  // here means a call site can add its own blockers and cannot drop these.
+  const place = (
+    candidates: readonly LabelCandidate[],
+    options: Omit<PlaceOptions, 'occupied'> & { readonly occupied?: readonly Box[] },
+  ): readonly PlacedLabel[] =>
+    placeLabels(candidates, (text) => context.measureText(text).width, {
+      ...options,
+      occupied: [...input.chrome, ...(options.occupied ?? [])],
+    });
 
   const inRadius = radius?.dependents ?? null;
   const project = (node: SceneNode): { x: number; y: number } =>
@@ -319,7 +341,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
         priority: region.nodeCount,
       };
     });
-    placedRegions = placeLabels(candidates, (text) => context.measureText(text).width, {
+    placedRegions = place(candidates, {
       budget: Number.POSITIVE_INFINITY,
       padding: REGION_LABEL_PADDING,
       lineHeight: REGION_LINE_HEIGHT,
@@ -362,7 +384,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
         priority: node.elevation * 1000 + node.dependentCount * 10 + node.radius,
       });
     }
-    const placed = placeLabels(candidates, (text) => context.measureText(text).width, {
+    const placed = place(candidates, {
       lineHeight: 14,
       padding: 3,
       budget: style.nodeLabelBudget,
@@ -435,11 +457,13 @@ export function drawOrbitFrame(
   context.fillStyle = INK.ground;
   context.fillRect(0, 0, viewport.width, viewport.height);
 
-  // Every node, every frame: there is no view-frustum cull here yet, and that
-  // is a measured omission rather than an oversight — at this repo's scale the
-  // sort dominates. It is the first thing to add when `npm run raster` says so.
-  const ordered = columns(scene.nodes, camera, viewport, orbit);
-  const screenOf = new Map(ordered.map((column) => [column.node.ref, column]));
+  // Culled in screen space through the orbit's own projection, the way the flat
+  // map has culled since ADR-0017. `screenOf` still holds **every** node,
+  // on-screen or not, so an edge with one endpoint off the side still draws the
+  // part of itself the player can see — the same distinction `visibleEdges`
+  // makes on the flat map. What the cull saves is the sort and the per-column
+  // draw.
+  const { ordered, byRef: screenOf } = projectAll(scene.nodes, camera, viewport, orbit, 120);
   const highlighted = radius?.dependents ?? null;
 
   // ---- wires ------------------------------------------------------------
@@ -585,6 +609,7 @@ export function drawOrbitFrame(
     budget: Number.POSITIVE_INFINITY,
     width: viewport.width,
     height: viewport.height,
+    occupied: input.chrome,
   });
   for (const label of placed) {
     context.fillStyle = INK.text;

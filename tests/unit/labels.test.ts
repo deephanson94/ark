@@ -96,4 +96,55 @@ describe('placeLabels', () => {
     expect(shortLabels).toHaveLength(2);
     expect(longLabels).toHaveLength(1);
   });
+
+  it('never places a label under the chrome standing over the canvas', () => {
+    // The HUD, the legend and the inspector are DOM panels *on top of* the
+    // canvas, so a label placed beneath one is drawn, counted, and invisible —
+    // a slot spent on nothing out of a budget of about 35. They arrive as
+    // `occupied` boxes, the same mechanism region labels already used.
+    const hud = { left: 16, top: 16, width: 300, height: 200 };
+    const under = candidate('hidden.ts', 120, 80, 9);
+    const clear = candidate('visible.ts', 700, 600, 1);
+
+    expect(placeLabels([under, clear], measure, OPTIONS).map((l) => l.text)).toEqual([
+      'hidden.ts',
+      'visible.ts',
+    ]);
+    expect(
+      placeLabels([under, clear], measure, { ...OPTIONS, occupied: [hud] }).map((l) => l.text),
+    ).toEqual(['visible.ts']);
+  });
+
+  it('returns only what it placed, never the boxes it was told to avoid', () => {
+    // `occupied` used to be spliced into the same array as the results and
+    // sliced back off by an offset. Two lists cost nothing and put a panel
+    // rectangle one arithmetic slip away from being drawn as a label — which it
+    // could not even be, having no text.
+    const hud = { left: 0, top: 0, width: 10, height: 10 };
+    const placed = placeLabels([candidate('a.ts', 700, 600)], measure, {
+      ...OPTIONS,
+      occupied: [hud],
+    });
+    expect(placed).toHaveLength(1);
+    expect(placed[0]?.text).toBe('a.ts');
+  });
+
+  it('spends the budget on labels it actually placed', () => {
+    // The budget counts placements, not blockers. Sharing one array with
+    // `occupied` made a large chrome eat the label budget before the first
+    // candidate was considered.
+    const blockers = Array.from({ length: 5 }, (_, i) => ({
+      left: -500 - i * 20,
+      top: -500,
+      width: 10,
+      height: 10,
+    }));
+    const candidates = [
+      candidate('a.ts', 100, 100),
+      candidate('b.ts', 400, 400),
+      candidate('c.ts', 700, 700),
+    ];
+    const placed = placeLabels(candidates, measure, { ...OPTIONS, budget: 3, occupied: blockers });
+    expect(placed).toHaveLength(3);
+  });
 });

@@ -502,3 +502,123 @@ describe('the instruction states the certification it can actually make', () => 
     expect(companion.prompt(challenge, (id) => id).instruction).not.toContain('at most once');
   });
 });
+
+describe('a co-change cell is one fact, so it gets one question', () => {
+  // ADR-0012 issues each answer *key* once and says nothing about keys that
+  // overlap. CLAUDE.md has carried that gap since M4; this closes it at the
+  // level the relation actually lives at.
+  //
+  // Co-change is symmetric — the atlas stores `[a, b, count]` once, with
+  // `a < b` — so "B changed with A" and "A changed with B" are one fact read
+  // from either end. Grading both means the reveal on the first board names a
+  // member of the second. Measured before the fix: **35 of ark's 40 boards held
+  // a mutual member and 38% of every key slot in the deck was exposed** (74 of
+  // 196; one board gave away 4 of its 6), and 6% on hono. After: zero on both,
+  // deck size unchanged, at a cost of 6 more unprovable nodes on hono.
+
+  /**
+   * Two hubs that are each other's companion, each with its own private
+   * partners, over the shared filler.
+   *
+   * The general fixture above cannot exercise this at all — none of its
+   * companions is itself a subject — and the anti-vacuity check below is what
+   * said so rather than letting the rule look tested.
+   */
+  const LEFT = 'src/core/engine.ts';
+  const RIGHT = 'lib/alpha.ts';
+  function mutualAtlas(): Atlas {
+    const others = COMPANIONS.filter((path) => path !== RIGHT);
+    return withHistory(fixtureAtlas(), [
+      // The strongest partner of each is the other one, so a greedy key takes it
+      // first from whichever subject the generator reaches first.
+      [LEFT, RIGHT, 9],
+      ...others.slice(0, 4).map((path) => [LEFT, path, 5] as const),
+      ...others.slice(4).map((path) => [RIGHT, path, 4] as const),
+    ]);
+  }
+
+  const OPTIONS = { maxChallenges: null, candidateCount: 20 } as const;
+
+  it('is not vacuous — both ends really are offered the same pair', () => {
+    const atlas = mutualAtlas();
+    const graph = buildGraph(atlas);
+    const index = indexCoChange(atlas);
+    const left = graph.refById.get(idOf(atlas, LEFT));
+    const right = graph.refById.get(idOf(atlas, RIGHT));
+    expect(left).toBeDefined();
+    expect(right).toBeDefined();
+    // The matrix genuinely records the cell from both directions, so the rule
+    // has something to refuse. Without this the assertion below passes on any
+    // deck whose subjects are never each other's companions.
+    expect(index.rows.get(left ?? -1)?.has(right ?? -1)).toBe(true);
+    expect(index.rows.get(right ?? -1)?.has(left ?? -1)).toBe(true);
+  });
+
+  it('grades the shared cell on exactly one of the two boards', () => {
+    const atlas = mutualAtlas();
+    const { challenges } = generateWithReport(atlas, OPTIONS);
+    const left = idOf(atlas, LEFT);
+    const right = idOf(atlas, RIGHT);
+    const holds = challenges.filter(
+      (c) =>
+        (c.subject === left && c.truth.includes(right)) ||
+        (c.subject === right && c.truth.includes(left)),
+    );
+    expect(holds).toHaveLength(1);
+  });
+
+  it('sizes the key against what is left, not against the whole ranking', () => {
+    // **A mutation survived the three assertions above and this is what caught
+    // it.** Sizing off `ranked.length` while sampling from `available` makes
+    // `size` larger than the key it produces — which is not a wrong answer, but
+    // it spends the missing slots: `want` is `candidateCount - size`, so the
+    // board comes up short of a full choice set, and `reach` is divided by a
+    // `size` the key does not have, so the difficulty is computed against a
+    // question nobody was asked.
+    //
+    // Every shipped board carries the full choice set — 20 of 20 on all three
+    // verbs across this repo's deck — so asserting it here is asserting the
+    // property, not this fixture's luck.
+    const { challenges } = generateWithReport(mutualAtlas(), OPTIONS);
+    for (const challenge of challenges) {
+      expect(challenge.candidates).toHaveLength(20);
+    }
+  });
+
+  it('never puts any pair in two answer keys', () => {
+    const { challenges } = generateWithReport(mutualAtlas(), OPTIONS);
+    expect(challenges.length).toBeGreaterThan(1);
+    const bySubject = new Map(challenges.map((c) => [c.subject, new Set(c.truth)]));
+    for (const challenge of challenges) {
+      for (const member of challenge.truth) {
+        expect(bySubject.get(member)?.has(challenge.subject) ?? false).toBe(false);
+      }
+    }
+  });
+
+  it('keeps the loser of a claimed pair off the board entirely, not as a distractor', () => {
+    // The invariant is unchanged by this rule: a companion that did not make the
+    // key is still banned from the choice set, whether it was sampled out or
+    // claimed by another board. Offering it as a wrong answer would be the exact
+    // false certification ADR-0014 exists to prevent.
+    const atlas = mutualAtlas();
+    const { challenges } = generateWithReport(atlas, OPTIONS);
+    const left = idOf(atlas, LEFT);
+    const right = idOf(atlas, RIGHT);
+    // Only the *loser* — the board that did not keep the pair. The winner has
+    // the other end in its answer key, so of course it is on its board. A first
+    // version asserted the exclusion for both and failed, which is the test
+    // being wrong rather than the rule.
+    const winner = challenges.find(
+      (c) =>
+        (c.subject === left && c.truth.includes(right)) ||
+        (c.subject === right && c.truth.includes(left)),
+    );
+    expect(winner).toBeDefined();
+    const loserSubject = winner?.subject === left ? right : left;
+    const otherEnd = winner?.subject === left ? left : right;
+    const loser = challenges.find((c) => c.subject === loserSubject);
+    expect(loser).toBeDefined();
+    expect(loser?.candidates).not.toContain(otherEnd);
+  });
+});

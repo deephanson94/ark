@@ -80,6 +80,11 @@ export function truthCap(candidateCount: number): number {
   return Math.max(0, Math.floor((candidateCount - 1) / 3));
 }
 
+/** An unordered pair of node ids, as one string. `a < b` matches the matrix. */
+function pairKey(a: string, b: string): string {
+  return a < b ? `${a}\n${b}` : `${b}\n${a}`;
+}
+
 export type SkipReason =
   /** The matrix records nothing changing with it. */
   | 'noCompanions'
@@ -95,6 +100,12 @@ export type SkipReason =
   /** Not enough certified non-companions to build a choice set that cannot be
    *  passed by selecting everything. */
   | 'tooFewDistractors'
+  /**
+   * Every pair this subject could be asked about is already the answer to
+   * somebody else's board. Co-change is symmetric, so the cell is one fact and
+   * gets one question — see the ranking step.
+   */
+  | 'pairsClaimed'
   /** Dropped to stay inside `maxChallenges`. */
   | 'capped'
   /** Pillar 3: a structure-blind heuristic passed the board. See `gate.ts`. */
@@ -193,6 +204,8 @@ export function generateWithReport(
   }
 
   const built: Built[] = [];
+  /** Unordered co-change pairs already inside some board's answer key. */
+  const claimed = new Set<string>();
   let considered = 0;
 
   // Guardrail 4, at the whole-repo level: if the walk stopped short of the
@@ -219,6 +232,29 @@ export function generateWithReport(
       continue;
     }
 
+    // **One matrix cell, one question.** Co-change is symmetric — the atlas
+    // stores `[a, b, count]` once, with `a < b` — so "B changed with A" and "A
+    // changed with B" are not two facts, they are one fact read from either
+    // end. Grading both means the reveal on the first board hands the player a
+    // named member of the second, and on this repo that was **35 of 40 boards
+    // holding a mutual member and 38% of every key slot in the deck** (74 of
+    // 196; one board gave away 4 of its 6). On hono, 6%.
+    //
+    // This is ADR-0012's rule — an answer key is issued once — applied one level
+    // down, to the *fact* rather than to the whole key, which is what CLAUDE.md
+    // has recorded as the open half of it since M4.
+    //
+    // Deliberately **not** done for Blast Radius, where a mutual pair is an
+    // import cycle: "streaming reaches components" and "components reaches
+    // streaming" are two distinct reachability claims about two subjects, both
+    // true and both worth asking. Symmetry of the *relation* is the licence
+    // here, and only this verb's relation has it.
+    const available = ranked.filter((ref) => !claimed.has(pairKey(idOf(subject), idOf(ref))));
+    if (available.length === 0) {
+      note('pairsClaimed');
+      continue;
+    }
+
     // The pool is everything the matrix certifies as *not* a companion. Every
     // partner the matrix knows about is banned whether or not it makes the key
     // — that ban is the invariant, and it is what removes the count boundary
@@ -231,7 +267,7 @@ export function generateWithReport(
 
     // Size the key down until selecting everything fails (ADR-0007).
     let size = 0;
-    for (let attempt = Math.min(cap, ranked.length); attempt >= 1; attempt--) {
+    for (let attempt = Math.min(cap, available.length); attempt >= 1; attempt--) {
       if (Math.min(pool.size, options.candidateCount - attempt) > 2 * attempt) {
         size = attempt;
         break;
@@ -242,7 +278,7 @@ export function generateWithReport(
       continue;
     }
 
-    const truthRefs = ranked.slice(0, size);
+    const truthRefs = available.slice(0, size);
     // The measured bar: the weakest coupling that made the key. Never below
     // `index.floor`, because `rankCompanions` only offers partners that clear
     // it — which is what lets every absent candidate be a certified exclusion.
@@ -294,6 +330,8 @@ export function generateWithReport(
     for (const edge of graph.out[subject] ?? []) neighbours.add(edge.to);
     for (const edge of graph.in[subject] ?? []) neighbours.add(edge.from);
     const hidden = truthRefs.filter((ref) => !neighbours.has(ref)).length;
+
+    for (const ref of truthRefs) claimed.add(pairKey(idOf(subject), idOf(ref)));
 
     built.push({
       subject,

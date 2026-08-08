@@ -58,6 +58,17 @@ async function indexForPlayer(): Promise<Atlas> {
 
 async function main(): Promise<number> {
   const failures: Failure[] = [];
+  /**
+   * Subjects this run has already answered.
+   *
+   * Later steps need a board that is still **open** — the inspector hides its
+   * "answer this" control once a subject's questions are all passed — and
+   * picking one with `.find()` over the deck is an ordering assumption that
+   * holds until the deck moves. It moved: on the CI merge commit the wire
+   * step's `.find()` landed on the very subject the challenge step had just
+   * played, and the click waited 30 s for a control that was correctly absent.
+   */
+  const answeredPaths = new Set<string>();
   const atlas = await indexForPlayer();
   const nodeCount = atlas.nodes.length;
   const pathById = new Map(atlas.nodes.map((node) => [node.id, node.path]));
@@ -354,6 +365,7 @@ async function main(): Promise<number> {
       if ((await page.locator('.console-notes .note').count()) === 0) {
         failures.push({ what: 'reveal', detail: 'the grade named no files' });
       }
+      answeredPaths.add(subject);
       await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
 
       // The fog has to have moved, or nothing the player proved reached it.
@@ -480,28 +492,52 @@ async function main(): Promise<number> {
       // not itself a Companion subject. Almost all of them do, and one answer is
       // then enough to leave a wire standing — `.find()` needs one, so this does
       // not depend on a count that changes every commit.
+      let wirePlayed: (typeof atlas.challenges)[number] | undefined;
       const companionSubjects = new Set(
         atlas.challenges.filter((c) => c.verb === 'companion').map((c) => c.subject),
       );
       const blastSubjects = new Set(
         atlas.challenges.filter((c) => c.verb === 'blastRadius').map((c) => c.subject),
       );
-      const wireTarget = atlas.challenges.find(
-        (c) =>
-          c.verb === 'companion' &&
-          !blastSubjects.has(c.subject) &&
-          c.truth.some((t) => !companionSubjects.has(t)),
-      );
-      const wireTargetPath = wireTarget === undefined ? '' : (pathById.get(wireTarget.subject) ?? '');
+      //
+      // **A list, biggest circle first, not `.find()`.** Two ordering
+      // assumptions bit here on CI's merge commit and neither was visible on the
+      // branch: the first match was the board the challenge step had already
+      // played (so the inspector correctly hid its "answer this" control), and
+      // the next one was a file small enough to fall between the grid's points.
+      // Node radius tracks `loc`, so trying the largest subjects first is the
+      // cheap fix for a coarse scan — and falling through to the next candidate
+      // is what stops this depending on any one of them.
+      const locOf = new Map(atlas.nodes.map((node) => [node.id, node.loc]));
+      const wireTargets = atlas.challenges
+        .filter(
+          (c) =>
+            c.verb === 'companion' &&
+            !blastSubjects.has(c.subject) &&
+            !answeredPaths.has(pathById.get(c.subject) ?? '') &&
+            c.truth.some((t) => !companionSubjects.has(t)),
+        )
+        .sort((a, b) => (locOf.get(b.subject) ?? 0) - (locOf.get(a.subject) ?? 0));
+      const wireTarget = wireTargets[0];
+      let wireTargetPath = '';
       let wireHit: { x: number; y: number } | null = null;
-      for (let row = 1; row < 26 && wireHit === null; row++) {
-        for (let column = 1; column < 40 && wireHit === null; column++) {
-          const x = box.x + (box.width * column) / 40;
-          const y = box.y + (box.height * row) / 26;
-          await page.mouse.move(x, y);
-          if ((await page.locator('.inspector-path').count()) === 0) continue;
-          if ((await page.locator('.inspector-path').innerText()).trim() !== wireTargetPath) continue;
-          wireHit = { x, y };
+      // Three at most: each attempt is a full grid sweep of mouse moves, and the
+      // point is to not depend on one candidate rather than to try them all.
+      for (const candidate of wireTargets.slice(0, 3)) {
+        wireTargetPath = pathById.get(candidate.subject) ?? '';
+        for (let row = 1; row < 26 && wireHit === null; row++) {
+          for (let column = 1; column < 40 && wireHit === null; column++) {
+            const x = box.x + (box.width * column) / 40;
+            const y = box.y + (box.height * row) / 26;
+            await page.mouse.move(x, y);
+            if ((await page.locator('.inspector-path').count()) === 0) continue;
+            if ((await page.locator('.inspector-path').innerText()).trim() !== wireTargetPath) continue;
+            wireHit = { x, y };
+          }
+        }
+        if (wireHit !== null) {
+          wirePlayed = candidate;
+          break;
         }
       }
 
@@ -517,7 +553,7 @@ async function main(): Promise<number> {
         if (verb !== 'companion') {
           failures.push({ what: 'wires', detail: `expected a companion board, got ${verb}` });
         }
-        const wanted = new Set(wireTarget.truth.map((id) => pathById.get(id) ?? ''));
+        const wanted = new Set((wirePlayed ?? wireTarget).truth.map((id) => pathById.get(id) ?? ''));
         const options = await page.locator('.choice-button').count();
         for (let i = 0; i < options; i++) {
           const button = page.locator('.choice-button').nth(i);

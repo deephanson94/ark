@@ -25,14 +25,18 @@ export interface LabelCandidate {
   readonly priority: number;
 }
 
-export interface PlacedLabel {
-  readonly text: string;
-  readonly x: number;
-  readonly y: number;
+/** A screen rectangle a label may not overlap. */
+export interface Box {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
+}
+
+export interface PlacedLabel extends Box {
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
 }
 
 export type Measure = (text: string) => number;
@@ -45,11 +49,20 @@ export interface PlaceOptions {
   /** Skip candidates outside this screen rectangle. */
   readonly width: number;
   readonly height: number;
-  /** Boxes an earlier pass already committed. Never returned, only avoided. */
-  readonly occupied?: readonly PlacedLabel[];
+  /**
+   * Rectangles this pass must avoid and never returns: labels an earlier pass
+   * committed, **and the DOM chrome standing over the canvas**.
+   *
+   * The second was missing until now, and the symptom was the whole bug: the
+   * HUD, the inspector and the legend are panels *on top of* the canvas, so a
+   * label placed underneath one is not a label — it is a slot spent on nothing,
+   * out of a budget of about 35. Feeding their rects in here costs one line at
+   * the call site and hands the slot to a name the player can actually read.
+   */
+  readonly occupied?: readonly Box[];
 }
 
-function overlaps(a: PlacedLabel, b: PlacedLabel): boolean {
+function overlaps(a: Box, b: Box): boolean {
   return (
     a.left < b.left + b.width &&
     a.left + a.width > b.left &&
@@ -72,14 +85,18 @@ export function placeLabels(
     (a, b) => b.priority - a.priority || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
   );
 
-  // Boxes already committed by an earlier pass. Region labels are placed first
-  // and node labels must not be allowed to overwrite them — two passes that
-  // each avoid collisions internally still collide with each other, which is
-  // what put `a22.js` through the middle of a region name on vite.
-  const placed: PlacedLabel[] = [...(options.occupied ?? [])];
-  const reserved = placed.length;
+  // Region labels are placed first and node labels must not overwrite them —
+  // two passes that each avoid collisions internally still collide with each
+  // other, which is what put `a22.js` through the middle of a region name on
+  // vite. The chrome joins them for the same reason.
+  //
+  // Two lists rather than one with a `reserved` offset: the blockers are `Box`,
+  // the results are `PlacedLabel`, and slicing a mixed array back apart was one
+  // arithmetic slip away from returning a panel as a label.
+  const blockers: Box[] = [...(options.occupied ?? [])];
+  const placed: PlacedLabel[] = [];
   for (const candidate of ranked) {
-    if (placed.length - reserved >= options.budget) break;
+    if (placed.length >= options.budget) break;
 
     const width = measure(candidate.text) + options.padding * 2;
     const height = options.lineHeight;
@@ -97,9 +114,10 @@ export function placeLabels(
 
     if (box.left + box.width < 0 || box.left > options.width) continue;
     if (box.top + box.height < 0 || box.top > options.height) continue;
-    if (placed.some((other) => overlaps(box, other))) continue;
+    if (blockers.some((other) => overlaps(box, other))) continue;
 
+    blockers.push(box);
     placed.push(box);
   }
-  return placed.slice(reserved);
+  return placed;
 }
