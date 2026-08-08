@@ -1480,3 +1480,66 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: the Archaeology ADR itself, from these numbers rather than from the sentence they
   replace. Then the **negative witness**, then the **phenomenon catalogue** for risk #1.
+
+- **ADR-0019: Archaeology asks a place what happened to it — the decision, and no generator.** §6.2's
+  *"what problem kept recurring?"* is not gradeable, so the reduction is **recognition instead of
+  generation**: subject a **file**, board **commits**, truth the commits whose own recorded file list
+  names it. You are never asked to articulate the recurring problem; the answer key *is* it. That is
+  the transpose of Placement, which is stated rather than glossed — it is where the remaining supply
+  is, because every file→file history relation git supports is either co-change (Companion) or a date
+  comparison the inspector prints for free.
+
+  **Two decisions came out of measurement and neither was the plan.**
+
+  **The date window is a pool filter, not a distractor strategy.** The inspector prints first-seen and
+  last-seen; every candidate row shows a date; so "tick everything inside the range" has **recall 1.0
+  by construction** and clears band A at precision 0.64. Unfiltered it is the dominant guess — best
+  0.77 on hono with **17 boards scoring 0.70–0.78**, the edge of a cliff rather than a plateau.
+  Constrain every candidate to the subject's own lifetime and the same guess selects the *whole
+  board*: it becomes ADR-0007's select-everything exploit, measured max **0.46** against a 0.5
+  threshold. **A gate heuristic retired by arithmetic** — one rule where there would have been two.
+
+  **A fact an earlier reveal already stated is not an answer**, and this is the finding that changed
+  the design. Placement's reveal names the files a commit touched, which is exactly a member of those
+  files' Archaeology keys: **55.6% of this repo's key members were already disclosed, and 15 of 66
+  boards were disclosed entirely** (16.0% and 1 of 172 on hono — the bootstrap repo is the worst case,
+  because its Placement deck covers 39 of 46 eligible commits against hono's 54 of 475). Excluding
+  them costs **13 boards here and none on hono**. The counter-argument nearly won — recall is not
+  Ctrl+F, and remembering a reveal *is* learning the repo — and lost to §9's own line: a note claims
+  what was **proved**, never what was **shown**. This generalises ADR-0012 from answer keys to the
+  facts inside them, and it is the first time one verb's output constrains another's.
+
+  Supply, measured on both repos as decided: **22 boards here** (supply binds) and **54 on hono**
+  (the cap binds), keys of 2–6 commits, lifting 1 of this repo's 16 unprovable nodes and 14 of hono's
+  154. Tier **5**, so it is served after tier 3 and before Placement.
+
+  **An adversarial review before merge found seven things, and four of them were a sentence
+  contradicting a number in the same document.** The worst was not in the proudest paragraph this
+  time. Decision 6 measured a width leak on **5 of 27 boards** and then wrote, four lines later, that
+  "the leak it prices is one the product does not have" — `broadKnown` is a gate heuristic now, at 5
+  boards here and 0 on hono, taking the deck to 22. Decision 7's justification argued from a fact
+  being *previously* shown, which **decision 8 falsifies three paragraphs later** — tier ascending
+  serves this verb *before* Placement; the rule survives, rebuilt order-free, which is also what makes
+  the width gate coherent, since the two paragraphs had been assuming opposite things about what the
+  player had already seen. And the "correction" this entry's previous draft was proudest of was
+  itself wrong: ark's retained commits carry **0** issue numbers, not 16 — all sixteen are `Merge pull
+  request #N` subjects, merge commits get no file list from `--name-status`, so **none is ever
+  retained**. The CHANGELOG's original 0 was right. The lesson is narrower than the landmine I cited:
+  **a different instrument is not drift** — I measured the walked git log where the question was
+  about verb supply. It did produce one fact nothing else in the document had: merge commits are
+  structurally invisible to this verb.
+
+  Also caught: 37 firings quoted as 37 refusals (it is 33 — four boards lose to two guesses); a false
+  superlative about supply binding; the map's click path **inverting the tier order** by alphabetical
+  accident, on the interaction `selector.ts` calls primary, against a `main.ts` comment stating the
+  rule an `archaeology-` prefix breaks; and two of six disclosure directions unchecked — of which
+  **Archaeology→Companion is a real 14-pair overlap here**, measured and deliberately not acted on,
+  because Placement's reveal *states* its atom while two Archaeology reveals only *imply* theirs under
+  combination, and combining two reveals is reasoning rather than lookup.
+
+  **Next**: build it. First task is the verb-blind disclosure accumulator decision 7 needs — each verb
+  declares the facts its reveal gives away, `build.ts` accumulates in generation order — because
+  without it nothing else can be correct. Then the member widening: `candidates`/`truth` admit a
+  commit id (`ATLAS_VERSION` 6 → 7, `docs/atlas-format.md` in the same commit), and six places assume
+  a *member* is a file — the worst is `save.ts`'s `asIds`, whose own comment states the false rule in
+  words, **the third instance of that class in that one file**.
