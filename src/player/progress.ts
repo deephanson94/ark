@@ -119,7 +119,7 @@ export interface Progression {
    * Named for what it means now rather than for what one verb does with it:
    * this used to read "unlocked the subject's full radius", which is false for
    * a Companion pass and is the kind of verb-specific wording that invites the
-   * next leak. What a pass unlocks is the verb's business (`provedThrough`).
+   * next leak. What a pass unlocks is the verb's business (`subjectsPassed`).
    */
   readonly unlocked: boolean;
 }
@@ -263,34 +263,54 @@ export function answeredKeys(progress: Progress, liveness: Liveness): Set<string
 }
 
 /**
- * Everything the player proved **through one verb** — that verb's passed
- * subjects, plus the members they picked correctly.
+ * The files whose **own** question of one verb the player has passed.
  *
  * This exists because `fog.understood` is verb-blind and one consumer must not
- * be. `main.ts` unlocks a node's full transitive dependent radius on hover for
- * anything `understood`, which is ADR-0008 decision 1: you may see the cone you
- * proved you knew. Feed that rule a verb-blind set the moment a second verb
- * exists and **passing a Companion question prints the answer to the still-open
- * Blast Radius question about the same file** — the M1 hover leak, reopened
- * from the side, and it would have shipped invisibly because no test asks what
- * one verb's pass does to another verb's board.
+ * be. `main.ts` unlocks a node's full transitive dependent radius for anything
+ * in this set, which is ADR-0008 decision 1: you may see the cone you proved
+ * you knew. Feed that rule a verb-blind set the moment a second verb exists and
+ * **passing a Companion question prints the answer to the still-open Blast
+ * Radius question about the same file** — the M1 hover leak, reopened from the
+ * side, and it would have shipped invisibly because no test asks what one
+ * verb's pass does to another verb's board.
+ *
+ * **Subjects only, and the members are excluded for the same reason the other
+ * verb is.** This returned `pass.proved` as well until ADR-0016 measured what
+ * that costs: a file picked correctly inside S's question got its own full cone
+ * drawn while *its own* board was still open, and by ADR-0008's invariant
+ * (`candidates ∩ dependents(M, ∞) = truth`) the drawn set intersected with that
+ * board is its answer key — measured at `e6f7e2f`, **26 of 40 boards are
+ * exposable this way and all 26 recover byte-exact**; 9 of them do in the
+ * deck's actual serving order, 6 at once at the worst frame. Hovering S does
+ * not substitute: `cone(S)` strictly overapproximates `cone(M)` and can contain
+ * M's certified distractors, so it never isolates the key, where `cone(M)`
+ * does, precisely.
+ *
+ * ADR-0008 decision 1 always said this — *"permanently unlocked by passing that
+ * node's challenge"* — so the member half was a divergence from the decision of
+ * record rather than a decision anyone took. Proving that D depends on S is not
+ * proving you know what depends on D.
+ *
+ * **Not gated on whether M's board is open**, which was the other candidate fix:
+ * ADR-0008 forbids it in as many words (*"the rule must not depend on whether a
+ * challenge is open, because the leak happens at the moment of choosing the
+ * subject"*), and a rule that reads deck state would go stale the moment a
+ * question is added.
  *
  * `understood` stays verb-blind on purpose: proving *anything* about a file is
  * a real reason to know its name. It is the radius, not the label, that has to
  * be earned in the verb that asks about it.
  */
-export function provedThrough(
+export function subjectsPassed(
   progress: Progress,
   liveness: Liveness,
   verb: VerbId,
 ): Set<NodeId> {
-  const proved = new Set<NodeId>();
+  const subjects = new Set<NodeId>();
   for (const pass of livePasses(progress, liveness)) {
-    if (pass.verb !== verb) continue;
-    proved.add(pass.subject);
-    for (const member of pass.proved) proved.add(member);
+    if (pass.verb === verb) subjects.add(pass.subject);
   }
-  return proved;
+  return subjects;
 }
 
 /**
