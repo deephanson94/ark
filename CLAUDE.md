@@ -343,7 +343,10 @@ spatial memory is orientation-locked and a north-up-forever map trains exactly t
 knowledge risk #1 says will not transfer. There is **one heading and it lives on the camera**:
 `Orbit` has no `yaw`, `rotate()` turns and `tip()` tips, and rotation is applied to coordinates
 rather than to the canvas, so labels never turn. It is never persisted — every session arrives
-north-up — and `n`, the HUD compass, shift-drag and a bearing-aware `f` are the ways out.
+north-up — and `n` and the HUD compass are the ways back to north, with shift-drag to turn by hand.
+**`f` is not one of them**: it fits at the current heading on purpose, because a fit that also
+straightened the map would undo the turn every time a player used the most ordinary control there
+is.
 
 **Two verbs ship.** `src/verbs/blastRadius/` asks what depends on a file (40 challenges here);
 `src/verbs/companion/` asks what *changes with* it (40 here, 54 on hono, 508 on svelte) — the first

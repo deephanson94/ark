@@ -103,12 +103,25 @@ function start(scene: Scene, root: HTMLElement): void {
    * *the tool shuffled the map*.
    */
   type Pivot = { anchor: Point; at: Point } | null;
-  /** A turn in flight: where the map was facing, where it is going, and when it set off. */
-  let turning: { from: number; to: number; startedAt: number; pivot: Pivot } | null = null;
+  /**
+   * A turn in flight: where the map was facing, where it is going, when it set
+   * off, and how long it takes.
+   *
+   * `ms` is on the record rather than a constant at the point of use because
+   * `prefers-reduced-motion` is a *zero-length* turn, not a separate code path.
+   * Written as a branch that skipped the animation, the reduced-motion route
+   * never called `bearingDuring` at all — so its `duration <= 0` case was dead
+   * in the product while a unit test exercised it under that very name. A
+   * tested branch nothing calls is the landmine this session already caught
+   * once in `easeTurn`; the fix is to make the words true rather than to
+   * rewrite them.
+   */
+  let turning: { from: number; to: number; startedAt: number; ms: number; pivot: Pivot } | null =
+    null;
   /**
    * Some people should not be shown a spinning world. The turn still happens —
-   * the map has to end up where the next question is asked from — it just
-   * arrives without the motion.
+   * the map has to end up where the next question is asked from — it just takes
+   * no time to get there.
    */
   const stillness =
     typeof window.matchMedia === 'function' &&
@@ -124,6 +137,14 @@ function start(scene: Scene, root: HTMLElement): void {
    */
   const pivotOn = (node: SceneNode | null): Pivot => {
     if (node === null) return null;
+    // **Flat map only.** In the orbit a node's disc is drawn at its column's
+    // *top* — turned, foreshortened, lifted, and offset by headroom — so
+    // `worldToScreen` names a point where nothing is drawn, and the on-screen
+    // test below would be answered by the wrong projection too. That is this
+    // file's oldest scar (the flat inverse driving a tipped view) arriving in a
+    // new function, and the ADR already gives the fallback: nothing to anchor
+    // on means turn about the middle of the screen.
+    if (orbit !== null) return null;
     const at = worldToScreen(camera, viewport, node);
     if (at.x < 0 || at.x > viewport.width || at.y < 0 || at.y > viewport.height) return null;
     return { anchor: { x: node.x, y: node.y }, at };
@@ -137,13 +158,37 @@ function start(scene: Scene, root: HTMLElement): void {
   };
 
   const turnTo = (target: number, pivot: Pivot): void => {
-    if (stillness) {
-      applyBearing(target, pivot);
-      turning = null;
-    } else {
-      turning = { from: camera.bearing, to: target, startedAt: performance.now(), pivot };
-    }
+    turning = {
+      from: camera.bearing,
+      to: target,
+      startedAt: performance.now(),
+      ms: stillness ? 0 : TURN_MS,
+      pivot,
+    };
     invalidate();
+  };
+
+  /**
+   * End a turn in flight, right now, at its destination.
+   *
+   * **Every camera command that is not itself about the heading calls this
+   * first**, and the reason is that a pivoted turn rewrites `camera.x/y` on
+   * every frame it runs: without this, pressing "Where next?" within 620 ms of
+   * closing a console selects the node, records the survey and updates the
+   * inspector while the camera is dragged straight back by the turn — a control
+   * that visibly does nothing, with the state and the screen disagreeing. Same
+   * for `f`, for `o`, and for a resize, whose new viewport makes the pivot's
+   * captured screen point a lie.
+   *
+   * It *lands* rather than cancels, so the schedule still delivers the heading
+   * it promised. A **drag** is the one exception and clears `turning` outright
+   * (below): a drag is itself a bearing-and-pan gesture, so the player's hand
+   * takes the value over rather than waiting for it.
+   */
+  const landTurn = (): void => {
+    if (turning === null) return;
+    applyBearing(turning.to, turning.pivot);
+    turning = null;
   };
 
   // `progress` is the state; `fog` is a view of it (ADR-0011). Everything the
@@ -476,6 +521,8 @@ function start(scene: Scene, root: HTMLElement): void {
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
     if (node === undefined) return;
+    // Before touching the camera: a turn in flight owns `x`/`y` every frame.
+    landTurn();
     selected = node;
     hovered = null;
     remember(recordSurvey(progress, [node.id]));
@@ -499,6 +546,10 @@ function start(scene: Scene, root: HTMLElement): void {
   );
 
   function resize(): void {
+    // The pivot's screen point was captured in the *old* viewport; a resized
+    // one would hold the anchor at coordinates that no longer mean anything,
+    // possibly outside the window entirely.
+    landTurn();
     const ratio = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     viewport = { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
@@ -511,8 +562,8 @@ function start(scene: Scene, root: HTMLElement): void {
   function frame(): void {
     if (turning !== null) {
       const elapsed = performance.now() - turning.startedAt;
-      applyBearing(bearingDuring(turning.from, turning.to, elapsed, TURN_MS), turning.pivot);
-      if (elapsed >= TURN_MS) turning = null;
+      applyBearing(bearingDuring(turning.from, turning.to, elapsed, turning.ms), turning.pivot);
+      if (elapsed >= turning.ms) turning = null;
       dirty = true;
     }
     if (dirty) {
@@ -598,9 +649,11 @@ function start(scene: Scene, root: HTMLElement): void {
       moved += Math.abs(dx) + Math.abs(dy);
       lastX = event.clientX;
       lastY = event.clientY;
-      // The player's hand wins. An animation that keeps turning under a drag is
-      // the map fighting you, which is the defect `zoomAt` documents for zoom;
-      // the turn is an offer, not a transition the player has to sit through.
+      // The player's hand wins, and here it takes the *value* over rather than
+      // waiting for it — this gesture is itself a pan or a turn, so snapping to
+      // the schedule's destination mid-drag would be the map fighting you,
+      // which is the defect `zoomAt` documents for zoom. Every other camera
+      // command lands the turn instead; see `landTurn`.
       turning = null;
       if (orbit === null) {
         // Shift-drag turns the flat map. The map turns on its own between
@@ -700,6 +753,9 @@ function start(scene: Scene, root: HTMLElement): void {
       // Fit *at the current heading*, never back to north: `f` answers "show me
       // all of it", and a fit that also straightened the map would quietly undo
       // the turn every time the player used the most ordinary control there is.
+      // Landing first so "the current heading" is the one the turn was taking
+      // us to, rather than wherever it had got to this frame.
+      landTurn();
       camera = fit(scene.bounds, viewport, camera.bearing);
       invalidate();
     }
@@ -714,6 +770,9 @@ function start(scene: Scene, root: HTMLElement): void {
       // One key there, the same key back. ADR-0009's D1 — the overview survives
       // — is only a real promise if leaving it costs one keystroke, so the flat
       // map is never more than `o` away and it is what the player arrives in.
+      // A pivot is a flat-map screen point and means nothing once the world
+      // is tipped, so the turn lands before the view changes under it.
+      landTurn();
       orbit = orbit === null ? DEFAULT_ORBIT : null;
       invalidate();
     }

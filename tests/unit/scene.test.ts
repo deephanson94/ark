@@ -74,6 +74,26 @@ describe('culling', () => {
     expect(visibleNodes(scene, justPast, TIGHT)).toContain(first);
   });
 
+  it('measures a disc in pixels, not in world units', () => {
+    // **Every other assertion in this block runs at scale 1, where the wrong
+    // formula and the right one agree.** The old cull computed its reach as
+    // `radius / scale` against a world-space box — a world radius treated as
+    // pixels — which this change quietly corrected to `radius * scale` while
+    // moving the test into screen space. Nothing noticed, because at scale 1
+    // the two are the same number. Zoomed in, they differ by 16x.
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error('fixture has no nodes');
+    const scale = 4;
+    const reach = first.radius * scale;
+    const strip: Viewport = { width: 20, height: 20 };
+    // Centre the view just past the node, so its centre is off screen and only
+    // the scaled disc can reach back in.
+    const inside: Camera = { x: first.x + (strip.width / 2 + reach * 0.5) / scale, y: first.y, scale, bearing: NORTH };
+    const outside: Camera = { x: first.x + (strip.width / 2 + reach * 2) / scale, y: first.y, scale, bearing: NORTH };
+    expect(visibleNodes(scene, inside, strip)).toContain(first);
+    expect(visibleNodes(scene, outside, strip)).not.toContain(first);
+  });
+
   it('culls by where the map is turned to, not by an axis-aligned box', () => {
     // The cull runs through the same projection that draws, so a node that
     // leaves the viewport when the map turns is dropped when the map turns.

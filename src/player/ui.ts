@@ -15,6 +15,7 @@ import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS } from '../verbs/index.js';
+import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -133,12 +134,17 @@ function createCompass(onNorth: () => void): { root: HTMLElement; update(bearing
   return {
     root,
     update(bearing) {
-      // Normalised only here, at the point of display. The camera's bearing
-      // accumulates on purpose so an animation never has to unwrap it.
-      const turned = (((bearing * 180) / Math.PI) % 360 + 360) % 360;
+      // **`northDegrees`, not the same arithmetic written out again.** This line
+      // was an inline copy of it for one commit, which made the needle's sign a
+      // second implementation of the projection's — and a flip in *this* copy
+      // survived the whole suite, because the unit test that checks the needle
+      // against the map checks the function the compass was not calling. That
+      // is the decoy instrument this compass exists to not be: a dial turning
+      // confidently over a map that has not.
+      const turned = northDegrees(bearing);
       // CSS rotation is clockwise on screen and so is the projection's, so the
       // dial's angle *is* the bearing — the 'N' ends up where the atlas's north
-      // ends up. No sign to get wrong, which is why the dial is not a canvas.
+      // ends up.
       dial.style.transform = `rotate(${turned.toFixed(1)}deg)`;
       const label = `turned ${Math.round(turned)}° — click to face north`;
       root.title = label;

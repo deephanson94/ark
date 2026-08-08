@@ -26,7 +26,7 @@ import { build, preview } from 'vite';
 import type { Atlas } from '../src/atlas/index.js';
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
-import { TURN_MS } from '../src/player/heading.js';
+import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ATLAS_OUT = join(ROOT, 'src/player/public/atlas.json');
@@ -341,6 +341,7 @@ async function main(): Promise<number> {
         }
       }
 
+      const headingBeforeGrade = await heading();
       await page.locator('.console-submit').click();
       await page.waitForSelector('.console-score', { timeout: 5000 });
       const score = (await page.locator('.console-score').innerText()).replace(/\s+/g, ' ').trim();
@@ -353,9 +354,6 @@ async function main(): Promise<number> {
         failures.push({ what: 'reveal', detail: 'the grade named no files' });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'graded.png') });
-
-      await page.locator('.console-submit').click(); // "back to the map"
-      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
 
       // The fog has to have moved, or nothing the player proved reached it.
       const understood = Number.parseInt(
@@ -379,6 +377,37 @@ async function main(): Promise<number> {
       // the map would still be north-up and `n` would be a no-op.
       //
       // Everything else here is a name for the number. The pixels are the gate.
+      // **The turn must not have happened behind the scrim.** ADR-0017 argues
+      // for a paragraph that turning while the console covers the map is worth
+      // nothing — the player would close it onto a world that had silently
+      // moved — and nothing tested it.
+      //
+      // Compared across the whole open-panel window, from before the grade to
+      // after a full turn's worth of time, rather than between two hashes taken
+      // after it: the first version of this check hashed the canvas 200 ms after
+      // the score appeared, by which time a grade-time turn had already
+      // finished, so both hashes matched and moving `turnTo` into `onGraded`
+      // sailed through it. A gate whose window can close before the thing it
+      // watches for is a gate that measures nothing.
+      await page.waitForTimeout(200);
+      const duringPanel = await hashCanvas();
+      await settle();
+      const headingWhileOpen = await heading();
+      if (headingWhileOpen !== headingBeforeGrade) {
+        failures.push({
+          what: 'rotation',
+          detail: `the map turned to ${headingWhileOpen}° while the console was still open, behind the scrim`,
+        });
+      }
+      if ((await hashCanvas()) !== duringPanel) {
+        failures.push({
+          what: 'rotation',
+          detail: 'the map moved while the console was still open',
+        });
+      }
+
+      await page.locator('.console-submit').click(); // "back to the map"
+      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
       await settle();
       // Frame the whole map at the new heading before anything scans it again:
       // the turn pivots about the file just graded, so the camera moves as well
@@ -387,11 +416,17 @@ async function main(): Promise<number> {
       await page.keyboard.press('f');
       await page.waitForTimeout(120);
       const turnedTo = await heading();
-      process.stdout.write(`e2e: after one grade the map is turned ${turnedTo}°\n`);
-      if (turnedTo <= 2 || turnedTo >= 358) {
+      // Derived from the constant the player uses, so this stays true if the
+      // schedule ever changes — and false the moment the *rendered* heading
+      // stops agreeing with it. "Not north" was too weak a claim: a sign flip
+      // in the compass reads 222° and passes it, which is the decoy instrument
+      // the needle is supposed not to be.
+      const oneTurn = Math.round(((GOLDEN_TURN * 180) / Math.PI) % 360);
+      process.stdout.write(`e2e: after one grade the map is turned ${turnedTo}° (expected ${oneTurn}°)\n`);
+      if (turnedTo !== oneTurn) {
         failures.push({
           what: 'rotation',
-          detail: `grading a challenge left the map at ${turnedTo}° — it did not turn`,
+          detail: `grading a challenge left the map at ${turnedTo}°, not the ${oneTurn}° it turns by`,
         });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'turned.png') });
@@ -410,6 +445,22 @@ async function main(): Promise<number> {
       }
       if (backTo !== 0) {
         failures.push({ what: 'rotation', detail: `n left the map at ${backTo}° instead of north` });
+      }
+
+      // **Only a *grade* turns the map.** The pending flag exists so that
+      // opening a question and thinking better of it costs nothing; without a
+      // test, turning on every close passes everything else in this file.
+      await page.locator('.inspector-action').click();
+      await page.waitForSelector('.console-panel', { timeout: 5000 });
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+      await settle();
+      const afterEscape = await heading();
+      if (afterEscape !== backTo) {
+        failures.push({
+          what: 'rotation',
+          detail: `escaping an unanswered board turned the map to ${afterEscape}°`,
+        });
       }
 
       // ---- history wires -------------------------------------------------

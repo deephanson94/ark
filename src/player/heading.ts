@@ -24,25 +24,28 @@
  *
  * The step has to be **irrational as a fraction of a full turn**, or the deck
  * cycles through a handful of alignments and re-locks the thing it was supposed
- * to break. Measured over 80 headings before this was written:
+ * to break. Over a full clear of this repo's 80-question deck — counting the
+ * heading each question is *answered from*, which includes the first, answered
+ * north-up on arrival by design:
  *
- * | step | distinct headings | questions answered within 15° of north |
- * |---|---:|---:|
- * | 90° | **5** | **20** |
- * | 72° | **6** | 16 |
- * | golden (137.5°) | **80** | 6 |
+ * | step | distinct headings | answered from exactly north | within 15° of it |
+ * |---|---:|---:|---:|
+ * | 90° | **4** | **20** | 20 |
+ * | 72° | **5** | 16 | 16 |
+ * | golden (137.5°) | **80** | **1** | 7 |
  *
  * A 90° step spends a whole playthrough on four alignments and puts a quarter
  * of the deck back at north — which is the defect wearing a rotation. The
  * golden angle is the canonical maximal-spread constant and it behaves like
  * one: every heading distinct, none repeated, and the near-north share falls to
- * roughly what an even spread would give (6/80 against 30/360 = 6.7/80).
+ * roughly what an even spread would give (7/80 against 30/360 = 6.7/80).
  *
- * A hashed heading — a pure function of `challenge.id` into K buckets — was the
- * other candidate and measured worse on the property that matters: at K = 8,
- * **14 of 80 consecutive pairs shared a bucket**, so the map did not turn at all
- * between them, and 17 questions were answered within 15° of north. A fixed
- * irrational step cannot produce a turn that is not a turn.
+ * A hashed heading — FNV-1a over `challenge.id`, mod K — was the other candidate
+ * and measured worse on the property that matters: at K = 8, **12 to 14 of 80
+ * consecutive pairs shared a bucket** (a range because the deck is regenerated
+ * at every commit and ark indexes itself), so the map did not turn at all
+ * between them. A fixed irrational step cannot produce a turn that is not a
+ * turn.
  *
  * ## What is *not* here
  *
@@ -90,10 +93,16 @@ export function easeTurn(t: number): number {
  *
  * Interpolates along the signed difference, so a turn of +137° goes one way and
  * a snap back to north goes the short way — the caller decides the direction by
- * choosing `to`, and this never re-derives it. A non-positive duration lands
- * immediately, which is the `prefers-reduced-motion` path: some people should
- * not be shown a spinning world at all, and the honest way to serve them is to
- * arrive without the motion rather than to withhold the feature.
+ * choosing `to`, and this never re-derives it.
+ *
+ * A non-positive duration lands immediately, and that is the
+ * `prefers-reduced-motion` path **because the player passes a duration of zero**
+ * — not because it takes a different route. Some people should not be shown a
+ * spinning world at all, and the honest way to serve them is a turn of no
+ * length rather than a second branch that skips this function. It *was* that
+ * second branch for one commit, which left this case dead in the product while
+ * the test exercised it under exactly that name: the same defect this file's
+ * own easing assertion exists to catch, one function along.
  */
 export function bearingDuring(from: number, to: number, elapsed: number, duration: number): number {
   if (duration <= 0 || elapsed >= duration) return to;

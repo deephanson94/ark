@@ -94,7 +94,7 @@ export interface Column {
   readonly base: Point;
   readonly top: Point;
   /**
-   * Position along the view axis after yaw. **Larger is *nearer* the eye** —
+   * Position along the view axis after the turn. **Larger is *nearer* the eye** —
    * it projects lower on the screen, which is what "closer" means in a tipped
    * view — so ascending `depth` is far-to-near, which is the order to draw in.
    * (This comment said the opposite until a review caught it; the code and the

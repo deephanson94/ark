@@ -1181,6 +1181,32 @@ One line per iteration: what changed, and what to do next.
   and asserts the property over every row instead of the top one, which is strictly stronger;
   mutation-checked by overstating a note's count. **`.first()` in a UI assertion is an ordering
   assumption, and on a repo that indexes itself it is a time bomb.**
+  **A post-ship review found four defects and two false sentences, and one of them was the exact
+  decoy this feature's testing story is built on.** `northDegrees` — the function whose docstring
+  says "the compass reads this, and so does a test", written so the needle's sign could not become a
+  second implementation — had **zero production callers**: `ui.ts` had the same expression written
+  out inline, so a sign flip in the copy the player sees passed the unit test (which checks the
+  function), passed the e2e (222° is not north either), and left the dial pointing the wrong way over
+  a correctly turned map. Fixed by importing it, and the e2e now pins the *value* against
+  `GOLDEN_TURN` rather than asserting "not north". Also found: grading from the orbit pivoted on the
+  flat projection, so the turn anchored a point where nothing is drawn — the file's oldest scar in a
+  new function; and a pivoted turn rewrites `camera.x/y` every frame, so pressing **"Where next?"
+  within 620 ms of closing a console silently did nothing** while the survey record updated — every
+  non-drag camera command now lands the turn first. `prefers-reduced-motion` was a second branch that
+  skipped `bearingDuring` entirely, leaving its `duration <= 0` case dead in the product with a test
+  exercising it under that name; it is now a turn of zero length through the same code. The ADR's own
+  table said 90° visits 5 headings when it visits 4 — counting 360° and 0° as different — and its
+  north column omitted the one question every session answers north-up on arrival, which is 1 for
+  golden rather than 0.
+  **Three ADR decisions had no test at all**, and the mutations proved it: "on close, not on grade",
+  "only a grade turns", and whether the pivot ever fires. The first two are now e2e gates — and the
+  first version of the scrim gate **survived its own mutation**, because it hashed the canvas 200 ms
+  after the grade, by which time a grade-time turn had already finished; comparing the heading across
+  the whole open-panel window instead is timing-independent and fails. The pivot is *counted* rather
+  than asserted, per the landmine: over a real playthrough it anchors on **both** graded turns, with
+  the centre path used once, by `n`, by design. The cull tests all ran at scale 1, where the old
+  `radius / scale` and the new `radius * scale` agree — reverting the formula survived the whole
+  suite until an assertion at scale 4 was added.
   **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
   name-alike, distance n±1, co-change ghost) and the reveal never says which, so the one moment the
   player is most ready to learn passes in silence. Then the **phenomenon catalogue**, a

@@ -34,23 +34,36 @@ transfer.** That is not a rough edge in the mechanic; it is the mechanic trainin
 
 **Why an irrational fraction of a turn, measured rather than argued.** The step has to be irrational
 in units of a full turn or the sequence *closes*, and a closed sequence hands the player back the
-alignment the whole change exists to break. Over 80 headings — a full clear of this repo's deck:
+alignment the whole change exists to break. Measured over a full clear of this repo's 80-question
+deck.
 
-| step | distinct headings | consecutive turns of 0° | questions answered from exactly north |
+**The convention is stated once, because a review caught the first version of this table mixing
+two.** Every figure counts the heading each question is *answered from* — which includes the first,
+answered north-up on arrival by design — and treats 360° and 0° as the same heading, because they
+are. Counting them as two is how the 90° row first read 5 distinct headings when it visits four: an
+instrument reporting something that is not there, in this repo's own vocabulary.
+
+| step | distinct headings | consecutive turns of 0° | answered from exactly north |
 |---|---:|---:|---:|
-| hashed into 8 buckets | 8 | **12–14** | 15–17 |
+| hashed into 8 buckets | 8 | **12–14** | ≈ 1 in 8 |
 | 135° (3 of 8 — the reviewed alternative) | 8 | 0 | **10** |
-| 90° | 5 | 0 | **20** |
-| **golden, 137.5°** | **80** | **0** | **0** |
+| 90° | 4 | 0 | **20** |
+| **golden, 137.5°** | **80** | **0** | **1** |
 
 **Read the ranges and the exact numbers differently, because they are different kinds of number.**
 The last three rows depend only on the step and the length of the deck: `n · 3/8` of a turn closes
 after eight, and 10 of 80 is arithmetic that will be true forever. The hash row depends on the
-*actual challenge ids*, and **ark indexes itself** — the deck is regenerated at every commit, so it
-was 14 and 17 at `0334d3e` and 12 and 15 at `0583978`, the commit that shipped this. Quoting either
-pair as *the* number is the transcription drift CLAUDE.md has a landmine for. The invariant is what
-survives: **a hashed heading fails to turn at all on roughly one consecutive pair in K, forever,
-because that is what uniform hashing does — and a fixed step cannot.**
+*actual challenge ids* — FNV-1a over `challenge.id`, mod 8 — and **ark indexes itself**, so the deck
+is regenerated at every commit: the zero-turn count was 14 at `0334d3e` and 12 at `0583978`, the
+commit that shipped this. Quoting either as *the* number is the transcription drift CLAUDE.md has a
+landmine for; its north column is left as the invariant rather than a count, since one bucket in
+eight is north by construction. What survives is: **a hashed heading fails to turn at all on roughly
+one consecutive pair in K, forever, because that is what uniform hashing does — and a fixed step
+cannot.**
+
+**Golden's 1 is the arrival, and it is not a defect.** Every session opens north-up at the canonical
+map, so the first question of every session is answered from north whatever the schedule is. The
+column measures how often the deck *returns* there, and that is the difference between 1 and 20.
 
 Two different defects, and each candidate has one. A **hashed** heading — a pure function of
 `challenge.id`, which was this ADR's first proposal — collides on consecutive grades once every K
@@ -61,7 +74,7 @@ repeats, putting one question in eight back at exactly north-up.
 
 The golden angle is the canonical maximal-spread constant and behaves like one: every heading in a
 full playthrough distinct, no turn smaller than 137.5°, and the near-north share falls to what an
-even spread gives (6 of 80 within 15°, against 6.7 expected).
+even spread gives (7 of 80 within 15°, against 6.7 expected).
 
 There is a second argument for the continuum, and it comes from the review that recommended the
 discrete step. **Shelton & McNamara found that multi-view learning sometimes stores *two*
@@ -80,9 +93,15 @@ and the flat map a punishment.
 **Why it pivots about the subject.** The turn is anchored on the file just graded, at wherever it
 stood on screen, so its disc does not move while the world swings around it (`pivotAround`). This is
 the difference between the intervention reading as *this place has more angles than you thought* and
-reading as *the tool shuffled the map*. When the subject is off screen there is nothing to anchor on
-and the viewport centre is used instead; pivoting about a point beyond the edge is a camera flying
-sideways rather than a world turning.
+reading as *the tool shuffled the map*. When the subject is off screen — or the player is in the orbit, where a
+node's disc is drawn at its column's *top* and the flat projection names a point where nothing is —
+there is nothing to anchor on and the viewport centre is used instead; pivoting about a point beyond
+the edge is a camera flying sideways rather than a world turning.
+
+**Counted rather than assumed**, per the landmine about machinery that never fires: over the e2e's
+playthrough the anchored path runs on **both** graded turns, and the centre path once — the `n`
+press, which passes no anchor by design. A fallback nobody counts is worse than no fallback, and
+this one is the primary path rather than the fallback.
 
 ## Decision 2 — one heading, on the camera, for both views
 
