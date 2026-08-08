@@ -22,7 +22,7 @@ import {
   UNCHECKED,
   answerKey,
   answeredKeys,
-  provedThrough,
+  subjectsPassed,
   applyGrade,
   deriveFog,
   livenessOf,
@@ -232,7 +232,7 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
    * Radius question about X — the M1 hover leak, re-entered from a direction
    * nothing tested.
    *
-   * `provedThrough` is the narrower set the radius rule now reads.
+   * `subjectsPassed` is the narrower set the radius rule now reads.
    */
   const bare = atlasWith(
     ['src/a.ts', 'src/b.ts', 'src/c.ts'],
@@ -275,8 +275,33 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
     // The name is earned — you did prove something about that file.
     expect(deriveFog(progress, liveness).understood.has(idFor('src/a.ts'))).toBe(true);
     // The import cone is not.
-    expect(provedThrough(progress, liveness, 'blastRadius').has(idFor('src/a.ts'))).toBe(false);
-    expect(provedThrough(progress, liveness, 'companion').has(idFor('src/a.ts'))).toBe(true);
+    expect(subjectsPassed(progress, liveness, 'blastRadius').has(idFor('src/a.ts'))).toBe(false);
+    expect(subjectsPassed(progress, liveness, 'companion').has(idFor('src/a.ts'))).toBe(true);
+  });
+
+  it('does not unlock a member\'s own radius from someone else\'s question', () => {
+    // **The same leak from the third direction, and the one that shipped.**
+    // `c` imports `a`, so passing the Blast Radius question about `a` can put
+    // `c` in the answer. That proves `c` depends on `a`; it proves nothing
+    // about what depends on `c` — and drawing `c`'s cone while `c`'s own board
+    // is open hands over that board's key exactly, because ADR-0008 keeps
+    // `candidates ∩ dependents(c, ∞) = truth`. Measured before the fix: 26 of
+    // this repo's 40 blast boards were exposable this way and all 26 recovered
+    // byte-exact.
+    //
+    // ADR-0008 decision 1 always said the unlock comes from "passing that
+    // node's challenge", so the member half was a divergence from the decision
+    // of record rather than a decision anyone took.
+    const liveness = livenessOf(graph, VERBS);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [
+      idFor('src/c.ts'),
+    ]);
+    const traced = subjectsPassed(progress, liveness, 'blastRadius');
+    expect(traced.has(idFor('src/a.ts'))).toBe(true);
+    expect(traced.has(idFor('src/c.ts'))).toBe(false);
+    // ...and the name is still earned, because proving anything about a file is
+    // a real reason to know what it is called. It is the radius that is gated.
+    expect(deriveFog(progress, liveness).understood.has(idFor('src/c.ts'))).toBe(true);
   });
 
   it('leaves the other verb\'s question in the deck', () => {

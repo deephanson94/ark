@@ -1219,3 +1219,32 @@ One line per iteration: what changed, and what to do next.
   and now that the flat map has a screen-space one, it is the obvious next borrower. Owner-only:
   `npm run raster` on real hardware (ADR-0009's P1′, and it should now measure a turned map, not
   north-up), and S1's recall-experiment design.
+
+- **The `tracedRadius` member leak is closed, and it was never an open question.** ADR-0016 had
+  recorded it as an open defect with two candidate fixes — gate on whether the member's board is
+  open, or accept and document it — and **ADR-0008 decision 1 forbids the first and rules out the
+  second**, in as many words: *"the rule must not depend on whether a challenge is open"*, and the
+  cone is *"permanently unlocked by passing that node's challenge"*. The member half was a
+  **divergence from the decision of record**, not a design choice anybody made, which is why the fix
+  needed no new decision. `provedThrough` becomes `subjectsPassed` and returns subjects only: a file
+  unlocks its own cone by passing its own question and by nothing else.
+  **Measured before, because the deck is regenerated at every commit and ADR-0016's figures had
+  drifted**: at `e6f7e2f`, **26 of 40 blast boards were exposable and all 26 recovered their answer
+  key byte-exact** — 9 of them in the deck's actual serving order, 6 at once at the worst frame,
+  against the ADR's recorded 20 and 12. Afterwards the number is not smaller but **structurally
+  zero**: a node is in the set only if its own board is passed, so its board is never open. The
+  mechanism is worth keeping: proving that D depends on S drew D's *own* cone, and by ADR-0008's
+  invariant `candidates ∩ dependents(D, ∞) = truth`, so the drawn set intersected with D's board is
+  that board's key exactly. Hovering S never substituted — `cone(S)` overapproximates and can contain
+  D's certified distractors, so it points at the answer where `cone(D)` *is* the answer.
+  **The cost is stated rather than absorbed.** After a perfect clear, 41 files lose an unlock they
+  had only through membership; **8 of them have any dependents at all** to draw, and none of the 41
+  carries a Blast Radius question of its own — so those 8 join the population
+  `report.unprovableNodes` already counts. A cone nobody can earn is the honest state under ADR-0008.
+  New landmine: **when an ADR states a rule in words, grep for the code that implements it.** This
+  survived two reviews as "settled fine" because a divergence reads exactly like a design choice once
+  it has been in the tree for a milestone.
+  **Next**: unchanged — the **negative witness** (a wrong pick has a known reason class and the
+  reveal never says which), then the **phenomenon catalogue** for risk #1. The other half of
+  ADR-0016's open pair — overlapping Companion answer keys, a *generator* defect that ADR-0012's
+  once-per-key rule does not cover — is still open and is the natural companion to it.

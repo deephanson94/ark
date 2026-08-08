@@ -206,7 +206,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   same file. **Both instances were the same one-line rule and only one was found by review**; the
   other surfaced in an e2e screenshot, and a third — the inspector button still reading "Map its
   blast radius" — in the same image. When you add a verb, grep every read of shared player state and
-  ask *which verb's claim is this?*
+  ask *which verb's claim is this?* **And ask it of the members, not just the subject.** The
+  verb-keyed replacement still returned the files picked correctly *inside someone else's question*,
+  so proving that D depends on S drew D's own cone — which by ADR-0008's own invariant *is* D's
+  answer key, byte-exact, on 26 of this repo's 40 boards. It survived two reviews as "settled fine"
+  and was reclassified as a defect by a third. The decision of record had said the right thing all
+  along (*"unlocked by passing that node's challenge"*); nobody had checked the code against it.
+  **When an ADR states a rule in words, grep for the code that implements it** — a divergence reads
+  exactly like a design choice once it has been in the tree for a milestone.
 - **Anything a verb says about its own question belongs on the `Verb` contract, not in the panel.**
   The console was verb-blind and the inspector was not, so the seam held in one file and failed in
   the one nobody had thought about. Wording, the reveal, the summary sentence, the grade's phrasing
@@ -415,7 +422,14 @@ the reveal never says which. The one moment the player is most ready to learn pa
 Then **the phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that
 would give the product an atom that *transfers* to another repo, which is the other half of risk #1.
 
-Smaller and still open: the twins a duplicate answer key drops are never mentioned to the player
+The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radius set is
+`subjectsPassed` and returns subjects only, so a file unlocks its own cone by passing its own
+question and by nothing else. It was a divergence from ADR-0008 decision 1 rather than an open
+question — measured at 26 of 40 boards exposable, all recovering their key byte-exact, before.
+
+Smaller and still open: **overlapping Companion answer keys** in the generator (ADR-0012 issues each
+key once but says nothing about keys that *overlap*, and the fix is to window mutual members the way
+0012 re-asks colliding subjects); the twins a duplicate answer key drops are never mentioned to the player
 (`cone(A) = cone(B)` is a true derived fact and must be *shown*, not proved — ADR-0011 decision 3);
 node labels near the top edge draw underneath the inspector and HUD; the orbit does not re-fit on
 entry and has no frustum cull — and now that the flat map culls in screen space through its own

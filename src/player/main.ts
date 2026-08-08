@@ -36,7 +36,7 @@ import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { VERBS, channelOf } from '../verbs/index.js';
-import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, provedThrough, recordSurvey } from './progress.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
@@ -226,20 +226,21 @@ function start(scene: Scene, root: HTMLElement): void {
    * question about the same file. Same leak M1 had on hover, arriving from a
    * direction no existing test looks at.
    */
-  let tracedRadius: ReadonlySet<NodeId> = provedThrough(progress, liveness, 'blastRadius');
+  let tracedRadius: ReadonlySet<NodeId> = subjectsPassed(progress, liveness, 'blastRadius');
 
   /**
    * The history wires the map may currently draw, and which of them burn bright.
    *
-   * **Not `provedThrough`, and that is the first half of the rule.** The obvious
-   * move is to reuse the helper `tracedRadius` uses, which returns subjects
-   * *and the members the player picked correctly in someone else's question*.
-   * For imports that is bounded by containment — a member's cone is a subset of
-   * the cone it was proved inside. Co-change has no containment: a member's row
-   * reaches anywhere on the map. Simulated over this repo's deck, that gate
-   * draws **89 members of still-open answer keys in a single frame**, across 28
-   * of 40 subjects. Fifth instance of ADR-0014's bug class, caught by measuring
-   * instead of by reading — ADR-0016.
+   * **Not the members, and that is the first half of the rule.** The obvious
+   * move was to reuse a helper that returns subjects *and the members the
+   * player picked correctly in someone else's question*. Simulated over this
+   * repo's deck, that gate draws **89 members of still-open answer keys in a
+   * single frame**, across 28 of 40 subjects — co-change has no containment, so
+   * a member's row reaches anywhere on the map. Fifth instance of ADR-0014's bug
+   * class, caught by measuring instead of by reading — ADR-0016. The helper it
+   * would have reused no longer returns members at all: the import side had the
+   * same defect, bounded by containment and therefore *exactly* an answer key
+   * (`subjectsPassed`).
    *
    * **And there is exactly one gate, which is the second half.** An earlier
    * version of this file drew every pair the open reveal named — ungated, on
@@ -288,7 +289,7 @@ function start(scene: Scene, root: HTMLElement): void {
   const remember = (next: Progress): void => {
     progress = next;
     fog = deriveFog(progress, liveness, shore);
-    tracedRadius = provedThrough(progress, liveness, 'blastRadius');
+    tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
     retie();
     saveProgress(store, saveKey, progress);
   };

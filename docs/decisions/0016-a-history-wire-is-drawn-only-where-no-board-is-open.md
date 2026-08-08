@@ -231,6 +231,34 @@ this repo: **20 of 40 Blast Radius subjects**, up to 12 at once. This ADR does n
 fix it — the fix is either excluding member-unlocks whose own board is open, or
 accepting and documenting it — but it must not go back to being assumed fine.
 
+> **CLOSED at `e6f7e2f`, and by neither option this paragraph offered.** The set
+> the radius rule reads (`subjectsPassed`, formerly `provedThrough`) now returns
+> **subjects only**, so a file unlocks its own cone by passing its own question
+> and by nothing else.
+>
+> Gating on whether the member's board is open — the first option above — is
+> forbidden in as many words by ADR-0008 decision 1: *"the rule must not depend
+> on whether a challenge is open, because the leak happens at the moment of
+> choosing the subject."* Accepting it was the second, and the same decision
+> rules that out too: the unlock is *"permanently unlocked by passing that node's
+> challenge"*. **The member half was a divergence from the decision of record,
+> not an open question** — which is why the fix needed no new decision, and why
+> this paragraph's framing of the choice was wrong.
+>
+> Re-measured at `e6f7e2f` before the change, because the deck is regenerated at
+> every commit and these figures drift: **26 of 40 boards exposable, and all 26
+> recover their key byte-exact**; 9 exposed in the deck's actual serving order,
+> 6 at once at the worst frame. After it the count is not smaller, it is
+> **structurally zero** — a node is in the set only if its own board is passed,
+> so its board is never open.
+>
+> **The cost, stated rather than absorbed.** After a perfect clear, 41 files lose
+> an unlock they had only through membership. Of those, **8 have any dependents
+> at all** to draw, and none of the 41 carries a Blast Radius question of its
+> own — so those 8 join the population ADR-0012's `report.unprovableNodes`
+> already counts: files no question can lift the fog from. A cone nobody can earn
+> is the honest state under ADR-0008, not a regression.
+
 **A wire beside an open *Blast Radius* board is a distractor, not an answer —
 measured rather than assumed.** The gate checks Companion boards only, so a
 licensed wire can sit next to an open blast question about the same subject.
