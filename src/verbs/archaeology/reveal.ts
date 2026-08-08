@@ -201,16 +201,37 @@ function whyNot(
     // repo, explaining itself.
     return `its message names ${path} and its diff does not touch it — a message says what someone meant to do.`;
   }
-  // **Relations, not identities.** Naming the file would hand over an atom of
-  // this commit's Placement answer key; the existential carries the entire
-  // lesson without it. See the header.
-  if (files.some((ref) => partners.has(ref))) {
+  // **Relations, not identities — and a relation over a set of one *is* an
+  // identity.** Naming the file would hand over an atom of this commit's
+  // Placement answer key, so these sentences say only that such a file exists.
+  // That argument holds exactly while the player cannot work out *which* file,
+  // and it fails when the subject has exactly one co-change partner or one
+  // import neighbour: "it changed a file that usually moves with this one" then
+  // names it as surely as printing the path would.
+  //
+  // Measured on `honojs/hono` before this guard: **4 distractor notes** were
+  // uniquely determined this way, **2 of them naming a file that is a shipped
+  // Placement answer-key member**. The chain was not completable in-product —
+  // neither subject carried a Companion board, so nothing ever told the player
+  // what the single partner was — but that is a fact about today's deck, not a
+  // property anything enforces, and one Companion board on such a subject would
+  // complete it with no code change. The guard costs two sentences that fall
+  // through to the generic one; the alternative is a leak whose safety depends
+  // on which questions happen to exist.
+  if (countIn(files, partners) > 0 && partners.size > 1) {
     return 'it changed a file that usually moves with this one — and this one stayed put. A coupling is a tendency, not a rule.';
   }
-  if (files.some((ref) => adjacent.has(ref))) {
+  if (countIn(files, adjacent) > 0 && adjacent.size > 1) {
     return 'it changed a file on the other end of an import edge from this one, and this one needed no edit.';
   }
   return 'it landed inside this file’s lifetime and never touched it.';
+}
+
+/** How many of `files` are in `set`. */
+function countIn(files: readonly NodeRef[], set: ReadonlySet<NodeRef>): number {
+  let n = 0;
+  for (const ref of files) if (set.has(ref)) n++;
+  return n;
 }
 
 /** Exported for the field note, which needs the same id shape. */

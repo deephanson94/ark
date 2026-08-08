@@ -52,8 +52,9 @@
  * **A commit an earlier reveal has already placed here is not an answer**
  * (decision 7). Placement's reveal names the files a commit touched, and each of
  * those is the atom *"commit C touched file F"* — which is a member of F's
- * answer key, read the other way. Measured before this rule existed: 55.6% of
- * this repo's key members and 15 of 66 candidate boards entirely. The commit is
+ * answer key, read the other way. Measured on the keys the generator actually
+ * issues: **54.8% of this repo's key members (114 of 208) and 11 of its 61
+ * candidate boards entirely**, against 16.4% and 1 of 142 on hono. The commit is
  * then off the board **altogether**, not merely out of the key: it *did* touch
  * the subject, so it can never be a distractor, and the invariant is what forces
  * that. `options.disclosed` is a set of opaque strings — this verb names no
@@ -105,14 +106,16 @@ const TIER = 5;
  * is code and test surface asserting a behaviour the product does not have.
  */
 export type SkipReason =
-  /** Fewer than two eligible commits touched this file. */
-  | 'tooFewCommits'
   /**
    * Decision 7 took the usable touchers below two: an earlier verb's reveal has
    * already stated where these commits landed.
    *
-   * Distinct from `tooFewCommits` so the exclusion's cost is a number in the
-   * report rather than a counterfactual somebody has to re-run.
+   * There is deliberately **no `tooFewCommits`**: a file with fewer than two
+   * eligible touchers is skipped before the body runs and is not *refused* —
+   * having no history is a property of the repo, not a guardrail declining a
+   * question, and counting it would make the report read as though most of the
+   * codebase had been turned away. This reason exists so the exclusion's cost is
+   * a number in the report rather than a counterfactual somebody has to re-run.
    */
   | 'disclosed'
   /** Not enough certified non-touchers inside the subject's own lifetime. */
@@ -199,17 +202,47 @@ export function generateWithReport(
     if (row.length > maxBreadth) maxBreadth = row.length;
   }
 
+  // **How many *retained* commits touched each file, which is not the same as
+  // how many *eligible* ones did.** The generator samples its key from the
+  // eligible set; the reveal and the field note both describe the population,
+  // and the population a player can check with `git log` is every commit the
+  // atlas kept — `wide` ones included, since a wide commit really did touch the
+  // file. Keeping these two counts straight is not pedantry: an adversarial
+  // review found the reveal printing *"that is every commit in this window that
+  // touched X"* over the eligible count while a wide toucher sat in the retained
+  // record, which is a **false universal claim the player can falsify with one
+  // git command** — and the field note, reading the retained count, contradicted
+  // the reveal on 21 of this repo's 26 boards. Both surfaces read this now.
+  const retainedTouchers = new Array<number>(atlas.nodes.length).fill(0);
+  for (const commit of atlas.history.commits) {
+    for (const ref of commit.files) {
+      const at = retainedTouchers[ref];
+      if (at !== undefined) retainedTouchers[ref] = at + 1;
+    }
+  }
+
   let considered = 0;
   const built: Built[] = [];
   for (const ref of atlas.nodes.keys()) {
     const touchers = trace.touching[ref] ?? [];
+    const node = atlas.nodes[ref];
     // Not counted as considered: a file with fewer than two eligible touchers
     // has no history to ask about, which is a property of the repo rather than a
     // refusal. Counting it would make the report read as though the guardrails
     // had declined most of the codebase.
-    if (touchers.length < 2) continue;
+    //
+    // The date guard rides along here rather than inside `build`, where it was a
+    // `return 'tooFewCommits'` that **could never be taken**: two touchers imply
+    // both dates, so the reason was structurally unprintable while `report.skipped`
+    // documents itself as *"never silent"* and `cli.ts` had a line for it. Same
+    // class as the `uncertain` branch this verb already deleted; found by the same
+    // question — does this path ever run on a real repo?
+    if (touchers.length < 2 || node === undefined) continue;
+    const from = node.firstSeen;
+    const to = node.lastSeen;
+    if (from === null || to === null) continue;
     considered++;
-    const entry = build(ref, touchers);
+    const entry = build(ref, touchers, from, to);
     if (typeof entry === 'string') {
       note(entry);
       continue;
@@ -217,14 +250,13 @@ export function generateWithReport(
     built.push(entry);
   }
 
-  function build(subject: NodeRef, touchers: readonly CommitIndex[]): Built | SkipReason {
+  function build(
+    subject: NodeRef,
+    touchers: readonly CommitIndex[],
+    from: string,
+    to: string,
+  ): Built | SkipReason {
     const node = nodeAt(graph, subject);
-    const from = node.firstSeen;
-    const to = node.lastSeen;
-    // Unreachable with two touchers: `history.ts` sets both dates from the same
-    // commits that produce the incidence. Typed rather than asserted, because
-    // the alternative is a non-null assertion on data from outside this module.
-    if (from === null || to === null) return 'tooFewCommits';
 
     // **Decision 7, and the order of these two lines is the whole of ADR-0019's
     // near-miss.** `touched` is built from the *unfiltered* toucher list, so a
@@ -343,7 +375,10 @@ export function generateWithReport(
         subject: node.id,
         candidates,
         truth,
-        evidence: { kind: 'history', touchedBy: touchers.length },
+        // The **retained** count, not the eligible one — see the comment on
+        // `retainedTouchers`. This is what the reveal and the field note both
+        // describe, and it is the number a player can check against `git log`.
+        evidence: { kind: 'history', touchedBy: retainedTouchers[subject] ?? touchers.length },
       },
     };
   }

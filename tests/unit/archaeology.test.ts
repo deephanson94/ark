@@ -30,6 +30,7 @@ import type { DisclosedFact } from '../../src/verbs/index.js';
 import { spread } from '../../src/verbs/sample.js';
 import { archaeology, generateWithReport } from '../../src/verbs/archaeology/index.js';
 import { COMMIT_TRACE_HEURISTICS, gradeCommitHeuristics } from '../../src/verbs/gate.js';
+import { commitSupply } from '../../src/verbs/commits.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /**
@@ -73,6 +74,8 @@ interface CommitSpec {
   readonly date: string;
   readonly subject: string;
   readonly files: readonly number[];
+  /** Refused supply by `commitSupply`, but still in the retained record. */
+  readonly wide?: boolean;
 }
 
 /**
@@ -114,6 +117,18 @@ const COMMITS: readonly CommitSpec[] = [
   { sha: 'aa0000000016', date: '2026-04-13', subject: 'settle the ninth', files: [20, 10] },
   { sha: 'aa0000000017', date: '2026-04-13', subject: 'cap the tenth', files: [21, 11] },
   { sha: 'aa0000000018', date: '2026-04-13', subject: 'last of the run', files: [ENGINE, 3] },
+  // **Wide, and it touches the engine.** `commitSupply` refuses it, so it is a
+  // *retained* toucher that is not an *eligible* one — the exact gap that made
+  // the reveal and the field note disagree about how many commits touched a
+  // file, and made "that is every commit" false. Without a commit of this shape
+  // the assertion about the two agreeing passes vacuously.
+  {
+    sha: 'aa0000000019',
+    date: '2026-03-02',
+    subject: 'reformat the tree',
+    files: [ENGINE, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    wide: true,
+  },
 ];
 
 function repo(overrides: { readonly contested?: readonly number[] } = {}): Atlas {
@@ -158,6 +173,17 @@ function repo(overrides: { readonly contested?: readonly number[] } = {}): Atlas
     repo: { ...base.repo, head: 'f'.repeat(40), headDate: '2026-06-15', root: '0'.repeat(40) },
     history: {
       ...base.history,
+      // **`src/io/reader.ts` gets exactly one partner and exactly one import
+      // neighbour**, which is what makes the reveal's "relations, never
+      // identities" rule testable: over a set of one, the relation *is* the
+      // identity. The engine gets two of each, so the arms still fire somewhere.
+      coChange: [
+        [at(0), at(1), 4],
+        [at(0), at(2), 3],
+        [at(3), at(4), 3],
+      ]
+        .map(([a, b, n]) => ((a as number) < (b as number) ? [a, b, n] : [b, a, n]))
+        .sort((x, y) => (y[2] as number) - (x[2] as number) || (x[0] as number) - (y[0] as number) || (x[1] as number) - (y[1] as number)) as [number, number, number][],
       present: true,
       commitsWalked: COMMITS.length,
       commitsRetained: COMMITS.length,
@@ -169,7 +195,7 @@ function repo(overrides: { readonly contested?: readonly number[] } = {}): Atlas
           date: commit.date,
           subject: commit.subject,
           files: [...commit.files.map(at)].sort((x, y) => x - y),
-          wide: false,
+          wide: commit.wide === true,
           issue: null,
         })),
     },
@@ -194,7 +220,22 @@ function engineBoard(atlas: Atlas = ATLAS, disclosed = new Set<DisclosedFact>())
   return found;
 }
 
-/** Which commits really touched a node, read straight off the atlas. */
+/**
+ * The commits the *generator* could have drawn a key from: eligible, and
+ * touching the node. Narrower than `touchersOf`, which is every **retained**
+ * toucher — a `wide` commit is in the second and not the first, and conflating
+ * them is what made the reveal contradict the field note.
+ */
+function eligibleTouchersOf(atlas: Atlas, nodeId: string): Set<string> {
+  const ref = atlas.nodes.findIndex((node) => node.id === nodeId);
+  const out = new Set<string>();
+  for (const commit of commitSupply(atlas).eligible) {
+    if (commit.files.includes(ref)) out.add(commitIdFor(commit.sha));
+  }
+  return out;
+}
+
+/** Every **retained** commit that touched a node, read straight off the atlas. */
 function touchersOf(atlas: Atlas, nodeId: string): Set<string> {
   const ref = atlas.nodes.findIndex((node) => node.id === nodeId);
   const out = new Set<string>();
@@ -269,7 +310,7 @@ describe('decision 3 — the key is a cross-section in date order', () => {
   it('spreads over the date ordering rather than the atlas’s', () => {
     const challenge = engineBoard();
     const byId = new Map(ATLAS.history.commits.map((c) => [commitIdFor(c.sha), c]));
-    const touchers = [...touchersOf(ATLAS, challenge.subject)].sort((a, b) => {
+    const touchers = [...eligibleTouchersOf(ATLAS, challenge.subject)].sort((a, b) => {
       const x = byId.get(a);
       const y = byId.get(b);
       return (x?.date ?? '') < (y?.date ?? '') ? -1 : (x?.date ?? '') > (y?.date ?? '') ? 1 : 0;
@@ -445,7 +486,7 @@ describe('guardrail 4 — what it refuses', () => {
 
   it('asks nothing about a file with fewer than two eligible touchers', () => {
     for (const challenge of boards()) {
-      expect(touchersOf(ATLAS, challenge.subject).size).toBeGreaterThanOrEqual(2);
+      expect(eligibleTouchersOf(ATLAS, challenge.subject).size).toBeGreaterThanOrEqual(2);
     }
   });
 });
@@ -494,9 +535,73 @@ describe('the reveal', () => {
     expect(new Set(correct.map((note) => note.note)).size).toBe(correct.length);
   });
 
+  it('never lets a relation over one file become that file’s name', () => {
+    // A subject with exactly one co-change partner or one import neighbour makes
+    // "it changed a file that usually moves with this one" name that file — an
+    // atom of the commit's Placement key. Measured at 4 such notes on hono
+    // before the guard.
+    for (const board of boards()) {
+      const ref = ATLAS.nodes.findIndex((node) => node.id === board.subject);
+      const adjacent = new Set<number>();
+      for (const edge of GRAPH.out[ref] ?? []) adjacent.add(edge.to);
+      for (const edge of GRAPH.in[ref] ?? []) adjacent.add(edge.from);
+      const partners = new Set<number>();
+      for (const [a, b] of ATLAS.history.coChange) {
+        if (a === ref) partners.add(b);
+        else if (b === ref) partners.add(a);
+      }
+      if (adjacent.size > 1 && partners.size > 1) continue;
+      // **Pick the wrong answers**, because `whyNot` only runs for a *spurious*
+      // note — grading with an empty answer produces only `missed` notes, which
+      // go to `whyYes`, and the assertion passes without executing the code it
+      // is about. Two mutants survived this suite before the picks were added.
+      const wrong = board.candidates.filter((id) => !board.truth.includes(id));
+      expect(wrong.length, board.id).toBeGreaterThan(0);
+      const said = archaeology
+        .reveal(ATLAS, GRAPH, board, archaeology.grade(board, { picked: wrong }))
+        .notes.map((note) => note.note)
+        .join(' ');
+      if (adjacent.size === 1) expect(said, board.id).not.toContain('import edge');
+      if (partners.size === 1) expect(said, board.id).not.toContain('usually moves with');
+    }
+  });
+
   it('draws nothing on the map', () => {
     expect(reveal.unlocks).toBe('nothing');
     expect(channelOf('archaeology')).toBe('nothing');
+  });
+
+  /**
+   * **The reveal and the field note must state the same population**, and an
+   * adversarial review found them stating different ones: the summary read the
+   * *eligible* toucher count while `noteWeights` counted every *retained*
+   * toucher, so the two disagreed on 21 of this repo's 26 boards. Worse, when
+   * the eligible count equalled the key the summary printed *"that is every
+   * commit in this window that touched X"* — **false of the atlas's own record**
+   * on 4 boards, and falsifiable by the player with one `git log`.
+   */
+  it('agrees with the field note about how many commits touched the file', () => {
+    for (const board of boards()) {
+      const population = archaeology.noteWeights(GRAPH, board.subject).size;
+      expect(board.evidence.kind).toBe('history');
+      if (board.evidence.kind !== 'history') continue;
+      expect(board.evidence.touchedBy, board.id).toBe(population);
+    }
+  });
+
+  it('says "that is every commit" only when it is every commit in the record', () => {
+    for (const board of boards()) {
+      const said = archaeology.reveal(
+        ATLAS,
+        GRAPH,
+        board,
+        archaeology.grade(board, { picked: [...board.truth] }),
+      ).summary;
+      if (!said.includes('That is every commit')) continue;
+      // The claim is about the atlas's retained record, so it is checked
+      // against that and not against whatever the generator was willing to ask.
+      expect(touchersOf(ATLAS, board.subject).size, board.id).toBe(board.truth.length);
+    }
   });
 
   it('states the population as revealed, never folded into the claim', () => {
