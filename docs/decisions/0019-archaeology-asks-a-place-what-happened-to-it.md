@@ -118,7 +118,7 @@ measured as the alternative and rejected — see the rejected list.
 |---|---|
 | `shallowClone` | see below — guardrail 4 |
 | `truncated` | `maxCommitFiles` cut a commit's list, so a non-mention is not a non-touch — guardrail 4 |
-| `uncertain` | contested rename lineage, in any role (ADR-0014 decision 4) |
+| `uncertain` | contested rename lineage — barring the *subject*, and any commit whose file list contains a barred node. Not "in any role" as a first draft had it: this verb's members are commits, and a commit has no lineage (ADR-0014 decision 4) |
 | `wide` | a commit over `history.wideLimit`: removed from **both** roles, so it is simply not on the board — pillar 3, as in ADR-0018 |
 | `tooFewCommits` | fewer than two eligible commits touched the subject |
 | `tooFewDistractors` | not enough certified non-members inside the window (decision 5) |
@@ -147,17 +147,25 @@ The reason is the trap CLAUDE.md's Next action names, and it is the sharpest one
 inspector prints every node's first seen and last seen; every candidate row shows a date.** So "tick
 every commit inside the range" is free, needs no idea of what changed with what — and its **recall is
 1.0 by construction**, which means its F1 is `2p/(1+p)` and it clears band A whenever precision
-reaches 0.64. Measured without the filter it is the dominant guess: best 0.52 here and best **0.77**
-on hono, with **17 of hono's boards scoring between 0.70 and 0.78**. That is not a plateau, it is the
-edge of a cliff, and the gate argument ADR-0008 built explicitly rests on not sitting on one.
+reaches 0.64. Measured without the filter: best 0.52 here and best **0.77** on hono, with **17 of
+hono's boards scoring between 0.70 and 0.78**. That is not a plateau, it is the edge of a cliff, and
+the gate argument ADR-0008 built explicitly rests on not sitting on one.
+
+**Note precisely what that does and does not say, because an earlier draft called it "the dominant
+guess" and claimed the filter "retires a gate heuristic".** 0.77 is *below* the 0.78 bar. A `window`
+heuristic in `COMMIT_TRACE_HEURISTICS` would have fired **zero** times on either repo, filter or no
+filter — so nothing is being retired, and the honest justification is entirely about board quality:
+without the filter, half of hono's deck hands a high B to someone reading two dates.
 
 With the filter, the guess selects the *whole board*, so it is exactly ADR-0007's select-everything
-exploit, which the 3:1 sizing already puts below the pass threshold. Measured maximum **0.46** on
-both repos, against a 0.5 threshold and a 0.78 bar.
+exploit. The **bound** is the sizing rule, not a measurement: the loop requires `distractors > 2·truth`,
+hence `candidates > 3·truth`, hence `2t/(t+c) < 0.5 = PASS_THRESHOLD` for every board it permits, at
+any `candidateCount`. The measured maximum is 0.46, and a 19-candidate six-key board — which the rule
+allows — would read 0.48. Both are below the threshold because the arithmetic says they must be, and
+that is the claim; the 0.46 is an observation, not a ceiling.
 
-**So `window` is not a gate heuristic. It is an invariant, and one rule beats two** — every leak
-ADR-0014 and ADR-0016 found was a rule that lived twice. A generator that filters the pool and a gate
-that scores the guess are two statements of one thing, and the second can only go stale.
+**So `window` is not a gate heuristic and never could have been a useful one.** It is an invariant,
+and one rule beats two — every leak ADR-0014 and ADR-0016 found was a rule that lived twice.
 
 One consequence is forced and is named rather than smuggled: with the filter on, *every* pool member
 is contemporary, so "contemporary" stops being a distractor strategy and §8.3's strategies pick
@@ -165,7 +173,7 @@ is contemporary, so "contemporary" stops being a distractor strategy and §8.3's
 filter and that forced consequence together, because they cannot be separated — ADR-0018's
 two-knobs-one-name error, avoided by saying so.
 
-### 6. `COMMIT_TRACE_HEURISTICS` = {`mentions`, `endpoints`, `oldestK`}, and one measured guess is left out
+### 6. `COMMIT_TRACE_HEURISTICS` = {`mentions`, `endpoints`, `oldestK`, `broadKnown`}, and one measured guess is left out
 
 | guess | what it needs | ark mean/best/**fires** | hono mean/best/**fires** |
 |---|---|---|---|
@@ -173,16 +181,19 @@ two-knobs-one-name error, avoided by saying so.
 | `endpoints` — the commit is dated exactly first-seen or last-seen | the inspector | 0.209 / 0.46 / **0** | 0.284 / 1.00 / **2** |
 | `oldestK` — the K oldest rows on the board | the board alone | 0.154 / 0.75 / **0** | 0.460 / 1.00 / **24** |
 | `recentK` — the K newest rows | the board alone | 0.190 / 0.50 / **0** | 0.199 / 0.67 / **0** |
+| `broadKnown` — the K widest, among commits a reveal has priced | an earlier reveal | 0.537 / 1.00 / **5** | 0.068 / 0.67 / **0** |
 | `window` — everything inside the range | the inspector | 0.252 / 0.46 / **0** | 0.304 / 0.46 / **0** |
 
 *fires* = boards where the guess reaches band A, under the shape as decided.
 
-**The whole gate is inert on this repo and refuses 37 boards on hono**, and that has to be said out
-loud rather than discovered. It is the same profile ADR-0018 measured for `recency` — 16 on hono, 0
-here — and it has the same cause: ark is three days old, so its date signals barely vary and its
-commit messages rarely name files. A gate justified only by the bootstrap repo would have been
-deleted as dead; a gate justified only by hono would fail pillar 6. **It needs both repos to be
-justifiable at all**, which is now the third verb in a row where that was true.
+**Each of the four is live on exactly one repo and dead on the other**, and that is the whole argument
+for measuring on two. `broadKnown` refuses 5 boards here and 0 on hono; the other three refuse 0 here
+and **33** on hono (37 firings across 33 boards — four boards lose to more than one guess, which is
+why the two numbers differ and why *refusals* is the one to quote). It is the profile ADR-0018
+measured for `recency` — 16 on hono, 0 here — with the same cause: ark is three days old, so its
+dates barely vary and its messages rarely name files, while hono's Placement deck is too sparse to
+price many widths. **A gate justified from either repo alone would have been half deleted as dead**,
+which is now the third verb in a row where that was true.
 
 **`recentK` is measured and left out.** It fires on neither repo, and CLAUDE.md's landmine is
 explicit: *count how many times a path fires on a real repo before you write tests around it.* It is
@@ -194,16 +205,23 @@ revives it on hono, which is the honest reason the sentence is not "recentK cann
 
 `directory` is absent for ADR-0018's reason, unchanged — the *members* have no directory.
 
-**Nothing on the board or in the reveal may print a commit's width.** It is not shown today, and it
-must stay that way: *"tick the K widest commits"* is structure-blind and beats band A on **5 of this
-repo's 27 boards and 6 of hono's 54**. Restricted to widths a player could actually have learned —
-Placement's reveal prints `touched` for its own subjects — it is **5 here and 0 on hono**, and the
-asymmetry is decision 7 working: on hono the disclosed commits leave the answer keys and take the
-leak with them, while on this repo Placement's deck covers 39 of 46 eligible commits, so the same
-commits remain on the board as perfectly legitimate *distractors* whose width is known. This is
-ADR-0014 decision 7's three-way alignment run as a *checklist against every field the UI prints*,
-before shipping rather than after; the leak it prices is one the product does not have and must not
-acquire.
+**Nothing on Archaeology's own board or reveal may print a commit's width** — and that is not
+sufficient, which the first version of this paragraph got wrong in the worst available way. It
+measured the leak and then declared, two sentences later, that "the leak it prices is one the product
+does not have". The product has it. Placement's reveal prints `touched` for its own subjects, so a
+player who has played Placement knows the width of those commits, and *"tick the K widest"* is as
+structure-blind as a guess gets.
+
+Measured, restricted to widths a reveal has actually printed: **band A on 5 of this repo's 27 boards,
+and 0 of hono's 54.** The asymmetry is decision 7's: on hono the disclosed commits leave the answer
+keys and take the leak with them, while here Placement's deck covers 39 of 46 eligible commits, so
+those commits stay on the board as perfectly legitimate *distractors* whose width is known.
+
+**So `broadKnown` is the fourth gate heuristic**, scored off the same disclosure record decision 7
+introduces — which carries two kinds of fact, *(commit, file)* for the exclusion and *(commit, width)*
+for this. **Cost: 5 boards here (27 → 22) and none on hono.** The alternative — accepting five boards
+a completing player can win on width alone — is the option ADR-0014 decision 7 exists to refuse, and
+"we measured it and shipped it anyway" is not a sentence this repo should add to its record.
 
 ### 7. A fact an earlier reveal has already stated is not an answer
 
@@ -238,9 +256,12 @@ so it can never be a distractor, and the invariant is what forces that.
 
 **Cost, measured**: the deck falls **40 → 27** here and **54 → 54** on hono (still at the cap).
 Thirteen boards on the bootstrap repo, nothing on the reference repo. It also takes hono's cross-verb
-width leak with it (`broadKnown`, 2 boards → **0**) and *not* this repo's (8 → 5), for the reason
-decision 6 gives. And it moves ark off its deck cap: 27 against a cap of 40, so **on the bootstrap
-repo it is supply that binds, not the cap** — the only one of the four verbs of which that is true.
+width leak with it (`broadKnown`, 2 boards → **0**) and *not* this repo's (8 → 5), which is why
+decision 6 has to gate what is left. And it moves ark off its deck cap — 27, then 22 after that gate,
+against a cap of 40 — so **on the bootstrap repo it is supply that binds rather than the cap.** (An
+earlier draft called that "the only one of the four verbs of which that is true", which is false:
+Placement ships 39 against the same cap of 40. Superlatives about a repo that indexes itself rot
+faster than the numbers they are built from.)
 
 **Why the strong version rather than a threshold.** Refusing only the fully-disclosed boards, or
 scoring disclosure as a gate heuristic, would both need the *same* coupling to the already-generated
@@ -250,8 +271,24 @@ deck — so weakening the rule buys none of the architecture back and only gives
 commit C touched `save.ts` from a reveal an hour ago is *knowledge of the repo*, and recall is not
 Ctrl+F — that is spaced repetition, which is the product working. What settles it is ADR-0011 and
 NORTH-STAR §9's own line: a field note *"accumulates facts you have proven you know, not facts you
-were shown"*. A board whose entire key was previously **shown** cannot honestly write a note claiming
-it was **proved**. Fifteen boards on this repo are in exactly that state.
+were shown"*. A board that can be answered from a reveal cannot honestly write a note claiming it was
+**proved**, and fifteen boards on this repo are answerable that way in their entirety.
+
+> **The word "previously" was doing work this document cannot support, and a review caught it.** The
+> first version argued from *"a board whose entire key was previously shown"* — which assumes the
+> player meets Placement before Archaeology. **Decision 8 says the opposite**: tier ascending serves
+> tier 5 before tier 6, and a commit subject is reachable only through the guide, so for a player
+> following the deck in order no Placement reveal exists yet.
+>
+> The repair is not to pick the other order — it is to stop arguing from order at all, because
+> **order is not controllable**. `selector.ts`'s `rankLess` puts `attempts` above `tier`, so a board
+> failed once returns *after* the tier-6 deck; the map's click path serves whatever a node's bucket
+> holds first, in atlas-id order, which is not tier order (see decision 8); a player can jump
+> anywhere; and a reindex reshuffles both decks. **A fact that can be read off one board's reveal and
+> ticked on another is a pillar-3 problem in whichever order they arrive**, and that is the argument.
+> The same order-free reasoning is what makes `broadKnown` a gate heuristic in decision 6 — the first
+> draft had these two paragraphs leaning on *opposite* temporal assumptions, which is how one of them
+> ended up denying a leak it had just measured.
 
 **This does not contradict ADR-0012, and the distinction matters.** §3.6 and ADR-0012 say uniqueness
 is *within-verb*, because *"two different verbs may honestly share an answer set — they are asking
@@ -270,13 +307,24 @@ first task of the session that builds this.
 ### 8. Tier 5, and a player meets it before Placement and after everything else
 
 §5 puts History at tier 5 and this is squarely it. The selector serves tier ascending, so on this
-repo the deck becomes **80 tier-3 questions, then 27 tier-5, then 39 tier-6**.
+repo the deck becomes **80 tier-3 questions, then 22 tier-5, then 39 tier-6**.
 
-Two consequences, both stated because a later session will otherwise discover them:
+> **The tier order governs the guide, and not the map — which is the primary path.** `challengesById`
+> buckets a node's questions in **atlas order**, which `build.ts` sorts by challenge **id**, and
+> `challengeFor` serves the first unanswered one. `archaeology-…` sorts before `blast-…` and
+> `companion-…`, so **clicking a disc would open the tier-5 history question before the tier-3 import
+> question**, on every subject that carries both. `main.ts`'s own comment states the rule the id
+> prefix would falsify — *"a node carrying both verbs offers Blast Radius until it is answered and
+> then Companion"* — which is CLAUDE.md's rule-stated-in-words landmine with the rule living in a
+> comment rather than an ADR. The implementing session must order a bucket by tier explicitly rather
+> than inherit an alphabetical accident; naming the verb `archaeology` and calling it done would
+> silently invert the curriculum on the path `selector.ts` calls primary.
+
+Two further consequences, both stated because a later session will otherwise discover them:
 
 - **Archaeology is served before Placement**, which pushes tier 6 further out still. That is §5's
   progression working — the tiers *are* the curriculum — not an accident of ordering.
-- **A short session still never leaves tier 3.** With three tiers and ~146 questions here, tier 6 is
+- **A short session still never leaves tier 3.** With three tiers and ~141 questions here, tier 6 is
   effectively unreachable in casual play. ADR-0018 noted this for one tier; a second one above tier 3
   makes it a real progression question rather than an observation, and it is listed below as
   something this decision does not settle.
@@ -306,13 +354,18 @@ Everything below is the shape as decided, including decision 7. Measured at `e44
 |---|---|---|
 | nodes | 128 | 425 |
 | retained / walked commits | 51 / 67 | 500 / 2,758 |
-| eligible commits | 46 (5 `wide`) | 475 (25 `uncertain`) |
+| eligible commits | 46 (5 `wide`) | 475 (25 refused: `uncertain` and `wide`, counted in that order here — ADR-0018 tests `wide` first and reports 24 + 1) |
 | files touched by ≥ 2 eligible commits, after decision 7 | 28 | 158 |
-| **deck shipped** | **27** — supply binds | **54** — the cap binds |
+| **deck shipped** | **22** — supply binds | **54** — the cap binds |
 | answer keys | 2–6 commits | 2–6 commits |
-| `ctrlF` | 0 | 33 |
+| `ctrlF` | 5 (all `broadKnown`) | 33 |
 | `duplicateKey` | 1 | 10 |
 | nodes it lifts out of unprovable | 1 of 16 | 14 of 154 |
+
+**Three populations appear in this document and they are not the same number**, which an earlier
+draft left for the reader to work out: **66** files here are touched by ≥ 2 eligible commits and are
+what decision 7's disclosure table is measured over; **28** survive decision 7; **22** ship. When
+decision 7 says "15 of 66 boards", those are candidate subjects, not shipped boards.
 
 Counterfactuals. **Every row holds all the other decisions fixed** — including decision 7, which an
 earlier draft of this table did not, so its figures described a shape this document does not
@@ -320,12 +373,16 @@ propose:
 
 | change (one decision, everything else as decided) | ark deck / `ctrlF` | hono deck / `ctrlF` |
 |---|---|---|
-| as decided | 27 / 0 | 54 / 33 |
+| as decided | 22 / 5 | 54 / 33 |
+| `broadKnown` out of the gate (decision 6's last paragraph) | 27 / 0 | 54 / 33 |
 | decision 7 off — disclosed members allowed back | 40 / 1 | 54 / 35 |
 | decision 5 off — no window filter, `contemporary` becomes a strategy | 24 / 4 | 54 / 67 |
 | **no wrong answer from inside the window, anywhere** | **0** | **3** |
 | `mentions` strategy dropped from the mix | 27 / 0 | 54 / 57 |
 | `companion` + `neighbour` strategies dropped | 27 / 0 | 54 / 35 |
+
+Rows 3–7 are measured with `broadKnown` out of the gate, so read them against row 2 rather than
+row 1.
 
 The fourth row is the one that measures the threat, and it exists because ADR-0018 learned that
 deleting a strategy measures almost nothing when the padding walks the same ordering anyway. It is
@@ -355,19 +412,38 @@ the two figures on record.
 | | ark | hono |
 |---|---|---|
 | commits whose subject looks like a revert, in the retained window | **0** | **1** (10 in 2,758; only 12 body references resolve to a commit the clone holds) |
-| commits carrying an issue number | **16** — *not 0, as CHANGELOG recorded* | 364 |
-| **distinct** issues among them | **16** | 368 |
+| **retained** commits carrying an issue number | **0** | 359 |
+| **distinct** issues among them | **0** | 356, of which **3** have more than one commit |
 
 **Revert detection** finds nothing on the bootstrap repo. A verb with no supply on the repo NORTH-STAR
 §11 makes the first level is not a verb.
 
-**Issue linkage** — NORTH-STAR §2's own example — is degenerate on both, and the ark figure the
-CHANGELOG carries is stale rather than wrong-in-conclusion: this repo now has sixteen `#N` references
-because it merges pull requests, and all sixteen are distinct PR numbers on merge subjects. One
-commit per number is a lookup, not a question, which is the same verdict hono's 368-in-364 gives for
-a different reason. It would also need the commit **body**, which `history.ts` does not keep. *This
-is CLAUDE.md's measured-constant landmine biting inside one milestone: the number moved from 0 to 16
-in three sessions, and the conclusion survived only because it never rested on the number being zero.*
+**Issue linkage** — NORTH-STAR §2's own example — is **0 on this repo and degenerate on hono**: 356
+distinct issues across 359 retained commits, so *"which commit closed #N"* is a 1:1 lookup rather
+than a question. It would also need the commit **body**, which `history.ts` does not keep.
+
+> **This row said 16 and 364/368 until a review checked it, and getting it wrong is more instructive
+> than the row itself.** This repo *does* now carry sixteen `#N` references — but every one of them
+> is a `Merge pull request #N` subject, and `git log --name-status` without `-m` emits **no file list
+> for a merge commit**, so `touched.size > 0` fails at `history.ts:177` and **not one of the sixteen
+> is ever retained**. The atlas says 0. The CHANGELOG's original 0 was right, and the "correction"
+> that replaced it measured the *walked git log* while the row is about *verb supply*, which only
+> retained commits can provide. Hono's numbers went the same way — 364/368 came from counting `#N`
+> tokens in git subjects, where one subject may carry two; the atlas keeps only the first
+> (`history.ts:299-304`), so *distinct* can never exceed *carrying* and my figures were not merely
+> imprecise but impossible in the shape they claimed to describe.
+>
+> The landmine this actually illustrates is **not** measured-constant drift, which is what the wrong
+> version cited. It is narrower and worse: **I re-measured with a different instrument than the one
+> that decides the question, and read the difference as drift rather than as a bug in my
+> measurement.** Everything here is now measured off `atlas.json`.
+
+**Merge commits are structurally invisible to this verb**, and that follows from the same fact. They
+are walked but never retained, so they can be neither truth nor candidate — harmless for guardrail 4,
+since a commit that cannot reach a board cannot corrupt a key, but it means decision 3's "arc of the
+file's life" silently omits every merge on a repo that does not squash, including an evil merge that
+really did change the subject. Stated because a decision record that re-derives the shallow-clone
+refusal to the letter should not leave this one implicit.
 
 **Birth cohorts** — *"which files arrived with this one?"* — die on the same repo: ark's 128 files
 have **three** distinct `firstSeen` dates, so the question has three answers.
@@ -390,7 +466,7 @@ what that costs.
 **Interior sampling — drop the oldest and newest touching commit from the key** to remove `oldestK`
 by construction rather than by gate. Measured against the decided baseline it buys **nothing**:
 hono's `oldestK` firings are 24 either way, while `duplicateKey` rises 10 → 14, `recentK` *starts*
-firing (0 → 1) and this repo's deck falls 27 → 26. It also removes a file's birth and its most recent
+firing (0 → 1) and this repo's deck falls 27 → 26 (measured against the pre-`broadKnown` baseline). It also removes a file's birth and its most recent
 change from the key, which are the two most legible events in its life. A gate that refuses 24 boards
 the deck cap immediately backfills is both cheaper and more honest.
 
@@ -433,22 +509,70 @@ with ADR-0018's reasoning for subjects: a fact about the id must not become a fa
   Free, already: `progress.ts`'s `applyGrade` filters candidates with `isNodeId`; `livenessOf.exists`
   already answers for both arms; `ties.ts` is gated on `channel`; `score.ts` and `selector.ts` treat
   ids as opaque strings; `tracedRadius` is keyed to `blastRadius` by name.
+
+  Two more the first draft of this list missed, both found by review:
+  7. **`gate.ts`'s `guess()` resolves every candidate through `nodeAt`** (`gate.ts:186-217`). Three of
+     the four heuristics above read a *commit's* message, date or width, so the scorer needs a
+     commit-side path — implied by naming the heuristics and never listed as work.
+  8. **The type list in this ADR's own header is short.** `Challenge.candidates` and `.truth` are the
+     schema half; `Grade.correct` / `.missed` / `.spurious`, `SetAnswer.picked`, `RevealNote.id`,
+     `NoteWeights`, `ProvedFile`, `Pass.proved` (the **stored save shape**) and `Verb.stillHolds`'s
+     `member` parameter are all `NodeId` today. Every one is an alias of `string`, so **the compiler
+     will report none of them** — which is ADR-0018's landmine verbatim, and the reason that ADR's
+     nine defects existed at all.
 - **A cross-verb key collision is not expressible.** Archaeology's `truth` holds commit ids and
   Placement's holds node ids, so the `(verb, truth)` uniqueness check the atlas test now uses cannot
   false-positive between them.
 - **Difficulty (§8.4)**: `breadth` is the count of eligible commits touching the subject — its full
   population before sampling; `reach` is the share of the key whose message shares no name token with
   the subject, i.e. how much of the file's history is *not* self-describing; `surprise` is measured
-  against `oldestK`, keeping ADR-0014 decision 7's alignment of map giveaway, naive guess and gate
-  heuristic.
+  against `oldestK`, the strongest guess the board alone hands over.
+  **ADR-0014 decision 7's three-way alignment does not hold cleanly here, and saying it did was an
+  overclaim.** There the UI giveaway, the naive guess and the gate heuristic are one strategy. Here
+  the UI giveaway is the inspector's dates (`endpoints`), the naive guess is the board's own ordering
+  (`oldestK`), and the gate holds four. Two legs, not one — which is what the alignment principle
+  exists to notice, so it is recorded as a divergence rather than asserted away.
 - **The omni-file refuses itself.** A file touched by nearly every commit has almost no certified
   non-members, so it produces no board — the exact file a churn-ranked verb would have made its star.
+
+## The fourth disclosure direction: measured, and deliberately not acted on
+
+Decision 7 checks Placement→Archaeology; decision 9 closes Archaeology→Placement. A review pointed
+out that the ADR had checked two directions of six. The other four, now checked:
+
+- **Companion→Archaeology** and **BlastRadius→Archaeology**: clean. Pair counts and import edges name
+  no commits, so neither reveal can state an atom of this verb's key.
+- **Archaeology→Placement**: closed *by construction*, and the argument is worth stating rather than
+  relying on. `F ∈ files(C)` can never be a candidate on C's Placement board, and `F ∈ truth(C)` means
+  decision 7 already removed C from F's key. It holds because of the invariant, not because anyone
+  arranged it.
+- **Archaeology→Companion: a real overlap, measured.** Two Archaeology reveals naming ≥ 2 of the same
+  commits certify that their two subjects co-changed at least twice, which — since ADR-0014's shipped
+  bars here are 2–3 shared commits — *is* a Companion truth membership. **23 pairs of shipped subjects
+  share ≥ 2 key commits on this repo, and 14 of those pairs are a shipped Companion answer.** On hono,
+  10 and 2.
+
+**Not acted on, and the distinction is the whole reason.** Placement's reveal **states** the atom —
+"this commit changed `save.ts`" is a sentence on the screen, and ticking it later is recall of a
+sentence. Archaeology's reveals only **imply** the co-change pair, and only to a player who holds two
+boards side by side and counts the commits common to both. Pillar 3's text is *"answerable by
+`Ctrl+F` rather than by reasoning about structure"* — and combining two reveals to notice that two
+files keep moving together is not a lookup, it is exactly the inference Companion exists to teach.
+Recorded with its number so a later session can overturn it on evidence rather than rediscover it.
 
 ## What this does not decide
 
 - **Whether tier-ascending selection still serves the player** now that two tiers sit above tier 3
-  and ~146 questions stand in front of them. Decision 8 states the consequence; the remedy, if one is
+  and ~141 questions stand in front of them. Decision 8 states the consequence; the remedy, if one is
   wanted, is a progression decision and not this verb's.
+- **Whether every figure here reproduces**, and it should be said plainly: **no generator exists**, so
+  every count in this document comes from a throwaway probe, in a project whose own record contains a
+  prototype that manufactured the effect it measured (ADR-0018 §6) and, in this document, a probe that
+  shipped a wrong answer key inside a counterfactual. The structural figures — node and commit counts,
+  eligible commits, wide commits, distinct dates, disclosure facts — were re-derived from `atlas.json`
+  and reproduce. The deck and gate figures cannot be checked until the verb is built, and the first
+  task after building it is to re-run this document's tables against the real generator and correct
+  whatever moved.
 - **Whether Placement should yield instead of Archaeology** where the two want the same fact. The
   incumbent keeps its deck, which is a choice about disruption rather than about which question is
   better.
@@ -456,3 +580,44 @@ with ADR-0018's reasoning for subjects: a fact about the id must not become a fa
   other side: this verb puts twenty commits on screen and the map behind them shows none.
 - **Whether `wideCommitFiles` at 25 is right.** Inherited and still unexamined; it now decides which
   commits an Archaeology board may contain as well as what the co-change matrix means.
+
+---
+
+## Found in review, before merge
+
+An adversarial review was run against the finished document with one instruction: *the soft spot is
+where the change is proudest — attack decisions 5 and 7.* It was right about where to look, and
+wrong about which of the two was worse.
+
+1. **A measured leak declared nonexistent in the same paragraph.** Decision 6 reported that the width
+   guess beats band A on 5 of 27 shipped boards and then closed with *"the leak it prices is one the
+   product does not have"*. Both sentences were mine, four lines apart. `broadKnown` is a gate
+   heuristic now, at 5 boards here and 0 on hono.
+2. **Decision 7's justification was falsified by decision 8, three paragraphs later.** The exclusion
+   rule argued from a fact being *"previously shown"*; tier-ascending selection serves Archaeology
+   **before** Placement. The rule survives — the argument had to be rebuilt order-free — and the same
+   repair is what makes finding 1 coherent, because the two paragraphs had been leaning on opposite
+   assumptions about what the player had already seen.
+3. **A "correction" that replaced a right number with a wrong one.** The issue-linkage row was changed
+   from 0 to 16, citing the measured-constant landmine. The atlas says **0**: all sixteen are merge
+   subjects, and merge commits get no file list, so none is ever retained. Hono's 364/368 was likewise
+   git-log counting, and *distinct exceeding carrying* is impossible in the shape the atlas stores.
+   The real lesson is one the landmine does not cover — **a different instrument is not drift** — and
+   it produced the merge-commit paragraph in decision 4, which nothing else in the document had.
+4. **37 refusals against a supply table saying 33** — the sum of per-heuristic firings, quoted as
+   boards, on a deck where four boards lose to more than one guess.
+5. **"The only one of the four verbs where supply binds"**, falsified by this document's own decision
+   8: Placement ships 39 against the same cap of 40.
+6. **The map's click path inverts the tier order** by alphabetical accident, on the interaction
+   `selector.ts` calls primary — and `main.ts`'s comment states the rule the `archaeology-` prefix
+   breaks. Decision 8 carries it now.
+7. **Two of six disclosure directions unchecked**, one of which (Archaeology→Companion) is a real
+   overlap of 14 pairs here — measured, and deliberately not acted on, above.
+
+Decision 5's core arithmetic and decision 4's certification both survived attack, including a search
+for a third wrong-key mechanism beside the walk window and the shallow clone; none was found. So the
+proudest paragraph was not the weakest this time — **the weakest was the one that had already done its
+measurement and then wrote the opposite down.** Four of the seven above are a sentence contradicting a
+number in the same document, which is a failure mode no suite can catch and no amount of measuring
+prevents: it is what happens when the prose is written from the intention rather than re-read against
+the table.

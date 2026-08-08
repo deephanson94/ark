@@ -359,6 +359,27 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   described a shape the document did not propose: as decisions accumulate, **the baseline moves, and
   rows measured before the last decision are measuring a dead design.** Re-run the whole table
   against the final baseline before quoting any of it.
+- **A different instrument is not drift.** ADR-0019 "corrected" a recorded 0 to 16 — issue numbers on
+  this repo's commits — and cited the measured-constant landmine while doing it. The 0 was right. The
+  sixteen `#N` references are all `Merge pull request #N` subjects, and `git log --name-status`
+  without `-m` emits **no file list for a merge commit**, so `touched.size > 0` fails and not one of
+  them is ever retained; the atlas says 0, and *retained* is the only sense in which a commit is verb
+  supply. The same paragraph reported hono as 364 carrying / 368 distinct, which the atlas cannot
+  represent — `issue` keeps only the first `#N` of a subject, so distinct can never exceed carrying;
+  both figures came from counting tokens in `git log` output. **When a recorded number looks wrong,
+  first check that you are measuring it with the instrument that decided it** — here `atlas.json`,
+  not the log the atlas is built from. Drift is what happens when the same measurement moves; this
+  was a different measurement wearing its name. (It did pay for itself once: the merge-commit fact
+  above is real, and means every merge is invisible to a commit-membership verb.)
+- **Four of seven review findings were a sentence contradicting a number in the same document.** Not
+  a wrong measurement — a right one, written up backwards: a paragraph that measured a leak on 5 of
+  27 boards and closed by calling it a leak "the product does not have"; a justification resting on
+  the play order that the decision three paragraphs later reverses; 37 per-heuristic firings quoted
+  as 37 refused boards when four boards lose to two guesses; a superlative the document's own table
+  falsifies. No suite can see any of these and no amount of extra measuring prevents them, because
+  the measurements were already right. **Re-read the prose against the table, not against the
+  intention** — and treat any sentence of the form "the product does not have X" as a claim needing
+  the same evidence as "the product has X".
 
 ---
 
@@ -523,7 +544,7 @@ Next action: **build Archaeology.** The design is settled and measured —
 implementation, not another design session. §6.2's *"what problem kept recurring?"* is not gradeable;
 the reduction is **recognition instead of generation**: subject a **file**, board **commits**, truth
 the commits whose own recorded file list names it, `candidates ∩ touchedBy(subject) = truth` for the
-fourth time. Tier 5. Measured supply as decided: **27 boards here, 54 on hono**, keys of 2–6 commits.
+fourth time. Tier 5. Measured supply as decided: **22 boards here, 54 on hono**, keys of 2–6 commits.
 
 **Do these in this order; the first one gates the rest.**
 
@@ -543,17 +564,24 @@ fourth time. Tier 5. Measured supply as decided: **27 boards here, 54 on hono**,
    (decision 5 — this is what makes the free date guess degenerate into select-everything) and the
    gate at `{mentions, endpoints, oldestK}`.
 
-Three things the ADR pins that are easy to undo by accident. **Commit width must never be printed**,
-on the board or in the reveal — "tick the K widest" beats band A on 5 of this repo's 27 boards and 6
-of hono's 54. **The reveal must not name the other files a commit touched**, which would hand over
-Placement's key for it — ADR-0014's finding 3, running the other way. And **the whole Ctrl+F gate is
-inert on this repo** (0 refusals) while refusing 37 on hono: do not delete it as dead, and do not
-justify it from one repo.
+Four things the ADR pins that are easy to undo by accident. **The gate is four heuristics and each is
+live on exactly one repo** — `broadKnown` refuses 5 here and 0 on hono, the other three refuse 0 here
+and 33 on hono: do not delete either half as dead, and do not justify the set from one repo.
+**Order a node's challenge bucket by tier explicitly** — `challengesById` takes atlas id order, and
+`archaeology-` sorts before `blast-`, so the map's click path would serve tier 5 before tier 3 and
+falsify `main.ts`'s own comment. **The reveal must not name the other files a commit touched**, which
+would hand over Placement's key for it — ADR-0014's finding 3, running the other way. And **the
+disclosure record carries two kinds of fact**, `(commit, file)` for decision 7's exclusion and
+`(commit, width)` for the width gate; both come from the same accumulator.
 
-**Both candidates the earlier entries named are dead, and one of the numbers proving it has already
-rotted.** Revert detection: **0** here, 1 in hono's window. Issue linkage: this line used to say 0
-here — it is now **16**, all distinct PR-merge subjects, so still a 1:1 lookup rather than a question,
-and still needing the commit **body** that `history.ts` does not keep. Birth cohorts die too: this
+**Both candidates the earlier entries named are dead, and the figure a session "corrected" was right
+the first time.** Revert detection: **0** here, 1 in hono's window. Issue linkage: **0 retained
+commits here** — the sixteen `#N` references in the log are all `Merge pull request #N` subjects, and
+merge commits get no file list from `--name-status`, so none of them is ever retained; on hono it is
+356 distinct issues across 359 retained commits, a 1:1 lookup rather than a question, and it would
+still need the commit **body** that `history.ts` does not keep. *Measure this off `atlas.json`, never
+off `git log` — the ADR briefly said 16 because it counted the walked log where the question is about
+retained supply.* Birth cohorts die too: this
 repo's 128 files have **three** distinct `firstSeen` dates. Rename lineage: 1 node here against 77 on
 hono. *Every date-derived signal here is near-degenerate because this repo is three days old — treat
 the ark column as a floor and never justify a history decision from it alone.*

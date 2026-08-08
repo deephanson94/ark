@@ -1509,19 +1509,33 @@ One line per iteration: what changed, and what to do next.
   what was **proved**, never what was **shown**. This generalises ADR-0012 from answer keys to the
   facts inside them, and it is the first time one verb's output constrains another's.
 
-  Supply, measured on both repos as decided: **27 boards here** (supply binds, 40 without decision 7)
-  and **54 on hono** (the cap binds), keys of 2–6 commits, lifting 1 of this repo's 16 unprovable
-  nodes and 14 of hono's 154. Tier **5**, so it is served after tier 3 and before Placement.
+  Supply, measured on both repos as decided: **22 boards here** (supply binds) and **54 on hono**
+  (the cap binds), keys of 2–6 commits, lifting 1 of this repo's 16 unprovable nodes and 14 of hono's
+  154. Tier **5**, so it is served after tier 3 and before Placement.
 
-  **Two of my own numbers were wrong before they were right, both in the direction that gets
-  believed.** The counterfactual table's first draft measured every row with decision 7 *off*, so it
-  described a shape the document does not propose — the identical error ADR-0018 records twice, caught
-  only by re-reading my own table. And the probe that justified decision 7 filtered the toucher list
-  *before* computing membership, dropping excluded commits into the distractor pool: **a wrong answer
-  key inside the counterfactual that was about to justify the rule.** Re-measured; the conclusions
-  held, which is luck rather than method. Also corrected: CHANGELOG's own "0 issue numbers on ark" is
-  now **16**, all distinct PR-merge subjects — still a 1:1 lookup, so the verdict survives a figure
-  that stopped being true within one milestone.
+  **An adversarial review before merge found seven things, and four of them were a sentence
+  contradicting a number in the same document.** The worst was not in the proudest paragraph this
+  time. Decision 6 measured a width leak on **5 of 27 boards** and then wrote, four lines later, that
+  "the leak it prices is one the product does not have" — `broadKnown` is a gate heuristic now, at 5
+  boards here and 0 on hono, taking the deck to 22. Decision 7's justification argued from a fact
+  being *previously* shown, which **decision 8 falsifies three paragraphs later** — tier ascending
+  serves this verb *before* Placement; the rule survives, rebuilt order-free, which is also what makes
+  the width gate coherent, since the two paragraphs had been assuming opposite things about what the
+  player had already seen. And the "correction" this entry's previous draft was proudest of was
+  itself wrong: ark's retained commits carry **0** issue numbers, not 16 — all sixteen are `Merge pull
+  request #N` subjects, merge commits get no file list from `--name-status`, so **none is ever
+  retained**. The CHANGELOG's original 0 was right. The lesson is narrower than the landmine I cited:
+  **a different instrument is not drift** — I measured the walked git log where the question was
+  about verb supply. It did produce one fact nothing else in the document had: merge commits are
+  structurally invisible to this verb.
+
+  Also caught: 37 firings quoted as 37 refusals (it is 33 — four boards lose to two guesses); a false
+  superlative about supply binding; the map's click path **inverting the tier order** by alphabetical
+  accident, on the interaction `selector.ts` calls primary, against a `main.ts` comment stating the
+  rule an `archaeology-` prefix breaks; and two of six disclosure directions unchecked — of which
+  **Archaeology→Companion is a real 14-pair overlap here**, measured and deliberately not acted on,
+  because Placement's reveal *states* its atom while two Archaeology reveals only *imply* theirs under
+  combination, and combining two reveals is reasoning rather than lookup.
 
   **Next**: build it. First task is the verb-blind disclosure accumulator decision 7 needs — each verb
   declares the facts its reveal gives away, `build.ts` accumulates in generation order — because
