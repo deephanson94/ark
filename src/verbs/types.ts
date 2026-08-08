@@ -11,6 +11,7 @@
  */
 
 import type { Atlas, Challenge, Graph, NodeId, SubjectId, VerbId } from '../atlas/index.js';
+import type { DisclosedFact } from './disclosure.js';
 
 export interface Grade {
   /** 0..1. Never negative — a wrong pick teaches, it does not subtract. */
@@ -40,6 +41,17 @@ export interface GenerateOptions {
   readonly maxChallenges: number | null;
   /** Target size of the choice set shown to the player. */
   readonly candidateCount: number;
+  /**
+   * Facts the reveals of **already-generated** verbs have stated (ADR-0019
+   * decision 7). Empty for the first verb to run.
+   *
+   * A set of opaque strings rather than another verb's challenges, so that a
+   * verb reading it still names no verb — see `disclosure.ts`. A generator is
+   * free to ignore it; the two verbs whose answers are files do, because no
+   * reveal in this build states an import edge or a co-change pair as an atom
+   * another verb could tick.
+   */
+  readonly disclosed: ReadonlySet<DisclosedFact>;
 }
 
 /**
@@ -66,6 +78,9 @@ export function maxChallengesFor(nodeCount: number): number {
 export const DEFAULT_GENERATE_OPTIONS: GenerateOptions = {
   maxChallenges: null,
   candidateCount: 20,
+  // The first verb to run has been told nothing, and a caller generating one
+  // verb alone is in exactly that position.
+  disclosed: new Set<DisclosedFact>(),
 };
 
 /**
@@ -302,6 +317,26 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * specific string must have come out of the atlas.
    */
   noteProse(facts: NoteFacts): NoteProse;
+  /**
+   * The atoms this challenge's **reveal** states outright, for a later verb to
+   * avoid asking back (ADR-0019 decision 7).
+   *
+   * Derived from the challenge alone and never from a grade, because the
+   * accumulator runs at generation time — before any player exists.
+   *
+   * **Required rather than optional, and that is the whole point.** An optional
+   * member is one a verb author never notices; a required one makes "what does
+   * my reveal give away?" a question you must answer to compile. Two of the
+   * three existing verbs answer *nothing* (`disclosesNothing`), and that is a
+   * measured answer rather than a default: an import cone and a co-change pair
+   * are relations between files, and no other verb's answer key is made of
+   * them. The moment one is, this is where it gets declared.
+   *
+   * The direction it runs in is the one nobody looks at: the *offending* reveal
+   * belongs to a verb written a milestone earlier, so the leak is invisible from
+   * inside the verb that suffers it.
+   */
+  discloses(challenge: C): Iterable<DisclosedFact>;
 }
 
 /**

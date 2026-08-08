@@ -54,6 +54,8 @@ export {
   textSubject,
 } from './gate.js';
 export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths.js';
+export type { DisclosedFact } from './disclosure.js';
+export { accumulate, disclosesNothing, touchedFact, widthFact } from './disclosure.js';
 import type { RevealChannel } from './types.js';
 import type { VerbId } from '../atlas/index.js';
 import { blastRadius } from './blastRadius/index.js';

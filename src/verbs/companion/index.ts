@@ -32,6 +32,7 @@
 import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
+import { disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -142,6 +143,14 @@ export const companion: Verb = {
         : null;
     return { claim, revealed };
   },
+  /**
+   * Nothing. This reveal names co-changed *pairs* and the count behind them,
+   * never a commit — so it cannot state an atom of a commit-membership key.
+   * (The reverse direction is real and measured: two Archaeology reveals imply
+   * a co-change pair. ADR-0019 records why that one is inference rather than
+   * disclosure, and therefore not declared here.)
+   */
+  discloses: disclosesNothing,
 };
 
 export type { CoChangeIndex, CoChangeRow } from './cochange.js';

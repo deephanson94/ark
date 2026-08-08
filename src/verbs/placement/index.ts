@@ -37,7 +37,7 @@
  */
 
 import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
-import { idOf, nodeAt } from '../../atlas/index.js';
+import { idOf, isCommitId, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
 import type {
   GenerateOptions,
@@ -50,6 +50,7 @@ import type {
   Verb,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
+import { touchedFact, widthFact } from '../disclosure.js';
 import { commitOf, labelOf } from './commits.js';
 import { generatePlacement } from './generate.js';
 import { revealOf } from './reveal.js';
@@ -158,6 +159,34 @@ export const placement: Verb = {
         ? `It touched ${facts.population} indexed files in all — the other ${facts.population - count} revealed to you, never proved.`
         : null;
     return { claim, revealed };
+  },
+  /**
+   * Everything this verb's reveal states about a commit, and it is the only
+   * verb in this build that states anything (ADR-0019 decision 7).
+   *
+   * Two kinds, because two different things leaked and they have different
+   * shapes:
+   *
+   *  - **`touched`, once per key member.** `revealOf` names each file in
+   *    `truth` beside the commit, so *"this commit changed that file"* is a
+   *    sentence on the screen. It is also, read the other way, a member of that
+   *    file's Archaeology answer key.
+   *  - **`width`, once.** `evidence.touched` is printed as the commit's full
+   *    file count so the reveal can say what sampling left out (ADR-0018
+   *    decision 2). That single number lets a later board be ranked by commit
+   *    size without reading a message.
+   *
+   * Only `truth` is declared, never `candidates`. The reveal explains a
+   * *distractor* as a file the commit did not touch, which is a negative fact:
+   * it cannot put a commit into an answer key, only keep one out of a board it
+   * was never on.
+   */
+  *discloses(challenge: Challenge) {
+    // A guard rather than an assertion: `Verb` is typed over the general
+    // `Challenge`, and a hand-edited atlas can put anything in `subject`.
+    if (!isCommitId(challenge.subject)) return;
+    for (const member of challenge.truth) yield touchedFact(challenge.subject, member);
+    if (challenge.evidence.kind === 'commit') yield widthFact(challenge.subject);
   },
 };
 

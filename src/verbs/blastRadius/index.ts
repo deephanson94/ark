@@ -21,6 +21,7 @@
 import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
+import { disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -122,6 +123,12 @@ export const blastRadius: Verb = {
         : null;
     return { claim, revealed };
   },
+  /**
+   * Nothing. This reveal names files and the import route between them — a
+   * relation no other verb's answer key is made of. Measured against
+   * Archaeology's keys, which are commits: an import edge states no commit.
+   */
+  discloses: disclosesNothing,
 };
 
 export type { Corpus, DistractorChoice, DistractorContext, StrategyId } from './distractors.js';

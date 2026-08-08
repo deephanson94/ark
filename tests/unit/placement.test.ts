@@ -17,7 +17,7 @@ import {
   isNodeId,
   validateAtlas,
 } from '../../src/atlas/index.js';
-import { PASS_THRESHOLD, VERBS, channelOf, scoreSet } from '../../src/verbs/index.js';
+import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet } from '../../src/verbs/index.js';
 import {
   commitSupply,
   generateWithReport,
@@ -113,7 +113,7 @@ const PLAIN: CommitSpec = {
   paths: CHANGED,
 };
 
-const OPTIONS = { maxChallenges: null, candidateCount: 20 } as const;
+const OPTIONS = { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: null, candidateCount: 20 } as const;
 
 function only(atlas: Atlas): Challenge {
   const { challenges } = generateWithReport(atlas, OPTIONS);

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
-import { PASS_THRESHOLD, scoreSet } from '../../src/verbs/index.js';
+import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, scoreSet } from '../../src/verbs/index.js';
 import { VERBS, channelOf } from '../../src/verbs/index.js';
 import { companion, generateWithReport, indexCoChange } from '../../src/verbs/companion/index.js';
 import { ASSUMED_MIN_CO_CHANGE } from '../../src/verbs/companion/cochange.js';
@@ -537,7 +537,7 @@ describe('a co-change cell is one fact, so it gets one question', () => {
     ]);
   }
 
-  const OPTIONS = { maxChallenges: null, candidateCount: 20 } as const;
+  const OPTIONS = { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: null, candidateCount: 20 } as const;
 
   it('is not vacuous — both ends really are offered the same pair', () => {
     const atlas = mutualAtlas();
