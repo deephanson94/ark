@@ -104,16 +104,26 @@ function consecutive(order: readonly Challenge[], same: (a: Challenge, b: Challe
 }
 
 describe('the defect the selector exists to fix is present in this atlas', () => {
-  it('has no duplicate answer keys at all — the generator removed the old one', () => {
+  it('has no duplicate answer keys within a verb — the generator removed them', () => {
     // This assertion used to be its own inverse. Until `dedupe()` it read
     // "there ARE identical answer keys here", because there were five pairs and
     // the selector's job was to keep them apart. The cause is fixed upstream
-    // now, so the instrument flips: the atlas this repo ships must contain no
-    // two challenges with the same key, and if that ever regresses the failure
-    // lands here rather than in a player who notices the repetition.
+    // now, so the instrument flips: if it ever regresses the failure lands here
+    // rather than in a player who notices the repetition.
+    //
+    // **Keyed by `(verb, truth)` and not by `truth` alone, which is a
+    // correction rather than a loosening.** ADR-0012 and `docs/atlas-format.md`
+    // §3.6 both say uniqueness is a **within-verb** property, in as many words:
+    // *"two different verbs may honestly share an answer set, because they are
+    // asking different questions about the same files."* This test asserted the
+    // stronger, undocumented thing and got away with it for two verbs, because
+    // a cross-verb collision never happened to occur. With three it does — a
+    // Companion key and the Placement board for the commit that produced that
+    // coupling are the same three files, which is not a repeat but the second
+    // question explaining the first.
     const byKey = new Map<string, Challenge[]>();
     for (const challenge of atlas.challenges) {
-      const key = truthKey(challenge);
+      const key = `${challenge.verb}\n${truthKey(challenge)}`;
       byKey.set(key, [...(byKey.get(key) ?? []), challenge]);
     }
     expect([...byKey.values()].filter((group) => group.length > 1)).toEqual([]);

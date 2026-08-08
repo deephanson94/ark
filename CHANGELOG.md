@@ -1419,6 +1419,24 @@ One line per iteration: what changed, and what to do next.
   vertical cull had no test at all, since a column's extent is `[top.y, base.y]` and an x-only test
   cannot see the asymmetry.
 
+  **CI went red on this and the reason is now a landmine.** Both failures were invisible on the
+  branch and reproducible only on the merge commit, because GitHub checks out `refs/pull/N/merge` —
+  **ark indexes a commit that does not exist on your machine**, so churn, co-change and the retained
+  commit list all differ and *which questions exist* differs with them. `test:determinism` cannot
+  see this: it indexes one commit twice, and this is two commits. The reproduction is
+  `git checkout -b x origin/master && git merge <branch>`.
+  What the merge history exposed was worth having. First, a **test asserting more than the
+  contract**: it read "no two challenges with the same key" while `docs/atlas-format.md` §3.6 and
+  ADR-0014 both say uniqueness is *within-verb* — *"two different verbs may honestly share an answer
+  set"* — and it passed for two verbs only because a cross-verb collision never arose. With three it
+  did, and the pair is not a repeat but arguably the best pair in the deck: a Companion key, and the
+  Placement board for the commit that **caused** that coupling. Keyed by `(verb, truth)` now.
+  Second, two `.find()` ordering assumptions in the e2e, the same class as the `.first()` landmine:
+  the wire step picked the board the challenge step had already answered (so the inspector correctly
+  hid its control and the click waited 30 s), and the next candidate was a file small enough to fall
+  between the cursor grid's points. It takes a list sorted by `loc` now and falls through to the next
+  candidate, so it depends on no single one.
+
   **Next**: unchanged — **Archaeology**, M4's third and last, which needs an ADR before any code
   because §6.2's wording is not deterministically gradeable and revert detection is the candidate
   reshaping. Then the **negative witness**. Still open and deliberately not touched here: the twins a
