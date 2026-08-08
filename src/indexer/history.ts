@@ -46,6 +46,12 @@ export interface FileHistory {
   readonly authors: number;
   readonly firstSeen: IsoDate | null;
   readonly lastSeen: IsoDate | null;
+  /**
+   * True when this file's lineage was decided by `applyRenames`' arbitrary
+   * tie-break, so its churn, dates and co-change counts may include another
+   * file's activity. See `Lineage` in the schema, and `applyRenames` below.
+   */
+  readonly contested: boolean;
 }
 
 export interface RetainedCommit {
@@ -75,7 +81,15 @@ const SUBJECT_LIMIT = 120;
 export function emptyHistory(paths: readonly string[]): HistoryResult {
   const perFile = new Map<string, FileHistory>();
   for (const path of paths) {
-    perFile.set(path, { originPath: path, churn: 0, authors: 0, firstSeen: null, lastSeen: null });
+    perFile.set(path, {
+      originPath: path,
+      churn: 0,
+      authors: 0,
+      firstSeen: null,
+      lastSeen: null,
+      // Nothing was inferred, so nothing was guessed.
+      contested: false,
+    });
   }
   return {
     perFile,
@@ -113,6 +127,8 @@ export function buildHistory(
 
   const accumulators = new Map<string, Accumulator>();
   const coChangeCounts = new Map<string, number>();
+  /** Live paths whose lineage was decided arbitrarily. See `applyRenames`. */
+  const contested = new Set<string>();
   const retained: RetainedCommit[] = [];
   let commitFilesDropped = 0;
   let oldest: IsoDate | null = null;
@@ -174,7 +190,7 @@ export function buildHistory(
       });
     }
 
-    applyRenames(commit, alias, origin);
+    applyRenames(commit, alias, origin, contested);
   }
 
   const perFile = new Map<string, FileHistory>();
@@ -186,6 +202,7 @@ export function buildHistory(
       authors: accumulator?.authors.size ?? 0,
       firstSeen: accumulator?.firstSeen ?? null,
       lastSeen: accumulator?.lastSeen ?? null,
+      contested: contested.has(path),
     });
   }
 
@@ -237,16 +254,38 @@ export function buildHistory(
  * When two live files both claim the same historical path — A was renamed to B,
  * and later a new file appeared at A — the first claimant in log order keeps it
  * and the second falls back to its own current path. That is arbitrary but
- * deterministic, which is the property that matters.
+ * deterministic.
+ *
+ * **Deterministic was enough until an answer key depended on it.** Every commit
+ * older than a skipped rename credits `from`'s activity to whichever live file
+ * currently holds that path, which may be a different file entirely. Blast
+ * Radius only ever used co-change to *rank distractors*, so a wrong count cost
+ * a slightly worse wrong answer. Companion grades against these counts, and
+ * guardrail 4 does not accept "arbitrary" in an answer key — so both files
+ * involved are recorded in `contested` and the verb refuses to ask about them.
+ *
+ * Measured: 0 on this repo, 0 on `sveltejs/svelte` (18,240 renames, none
+ * contested), **5 skips on `honojs/hono`** — including a pair renamed to each
+ * other's paths and back, so each live file claims the other's history.
  */
 function applyRenames(
   commit: GitCommit,
   alias: Map<string, string>,
   origin: Map<string, string>,
+  contested: Set<string>,
 ): void {
   for (const [from, to] of commit.renames) {
     const current = alias.get(to);
-    if (current === undefined || alias.has(from)) continue;
+    if (current === undefined) continue;
+    if (alias.has(from)) {
+      // Both sides are compromised: the live file sitting at `from` is about to
+      // inherit history that is not its own, and `current` loses history that
+      // is. Neither may carry a question graded on co-change.
+      const claimant = alias.get(from);
+      if (claimant !== undefined) contested.add(claimant);
+      contested.add(current);
+      continue;
+    }
     alias.set(from, current);
     alias.delete(to);
     origin.set(current, from);

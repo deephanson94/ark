@@ -10,8 +10,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Atlas } from '../../src/atlas/index.js';
-import { buildGraph } from '../../src/atlas/index.js';
-import { CTRL_F_THRESHOLD, gradeHeuristics } from '../../src/verbs/blastRadius/gate.js';
+import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
+import { CTRL_F_THRESHOLD, HISTORY_HEURISTICS, PATH_HEURISTICS, gradeHeuristics } from '../../src/verbs/gate.js';
 import { generateBlastRadius, generateWithReport } from '../../src/verbs/blastRadius/index.js';
 import { BAND_THRESHOLDS, PASS_THRESHOLD } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -195,5 +195,80 @@ describe('the generator refuses what it cannot repair', () => {
         expect(verdict.passed, `${challenge.id} beaten by ${verdict.beatenBy.join(', ')}`).toBe(true);
       }
     }
+  });
+});
+
+describe('the churn heuristic (Companion)', () => {
+  /**
+   * The naive strategy for a co-change question is not "same folder" — it is
+   * *"the files that change all the time change with everything"*. On this repo
+   * `CHANGELOG.md` has 37 co-change partners and is nobody's specific
+   * companion. So Companion's gate scores that guess too, and this is the
+   * assertion that it actually does: without it the heuristic was dead code
+   * that a mutation could delete unnoticed.
+   *
+   * Measured on real repos, it refuses 13 subjects here, 17 on `honojs/hono`
+   * and 132 on `sveltejs/svelte` — machinery that fires, which is the bar
+   * CLAUDE.md sets before writing tests around a new path.
+   */
+  // The busy files sit in *different* directories from the subject and share no
+  // name token with it, so `directory` and `name` both score 0 here. Otherwise
+  // this would pass whichever heuristic happened to fire, and prove nothing
+  // about `churn` — the vacuous pass CLAUDE.md warns about.
+  const busy = atlasWith(
+    ['src/cold.ts', 'src/ice.ts', 'lib/hot.ts', 'lib/far.ts', 'vendor/warm.ts', 'vendor/away.ts'],
+    [],
+  );
+  const churned = validateAtlas({
+    ...busy,
+    nodes: busy.nodes.map((node) => ({
+      ...node,
+      churn: node.path === 'lib/hot.ts' || node.path === 'vendor/warm.ts' ? 90 : 1,
+    })),
+  });
+
+  const refOf = (path: string): number => churned.nodes.findIndex((n) => n.path === path);
+
+  it('catches a board whose answer is exactly the busiest candidates', () => {
+    const graph = buildGraph(churned);
+    const candidates = churned.nodes.map((_, ref) => ref).filter((ref) => ref !== refOf('src/cold.ts'));
+    const truth = [refOf('lib/hot.ts'), refOf('vendor/warm.ts')];
+    const verdict = gradeHeuristics(
+      graph,
+      refOf('src/cold.ts'),
+      candidates,
+      truth,
+      HISTORY_HEURISTICS,
+    );
+    expect(verdict.beatenBy).toContain('churn');
+    expect(verdict.passed).toBe(false);
+  });
+
+  it('leaves Blast Radius boards alone — it is not in that verb\'s heuristic set', () => {
+    // Deliberate: adding a heuristic to a shipped verb would delete questions
+    // from it for a reason nobody measured.
+    const graph = buildGraph(churned);
+    const candidates = churned.nodes.map((_, ref) => ref).filter((ref) => ref !== refOf('src/cold.ts'));
+    const truth = [refOf('lib/hot.ts'), refOf('vendor/warm.ts')];
+    const verdict = gradeHeuristics(graph, refOf('src/cold.ts'), candidates, truth, PATH_HEURISTICS);
+    expect(verdict.scores.map(([id]) => id)).not.toContain('churn');
+    expect(verdict.passed).toBe(true);
+  });
+
+  it('takes exactly as many as the answer key holds, so there is no free parameter', () => {
+    // A fixed k would be a magic number. Sized to the key, it is the strongest
+    // guess a pure-churn player could make.
+    const graph = buildGraph(churned);
+    const candidates = churned.nodes.map((_, ref) => ref).filter((ref) => ref !== refOf('src/cold.ts'));
+    // One-member key: only the single busiest file is guessed, so a two-file
+    // answer cannot be scored against a one-file guess and the board survives.
+    const verdict = gradeHeuristics(
+      graph,
+      refOf('src/cold.ts'),
+      candidates,
+      [refOf('lib/far.ts')],
+      HISTORY_HEURISTICS,
+    );
+    expect(verdict.scores.find(([id]) => id === 'churn')?.[1]).toBe(0);
   });
 });

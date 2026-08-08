@@ -198,6 +198,28 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   esbuild's `keepNames`, which wraps named inner functions in a `__name` helper that does not exist
   in the page; the evaluate fails at runtime with `ReferenceError: __name is not defined`. Inline the
   function, or pass the body as a string.
+- **Verb-blind state read by verb-specific code is how one verb leaks another's answer key.** The
+  fog's `understood` set is deliberately verb-blind — proving anything about a file is a real reason
+  to know its name — but the map reads it to decide whether to draw a node's *full import radius*,
+  and the inspector read it to print the transitive count. With one verb both are ADR-0008 decision 1
+  working. With two, a Companion pass printed the answer to the open Blast Radius question about the
+  same file. **Both instances were the same one-line rule and only one was found by review**; the
+  other surfaced in an e2e screenshot, and a third — the inspector button still reading "Map its
+  blast radius" — in the same image. When you add a verb, grep every read of shared player state and
+  ask *which verb's claim is this?*
+- **Anything a verb says about its own question belongs on the `Verb` contract, not in the panel.**
+  The console was verb-blind and the inspector was not, so the seam held in one file and failed in
+  the one nobody had thought about. Wording, the reveal, the summary sentence, the grade's phrasing
+  and the button label are all verb-supplied now. Templating a verb's `title` into a fixed sentence
+  is not a fix — it produced *"Map its companion"*.
+- **Do not tokenise or split paths inside a per-subject loop.** `blastRadius/distractors.ts` has
+  documented this since M2 ("cost 8 s of a 10 s index budget") and M4's Companion did it anyway:
+  **29.7 s on svelte against Blast Radius's 0.6**, pushing a full index from 22.5 s to 47.8 s. The
+  generator asks for a choice set once per subject, so per-node work happens V² times. Precompute a
+  corpus and invert the indexes; a documented landmine in one file does not protect the next one.
+- **`innerText` returns *rendered* text.** An e2e assertion comparing a verb's title against
+  `.console-verb` failed because the CSS is `text-transform: uppercase` and the DOM said
+  `COMPANION`. The element's text and the string the code put there are not the same value.
 - **A second opinion catches reasoning, not liveness. Measure whether new machinery fires.** The
   Ctrl+F gate's repair pass was designed by a Fable consult *before* it was written, reviewed as
   sound, tested, and rescued **zero** boards on either repo. No amount of earlier consulting would
@@ -270,7 +292,7 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 and M3 delivered, and the first three rungs toward the third-person world are shipped.**
+**M2, M3 and M4 delivered, and the first three rungs toward the third-person world are shipped.**
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
 Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
@@ -281,10 +303,14 @@ Press **`o`** for the orbit view: every file a column standing on its 2D footing
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
 it to the pixel. Still zero runtime dependencies.
 
-M0's atlas format and verb contracts, M1's map, M2's Blast Radius verb: `src/verbs/blastRadius/` generates 39 challenges for this repo — **all
-39 with a distinct answer key** — the four §8.3 distractor strategies pick the wrong answers,
-difficulty is computed per §8.4, and the player has a challenge console over the map with partial
-credit, a derived per-file reveal, and fog that lifts on what you prove. **Progress survives a
+**Two verbs ship.** `src/verbs/blastRadius/` asks what depends on a file (40 challenges here);
+`src/verbs/companion/` asks what *changes with* it (31 here, 54 on hono, 508 on svelte) — the first
+verb graded on git rather than on imports, and the one that reaches the edgeless files the import
+graph structurally cannot. Together they leave 27 of this repo's 113 nodes unprovable where Blast
+Radius alone leaves 35; on hono 178 against 269, on svelte 3,283 against 3,776. The four §8.3
+distractor strategies pick the wrong answers for each, difficulty is computed per §8.4, and the
+player has a challenge console over the map with partial credit, a derived per-file reveal, and fog
+that lifts on what you prove. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown. 49 KiB of JS, zero runtime
 dependencies, first paint ~240 ms. `npx ark index .` produces a valid ~101 KiB atlas in ~270 ms.
@@ -325,15 +351,20 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **M4 — the git verbs (Companion, Placement, Archaeology).** Not a change of subject:
-`docs/prior-art.md` §4.2 measured that the import graph and the change-history hotspots are nearly
-disjoint populations — of the top 2% of files by churn, Blast Radius covers **0% here, 64.6% on
-svelte, 2.4% on vite** — so the git verbs cover complementary ground rather than more of the same,
-and they reach the edgeless files (56% of vite) the import graph structurally cannot. Every node on
-every repo measured has `churn > 0`, so their ceiling is 100% and what limits them is **our own
-`maxCommitFiles` cap**, which NORTH-STAR already anticipated moving to a side-file. It is also what a
-world needs to be worth moving through: a walk with nothing to read en route is a loading screen with
-extra steps.
+Next action: **draw the co-change relation on the map.** Companion asks about a coupling the player
+is never shown — the map has no history channel at all — so the reveal does all the teaching, and
+§4's "fog lifts around what you proved" is only half kept: a Companion pass lifts fog on what it
+proved and changes nothing else on screen. It is the one change that would make the new verb's
+payoff match Blast Radius's, and the data is already in the atlas.
+
+**A measured correction to the brief this session inherited**: `maxCommitFiles` does **not** limit
+the git verbs' co-change signal. The matrix is accumulated from `touched` *before* that truncation,
+and over every walked commit rather than the 500 retained — verified against `git log`, where hono's
+`context.ts`/`context.test.ts` pair scores 72 and the newest 500 commits contain about 5 of them.
+What actually bounds Companion is `maxCommitsWalked` (20,000), `wideCommitFiles` (25) and
+`maxCoChangePairs` (8,000, which has never bitten on any repo measured). `maxCommitFiles` limits
+**Placement and Archaeology**, whose ground truth *is* a retained commit's file list — which is one
+reason neither of them was the verb to build first.
 
 Then, in evidence order: **map rotation between challenges** (`docs/prior-art.md` §4.4 — map-derived
 spatial memory is *orientation-locked*, ours is north-up forever, and it is the highest-leverage
@@ -348,5 +379,10 @@ node labels near the top edge draw underneath the inspector and HUD; the orbit d
 entry and has no frustum cull. And one measurement only a human can take: **`npm run raster` on real
 hardware** — 45/33/43 fps is a headless software floor, and ADR-0009's P1′ gates the renderer on it.
 
-If Blast Radius stops being interesting, stop and rethink the verb rather than adding a second one —
-M4's git verbs are not a way to avoid that question.
+The verb seam was the real work of M4 and it is worth knowing what it now costs to add a third:
+`difficulty.ts`, `gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb, and
+`reveal`, the reveal's summary sentence, the grade's phrasing, the button label and `stillHolds` are
+all on the `Verb` contract. Nothing in the console, the notes or the map names a verb any more.
+`(verb, subject)` is the key everywhere `subject` used to be — saves, the deck, the selector's
+attempt counter — and **each of those was a live defect, not tidying**: keyed by subject, a full
+playthrough of this repo served 60 of its 71 questions and called the deck finished.

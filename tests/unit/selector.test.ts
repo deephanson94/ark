@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
+import { answerKey } from '../../src/player/progress.js';
 
 const id = (n: number): NodeId => `n:${n.toString(16).padStart(12, '0')}`;
 
@@ -92,13 +93,13 @@ describe('the base order', () => {
       challenge({ name: 'done', subject: 1, truth: [10], difficulty: 0.1 }),
       challenge({ name: 'open', subject: 2, truth: [11], difficulty: 0.9 }),
     ];
-    const state = { ...NO_HISTORY, answered: new Set([id(1)]) };
+    const state = { ...NO_HISTORY, answered: new Set([answerKey('blastRadius', id(1))]) };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-open');
   });
 
   it('returns null only when every question has been passed', () => {
     const deck = [challenge({ name: 'only', subject: 1, truth: [10] })];
-    expect(suggestNext(deck, regionOf, { ...NO_HISTORY, answered: new Set([id(1)]) })).toBeNull();
+    expect(suggestNext(deck, regionOf, { ...NO_HISTORY, answered: new Set([answerKey('blastRadius', id(1))]) })).toBeNull();
     expect(suggestNext([], regionOf, NO_HISTORY)).toBeNull();
   });
 });
@@ -157,7 +158,7 @@ describe('the overlap rank — how much of the last answer this one repeats', ()
     const twin = challenge({ name: 'twin', subject: 2, truth: [10, 11] });
     const next = suggestNext([first, twin], regionOf, {
       ...NO_HISTORY,
-      answered: new Set([id(1)]),
+      answered: new Set([answerKey('blastRadius', id(1))]),
       previous: first,
     });
     expect(next?.id).toBe('blast-twin');
@@ -210,7 +211,7 @@ describe('the region constraint — the tour', () => {
     const only = challenge({ name: 'only', subject: 2, truth: [11] });
     const next = suggestNext([first, only], regionOf, {
       ...NO_HISTORY,
-      answered: new Set([id(1)]),
+      answered: new Set([answerKey('blastRadius', id(1))]),
       previous: first,
     });
     expect(next?.id).toBe('blast-only');
@@ -231,17 +232,17 @@ describe('a wrong answer rotates rather than repeats', () => {
     const failed = deck[0];
     if (failed === undefined) throw new Error('fixture');
     const state = {
-      answered: new Set<NodeId>(),
-      attempts: noteAttempt(new Map(), id(1)),
+      answered: new Set<string>(),
+      attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
       previous: failed,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
 
   it('comes back to it only after the rest of the deck', () => {
-    let state = { answered: new Set<NodeId>(), attempts: new Map<NodeId, number>(), previous: null } as {
-      answered: Set<NodeId>;
-      attempts: Map<NodeId, number>;
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), previous: null } as {
+      answered: Set<string>;
+      attempts: Map<string, number>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -249,7 +250,7 @@ describe('a wrong answer rotates rather than repeats', () => {
       const next = suggestNext(deck, regionOf, state);
       if (next === null) break;
       served.push(next.id);
-      state = { ...state, attempts: noteAttempt(state.attempts, next.subject), previous: next };
+      state = { ...state, attempts: noteAttempt(state.attempts, answerKey(next.verb, next.subject)), previous: next };
     }
     // Every question once before any repeat — guardrail 6 says a wrong answer
     // costs nothing, and being asked it again immediately is a cost.
@@ -258,9 +259,9 @@ describe('a wrong answer rotates rather than repeats', () => {
   });
 
   it('keeps cycling instead of stalling when the whole deck has been failed', () => {
-    let state = { answered: new Set<NodeId>(), attempts: new Map<NodeId, number>(), previous: null } as {
-      answered: Set<NodeId>;
-      attempts: Map<NodeId, number>;
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), previous: null } as {
+      answered: Set<string>;
+      attempts: Map<string, number>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -269,7 +270,7 @@ describe('a wrong answer rotates rather than repeats', () => {
       expect(next).not.toBeNull();
       if (next === null) break;
       served.push(next.id);
-      state = { ...state, attempts: noteAttempt(state.attempts, next.subject), previous: next };
+      state = { ...state, attempts: noteAttempt(state.attempts, answerKey(next.verb, next.subject)), previous: next };
     }
     // Three passes over three questions, evenly — not one question nine times.
     for (const name of ['blast-a', 'blast-b', 'blast-c']) {
@@ -279,8 +280,8 @@ describe('a wrong answer rotates rather than repeats', () => {
 
   it('prefers an untried question to an easier one already failed', () => {
     const state = {
-      answered: new Set<NodeId>(),
-      attempts: noteAttempt(new Map(), id(1)),
+      answered: new Set<string>(),
+      attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
       previous: null,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
@@ -300,8 +301,8 @@ describe('a wrong answer rotates rather than repeats', () => {
     const fresh = challenge({ name: 'fresh', subject: 2, truth: [11], difficulty: 0.9 });
     const failedElsewhere = challenge({ name: 'failed', subject: 3, truth: [12], difficulty: 0.2 });
     const next = suggestNext([previous, fresh, failedElsewhere], regionOf, {
-      answered: new Set([id(1)]),
-      attempts: noteAttempt(new Map(), id(3)),
+      answered: new Set([answerKey('blastRadius', id(1))]),
+      attempts: noteAttempt(new Map(), answerKey('blastRadius', id(3))),
       previous,
     });
     expect(next?.id).toBe('blast-fresh');

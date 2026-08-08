@@ -10,7 +10,7 @@
 
 import { byteCompare } from '../atlas/index.js';
 import type { Challenge, NodeId } from '../atlas/index.js';
-import type { Grade, SetAnswer } from './types.js';
+import type { Grade, SetAnswer, SetPhrasing } from './types.js';
 import { PASS_THRESHOLD } from './types.js';
 
 export interface SetScore {
@@ -75,43 +75,30 @@ export function isGameable(challenge: Challenge, threshold = PASS_THRESHOLD): bo
  * ground truth was traced to — so it cannot drift out of sync with the score.
  * It deliberately names no files: `correct`, `missed` and `spurious` carry the
  * ids, and only the player has the atlas needed to turn those into paths.
+ *
+ * **The metric is shared; the sentences are not.** `phrasing` comes from the
+ * verb, because the three lines below used to assert that a missed answer
+ * "reached the subject by a path you did not select" — true of an import chain,
+ * false of a co-change pair, and the kind of wrong-but-fluent copy that costs
+ * exactly as much trust as a wrong answer key.
  */
-export function gradeSet(challenge: Challenge, answer: SetAnswer): Grade {
+export function gradeSet(challenge: Challenge, answer: SetAnswer, phrasing: SetPhrasing): Grade {
   const result = scoreSet(answer.picked, challenge.truth);
   return {
     score: result.score,
     correct: result.correct,
     missed: result.missed,
     spurious: result.spurious,
-    evidence: explain(challenge, result),
+    evidence: explain(challenge, result, phrasing),
   };
 }
 
-function explain(challenge: Challenge, result: SetScore): string {
-  const found = `${result.correct.length} of ${challenge.truth.length}`;
-  // `evidence.depth` is the *measured* furthest hop in this answer key, not a
-  // bound the generator imposed — there is no bound (ADR-0008) — so the claim
-  // here is a fact about the question rather than a description of the tool.
-  const scope =
-    challenge.evidence.kind === 'importGraph'
-      ? `traced through the import graph; the furthest is ${challenge.evidence.depth} ${
-          challenge.evidence.depth === 1 ? 'hop' : 'hops'
-        } away`
-      : `drawn from files that changed together at least ${challenge.evidence.minCount} times`;
-
-  const parts = [`Found ${found} (${scope}).`];
-  if (result.missed.length > 0) {
-    parts.push(
-      `${result.missed.length} reached the subject by a path you did not select.`,
-    );
-  }
-  if (result.spurious.length > 0) {
-    parts.push(
-      `${result.spurious.length} of your picks do not reach the subject at all.`,
-    );
-  }
-  if (result.missed.length === 0 && result.spurious.length === 0) {
-    parts.push('Exact — you drew the boundary where it actually is.');
-  }
+function explain(challenge: Challenge, result: SetScore, phrasing: SetPhrasing): string {
+  const parts = [
+    `Found ${result.correct.length} of ${challenge.truth.length} (${phrasing.scope(challenge)}).`,
+  ];
+  if (result.missed.length > 0) parts.push(phrasing.missed(result.missed.length));
+  if (result.spurious.length > 0) parts.push(phrasing.spurious(result.spurious.length));
+  if (result.missed.length === 0 && result.spurious.length === 0) parts.push(phrasing.exact);
   return parts.join(' ');
 }

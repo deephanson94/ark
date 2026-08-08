@@ -35,8 +35,8 @@ import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
-import { difficultyOf, surpriseOf } from './difficulty.js';
-import { gradeHeuristics } from './gate.js';
+import { difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
+import { PATH_HEURISTICS, gradeHeuristics } from '../gate.js';
 
 /** NORTH-STAR §5: predicting change propagation is tier 3, Coupling. */
 const TIER = 3;
@@ -530,6 +530,7 @@ export function generateWithReport(
       subject,
       [...truthRefs, ...distractors.map((choice) => choice.ref)],
       truthRefs,
+      PATH_HEURISTICS,
     );
     if (!verdict.passed) return 'ctrlF';
 
@@ -561,10 +562,13 @@ export function generateWithReport(
         verb: 'blastRadius',
         tier: TIER,
         difficulty: difficultyOf({
-          fanOut: reached.size,
-          maxFanOut,
-          depth,
-          maxDepth,
+          breadth: reached.size,
+          maxBreadth: maxFanOut,
+          // `hopReach` is `difficultyOf`'s old inline depth term, moved beside
+          // the formula when Companion needed `reach` to be a fraction rather
+          // than a hop count. Identical arithmetic: the numbers this verb
+          // produced before M4 are the numbers it produces now.
+          reach: hopReach(depth, maxDepth),
           surprise: surpriseOf(truth, naive),
         }),
         subject: idOfRef(subject),

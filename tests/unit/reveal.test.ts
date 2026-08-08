@@ -13,7 +13,8 @@ import { describe, expect, it } from 'vitest';
 import type { Atlas, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { revealOf } from '../../src/verbs/blastRadius/index.js';
-import { gradeSet } from '../../src/verbs/index.js';
+import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
+import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 const PATHS = [
@@ -55,6 +56,7 @@ function withCoChange(atlas: Atlas, a: string, b: string, count: number): Atlas 
       commitsWalked: 0,
       commitsRetained: 0,
       window: null,
+      wideLimit: 25,
       coChange: [pair],
       commits: [],
     },
@@ -77,9 +79,9 @@ function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
     truth,
     evidence: { kind: 'importGraph' as const, depth: 2 },
   };
-  const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) });
+  const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
   const reveal = revealOf(atlas, buildGraph(atlas), challenge, grade);
-  return { reveal, note: reveal.notes.find((entry) => entry.path === path) };
+  return { grade, reveal, note: reveal.notes.find((entry) => entry.path === path) };
 }
 
 describe('revealOf', () => {
@@ -101,13 +103,23 @@ describe('revealOf', () => {
     expect(note?.note).toContain('the other way');
   });
 
-  it('separates a co-change companion from a structural dependent', () => {
+  it('never names a co-change count — that is the other verb\'s answer key', () => {
+    // This assertion is the **inverse** of the one it replaces, and the reason
+    // is the whole M4 seam. Until Companion existed, §8.3's best distractor
+    // explaining itself ("changed with the subject in 11 commits, but never
+    // imports it") was a free lesson. Now it is a member of Companion's answer
+    // key for the same subject, handed over with its count — and Blast Radius is
+    // served first for a shared subject, so that question is still open.
+    //
+    // `coChangeStrategy` picks these distractors *ranked count-descending*, so
+    // the file most likely to be explained this way is the strongest companion:
+    // the leak lands on the answer's best member, not a random one.
     const atlas = withCoChange(fixture(), 'src/a/subject.ts', 'src/z/companion.ts', 11);
     const { note } = noteFor(atlas, ['src/z/companion.ts'], 'src/z/companion.ts');
-    // §8.3 calls this the best distractor there is, because the explanation is
-    // itself a fact about the codebase.
-    expect(note?.note).toContain('11 commits');
-    expect(note?.note).toContain('never imports it');
+    expect(note?.note).not.toContain('11');
+    expect(note?.note).not.toContain('commit');
+    // It still says something true, from the import graph alone.
+    expect(note?.note).toBe('no chain of imports reaches the subject.');
   });
 
   it('calls out the same-directory guess for what it is', () => {
@@ -139,5 +151,34 @@ describe('revealOf', () => {
     const { note } = noteFor(fixture(), ['src/a/direct.ts'], 'src/a/direct.ts');
     expect(note?.kind).toBe('correct');
     expect(note?.note).toBe('imports the subject directly.');
+  });
+});
+
+describe('what a reveal puts on the map (guardrail 6)', () => {
+  /**
+   * The regression this exists for, which was introduced by the *fix* for a
+   * leak rather than by the leak.
+   *
+   * `onGraded` used to draw `FULL_RADIUS` unconditionally, which let a
+   * Companion answer render an import cone nobody had earned. Routing it
+   * through `depthFor` closed that — and broke this: `depthFor` reads a set
+   * only a **passed** challenge writes to, so a Blast Radius answer that came
+   * apart stopped drawing the radius while the panel went on saying "now drawn
+   * on the map".
+   *
+   * So the verb declares it, and the declaration does not depend on the score.
+   */
+  it('unlocks the import radius on a failed blast-radius answer too', () => {
+    const graded = noteFor(fixture(), [], 'src/a/direct.ts');
+    expect(graded.grade.score).toBeLessThan(PASS_THRESHOLD);
+    expect(graded.reveal.unlocks).toBe('importRadius');
+    // ...and the sentence the map has to keep true.
+    expect(graded.reveal.summary).toContain('drawn on the map');
+  });
+
+  it('unlocks it on a perfect answer as well — the score is not the question', () => {
+    const perfect = noteFor(fixture(), ['src/a/direct.ts', 'src/b/distant.ts'], 'src/a/direct.ts');
+    expect(perfect.grade.score).toBe(1);
+    expect(perfect.reveal.unlocks).toBe('importRadius');
   });
 });

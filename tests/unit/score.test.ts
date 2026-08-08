@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Challenge } from '../../src/atlas/index.js';
 import { PASS_THRESHOLD, bandFor, gradeSet, isGameable, scoreSet, selectAllScore } from '../../src/verbs/index.js';
+import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 
 function ids(count: number, prefix = 'n:'): string[] {
   return Array.from({ length: count }, (_, i) => `${prefix}${i.toString(16).padStart(12, '0')}`);
@@ -107,7 +108,7 @@ describe('gradeSet', () => {
   const challenge = challengeWith(candidates, truth);
 
   it('derives evidence from the measured result', () => {
-    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 2), candidates[10] ?? ''] });
+    const grade = gradeSet(challenge, { picked: [...truth.slice(0, 2), candidates[10] ?? ''] }, BLAST_PHRASING);
     expect(grade.evidence).toContain('Found 2 of 4');
     // The measured furthest hop, not a bound the generator imposed (ADR-0008).
     expect(grade.evidence).toContain('furthest is 2 hops away');
@@ -116,13 +117,13 @@ describe('gradeSet', () => {
   });
 
   it('says so when the boundary was drawn exactly right', () => {
-    const grade = gradeSet(challenge, { picked: truth });
+    const grade = gradeSet(challenge, { picked: truth }, BLAST_PHRASING);
     expect(grade.score).toBe(1);
     expect(grade.evidence).toContain('Exact');
   });
 
   it('never returns a negative score for a wrong answer', () => {
-    const grade = gradeSet(challenge, { picked: candidates.slice(4) });
+    const grade = gradeSet(challenge, { picked: candidates.slice(4) }, BLAST_PHRASING);
     expect(grade.score).toBe(0);
     expect(grade.score).toBeGreaterThanOrEqual(0);
   });

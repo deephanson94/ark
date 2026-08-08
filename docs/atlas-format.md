@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 4**
+**Schema version: 5**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 4,
+  "version": 5,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -123,9 +123,25 @@ Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-note
 | `exports` | `string[]` | Sorted. `"default"` for a default export, `"*"` for `export * from`. |
 | `unresolved` | `string[]` | Sorted. Import specifiers we could **not** pin down. Drives guardrail 4. |
 | `externals` | `string[]` | Sorted. Specifiers resolved to a declared dependency, builtin or URL. |
+| `lineage` | `"certain" \| "contested"` | Whether the rename walk had to guess this file's history. See below. |
 | `churn` | `number` | Commits touching this file, following renames. `0` without history. |
 | `authors` | `number` | Distinct commit authors. |
 | `firstSeen`, `lastSeen` | `"YYYY-MM-DD" \| null` | Null without history. |
+
+#### `lineage` — `Confidence`'s counterpart on the git side
+
+`contested` means two live files both claimed the same historical path, so the rename walk resolved
+it arbitrarily — deterministically, but arbitrarily — and some of this node's `churn`, dates and
+co-change counts may belong to a different file. `certain` for every node in a repo with no history:
+nothing was inferred, so nothing was guessed.
+
+It exists for the same reason `Confidence` does. Blast Radius never needed it — co-change only ranks
+its distractors — but a verb **graded** on these counts may not ask about a file whose history is a
+coin-flip (guardrail 4). Companion refuses a contested node as subject, as answer and as distractor.
+
+Measured: 0 contested nodes on this repo and on `sveltejs/svelte` (18,240 renames, none contested),
+**7 on `honojs/hono`**, where two files were renamed to each other's paths and back so each live
+file claims the other's history.
 
 #### `elevation` — the third coordinate
 
@@ -250,12 +266,24 @@ There is deliberately **no cap** on region count. The bound is a consequence rat
 | `commitsWalked` | `number` | Commits read from git. |
 | `commitsRetained` | `number` | Equals `commits.length`. |
 | `window` | `{from, to} \| null` | Oldest and newest commit dates seen. |
+| `wideLimit` | `number` | A commit touching more indexed files than this contributed **nothing** to `coChange`. ≥ 2. |
 | `coChange` | `[NodeRef, NodeRef, number][]` | `a < b`. **Order: count desc, then a asc, then b asc.** |
 | `commits` | `CommitRecord[]` | **Order: newest first.** |
 
 `CommitRecord`: `sha` (12 hex), `date`, `subject` (≤ 120 chars), `files` (`NodeRef[]`, ascending,
 unique), `wide` (the commit touched more files than the co-change cap), `issue` (first `#NNNN` in
 the subject, or null).
+
+**`wideLimit` is part of the contract, not a budget.** It does not change how *many* numbers
+`coChange` holds — it changes what they **mean**. A reader who does not know it will take "changed
+together 4 times" as a claim about all commits when it is a claim about focused ones. Companion
+copies it into each challenge's `evidence` so the player can be told the exact rule they are graded
+under ([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)).
+
+**Absence from `coChange` is not proof of zero.** Three separate rules drop pairs — the noise floor,
+the wide-commit exclusion and the pair cap — so a verb that reads absence as "never changed
+together" will offer a genuine companion as a wrong answer. The provable bound, and the only way to
+use this matrix in an answer key, is in ADR-0014.
 
 #### Staying inside the budget
 
@@ -284,13 +312,25 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | field | type | notes |
 |---|---|---|
 | `id` | `string` | Stable within an atlas. |
-| `verb` | `VerbId` | `blastRadius` today. |
+| `verb` | `VerbId` | `blastRadius` or `companion`. The full list is `VERB_IDS` in the schema — **the only one**. |
 | `tier` | `1..6` | Curriculum tier, NORTH-STAR §5. |
 | `difficulty` | `number` | `0..1`. **Computed, never authored** (NORTH-STAR §8.4). Generators normalise. |
 | `subject` | `NodeId` | The file the question is about. Never appears in `candidates`. |
 | `candidates` | `NodeId[]` | Sorted. The choice set. Non-empty. |
 | `truth` | `NodeId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
-| `evidence` | `Evidence` | `{kind: "importGraph", depth}` or `{kind: "coChange", minCount}`. |
+| `evidence` | `Evidence` | `{kind: "importGraph", depth}` or `{kind: "coChange", minCount, wideLimit, atMost}`. |
+
+Both `evidence` variants carry a **measured** quantity rather than a bound the generator imposed:
+`depth` is the furthest hop this answer key actually travels
+([ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) §5), and
+`minCount` is the weakest coupling that made this key
+([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)). Each verb's prompt may
+therefore state its own as a fact.
+
+`atMost` is the other half of a Companion board's claim: what a candidate **outside** the answer key
+is certified at. Normally 1, raised when the pair cap bit. It exists because the instruction line
+said "at most once" unconditionally, which is a false certification on any repo where the cap fired —
+a bound that raises correctly while the sentence describing it does not is half a fix.
 
 `truth` sits here in plaintext, deliberately. This is a learning tool, not an exam; anyone who opens
 devtools to read the answer has opted out of the product. Do not obfuscate it.
@@ -364,12 +404,12 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `4`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `5`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 a v2 atlas into a v1 build fails with
 
 ```
-atlas.version: this build reads atlas v4, got v3 — reindex required
+atlas.version: this build reads atlas v5, got v4 — reindex required
 ```
 
 The player must never guess at a shape.

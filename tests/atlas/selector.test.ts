@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../../src/indexer/build.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
+import { answerKey } from '../../src/player/progress.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -67,19 +68,19 @@ interface Step {
 
 /** Play the whole deck, returning what was served in what order. */
 function playthrough(outcomeFor: (step: number) => Outcome): Step[] {
-  const answered = new Set<NodeId>();
-  let attempts = new Map<NodeId, number>();
+  const answered = new Set<string>();
+  let attempts = new Map<string, number>();
   let previous: Challenge | null = null;
   const served: Step[] = [];
   const limit = atlas.challenges.length * 3;
   for (let step = 0; step < limit; step++) {
-    const open = atlas.challenges.filter((c) => !answered.has(c.subject)).length;
+    const open = atlas.challenges.filter((c) => !answered.has(answerKey(c.verb, c.subject))).length;
     const next = suggestNext(atlas.challenges, regionOf, { answered, attempts, previous });
     if (next === null) break;
     served.push({ challenge: next, open });
     previous = next;
-    if (outcomeFor(step) === 'pass') answered.add(next.subject);
-    else attempts = noteAttempt(attempts, next.subject);
+    if (outcomeFor(step) === 'pass') answered.add(answerKey(next.verb, next.subject));
+    else attempts = noteAttempt(attempts, answerKey(next.verb, next.subject));
     if (answered.size === atlas.challenges.length) break;
   }
   return served;
@@ -210,7 +211,7 @@ describe('every rank component earns its place on real data', () => {
     // has to change an actual *pick* to be worth its code. Measured: 2 here, 3
     // on vite, 41 on svelte. Run both rules against one shared history, so a
     // divergence is a disagreement and not two trajectories drifting apart.
-    const answered = new Set<NodeId>();
+    const answered = new Set<string>();
     let previous: Challenge | null = null;
     let diverged = 0;
     for (let step = 0; step < atlas.challenges.length; step++) {
@@ -229,7 +230,7 @@ describe('every rank component earns its place on real data', () => {
       if (withOverlap === null) break;
       if (withOverlap.id !== without?.id) diverged++;
       previous = withOverlap;
-      answered.add(withOverlap.subject);
+      answered.add(answerKey(withOverlap.verb, withOverlap.subject));
     }
     expect(diverged).toBeGreaterThan(0);
   });
@@ -240,7 +241,7 @@ describe('every rank component earns its place on real data', () => {
     if (first === null) return;
     const after = suggestNext(atlas.challenges, regionOf, {
       ...NO_HISTORY,
-      answered: new Set([first.subject]),
+      answered: new Set([answerKey(first.verb, first.subject)]),
     });
     expect(after?.id).not.toBe(first.id);
   });

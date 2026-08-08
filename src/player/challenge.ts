@@ -8,10 +8,12 @@
  * looking, and a jump would undo the one thing the fixed layout exists to give
  * you.
  *
- * This file knows nothing about what Blast Radius asks. It looks the verb up in
- * `VERBS`, asks it for its wording and its grade, and renders a `Grade`. That
- * is the seam CLAUDE.md means by "adding a verb must not require editing the
- * console" — the next verb is a new directory and one line in that map.
+ * This file knows nothing about what any verb asks. It looks the verb up in
+ * `VERBS` and asks it for its wording, its grade and its reveal. That is the
+ * seam CLAUDE.md means by "adding a verb must not require editing the console"
+ * — and M4 is where the claim was tested: adding Companion needed `reveal` and
+ * the summary sentence moved onto the `Verb` contract, because both were being
+ * imported straight out of `blastRadius/`. Nothing below names a verb now.
  *
  * Guardrail 6 is visible in the copy, not just in the arithmetic: there is no
  * fail state, wrong picks cost nothing, and the reveal fires on every grade
@@ -20,10 +22,8 @@
 
 import type { Challenge, NodeId } from '../atlas/index.js';
 import { nodeAt } from '../atlas/index.js';
-import type { Grade } from '../verbs/index.js';
+import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
 import { VERBS, bandFor } from '../verbs/index.js';
-import { revealOf } from '../verbs/blastRadius/index.js';
-import type { RevealNote } from '../verbs/blastRadius/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -44,7 +44,7 @@ export interface Console {
 
 export interface ConsoleHandlers {
   /** Fired once per submitted answer, before the player closes the panel. */
-  onGraded(challenge: Challenge, grade: Grade): void;
+  onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): void;
   onClose(): void;
 }
 
@@ -114,8 +114,11 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
     submit.addEventListener('click', () => {
       const grade = verb.grade(challenge, { picked: [...picked] });
-      handlers.onGraded(challenge, grade);
-      renderResult(challenge, grade);
+      // The reveal is computed once and handed on, so the map and the panel
+      // cannot disagree about what was just revealed.
+      const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
+      handlers.onGraded(challenge, grade, reveal);
+      renderResult(challenge, grade, reveal);
     });
 
     body.replaceChildren(
@@ -128,9 +131,8 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     refresh();
   }
 
-  function renderResult(challenge: Challenge, grade: Grade): void {
+  function renderResult(challenge: Challenge, grade: Grade, reveal: Reveal): void {
     const band = bandFor(grade.score);
-    const reveal = revealOf(scene.atlas, scene.graph, challenge, grade);
     const verb = VERBS[challenge.verb];
 
     const score = el('div', `console-score band-${band}`, [
@@ -150,9 +152,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // `evidence` is assembled from the measured result inside `grade()`, so
       // it cannot drift out of sync with the number above it.
       el('p', 'console-evidence', [grade.evidence]),
-      el('p', 'console-instruction', [
-        `Its full blast radius is ${reveal.radius} file${reveal.radius === 1 ? '' : 's'} — now drawn on the map.`,
-      ]),
+      // Written by the verb, for the same reason as the reveal itself: only
+      // the verb knows what its answer key sampled away.
+      el('p', 'console-instruction', [reveal.summary]),
       notes(reveal.notes),
       el('div', 'console-footer', [el('div', 'console-tally', []), done]),
     );

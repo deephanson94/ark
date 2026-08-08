@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url';
 
 import { serializeAtlas } from '../atlas/index.js';
 import type { Atlas } from '../atlas/index.js';
-import type { GenerationResult } from '../verbs/blastRadius/index.js';
+import type { IndexResult } from './build.js';
 import { buildIndex, indexOptions } from './build.js';
 import { serveDirectory } from './serve.js';
 
@@ -78,45 +78,89 @@ export function parseArgs(argv: readonly string[]): Args | null {
 
 function summarise(
   atlas: Atlas,
-  generation: GenerationResult,
+  generation: IndexResult['generation'],
   bytes: number,
   milliseconds: number,
 ): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
+  const blast = generation.blastRadius.report;
+  const companion = generation.companion.report;
   const lines = [
     `repo        ${atlas.repo.name} @ ${atlas.repo.head?.slice(0, 12) ?? 'no commits'}`,
     `nodes       ${atlas.nodes.length} files across ${atlas.regions.length} regions`,
     `edges       ${atlas.edges.length} imports (${probable} needed a guess)`,
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
-    `challenges  ${atlas.challenges.length} of ${generation.report.subjectsConsidered} subjects with a radius`,
+    `blast       ${generation.blastRadius.challenges.length} of ${blast.subjectsConsidered} subjects with a radius`,
+    `companion   ${generation.companion.challenges.length} of ${companion.subjectsConsidered} subjects with a change history`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
   ];
-  // Which questions we refused to ship, and how much of each choice set came
-  // from a principled distractor strategy rather than padding. Both are
+
+  // Which questions each verb refused to ship, and how much of each choice set
+  // came from a principled distractor strategy rather than padding. Both are
   // measurements about answer-key quality, and a generator that quietly
   // declines half a repo reads as success unless it says so (CLAUDE.md).
-  for (const [reason, count] of generation.report.skipped) {
+  for (const [reason, count] of blast.skipped) {
     if (reason === 'noDependents') continue; // not a refusal — nothing imports it
-    lines.push(`declined    ${count} subject(s): ${reason}`);
+    lines.push(`blast       declined ${count} subject(s): ${reason}`);
   }
-  if (generation.report.reasked > 0) {
+  if (blast.reasked > 0) {
+    lines.push(`blast       re-asked ${blast.reasked} subject(s) with a second, disjoint answer key`);
+  }
+  for (const [reason, count] of companion.skipped) {
+    if (reason === 'noCompanions') continue; // not a refusal — it changes alone
+    lines.push(`companion   declined ${count} subject(s): ${reason}`);
+  }
+  if (companion.minCountRange !== null) {
+    const [low, high] = companion.minCountRange;
+    // The bar each answer key was actually measured at. Printed because it is
+    // the number that says whether this verb is asking about real coupling or
+    // about coincidence — a deck whose keys all rest on 2 shared commits is a
+    // deck about a repo with no history worth reading yet.
+    lines.push(`companion   answer keys rest on ${low}–${high} shared commits`);
+  }
+  if (companion.contestedNodes > 0) {
     lines.push(
-      `re-asked    ${generation.report.reasked} subject(s) with a second, disjoint answer key`,
+      `companion   barred ${companion.contestedNodes} node(s) with contested rename lineage`,
     );
   }
+  if (companion.capBit) {
+    lines.push('companion   co-change pair cap bit — the certification bound rose above 1');
+  }
+  if (companion.walkTruncated) {
+    // The whole-repo refusal, said out loud. Absence from a matrix built over
+    // part of the history certifies nothing, so no question could be asked.
+    lines.push(
+      `companion   REFUSED the repo: the walk stopped at ${atlas.history.commitsWalked} commits,` +
+        ' so absence from the co-change matrix proves nothing',
+    );
+  }
+
   // The cost of every refusal above, in the currency the player feels: how much
   // of the map can never come out of the fog, because `progress.ts` promotes a
-  // node only as a subject or as a picked answer.
+  // node only as a subject or as a picked answer. Reported for the two verbs
+  // *together*, because a node either verb can reveal is not dark.
+  const provable = new Set<string>();
+  for (const challenge of atlas.challenges) {
+    provable.add(challenge.subject);
+    for (const id of challenge.truth) provable.add(id);
+  }
   lines.push(
-    `unprovable  ${generation.report.unprovableNodes} of ${atlas.nodes.length} node(s) no question can reveal`,
+    `unprovable  ${atlas.nodes.length - provable.size} of ${atlas.nodes.length} node(s) no question can reveal` +
+      ` (blast alone would leave ${blast.unprovableNodes})`,
   );
-  const mix = generation.report.distractorMix
-    .filter(([, count]) => count > 0)
-    .map(([strategy, count]) => `${strategy} ${count}`)
-    .join(', ');
-  if (mix.length > 0) lines.push(`distractors ${mix}`);
+
+  for (const [label, mix] of [
+    ['blast     ', blast.distractorMix],
+    ['companion ', companion.distractorMix],
+  ] as const) {
+    const text = mix
+      .filter(([, count]) => count > 0)
+      .map(([strategy, count]) => `${strategy} ${count}`)
+      .join(', ');
+    if (text.length > 0) lines.push(`distractors ${label} ${text}`);
+  }
   for (const truncation of atlas.report.truncations) {
     lines.push(`truncated   ${truncation.what}: kept ${truncation.kept}, dropped ${truncation.dropped}`);
   }

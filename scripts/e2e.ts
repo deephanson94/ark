@@ -251,9 +251,19 @@ async function main(): Promise<number> {
       await page.waitForSelector('.console-panel', { timeout: 5000 });
       const question = (await page.locator('.console-question').innerText()).trim();
       process.stdout.write(`e2e: challenge → ${question}\n`);
-      if (!question.includes('depend on it')) {
-        // ADR-0008 fixes the wording; the graph proves dependence, not that a
-        // file will need to change.
+      // Verb-aware since M4. ADR-0008 fixes Blast Radius's wording — the graph
+      // proves dependence, not that a file will need to change — and ADR-0014
+      // fixes Companion's, which must state the *measured* bar so the player
+      // knows the line they are being asked to draw.
+      // Read off the console's own header, which the *verb* supplies — so this
+      // also checks the seam that lets the console render a question it knows
+      // nothing about.
+      // Lowercased because `innerText` returns *rendered* text and the header
+      // is `text-transform: uppercase` — it reads `COMPANION`, not `companion`.
+      const title = (await page.locator('.console-verb').innerText()).trim().toLowerCase();
+      process.stdout.write(`e2e: verb → ${title}\n`);
+      const expected = title === 'companion' ? 'changed alongside' : 'depend on it';
+      if (!question.includes(expected)) {
         failures.push({ what: 'prompt', detail: `unexpected wording: "${question}"` });
       }
       const choices = await page.locator('.choice-button').count();

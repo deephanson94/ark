@@ -34,7 +34,7 @@
 
 import type { NodeId, VerbId } from '../atlas/index.js';
 import type { Graph } from '../atlas/index.js';
-import { byteCompare, dependents, idOf } from '../atlas/index.js';
+import { byteCompare } from '../atlas/index.js';
 import type { Challenge } from '../atlas/index.js';
 import type { Grade } from '../verbs/index.js';
 import { PASS_THRESHOLD } from '../verbs/index.js';
@@ -113,7 +113,14 @@ export function recordPass(
 
 export interface Progression {
   readonly progress: Progress;
-  /** True when this grade unlocked the subject's full radius. */
+  /**
+   * True when this grade reached the pass threshold.
+   *
+   * Named for what it means now rather than for what one verb does with it:
+   * this used to read "unlocked the subject's full radius", which is false for
+   * a Companion pass and is the kind of verb-specific wording that invites the
+   * next leak. What a pass unlocks is the verb's business (`provedThrough`).
+   */
   readonly unlocked: boolean;
 }
 
@@ -145,8 +152,21 @@ export function applyGrade(
 export interface Liveness {
   /** True when this id names a node in the atlas now loaded. */
   exists(id: NodeId): boolean;
-  /** True when `member` still transitively depends on `subject`. */
-  dependsOn(subject: NodeId, member: NodeId): boolean;
+  /**
+   * True when the claim `(verb, subject, member)` still holds.
+   *
+   * **Per verb, and that is not a refinement — it is the difference between
+   * dropping true claims and keeping false ones.** Before M4 this was
+   * `dependsOn`, one rule for one verb: "does `member` still transitively
+   * import `subject`". Applied to a Companion pass it would delete every claim
+   * about a co-change pair that never imported anything — which is most of them
+   * (67% on hono, 89% on svelte) — while a Blast Radius claim checked against
+   * the co-change matrix would survive on coincidence.
+   *
+   * The rule itself belongs to the verb (`Verb.stillHolds`), because only the
+   * verb knows what it asserted.
+   */
+  holds(verb: VerbId, subject: NodeId, member: NodeId): boolean;
 }
 
 /**
@@ -154,27 +174,44 @@ export interface Liveness {
  * turns the decay check off, which is the one thing that keeps a restored save
  * honest.
  */
-export const UNCHECKED: Liveness = { exists: () => true, dependsOn: () => true };
+export const UNCHECKED: Liveness = { exists: () => true, holds: () => true };
 
-/** The real thing, over a loaded graph. Memoised: one sweep per subject. */
-export function livenessOf(graph: Graph): Liveness {
-  const cones = new Map<NodeId, ReadonlySet<NodeId>>();
-  const coneOf = (subject: NodeId): ReadonlySet<NodeId> => {
-    const cached = cones.get(subject);
-    if (cached !== undefined) return cached;
-    const ref = graph.refById.get(subject);
-    const cone = new Set<NodeId>();
-    if (ref !== undefined) {
-      for (const dependent of dependents(graph, ref, Infinity).keys()) cone.add(idOf(graph, dependent));
-    }
-    cones.set(subject, cone);
-    return cone;
-  };
+/**
+ * The real thing, over a loaded graph.
+ *
+ * Memoised per `(verb, subject)`: restoring a save asks this once per stored
+ * member, and both verbs' checks are a whole-cone or whole-matrix sweep.
+ */
+export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
+  const cones = new Map<string, ReadonlySet<NodeId>>();
   return {
     exists: (id) => graph.refById.has(id),
-    dependsOn: (subject, member) => coneOf(subject).has(member),
+    holds: (verb, subject, member) => {
+      const key = `${verb}\n${subject}`;
+      let cone = cones.get(key);
+      if (cone === undefined) {
+        const implementation = verbs[verb];
+        const found = new Set<NodeId>();
+        // Ask the verb about every node once rather than per member: the
+        // implementations are a cone walk and a matrix lookup, and calling
+        // either once per stored claim turns an O(1) question into an O(V·E)
+        // one on a save with a full notebook.
+        if (implementation !== undefined) {
+          for (const node of graph.atlas.nodes) {
+            if (implementation.stillHolds(graph, subject, node.id)) found.add(node.id);
+          }
+        }
+        cone = found;
+        cones.set(key, cone);
+      }
+      return cone.has(member);
+    },
   };
 }
+
+/** Just enough of `VERBS` to check a claim. Injected so this module stays pure. */
+export type VerbLookup = Readonly<Partial<Record<VerbId, { stillHolds: StillHolds }>>>;
+type StillHolds = (graph: Graph, subject: NodeId, member: NodeId) => boolean;
 
 /**
  * The stored passes that the current atlas still bears out, each narrowed to
@@ -191,7 +228,7 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
   for (const pass of progress.passes) {
     if (!liveness.exists(pass.subject)) continue;
     const proved = pass.proved.filter(
-      (member) => liveness.exists(member) && liveness.dependsOn(pass.subject, member),
+      (member) => liveness.exists(member) && liveness.holds(pass.verb, pass.subject, member),
     );
     // A fully decayed pass drops out entirely, which demotes its subject: the
     // map re-fogs, honestly, because the thing the player proved is no longer
@@ -202,22 +239,58 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
   return live;
 }
 
+/** The key a challenge is "answered" under. `(verb, subject)`, never `id`. */
+export function answerKey(verb: VerbId, subject: NodeId): string {
+  return `${verb}\n${subject}`;
+}
+
 /**
- * The subjects the player has actually answered a question about.
+ * The questions the player has actually answered, as `(verb, subject)` keys.
  *
  * Deliberately **not** the same as `fog.understood`. Picking a file correctly in
  * someone else's question promotes it to `understood` — you proved you knew it
- * sits in that radius — but it says nothing about *its own* radius, which is a
- * different question the player has not been asked. Reading the deck off the
- * fog silently retired questions nobody had answered.
+ * sits in that answer — but it says nothing about the question *that file* is
+ * the subject of. Reading the deck off the fog silently retired questions
+ * nobody had answered.
  *
- * **This collapses over verbs, which is correct only while there is one.** When
- * M4's git verbs land, "answered" has to become per-`(verb, subject)` — the
- * `Pass` record already carries the verb for exactly that reason — or a
- * Blast Radius pass will retire a Companion question about the same file.
+ * **Keyed per verb since M4, and the old comment here predicted exactly why**:
+ * collapsing over verbs was correct only while there was one, because a Blast
+ * Radius pass would otherwise retire the Companion question about the same
+ * file. `Pass` has carried the verb since M3 for this.
  */
-export function answeredSubjects(progress: Progress, liveness: Liveness): Set<NodeId> {
-  return new Set(livePasses(progress, liveness).map((pass) => pass.subject));
+export function answeredKeys(progress: Progress, liveness: Liveness): Set<string> {
+  return new Set(livePasses(progress, liveness).map((pass) => answerKey(pass.verb, pass.subject)));
+}
+
+/**
+ * Everything the player proved **through one verb** — that verb's passed
+ * subjects, plus the members they picked correctly.
+ *
+ * This exists because `fog.understood` is verb-blind and one consumer must not
+ * be. `main.ts` unlocks a node's full transitive dependent radius on hover for
+ * anything `understood`, which is ADR-0008 decision 1: you may see the cone you
+ * proved you knew. Feed that rule a verb-blind set the moment a second verb
+ * exists and **passing a Companion question prints the answer to the still-open
+ * Blast Radius question about the same file** — the M1 hover leak, reopened
+ * from the side, and it would have shipped invisibly because no test asks what
+ * one verb's pass does to another verb's board.
+ *
+ * `understood` stays verb-blind on purpose: proving *anything* about a file is
+ * a real reason to know its name. It is the radius, not the label, that has to
+ * be earned in the verb that asks about it.
+ */
+export function provedThrough(
+  progress: Progress,
+  liveness: Liveness,
+  verb: VerbId,
+): Set<NodeId> {
+  const proved = new Set<NodeId>();
+  for (const pass of livePasses(progress, liveness)) {
+    if (pass.verb !== verb) continue;
+    proved.add(pass.subject);
+    for (const member of pass.proved) proved.add(member);
+  }
+  return proved;
 }
 
 /**

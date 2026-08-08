@@ -46,6 +46,8 @@ import { DEFAULT_WALK_OPTIONS, walk } from './walk.js';
 import type { WalkOptions } from './walk.js';
 import type { GenerationResult } from '../verbs/blastRadius/index.js';
 import { generateWithReport } from '../verbs/blastRadius/index.js';
+import type { GenerationResult as CompanionResult } from '../verbs/companion/index.js';
+import { generateWithReport as generateCompanionWithReport } from '../verbs/companion/index.js';
 import type { GenerateOptions } from '../verbs/index.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../verbs/index.js';
 
@@ -79,8 +81,11 @@ export const DEFAULT_INDEX_OPTIONS: Omit<IndexOptions, 'root'> = {
 
 export interface IndexResult {
   readonly atlas: Atlas;
-  /** What generation shipped and what it refused to. Printed by the CLI. */
-  readonly generation: GenerationResult;
+  /** What each verb shipped and what it refused to. Printed by the CLI. */
+  readonly generation: {
+    readonly blastRadius: GenerationResult;
+    readonly companion: CompanionResult;
+  };
 }
 
 export function indexOptions(root: string, overrides: Partial<IndexOptions> = {}): IndexOptions {
@@ -270,6 +275,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       exports: exported.kept,
       unresolved: unresolved.kept,
       externals: dedupeSorted(externalsByPath.get(path) ?? []),
+      lineage: fileHistory?.contested === true ? 'contested' : 'certain',
       churn: fileHistory?.churn ?? 0,
       authors: fileHistory?.authors ?? 0,
       firstSeen: fileHistory?.firstSeen ?? null,
@@ -331,6 +337,10 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       commitsWalked: history.commitsWalked,
       commitsRetained: commits.length,
       window: history.window,
+      // Part of the contract, not a budget: it changes what the numbers in
+      // `coChange` mean, and Companion has to be able to tell the player the
+      // rule they are graded under.
+      wideLimit: options.history.wideCommitFiles,
       coChange,
       commits,
     },
@@ -343,10 +353,23 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
 
   // Fail here rather than in the player (guardrail 5).
   const validated = validateAtlas(draft);
-  const generation = generateWithReport(validated, options.generate);
+
+  // **The cap is per verb, deliberately.** `maxChallengesFor` scales the deck
+  // with the repo so a 2,000-file codebase is not exhausted in one sitting; a
+  // shared budget would make the second verb's coverage depend on how much
+  // supply the first happened to find, which is backwards — the whole measured
+  // argument for Companion is that it reaches files Blast Radius cannot. The
+  // cost is bounded: a challenge serialises to roughly 600 bytes, so two full
+  // decks at 2,000 files is ~300 KiB against a 5 MB ceiling.
+  const blast = generateWithReport(validated, options.generate);
+  const companionResult = generateCompanionWithReport(validated, options.generate);
+  const challenges = [...blast.challenges, ...companionResult.challenges].sort((a, b) =>
+    byteCompare(a.id, b.id),
+  );
+
   return {
-    atlas: validateAtlas({ ...validated, challenges: generation.challenges }),
-    generation,
+    atlas: validateAtlas({ ...validated, challenges }),
+    generation: { blastRadius: blast, companion: companionResult },
   };
 }
 

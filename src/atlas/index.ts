@@ -6,7 +6,7 @@
  * pure functions over that data.
  */
 
-export { ATLAS_VERSION, IMPORTING_LANGS, canImport } from './schema.js';
+export { ATLAS_VERSION, IMPORTING_LANGS, VERB_IDS, canImport } from './schema.js';
 export type {
   Atlas,
   AtlasEdge,
@@ -21,6 +21,7 @@ export type {
   IndexReport,
   IsoDate,
   Lang,
+  Lineage,
   NodeId,
   NodeKind,
   NodeRef,
