@@ -405,6 +405,32 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   because every verb had *a* test. When you add a peer to an existing family, list what the family is
   checked for and check the list against each member, not against the newcomer.
 
+- **A figure about this repo is measured on the tree that does not yet contain it.** The session that
+  built Archaeology re-measured ADR-0019's tables — the ADR's own instruction — and wrote every ark
+  figure down wrong: node counts included an untracked probe script, and commit counts predated the
+  commit the section claimed to be measured at. **The hono column reproduced perfectly**, which is
+  the only reason the cause was findable at all. This is not the measured-constant landmine (a number
+  going stale); it is narrower: **the act of recording a measurement about a self-indexing repo
+  changes the thing measured**, so a figure taken from the working tree is false the moment it is
+  committed. Measure on a clean clone of a *named* commit — `git clone . /tmp/x && git -C /tmp/x
+  checkout <sha>` — and put the sha in the prose. Then the number stays checkable forever instead of
+  for one commit.
+- **Two individually-honest panels can state contradictory facts, and no suite can see it.** The
+  Archaeology reveal computed "how many commits touched this file" from the *eligible* set and the
+  field note computed it from the *retained* set. Each surface was internally consistent, each had
+  passing tests, and they disagreed on **21 of 26 boards** — with the reveal printing *"that is every
+  commit in this window that touched X"* over a record that held more, which is **false and
+  falsifiable by the player with one `git log`**. A test asserts a state; this defect lives *between*
+  two states, exactly as ADR-0016's vanishing wires did between two frames. When two surfaces
+  describe the same population, assert that they **agree**, not that each is individually right.
+- **A relation over a set of one is an identity.** A reveal that deliberately says *"it changed a file
+  that usually moves with this one"* rather than naming the file — because the name is another verb's
+  answer key — names it anyway whenever the subject has exactly one co-change partner. Measured at 4
+  such notes on hono, 2 naming a shipped Placement key member. The rule looked safe because the
+  *sentence* contains no path; safety actually rested on the set being big enough to be ambiguous,
+  which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
+  the size of the set you are quantifying over.**
+
 - **Four of seven review findings were a sentence contradicting a number in the same document.** Not
   a wrong measurement — a right one, written up backwards: a paragraph that measured a leak on 5 of
   27 boards and closed by calling it a leak "the product does not have"; a justification resting on
@@ -513,8 +539,10 @@ imports, and the one that reaches the edgeless files the import graph structural
 (**[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**); `src/verbs/archaeology/`
 shows a file and asks which commits landed on it
 (**[ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)**). Together
-they leave 20 of this repo's 140 nodes unprovable where Blast Radius alone leaves 54; on hono 138
-against 269.
+they leave 19 of this repo's 140 nodes unprovable where Blast Radius alone leaves 52; on hono 138
+against 269. (Measured at `11c92c0` on a clean clone — ark indexes itself, so a figure about this
+repo is only checkable if it names the commit it was taken at, and the commit carrying the sentence
+is always one later than the one it describes.)
 
 **Both halves of the id union are now real in every role.** Placement's *subject* is a commit and
 Archaeology's *members* are — `Challenge.subject`, `.candidates` and `.truth` are all `AtlasId`,
@@ -544,7 +572,7 @@ memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
 sentence. ~89 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npx ark index .` produces
-a valid ~250 KiB atlas in ~455 ms (measured at the commit that added Archaeology).
+a valid ~250 KiB atlas in ~455 ms (measured at `11c92c0`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -609,16 +637,23 @@ Then the **overlapping Companion answer keys** in the generator, and after those
 catalogue** — a repo-independent vocabulary of ~30–60 structural phenomena, the atom that would let
 anything *transfer* to another repo, which is the other half of risk #1.
 
-**Three things about Archaeology a later session will want, all measured at the commit that built
-it.** `oldestK` fires **zero times on both repos** where ADR-0019 predicted 24 on hono, and it is
+**Four things about Archaeology a later session will want.** `oldestK` fires **zero times on both repos** where ADR-0019 predicted 24 on hono, and it is
 kept as a canary rather than a live gate — the reasoning and the counterfactuals that revive it are
 in that ADR's *Re-measured* section, and **the honest reading is that it is one distractor-mix change
-away from mattering**, not that it is dead. `recentK` is in the set *because* the re-measurement
+away from mattering**, not that it is dead — with the caveat that document now records: decision 6's
+written rule ("fires on neither repo → out") condemns `oldestK` exactly as it condemned `recentK`,
+and keeping it means the operative rule is really "keep a guess the board invites when scoring it is
+free". That is defensible and it is not what was written down.
+
+`recentK` is in the set *because* the re-measurement
 found it refusing 3 hono boards after the ADR excluded it for firing zero times; that is the ADR's
 own criterion applied to better data, and it is the only place the implementation changed a decision.
 And **`uncertain` is not a refusal this verb can make** — `commitSupply` refuses every commit
 touching a barred node, so a contested file has no eligible touchers at all; the branch was
-unreachable and is gone.
+unreachable and is gone — and so was **`tooFewCommits`**, a *second* dead refusal in the same
+six-row table, found only when a review checked the table against the code rather than against the
+argument. And the reveal's *"relations, never identities"* rule is guarded by a **set-size check**:
+over a set of one, the existential names the file. Do not simplify either guard away.
 
 **M5 is what the roadmap says next** (tree-sitter, 3–4 more languages, NORTH-STAR §13) and it is the
 larger bet: the scanner is ES-modules-only, so a Python or Go repo still produces a map with no edges

@@ -1207,6 +1207,24 @@ One line per iteration: what changed, and what to do next.
   the centre path used once, by `n`, by design. The cull tests all ran at scale 1, where the old
   `radius / scale` and the new `radius * scale` agree — reverting the formula survived the whole
   suite until an assertion at scale 4 was added.
+  **An adversarial review of the finished code then found four more**, and the shape of them is the
+  usual one — none was findable by the type system or by any suite. The reveal and the field note
+  described **different populations** (eligible touchers against retained ones), so they disagreed on
+  21 of 26 boards and the reveal printed *"that is every commit in this window that touched X"* over
+  a record that held more — **false, and falsifiable with one `git log`**, on 4 boards here and 4 on
+  hono; each surface was internally consistent, which is why nothing could see it. **`tooFewCommits`
+  was a second unreachable refusal** in the same six-row ADR table that already lost `uncertain`.
+  **A relation over a set of one is an identity**: *"it changed a file that usually moves with this
+  one"* names the file when the subject has exactly one partner — 4 such notes on hono, 2 of them
+  naming a shipped Placement answer-key member. And **the re-measured figures themselves** were taken
+  on the working tree rather than on the commit they named, which the hono column reproducing exactly
+  is what isolated.
+
+  The tests written for those fixes are worth recording too: **the first round of mutants all
+  survived**, because the fixture had no wide commit, no co-change matrix, and graded with an empty
+  answer so the wrong-pick explainer never ran. Three assertions that passed without executing the
+  code they were about, in the session that had already written a landmine about exactly that.
+
   **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
   name-alike, distance n±1, co-change ghost) and the reveal never says which, so the one moment the
   player is most ready to learn passes in silence. Then the **phenomenon catalogue**, a
@@ -1569,16 +1587,18 @@ One line per iteration: what changed, and what to do next.
 
   Step 1's disclosure accumulator — shipped last session with nothing consuming it — **finally has a
   consumer and a test that bites**: disconnect it and `test:atlas` goes red. Decision 7 measured at
-  **58.9% of this repo's key members already stated by a Placement reveal, and 17 of 70 candidate
-  boards entirely**; excluding them costs 41 subjects here (deck 40 → 27) and 21 on hono (54, still
-  capped). The order of two lines in the generator is the whole of that rule: membership is computed
+  **52.2% of this repo's issued key members already stated by a Placement reveal, and 6 of 61
+  candidate boards entirely**; excluding them costs 42 subjects here (deck 40 → 26) and 21 on hono
+  (54, still capped). The order of two lines in the generator is the whole of that rule: membership is computed
   from the **unfiltered** toucher list, so an excluded commit leaves the board altogether rather than
   dropping into the distractor pool — which is the wrong answer key ADR-0019's own probe shipped
   inside the counterfactual that was about to justify the rule.
 
   **Re-running the ADR's tables against the real generator was the first task after building it, and
-  one row inverted.** Structural figures reproduce; the window guess maxes at **0.462** against a
-  predicted 0.46, which is decision 5's arithmetic to the digit. But the gate table swapped ends:
+  one row inverted.** Structural figures reproduce; the window guess maxes at **0.480 here and 0.462
+  on hono**, which decision 5 predicted in as many words (*"a 19-candidate six-key board — which the
+  rule allows — would read 0.48"*), both below the 0.5 threshold because the sizing rule requires it.
+  But the gate table swapped ends:
   `oldestK` fires **0 times on both repos** against a predicted 24 on hono, while `recentK` — left
   out *because* it measured zero — refuses **3 hono boards**. So `recentK` is in the set, on
   decision 6's own stated rule and on its own caveat that the exclusion held only *"under this
@@ -1605,10 +1625,14 @@ One line per iteration: what changed, and what to do next.
   the atlas's id order would have served the tier-5 question first on the path `selector.ts` calls
   primary, inverting the curriculum and falsifying `main.ts`'s own comment.
 
-  Measured: **27 boards here** (supply binds) and **54 on hono** (the cap binds), keys of 2–6
-  commits, lifting 1 of this repo's 21 unprovable nodes and **16** of hono's 154. Four verbs now
-  leave **20 of ark's 140** nodes unprovable where Blast Radius alone leaves 54. Atlas 249.8 KiB in
-  ~455 ms, all budgets inside their ceilings, byte-identical across two runs. The reveal states
+  Measured **at `11c92c0`, on a clean clone of that commit** — because the first draft of these
+  figures was taken from the working tree that became the commit carrying them, which counted an
+  untracked probe script as a node and missed a commit that did not exist yet, and got every ark
+  figure wrong by exactly the act of writing it down. **26 boards here** (supply binds) and **54 on
+  hono** (the cap binds), keys of 2–6 commits, lifting 1 of this repo's 20 unprovable nodes and
+  **16** of hono's 154. Four verbs leave **19 of ark's 140** nodes unprovable where Blast Radius
+  alone leaves 52. Atlas ~250 KiB in ~455 ms, all budgets inside their ceilings, byte-identical
+  across two runs. The reveal states
   relations and never identities — *"it changed a file that imports this one"*, never which — because
   naming it would hand over that commit's Placement key, ADR-0014's finding 3 running the other way;
   and it never prints a commit's width, which is `broadKnown`'s input. Both pinned by tests that fail
@@ -1618,6 +1642,24 @@ One line per iteration: what changed, and what to do next.
   real atlas** — it lived only in a unit fixture. Both are there now, with the cross-verb disclosure
   check, which is the one property neither verb can see and which the `(verb, truth)` uniqueness rule
   structurally cannot express, since one key holds node ids and the other commit ids.
+
+  **An adversarial review of the finished code then found four more**, and the shape of them is the
+  usual one — none was findable by the type system or by any suite. The reveal and the field note
+  described **different populations** (eligible touchers against retained ones), so they disagreed on
+  21 of 26 boards and the reveal printed *"that is every commit in this window that touched X"* over
+  a record that held more — **false, and falsifiable with one `git log`**, on 4 boards here and 4 on
+  hono; each surface was internally consistent, which is why nothing could see it. **`tooFewCommits`
+  was a second unreachable refusal** in the same six-row ADR table that already lost `uncertain`.
+  **A relation over a set of one is an identity**: *"it changed a file that usually moves with this
+  one"* names the file when the subject has exactly one partner — 4 such notes on hono, 2 of them
+  naming a shipped Placement answer-key member. And **the re-measured figures themselves** were taken
+  on the working tree rather than on the commit they named, which the hono column reproducing exactly
+  is what isolated.
+
+  The tests written for those fixes are worth recording too: **the first round of mutants all
+  survived**, because the fixture had no wide commit, no co-change matrix, and graded with an empty
+  answer so the wrong-pick explainer never ran. Three assertions that passed without executing the
+  code they were about, in the session that had already written a landmine about exactly that.
 
   **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
   name-alike, structurally-near non-dependent, co-change ghost, message-mention), the generator

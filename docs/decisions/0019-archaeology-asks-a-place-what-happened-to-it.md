@@ -635,33 +635,51 @@ the table.
 
 *"What this does not decide"* ended with an instruction: **no generator existed, so every deck and
 gate figure above came from a throwaway probe, and the first task after building the verb is to
-re-run these tables and correct whatever moved.** This is that pass. Measured at the commit that
-added the verb, on the same two repos.
+re-run these tables and correct whatever moved.** This is that pass.
+
+> **Measured at `11c92c0`, on a clean clone of that commit.** The sha is not decoration. A first
+> version of this section was measured on the *working tree* that became the commit carrying it — so
+> it counted an untracked probe script as a node and missed a commit that did not exist yet, and
+> every figure in the ark column was wrong by exactly the act of writing it down. The hono column
+> reproduced perfectly, which is what isolated the cause. Ark indexes itself: **a figure about this
+> repo is only checkable if it names the commit it was taken at**, and the commit carrying this
+> paragraph is by construction one later than the one it describes.
 
 The **structural** figures reproduce. The **deck and gate** figures mostly do not, and one of them
 inverts a decision.
 
-| | ADR's probe (at `e44a823`) | real generator | note |
+| | ADR's probe (at `e44a823`) | real generator (at `11c92c0`) | note |
 |---|---|---|---|
 | ark nodes | 128 | 140 | the repo grew; ark indexes itself |
-| ark retained / walked | 51 / 67 | 54 / 71 | as above |
-| ark eligible commits | 46 (5 `wide`) | 49 (5 `wide`) | as above |
-| ark files touched ≥ 2× | 66 | 70 | as above |
-| ark subjects surviving decision 7 | 28 | 29 | |
-| **ark deck** | **22** | **27** | see `oldestK` below |
+| ark retained / walked | 51 / 67 | 56 / 73 | as above |
+| ark eligible commits | 46 (5 `wide`) | 50 (6 `wide`) | as above |
+| **ark deck** | **22** | **26** | `broadKnown` costs 1 board here, not 5 |
 | hono deck | 54 | 54 | the cap binds, as predicted |
 | answer keys | 2–6 | 2–6 | both repos |
 | ark `duplicateKey` | 1 | 1 | |
 | hono `duplicateKey` | 10 | 11 | |
-| ark disclosure share | 55.6% | **58.9%** (179 of 304) | |
-| ark boards fully disclosed | 15 of 66 | **17 of 70** | |
-| hono disclosure share | 16.0% | **14.4%** (132 of 917) | |
-| hono boards fully disclosed | 1 of 172 | 1 of 172 | |
+| ark disclosure share | 55.6% | **52.2%** (109 of 209) | see below — the probe's figure was close |
+| ark boards fully disclosed | 15 of 66 | **6 of 61** | |
+| hono disclosure share | 16.0% | **16.4%** (90 of 548) | |
+| hono boards fully disclosed | 1 of 172 | 1 of 142 | |
 | decision 7 off → ark deck | 40 | **40** | reproduces exactly |
 | decision 7 off → hono deck | 54 | 54 | |
-| window-guess maximum | 0.46 | **0.462** | decision 5's arithmetic, to the digit |
-| nodes it lifts out of unprovable, ark | 1 of 16 | 1 (21 → 20) | |
+| window-guess maximum | 0.46 | **0.480** ark, 0.462 hono | see below |
+| nodes it lifts out of unprovable, ark | 1 of 16 | 1 (20 → 19) | |
 | nodes it lifts out of unprovable, hono | 14 of 154 | **16** (154 → 138) | |
+
+**The disclosure share has to be measured over the keys the generator issues**, and a first version
+of this row did not: it counted *every* eligible toucher of every candidate subject, which is a
+larger population than any key (the key is capped at 6), and reported 58.9% of 304. That is the
+"a different instrument is not drift" landmine committed inside the section that quotes it. Measured
+over issued keys — the population decision 7 actually acts on — it is 52.2%, and the probe's original
+55.6% was right to within the repo's own movement.
+
+**The window guess reads 0.480 on ark and 0.462 on hono, and both are the arithmetic working.**
+Decision 5 predicted exactly this: *"the measured maximum is 0.46, and a 19-candidate six-key board —
+which the rule allows — would read 0.48"*. Ark now ships such a board. Both are below the 0.5 pass
+threshold because the sizing rule requires it, which is the claim; the particular number is an
+observation.
 
 ### The gate table is the one that inverted
 
@@ -693,11 +711,17 @@ anyway. Measured, it is one design change from firing (newest-first padding take
 dropping the window filter, to 2), and its mean is 0.169 / 0.150 against a 0.78 bar. It stays as a
 canary against a regression in the distractor mix.
 
-**`broadKnown` costs 1 board here, not 5** — so decision 6's *"cost: 5 boards here (27 → 22)"* reads
-27 → 26 today, and the shipped deck is 27 rather than 22 because the deck no longer loses those 5.
-The rule is unchanged and still fires on exactly one of the two repos, which was the argument.
+> **The honest caveat, recorded because a review pressed on it.** Decision 6's original rule — *fires
+> on neither repo, so leave it out* — now condemns `oldestK` exactly as it condemned `recentK`, and
+> this document resolves that by re-labelling `oldestK` a canary. The operative rule has therefore
+> become *"keep a guess the board genuinely invites when scoring it is free"*, which would also have
+> admitted `recentK` on day one. That is a defensible rule and it is not the one decision 6 wrote
+> down. Stated as the judgement it is, rather than presented as the original criterion.
 
-### Three things the implementation found that no measurement predicted
+### Five things the implementation found that no measurement predicted
+
+The first three came out of building it; the last two out of an adversarial review of the finished
+code, which is where ADR-0018's worst findings came from too.
 
 **`uncertain` is not a refusal this verb can make.** Decision 4's table lists it — *"barring the
 subject, and any commit whose file list contains a barred node"* — and the second clause makes the
@@ -706,13 +730,35 @@ file has **zero** eligible touchers and is dropped by the fewer-than-two test be
 Confirmed by mutation and on hono's 7 contested nodes. The guardrail is honoured more strongly by the
 supply rule than by a second copy of it, and the branch is gone.
 
+**`tooFewCommits` was dead for the same reason, and decision 4's table still listed it.** The
+fewer-than-two case is a silent `continue` before the generator's body; the only `return` sat behind
+a null-date guard that two touchers make unreachable. So `report.skipped` could never contain it,
+while that field's own documentation says *"never silent"* and the CLI carried a line to print it.
+Two unreachable refusals in one six-row table is a table nobody had checked against the code.
+
 **A 2-toucher file's key *is* both endpoints**, so on a repo with one commit per date `endpoints`
 scores ~1.0 on every such board and refuses it. Real repos land several commits a day, which dilutes
 the guess — but the first unit fixture did not, and shipped **one board** while every assertion about
-choice sets passed vacuously. Named because it is a property of the verb, not of the fixture: keys of
-2 exist on both real repos precisely because their dates collide.
+choice sets passed vacuously.
 
-**Placement had no invariant test on the real atlas.** Adding Archaeology's revealed that
+**The reveal and the field note described different populations.** `summary` read the *eligible*
+toucher count and the note read the *retained* one, so the two disagreed on 21 of ark's 26 boards —
+and where the eligible count equalled the key, the reveal printed *"that is every commit in this
+window that touched X"*, which was **false of the atlas's own record** on 4 boards and falsifiable
+with one `git log`. A `wide` commit really did touch the file. `evidence.touchedBy` is the retained
+count now. Note the shape: each surface was internally consistent, so no suite could see it — this is
+ADR-0014 decision 7's *"what else is on screen?"* question asked across two panels instead of two
+verbs.
+
+**A relation over a set of one is an identity.** Decision 9's rule is that the reveal states
+relations and never names a file, because the name is an atom of that commit's Placement key. When
+the subject has exactly one co-change partner or one import neighbour, *"it changed a file that
+usually moves with this one"* names it anyway: **4 such notes on hono, 2 of them naming a shipped
+Placement answer-key member**. Not completable in today's decks — neither subject carries a Companion
+board, so nothing ever tells the player which file it is — but that is a fact about which questions
+happen to exist rather than anything enforced. Both arms now require a set of at least two.
+
+**And Placement had no invariant test on the real atlas.** Adding Archaeology's revealed that
 `candidates ∩ files(commit) = truth` had only ever been checked against a unit fixture. Both are now
 in `tests/atlas/`, together with the cross-verb disclosure check — which is the one property neither
 verb can see, and which `test:atlas`'s `(verb, truth)` uniqueness check structurally cannot express,
