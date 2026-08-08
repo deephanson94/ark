@@ -75,6 +75,7 @@ export const PHRASING: SetPhrasing = {
 
 export const companion: Verb = {
   id: 'companion',
+  channel: 'coChangeTies',
   generate(atlas, options: GenerateOptions = DEFAULT_GENERATE_OPTIONS) {
     return generateCompanion(atlas, options);
   },

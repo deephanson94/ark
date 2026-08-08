@@ -22,6 +22,17 @@ export interface Ink {
   readonly silhouette: string;
   readonly edge: string;
   readonly edgeHighlight: string;
+  /**
+   * A co-change wire: two files history says move together.
+   *
+   * A **third** meaning that can share the screen with the other two — a node
+   * can carry an open question, sit in a drawn blast cone and have a history
+   * wire at the same time — so it gets its own family rather than a shade of
+   * one of theirs. Ember, against gold `edgeHighlight` and teal `question`.
+   */
+  readonly tie: string;
+  /** The same wire at rest, once the moment of the grade has passed. */
+  readonly tieRest: string;
   /** Ring on a node that still carries an unanswered question. */
   readonly question: string;
   readonly text: string;
@@ -34,6 +45,8 @@ export const INK: Ink = {
   silhouette: '#2b3444',
   edge: 'rgba(140, 160, 190, 0.16)',
   edgeHighlight: 'rgba(255, 214, 130, 0.85)',
+  tie: 'rgba(240, 122, 92, 0.92)',
+  tieRest: 'rgba(240, 122, 92, 0.30)',
   // Deliberately not the highlight colour: a question marker and a blast-radius
   // highlight appear at the same time and must not read as the same thing.
   question: 'rgba(126, 214, 214, 0.62)',

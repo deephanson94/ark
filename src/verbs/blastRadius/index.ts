@@ -59,6 +59,7 @@ export const PHRASING: SetPhrasing = {
 
 export const blastRadius: Verb = {
   id: 'blastRadius',
+  channel: 'importRadius',
   generate(atlas, options: GenerateOptions = DEFAULT_GENERATE_OPTIONS) {
     return generateBlastRadius(atlas, options);
   },

@@ -1025,3 +1025,87 @@ One line per iteration: what changed, and what to do next.
   challenges** (`docs/prior-art.md` §4.4, still the highest-leverage lowest-cost item in the writeup),
   the **negative witness**, and the **phenomenon catalogue** for risk #1. Still owner-only:
   `npm run raster` on real hardware (ADR-0009's P1′) and S1's recall-experiment design.
+
+- **The map has a history channel: co-change draws as wires, and the gate is pillar 3.** Companion
+  shipped asking about a coupling the player was never shown — every edge on the map was an import —
+  so its reveal did all the teaching and §4's "fog lifts around what you proved" was half kept for the
+  one verb whose whole argument is reaching what the import graph structurally cannot see. Named pairs
+  now draw as shallow ember arcs (`src/player/ties.ts`), no schema change, `history.coChange` was
+  already there. **[ADR-0016](./docs/decisions/0016-a-history-wire-is-drawn-only-where-no-board-is-open.md)**
+  is the disclosure rule and almost none of it survived first contact with a measurement.
+  **There is no free tier and the reason is structural.** ADR-0008 could give away depth 1 because
+  Blast Radius's question lives *above* it; Companion's key is sampled count-descending, so any count
+  tier is the *top* of the answer, pre-sorted. Measured `|truth| / |row|` over the shipped deck:
+  **median 1.00** — for the median subject the key *is* the whole row. A visible threshold would also
+  repaint the middle band ADR-0014 exists to ban.
+  **Three gates simulated over the real deck**, counting drawn pairs that belong to a still-open
+  answer key. `provedThrough` — the helper `tracedRadius` already uses, and the obvious reuse —
+  exposes **89 open-key members in one frame across 28 of 40 subjects**, because it includes members
+  proved in someone *else's* question and co-change has none of the containment that bounds an import
+  cone. That would have been the fifth instance of ADR-0014's bug class, this time inside the correct
+  verb. Named-pairs-with-both-boards-closed exposes **0, ever**.
+  **The rule is pillar 3, not disclosure.** Every drawn pair was already named in a reveal, in words.
+  But text in a closed panel is a memory test and ink on the map is a lookup, concurrent with the
+  board §9 keeps visible behind the scrim — measured, an ungated layer assembles **5 of a 6-member
+  key** beside an open question. The principle that also explains why Blast Radius never has this
+  problem while drawing every import edge always: **the map may aggregate what it already draws; only
+  a reveal may introduce a primitive.** A cone is aggregation and the aggregating is the tested skill;
+  reading a wire is not a skill.
+  **The thing I got wrong, kept because it is the useful part.** I built the recommended shape — an
+  ungated flash at the grade over a gated layer — and it passed everything. Then measured what
+  survives one click: **79% of the promised wires vanish** (6 promised / 1 kept on the board the e2e
+  plays, nothing at all on 4 of 40), so the reveal's *"now drawn on the map"* was false immediately —
+  verbatim the defect `onGraded` records shipping once already, from the other direction. One gate
+  now, and the summary claims the record rather than the rendering: *"become history wires, drawn once
+  both files' questions are answered."* New landmine in CLAUDE.md: a suite checks a state, and this
+  defect lived in the transition between two.
+  **Verified**: 435 unit (13 new in `tests/unit/ties.test.ts`), 86 atlas, determinism byte-identical,
+  e2e clean with screenshots. **10 mutations, 10 caught — after one survived.** The dedup assertion
+  was vacuous: an unnormalised pair key *drops* the second direction rather than duplicating it, so
+  the count still read 1 and "expect 1 wire" passed against broken code. Rewritten to assert each
+  direction alone produces a wire. Liveness is measured, not assumed: `tiesDrawn` is in the HUD for
+  the same reason `peaksDrawn` is, and e2e fails if a Companion pass draws none — 3 wires on the real
+  repo, 0 in the orbit, which is deliberate and commented rather than omitted.
+  **Two things this leaves open, both named in the ADR so neither reads as solved.** Two Companion
+  subjects can each carry the other in their key, so answering one discloses a member of the other's —
+  up to **6 of 6**, in text, in the reveal. That is generator-side: ADR-0012 issues each key once and
+  says nothing about keys that *overlap*, and the fix is to window mutual members the way 0012
+  re-asks colliding subjects. And **`tracedRadius`'s member half is an open defect**, reclassified
+  from "settled fine" during this work: `provedThrough` includes members, so a file proved inside S's
+  question gets `FULL_RADIUS` while its *own* board is open, and by ADR-0008's invariant the lit set
+  ∩ that board is the key byte-exact. Hovering S does not substitute — `cone(S)` overapproximates and
+  never isolates it. **20 of 40 Blast Radius subjects, up to 12 at once.**
+  **A second-opinion review after shipping found four defects, none of them in the logic.** The gate
+  itself survived — no sequence draws a wire beside an open board. What it caught: two comments still
+  describing the *deleted* two-gate design as current, which together were a rebuild kit for the 79%
+  defect; `Reveal.unlocks: 'coChangeTies'` **read by nothing**, with the real licence hard-coded as
+  `challenge.verb !== 'companion'` in two files — M4's "nothing outside a verb names a verb" seam
+  quietly undone, so the licence is now `Verb.channel` and `channelOf()`; a **loop whose assertion ran
+  zero times** in the very test the file calls its most important (a ternary repeating its own
+  condition, so the leak check rested entirely on a length assertion); and an endpoint cull that drops
+  a long wire exactly when you stand between its ends. Also measured on request: a wire beside an open
+  *Blast Radius* board predicts blast-membership at **41% against a 27% base rate** — a §8.3 class-4
+  distractor, not an answer, so the gate stays Companion-only. That the findings are all in comments,
+  a dead contract value, an unrun loop and an unsimulated future is the point: the load-bearing
+  decisions were measured before they were argued, and measurement does not reach those places.
+  **A third review, of the merged diff, found the fix commit had reproduced its own first finding.**
+  The corrected orbit bullet was *appended* to ADR-0016's Consequences without deleting the one it
+  replaced, so the document of record carried two adjacent bullets contradicting each other about the
+  same thing — a superseded description left standing as current, committed by the commit that fixed
+  exactly that. It also spot-checked the ADR's figures against the data: the structural ones reproduce
+  **to the digit**, and two did not — "all 174 pairs" (the matrix was 173, then 180, then 200) and
+  "24 of 27 qualify" (22 of 24). The same rot was already sitting in CLAUDE.md's Current state ("49
+  KiB of JS", "31 companion challenges"). The fix is not more care: **prefer the invariant to the
+  count** — "every pair the matrix records is sampleable" holds forever where "all 174" holds for one
+  commit — and name the commit where a number really is the point. New landmine. Also from that
+  review: the generic `unlocks`-vs-`channel` pin (two literals asserted separately drift the moment a
+  third verb exists), and `channelOf`'s docstring softened, because it claimed *no* code outside a
+  verb names a verb while the import cone's restored-save licence is still
+  `provedThrough(…, 'blastRadius')` — an overclaim in the exact comment written to fix an overclaim.
+  **Next**: **map rotation between challenges.** `docs/prior-art.md` §4.4 has called it the
+  highest-leverage lowest-cost item in the writeup for three sessions and it is still undone —
+  map-derived spatial memory is orientation-locked, ours is north-up forever, and the verbs pick an
+  arbitrary subject each time, so we are training precisely the alignment-specific knowledge the
+  evidence says will not transfer. Then the **negative witness** (a wrong pick has a known reason
+  class and we never say it) and the **phenomenon catalogue** for risk #1. Owner-only and still open:
+  `npm run raster` on real hardware (ADR-0009's P1′) and S1's recall-experiment design.

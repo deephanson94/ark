@@ -116,6 +116,16 @@ export interface RevealNote {
 }
 
 /**
+ * A map channel an answer may be rendered into.
+ *
+ * One list, used two ways: `Verb.channel` is the standing licence a restored
+ * save is rebuilt from, and `Reveal.unlocks` is what a particular grade just
+ * put there. They must agree — `tests/unit/companion.test.ts` pins them — and
+ * they are separate because only the second can vary with the answer.
+ */
+export type RevealChannel = 'importRadius' | 'coChangeTies' | 'nothing';
+
+/**
  * What the player learns from a grade.
  *
  * `grade()` is pure over `(challenge, answer)` and so has no atlas to turn an
@@ -144,16 +154,25 @@ export interface Reveal {
    * withholding the picture would make `summary` a lie ("now drawn on the map"
    * beside a map that is not drawing it).
    *
+   * `coChangeTies` means the pairs this reveal has just **named in words** may
+   * now be drawn as history wires. Deliberately the named pairs and not the
+   * subject's whole co-change row: the summary sentence states the row's
+   * *cardinality* ("has changed with N files in all"), while the notes state
+   * the *identities* of the board members only. Drawing the row would put 31
+   * pairs on this repo's map that no reveal ever named — 18% of the finished
+   * layer — which is a new disclosure dressed as a rendering. See ADR-0016.
+   *
    * `nothing` means this verb revealed something the map has no channel for.
-   * Companion is `nothing` today: the map draws imports and has no history
-   * channel at all, which is the thing the next rung is for.
+   * No verb returns it today; it is kept because a verb that reveals a relation
+   * the map cannot draw must be able to say so rather than borrow a channel
+   * that means something else, which is how the first three leaks happened.
    *
    * On the contract rather than in the console because *"which cone may be
    * drawn"* is a claim about a verb's own answer, and this codebase has three
    * separate instances on record of that judgement being made outside the verb
    * and getting it wrong.
    */
-  readonly unlocks: 'importRadius' | 'nothing';
+  readonly unlocks: RevealChannel;
 }
 
 /**
@@ -177,6 +196,21 @@ export interface SetPhrasing {
 
 export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
   readonly id: VerbId;
+  /**
+   * Which map channel this verb's answers may ever appear in.
+   *
+   * The **static** twin of `Reveal.unlocks`, and it exists because the reveal
+   * alone could not carry the rule. `unlocks` is a fact about one grade and
+   * lives only for as long as the panel does; the map has to rebuild the same
+   * licence from a *restored save*, where no `Reveal` object has ever existed.
+   * Without this the shell reconstructs it by name — `challenge.verb !==
+   * 'companion'`, hard-coded, twice — which is precisely the "nothing outside a
+   * verb names a verb" seam M4 spent its whole budget building, quietly undone.
+   *
+   * A verb whose relation the map cannot draw says `nothing`, and its answers
+   * are then not drawable by construction rather than by omission.
+   */
+  readonly channel: RevealChannel;
   /** Pure: same atlas and options ⇒ same challenges, in the same order. */
   generate(atlas: Atlas, options: GenerateOptions): readonly C[];
   /** Pure and self-contained. */
