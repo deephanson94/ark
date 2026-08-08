@@ -1443,3 +1443,40 @@ One line per iteration: what changed, and what to do next.
   duplicate answer key drops are never mentioned to the player — `cone(A) = cone(B)` is a true derived
   fact that ADR-0011 decision 3 says must be *shown* rather than proved, so it wants a decision about
   where before it wants code.
+
+- **Measured Archaeology's supply before opening its ADR, and both named candidates are dead.** No
+  code — this is the "measure before you argue" step, done first because the two candidates the
+  earlier entries name were named from plausibility rather than from data.
+
+  | signal, inside the retained window | ark (the bootstrap repo) | `honojs/hono` |
+  |---|---|---|
+  | retained commits / walked | 50 / 64 | 500 / 2,758 |
+  | usable (not wide) | 45 | 499 |
+  | **looks like a revert** | **0** | **1** |
+  | **carries an issue number** | **0** | 358, but **355 distinct** |
+  | issues with more than one commit | 0 | 3 |
+  | files with churn ≥ 5 | 29 | 251 |
+
+  **Revert detection** — which two earlier entries and CLAUDE.md all call "the strongest candidate" —
+  finds **nothing** on the repo NORTH-STAR §11 makes the first level, and one commit in hono's
+  window: 10 across its full 2,758-commit history, of which only 12 `This reverts commit <sha>` body
+  references resolve to a commit the clone contains at all. A verb with no supply on the bootstrap
+  repo is not a verb, and this is the second time in two sessions that the *named obvious answer*
+  did not survive being counted.
+
+  **Issue linkage** — NORTH-STAR §2's own example, *"git knows which file fixed issue #4412, because
+  the commit says so"* — is 0 here (this repo puts no issue numbers in subjects) and degenerate on
+  hono: 355 distinct issues across 358 commits, so "which commit closed #N" is a 1:1 lookup rather
+  than a question. It would also need the commit **body**, which `history.ts` does not keep.
+
+  What survives is the half of §6.2 that was already gradeable: **churn and the dates around it**,
+  complete on every node regardless of ADR-0005's commit cap because it aggregates before it
+  retains. So the design question the ADR has to answer is narrower and sharper than "how do we
+  detect a revert": **what can be asked about a file's history that is not "which of these is
+  busiest"** — a guess `gate.ts` already refuses as structure-blind and the inspector prints for
+  free. With the same trap one field over: the inspector prints `first seen` and `last seen`, so any
+  prompt quoting a date hands over a matching guess, which is what `recency` was added to
+  `COMMIT_HEURISTICS` to refuse.
+
+  **Next**: the Archaeology ADR itself, from these numbers rather than from the sentence they
+  replace. Then the **negative witness**, then the **phenomenon catalogue** for risk #1.

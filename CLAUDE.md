@@ -493,9 +493,40 @@ nodes no question can ever lift the fog from.
 Next action: **Archaeology, M4's third and last — and it cannot be built as §6.2 states it.**
 *"This file was rewritten three times. What problem kept recurring?"* is not deterministically
 gradeable, so guardrail 3 (no model in the grading path) and guardrail 4 (no uncertain ground truth)
-both bite. It needs reshaping into something git answers exactly — **revert detection is the
-strongest candidate** — and that is a decision to take in an ADR *before* any code. Do not open the
-session by writing a generator.
+both bite. It needs reshaping into something git answers exactly, and that is a decision to take in
+an ADR *before* any code. Do not open the session by writing a generator.
+
+**Both named candidates were measured before the ADR was opened, and both are dead — start from
+this rather than from the sentence this line used to carry.** It said *"revert detection is the
+strongest candidate"*; the supply says otherwise.
+
+| signal, inside the retained window | ark (the bootstrap repo) | `honojs/hono` |
+|---|---|---|
+| retained commits / walked | 50 / 64 | 500 / 2,758 |
+| usable (not wide) | 45 | 499 |
+| **looks like a revert** | **0** | **1** |
+| **carries an issue number** | **0** | 358, but **355 distinct** |
+| issues with more than one commit | 0 | **3** |
+| files with churn ≥ 5 | 29 | 251 |
+
+**Revert detection** finds nothing on the repo NORTH-STAR §11 makes the first level, and one commit
+in hono's window (10 across its full history, of which only 12 body references resolve to a commit
+the clone contains). A verb with no supply on the bootstrap repo is not a verb.
+
+**Issue linkage** — NORTH-STAR §2's own example, *"git knows which file fixed issue #4412, because
+the commit says so"* — is 0 here, because this repo does not put issue numbers in commit subjects,
+and on hono it is degenerate: 355 distinct issues across 358 commits, so *"which commit closed #N"*
+is a 1:1 lookup rather than a question. It would also need the commit **body**, which
+`history.ts` does not keep.
+
+What *does* have supply is the half of §6.2 that is already gradeable — **churn, and the dates
+around it**. `firstSeen`, `lastSeen` and `churn` are on every node and complete regardless of the
+commit cap (ADR-0005 aggregates before it retains). The open design question is therefore narrower
+and sharper than "how do we detect reverts": **what can you ask about a file's history that is not
+"which of these is busiest"** — which `gate.ts` already refuses as structure-blind, and which the
+inspector prints for free. Note the trap that just cost a fix: the inspector also prints `first
+seen` and `last seen`, so any prompt quoting a date hands over a matching guess (`recency` in
+`COMMIT_HEURISTICS` is there for exactly that).
 
 Two things Placement measured that a session designing Archaeology will want, because both were
 assumed wrong before they were checked. **ADR-0005's `maxCommits` does not bound a commit-subject
