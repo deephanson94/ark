@@ -42,8 +42,8 @@ describe('what a note is built from', () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]?.subjectLabel).toBe('src/hub.ts');
     expect(notes[0]?.proved).toEqual([
-      { path: 'src/mid.ts', weight: 1 },
-      { path: 'src/far.ts', weight: 2 },
+      { label: 'src/mid.ts', weight: 1 },
+      { label: 'src/far.ts', weight: 2 },
     ]);
     expect(notes[0]?.farthest).toBe(2);
   });
@@ -64,7 +64,7 @@ describe('what a note is built from', () => {
     // it must not render — a stale claim shown as knowledge is a worse lie than
     // showing nothing.
     const notes = fieldNotes(graph, passOn('src/hub.ts', ['src/mid.ts', 'src/loner.ts']), liveness);
-    expect(notes[0]?.proved.map((file) => file.path)).toEqual(['src/mid.ts']);
+    expect(notes[0]?.proved.map((member) => member.label)).toEqual(['src/mid.ts']);
   });
 
   it('goes dormant rather than half-rendering when nothing survives', () => {
@@ -89,7 +89,7 @@ describe('what a note is built from', () => {
     // moved file appears under its new name rather than vanishing. That is the
     // job ADR-0002 exists to do.
     const notes = fieldNotes(graph, passOn('src/hub.ts', ['src/mid.ts']), liveness);
-    expect(notes[0]?.proved[0]?.path).toBe(nodePathOf('src/mid.ts'));
+    expect(notes[0]?.proved[0]?.label).toBe(nodePathOf('src/mid.ts'));
   });
 });
 
@@ -148,7 +148,7 @@ describe('the prose claims exactly what was proved', () => {
       .filter((word) => word.includes('/'));
     expect(words.length).toBeGreaterThan(0);
     for (const word of words) {
-      expect([note.subjectLabel, ...note.proved.map((f) => f.path)]).toContain(word);
+      expect([note.subjectLabel, ...note.proved.map((f) => f.label)]).toContain(word);
     }
   });
 });
@@ -243,7 +243,7 @@ describe('a note about a commit, which is not a file', () => {
   it('renders at all, rather than vanishing because the subject is not a node', () => {
     const notes = fieldNotes(commitGraph, record, livenessOf(commitGraph, VERBS));
     expect(notes).toHaveLength(1);
-    expect(notes[0]?.subjectLabel).toBe('0123456789ab — "move the retry budget"');
+    expect(notes[0]?.subjectLabel).toBe('2026-02-02  0123456789ab  "move the retry budget"');
   });
 
   it('says what changed in the commit, and never how many hops away it was', () => {
@@ -252,7 +252,7 @@ describe('a note about a commit, which is not a file', () => {
     expect(note).toBeDefined();
     if (note === undefined) return;
     const prose = noteProse(note);
-    expect(prose.claim).toContain('changed in 0123456789ab');
+    expect(prose.claim).toContain('changed in 2026-02-02  0123456789ab');
     expect(prose.claim).not.toContain('hops');
     expect(prose.claim).not.toContain('depend');
     // Two files touched, one proved: the gap is stated as revealed, never

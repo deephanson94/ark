@@ -17,16 +17,16 @@
  */
 
 import type { Atlas, Challenge, Graph, NodeId, NodeRef } from '../../atlas/index.js';
-import { byteCompare, nodeAt } from '../../atlas/index.js';
+import { byteCompare, commitAt, nodeAt } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
 import { textSubject } from '../gate.js';
 import { nameTokens } from '../paths.js';
-import { commitOf, labelOf } from './commits.js';
+import { commitLabel } from '../members.js';
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
 
-export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade: Grade): Reveal {
-  const commit = commitOf(atlas, challenge.subject);
+export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grade: Grade): Reveal {
+  const commit = commitAt(graph, challenge.subject);
   if (commit === null) {
     throw new RangeError(`challenge ${challenge.id} names a commit not in this atlas`);
   }
@@ -41,7 +41,7 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
     const path = nodeAt(graph, ref).path;
     notes.push({
       id,
-      path,
+      label: path,
       kind,
       // A commit's file list is not a path through anything — there is no chain
       // of files to walk. Leaving this empty is the honest answer; inventing a
@@ -58,7 +58,7 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
   for (const id of grade.spurious) add(id, 'spurious');
   for (const id of grade.correct) add(id, 'correct');
 
-  notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || byteCompare(a.path, b.path));
+  notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || byteCompare(a.label, b.label));
 
   // How many indexed files the commit touched, against how many were on the
   // board. The gap is exactly what sampling left out, and naming it is what
@@ -71,7 +71,7 @@ export function revealOf(atlas: Atlas, graph: Graph, challenge: Challenge, grade
       : `That is every indexed file ${commit.sha} touched.`;
 
   return {
-    subject: labelOf(commit),
+    subject: commitLabel(commit),
     summary,
     // A commit is not a node, so there is no cone to widen and no wire to draw.
     // Saying so explicitly is the point of `nothing` existing: a verb that

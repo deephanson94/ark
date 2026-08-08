@@ -14,6 +14,7 @@ import type {
   Atlas,
   AtlasEdge,
   AtlasNode,
+  Challenge,
   CoChangePair,
   CommitRecord,
   Confidence,
@@ -50,8 +51,14 @@ import type { GenerationResult as CompanionResult } from '../verbs/companion/ind
 import { generateWithReport as generateCompanionWithReport } from '../verbs/companion/index.js';
 import type { GenerationResult as PlacementResult } from '../verbs/placement/index.js';
 import { generateWithReport as generatePlacementWithReport } from '../verbs/placement/index.js';
-import type { GenerateOptions } from '../verbs/index.js';
-import { DEFAULT_GENERATE_OPTIONS } from '../verbs/index.js';
+import type { GenerationResult as ArchaeologyResult } from '../verbs/archaeology/index.js';
+import { generateWithReport as generateArchaeologyWithReport } from '../verbs/archaeology/index.js';
+import type { DisclosedFact, GenerateOptions, Verb } from '../verbs/index.js';
+import { DEFAULT_GENERATE_OPTIONS, accumulate } from '../verbs/index.js';
+import { blastRadius } from '../verbs/blastRadius/index.js';
+import { companion } from '../verbs/companion/index.js';
+import { placement } from '../verbs/placement/index.js';
+import { archaeology } from '../verbs/archaeology/index.js';
 
 /**
  * Identifies the indexer build that produced an atlas. Bump alongside
@@ -88,6 +95,7 @@ export interface IndexResult {
     readonly blastRadius: GenerationResult;
     readonly companion: CompanionResult;
     readonly placement: PlacementResult;
+    readonly archaeology: ArchaeologyResult;
   };
 }
 
@@ -364,18 +372,49 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   // argument for Companion is that it reaches files Blast Radius cannot. The
   // cost is bounded: a challenge serialises to roughly 600 bytes, so three full
   // decks at 2,000 files is ~450 KiB against a 5 MB ceiling.
-  const blast = generateWithReport(validated, options.generate);
-  const companionResult = generateCompanionWithReport(validated, options.generate);
-  const placementResult = generatePlacementWithReport(validated, options.generate);
+  //
+  // **Generation order is load-bearing now, where it used to be arbitrary.**
+  // ADR-0019 decision 7: a fact an earlier reveal already states is not a
+  // question a later verb may ask, and the tie-break is first-come — so the
+  // order of these calls decides which verb keeps a shared fact. Placement runs
+  // before Archaeology and therefore keeps the commit-membership atoms its
+  // reveal names; Archaeology yields, and `report.skipped`'s `disclosed` entry
+  // says how many subjects that cost — a number in the output rather than a
+  // counterfactual somebody has to re-run.
+  //
+  // The accumulator is verb-blind: each verb declares what its own reveal gives
+  // away (`Verb.discloses`), this loop collects the declarations, and a later
+  // generator reads a set of opaque strings rather than another verb's deck.
+  // Nothing here interprets a fact, and nothing downstream names a verb.
+  const disclosed = new Set<DisclosedFact>();
+  const run = <R extends { readonly challenges: readonly Challenge[] }>(
+    verb: Verb,
+    generate: (atlas: Atlas, options: GenerateOptions) => R,
+  ): R => {
+    const result = generate(validated, { ...options.generate, disclosed });
+    accumulate(disclosed, result.challenges, (c) => verb.discloses(c));
+    return result;
+  };
+
+  const blast = run(blastRadius, generateWithReport);
+  const companionResult = run(companion, generateCompanionWithReport);
+  const placementResult = run(placement, generatePlacementWithReport);
+  const archaeologyResult = run(archaeology, generateArchaeologyWithReport);
   const challenges = [
     ...blast.challenges,
     ...companionResult.challenges,
     ...placementResult.challenges,
+    ...archaeologyResult.challenges,
   ].sort((a, b) => byteCompare(a.id, b.id));
 
   return {
     atlas: validateAtlas({ ...validated, challenges }),
-    generation: { blastRadius: blast, companion: companionResult, placement: placementResult },
+    generation: {
+      blastRadius: blast,
+      companion: companionResult,
+      placement: placementResult,
+      archaeology: archaeologyResult,
+    },
   };
 }
 

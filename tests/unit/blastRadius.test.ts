@@ -21,9 +21,9 @@ import {
   generateWithReport,
   sampleByDistance,
   surpriseOf,
-  truthCap,
 } from '../../src/verbs/blastRadius/index.js';
 import { DEFAULT_GENERATE_OPTIONS, isGameable, blastRadius } from '../../src/verbs/index.js';
+import { truthCap } from '../../src/verbs/sample.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /** A chain `f0 → f1 → … → fN` plus `spare` unattached files to pad choice sets. */
@@ -256,7 +256,7 @@ describe('choice-set shape', () => {
 
   it('respects a smaller choice set by shrinking the answer key', () => {
     const atlas = hub(9, 16);
-    const small = generateBlastRadius(atlas, { maxChallenges: 40, candidateCount: 10 });
+    const small = generateBlastRadius(atlas, { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: 40, candidateCount: 10 });
     expect(small.length).toBeGreaterThan(0);
     for (const challenge of small) {
       expect(challenge.candidates.length).toBeLessThanOrEqual(10);
@@ -268,7 +268,7 @@ describe('choice-set shape', () => {
   it('keeps the difficulty range when it has to drop challenges', () => {
     const atlas = hub(9, 16);
     const all = generateBlastRadius(atlas);
-    const few = generateBlastRadius(atlas, { maxChallenges: 3, candidateCount: 20 });
+    const few = generateBlastRadius(atlas, { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: 3, candidateCount: 20 });
     expect(all.length).toBeGreaterThan(3);
     expect(few).toHaveLength(3);
     const spread = (cs: readonly Challenge[]): number =>
@@ -276,7 +276,7 @@ describe('choice-set shape', () => {
     // Taking the first three by id would collapse the range; even spacing over
     // the difficulty-sorted list keeps both ends.
     expect(spread(few)).toBeCloseTo(spread(all), 5);
-    expect(generateWithReport(atlas, { maxChallenges: 3, candidateCount: 20 }).report.skipped)
+    expect(generateWithReport(atlas, { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: 3, candidateCount: 20 }).report.skipped)
       .toContainEqual(['capped', all.length - 3]);
   });
 });

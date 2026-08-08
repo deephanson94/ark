@@ -10,6 +10,7 @@ export { ATLAS_VERSION, IMPORTING_LANGS, VERB_IDS, canImport } from './schema.js
 export type {
   Atlas,
   AtlasEdge,
+  AtlasId,
   AtlasNode,
   Challenge,
   CoChangePair,
@@ -30,13 +31,12 @@ export type {
   RegionKind,
   RepoMeta,
   SkipCount,
-  SubjectId,
   Truncation,
   VerbId,
 } from './schema.js';
 
 export { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
-export { byKey, byteCompare, isStrictlySorted, round2, sortedUnique } from './order.js';
+export { byKey, byteCompare, challengeOrder, isStrictlySorted, round2, sortedUnique } from './order.js';
 export {
   AtlasValidationError,
   coChangeOrder,
@@ -49,6 +49,7 @@ export { serializeAtlas } from './serialize.js';
 export type { Challengeability, Direction, Graph } from './graph.js';
 export {
   buildGraph,
+  commitAt,
   dependencies,
   dependentRoutes,
   dependents,

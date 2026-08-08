@@ -81,7 +81,7 @@ function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
   };
   const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
   const reveal = revealOf(atlas, buildGraph(atlas), challenge, grade);
-  return { grade, reveal, note: reveal.notes.find((entry) => entry.path === path) };
+  return { grade, reveal, note: reveal.notes.find((entry) => entry.label === path) };
 }
 
 describe('revealOf', () => {

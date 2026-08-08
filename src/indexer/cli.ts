@@ -87,6 +87,7 @@ function summarise(
   const blast = generation.blastRadius.report;
   const companion = generation.companion.report;
   const placement = generation.placement.report;
+  const archaeology = generation.archaeology.report;
   const lines = [
     `repo        ${atlas.repo.name} @ ${atlas.repo.head?.slice(0, 12) ?? 'no commits'}`,
     `nodes       ${atlas.nodes.length} files across ${atlas.regions.length} regions`,
@@ -96,6 +97,7 @@ function summarise(
     `blast       ${generation.blastRadius.challenges.length} of ${blast.subjectsConsidered} subjects with a radius`,
     `companion   ${generation.companion.challenges.length} of ${companion.subjectsConsidered} subjects with a change history`,
     `placement   ${generation.placement.challenges.length} of ${placement.commitsConsidered} commits Ark may ask about`,
+    `archaeology ${generation.archaeology.challenges.length} of ${archaeology.subjectsConsidered} files with a history worth asking about`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
   ];
 
@@ -168,17 +170,54 @@ function summarise(
     );
   }
 
+  for (const [reason, count] of archaeology.skipped) {
+    lines.push(`archaeology declined ${count} file(s): ${reason}`);
+  }
+  if (archaeology.keyRange !== null) {
+    const [narrowest, widest] = archaeology.keyRange;
+    lines.push(
+      `archaeology answer keys hold ${narrowest}–${widest} commits; ${archaeology.sampled} sampled from a longer history`,
+    );
+  }
+  // **The gate's firings, per heuristic, and this line is not decoration.**
+  // ADR-0019 measured each of the four as live on exactly *one* of two repos —
+  // so a session reading a zero here on this repo must not conclude the
+  // heuristic is dead, and one reading a zero on hono must not either. Printing
+  // the split is how the next person finds that out without re-running the
+  // measurement. CLAUDE.md's landmine: count how many times a path fires on a
+  // real repo before writing tests around it.
+  const fired = archaeology.heuristicFirings.filter(([, count]) => count > 0);
+  if (fired.length > 0) {
+    lines.push(
+      `archaeology ctrl-F refusals by guess: ${fired.map(([id, n]) => `${id} ${n}`).join(', ')}`,
+    );
+  }
+  if (archaeology.shallow) {
+    lines.push(
+      'archaeology REFUSED the repo: a shallow clone records its oldest commit as adding' +
+        ' the entire worktree, so it would enter every file’s answer key',
+    );
+  }
+
   // The cost of every refusal above, in the currency the player feels: how much
   // of the map can never come out of the fog, because `progress.ts` promotes a
   // node only as a subject or as a picked answer. Reported for the two verbs
   // *together*, because a node either verb can reveal is not dark.
   const provable = new Set<string>();
   for (const challenge of atlas.challenges) {
-    // `isNodeId` because a commit subject is not a node and cannot come out of
-    // the fog. Counting it here would have overstated coverage by one per
-    // Placement question — a report about the map, inflated by things not on it.
+    // `isNodeId` because a commit is not a node and cannot come out of the fog.
+    // Counting one here would overstate coverage — a report about the map,
+    // inflated by things not on it.
+    //
+    // **On both roles, and the second was missing.** The subject filter landed
+    // with Placement; the member loop below did not, because at the time a
+    // member was always a file. Archaeology's members are commits, so an
+    // unfiltered loop would add ~4 phantom ids per board to a set whose size is
+    // then subtracted from the node count — understating `unprovable` by
+    // hundreds on a repo where nothing had changed. The comment one line up was
+    // right about the class and applied to half of it.
     if (isNodeId(challenge.subject)) provable.add(challenge.subject);
-    for (const id of challenge.truth) provable.add(id);
+    for (const id of challenge.truth) if (isNodeId(id)) provable.add(id);
   }
   lines.push(
     `unprovable  ${atlas.nodes.length - provable.size} of ${atlas.nodes.length} node(s) no question can reveal` +
@@ -189,6 +228,7 @@ function summarise(
     ['blast     ', blast.distractorMix],
     ['companion ', companion.distractorMix],
     ['placement ', placement.distractorMix],
+    ['archaeol. ', archaeology.distractorMix],
   ] as const) {
     const text = mix
       .filter(([, count]) => count > 0)

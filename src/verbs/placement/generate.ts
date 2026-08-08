@@ -56,11 +56,12 @@ import type { Atlas, Challenge, NodeRef } from '../../atlas/index.js';
 import { buildGraph, byteCompare, commitIdFor, nodeAt } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
+import { retain, spread, truthCap } from '../sample.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_HEURISTICS, gradeHeuristics, textSubject } from '../gate.js';
 import { analyse } from '../companion/distractors.js';
-import type { CommitSkip, EligibleCommit } from './commits.js';
-import { commitSupply } from './commits.js';
+import type { CommitSkip, EligibleCommit } from '../commits.js';
+import { commitSupply } from '../commits.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { mixOf, selectDistractors } from './distractors.js';
 
@@ -72,14 +73,6 @@ import { mixOf, selectDistractors } from './distractors.js';
  */
 const TIER = 6;
 
-/**
- * The largest answer key that still satisfies ADR-0007's 3:1 rule at a given
- * choice-set size. Arithmetic, not a policy of this verb — the same expression
- * appears in `companion/generate.ts` for the same reason.
- */
-export function truthCap(candidateCount: number): number {
-  return Math.max(0, Math.floor((candidateCount - 1) / 3));
-}
 
 export type SkipReason =
   /** A commit touching more than `history.wideLimit` indexed files. */
@@ -143,27 +136,6 @@ export function generatePlacement(
   return generateWithReport(atlas, options).challenges;
 }
 
-/**
- * `size` members of `files`, spread evenly across it.
- *
- * Indices are strictly increasing whenever `size <= files.length` (they are
- * `round(i·(L−1)/(size−1))` over a list at least as long as the sample), so the
- * result never collapses to fewer than `size` files. `retain()` uses the same
- * arithmetic to keep both ends and the middle of a difficulty ordering.
- *
- * Order-agnostic on purpose: the caller decides what "evenly across" means by
- * choosing the ordering. See the header on why that ordering is by path.
- */
-export function spread<T>(files: readonly T[], size: number): T[] {
-  if (size >= files.length) return [...files];
-  const out: T[] = [];
-  for (let i = 0; i < size; i++) {
-    const at = size === 1 ? 0 : Math.round((i * (files.length - 1)) / (size - 1));
-    const file = files[at];
-    if (file !== undefined) out.push(file);
-  }
-  return out;
-}
 
 export function generateWithReport(
   atlas: Atlas,
@@ -384,27 +356,5 @@ export function generateWithReport(
   };
 }
 
-/**
- * Drop to `max` while keeping the difficulty range. Evenly spaced samples of the
- * difficulty-sorted list keep both ends and the middle, so the progression curve
- * survives the cut — the rule both other verbs retain under.
- */
-function retain<T extends { challenge: Challenge }>(entries: readonly T[], max: number): T[] {
-  if (entries.length <= max) return [...entries];
-  if (max <= 0) return [];
-  const ordered = [...entries].sort(
-    (a, b) =>
-      a.challenge.difficulty - b.challenge.difficulty || byteCompare(a.challenge.id, b.challenge.id),
-  );
-  const picked = new Set<number>();
-  for (let i = 0; i < max; i++) {
-    picked.add(max === 1 ? 0 : Math.round((i * (ordered.length - 1)) / (max - 1)));
-  }
-  for (let i = 0; picked.size < max && i < ordered.length; i++) picked.add(i);
-  return [...picked]
-    .sort((a, b) => a - b)
-    .map((index) => ordered[index])
-    .filter((entry): entry is T => entry !== undefined);
-}
 
 export type { CommitSkip };

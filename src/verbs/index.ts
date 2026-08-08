@@ -23,7 +23,7 @@ export type {
   NoteKind,
   NoteProse,
   NoteWeights,
-  ProvedFile,
+  ProvedMember,
   Prompt,
   Reveal,
   RevealChannel,
@@ -43,23 +43,40 @@ export type { SetScore } from './score.js';
 export { gradeSet, isGameable, scoreSet, selectAllScore } from './score.js';
 export type { DifficultyInput } from './difficulty.js';
 export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from './difficulty.js';
-export type { GateSubject, GateVerdict, HeuristicId } from './gate.js';
+export type {
+  CommitGateVerdict,
+  CommitHeuristicId,
+  GateSubject,
+  GateVerdict,
+  HeuristicId,
+  TraceSubject,
+} from './gate.js';
 export {
   COMMIT_HEURISTICS,
+  COMMIT_TRACE_HEURISTICS,
   CTRL_F_THRESHOLD,
   HISTORY_HEURISTICS,
   PATH_HEURISTICS,
+  gradeCommitHeuristics,
   gradeHeuristics,
   pathSubject,
   textSubject,
 } from './gate.js';
 export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths.js';
+export { retain, spread, truthCap } from './sample.js';
+export type { CommitSkip, CommitSupply, EligibleCommit } from './commits.js';
+export { commitSupply } from './commits.js';
+export { commitLabel, memberLabel } from './members.js';
+export type { DisclosedFact } from './disclosure.js';
+export { accumulate, disclosesNothing, touchedFact, widthFact } from './disclosure.js';
 import type { RevealChannel } from './types.js';
 import type { VerbId } from '../atlas/index.js';
+import { archaeology } from './archaeology/index.js';
 import { blastRadius } from './blastRadius/index.js';
 import { companion } from './companion/index.js';
 import { placement } from './placement/index.js';
 
+export { archaeology } from './archaeology/index.js';
 export { blastRadius, promptFor } from './blastRadius/index.js';
 export { companion } from './companion/index.js';
 export { placement } from './placement/index.js';
@@ -75,7 +92,7 @@ export { placement } from './placement/index.js';
  * shape twice" rule broken in the place where breaking it silently discards a
  * player's progress.
  */
-export const VERBS = { blastRadius, companion, placement } as const;
+export const VERBS = { archaeology, blastRadius, companion, placement } as const;
 
 /**
  * Which map channel a verb's answers may be rendered into.

@@ -61,6 +61,7 @@ import type { Atlas, Challenge, NodeRef } from '../../atlas/index.js';
 import { buildGraph, byteCompare, nodeAt } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
+import { retain, truthCap } from '../sample.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { HISTORY_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
 import type { CoChangeIndex } from './cochange.js';
@@ -71,14 +72,6 @@ import { analyse, mixOf, selectDistractors } from './distractors.js';
 /** NORTH-STAR §5: "what always changes alongside this file" is tier 3, Coupling. */
 const TIER = 3;
 
-/**
- * The largest answer key that still satisfies ADR-0007's 3:1 rule at a given
- * choice-set size. Shared with Blast Radius by arithmetic rather than by
- * import — the rule is ADR-0007's, not either verb's.
- */
-export function truthCap(candidateCount: number): number {
-  return Math.max(0, Math.floor((candidateCount - 1) / 3));
-}
 
 /** An unordered pair of node ids, as one string. `a < b` matches the matrix. */
 function pairKey(a: string, b: string): string {
@@ -417,28 +410,5 @@ export function generateWithReport(
   };
 }
 
-/**
- * Drop to `max` while keeping the difficulty range. Evenly spaced samples of
- * the difficulty-sorted list keep both ends and the middle, so the progression
- * curve survives the cut — the same rule Blast Radius retains under, for the
- * same reason.
- */
-function retain<T extends { challenge: Challenge }>(entries: readonly T[], max: number): T[] {
-  if (entries.length <= max) return [...entries];
-  if (max <= 0) return [];
-  const ordered = [...entries].sort(
-    (a, b) =>
-      a.challenge.difficulty - b.challenge.difficulty || byteCompare(a.challenge.id, b.challenge.id),
-  );
-  const picked = new Set<number>();
-  for (let i = 0; i < max; i++) {
-    picked.add(max === 1 ? 0 : Math.round((i * (ordered.length - 1)) / (max - 1)));
-  }
-  for (let i = 0; picked.size < max && i < ordered.length; i++) picked.add(i);
-  return [...picked]
-    .sort((a, b) => a - b)
-    .map((index) => ordered[index])
-    .filter((entry): entry is T => entry !== undefined);
-}
 
 export type { CoChangeIndex };

@@ -1026,6 +1026,172 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- Archaeology: the first board whose *rows* are not files ---------
+    //
+    // Reachable from the map — its subject is a node — but only after the
+    // tier-3 question about the same file, which is `challengeOrder` working.
+    // Seeded through the restore path for the same reason Placement is: §5's
+    // tiers are the progression and this is tier 5, so honest play costs 80
+    // answered boards first.
+    //
+    // What this checks that no unit test can: **the console renders twenty
+    // commits**. Every row here is a `c:` id, and until this change the panel
+    // resolved a row through `refById` and fell back to printing the raw id — a
+    // board of `c:1a2b3c4d5e6f`. The screenshot is the point.
+    const archaeologyDeck = atlas.challenges.filter((entry) => entry.verb === 'archaeology');
+    if (archaeologyDeck.length === 0) {
+      failures.push({ what: 'archaeology', detail: 'the atlas shipped no Archaeology questions' });
+    } else {
+      const target = archaeologyDeck[0];
+      if (target === undefined) throw new Error('unreachable: deck is non-empty');
+      // Seed everything *except* this one board, so the guide has exactly one
+      // question left and there is no ambiguity about which was played. Chosen
+      // by subject rather than by taking whatever came first on screen — the
+      // `.first()` landmine, which cost four milestones of a false green.
+      const seeded = JSON.stringify({
+        version: 1,
+        surveyed: [],
+        passes: atlas.challenges
+          .filter((entry) => !(entry.verb === target.verb && entry.subject === target.subject))
+          .map((entry) => ({ verb: entry.verb, subject: entry.subject, proved: entry.truth })),
+      });
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const seededPage = await context.newPage();
+      const seededErrors: string[] = [];
+      seededPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') seededErrors.push(message.text());
+      });
+      try {
+        await seededPage.addInitScript(
+          ([storageKey, value]) => window.localStorage.setItem(String(storageKey), String(value)),
+          [storageKeyFor(atlas.repo), seeded],
+        );
+        await seededPage.goto(url, { waitUntil: 'networkidle' });
+        await seededPage.waitForSelector('canvas.map', { timeout: 15_000 });
+        // Two clicks, and the difference from Placement is the design working.
+        // A node subject **has** a place, so ADR-0011's "the map stays the
+        // frame" applies: the guide flies there and selects it, leaving the
+        // inspector's own control one keystroke away. Placement's subject has
+        // nowhere to fly, which is why that button opens the board directly.
+        await seededPage.locator('.guide-action').click();
+        await seededPage.waitForSelector('.inspector-action', { timeout: 5000 });
+        const label = (await seededPage.locator('.inspector-action').innerText()).trim();
+        if (!/history/i.test(label)) {
+          // The inspector hard-coded Blast Radius's phrasing until M4 and then
+          // opened Companion boards with it. The verb owns its own wording.
+          failures.push({
+            what: 'archaeology',
+            detail: `the inspector offers "${label}" for a history question`,
+          });
+        }
+        await seededPage.locator('.inspector-action').click();
+        await seededPage.waitForSelector('.console-panel', { timeout: 5000 });
+
+        const verb = (await seededPage.locator('.console-verb').innerText()).trim().toLowerCase();
+        if (verb !== 'archaeology') {
+          failures.push({ what: 'archaeology', detail: `the guide opened a ${verb} board` });
+        }
+        const asked = (await seededPage.locator('.console-question').innerText()).trim();
+        process.stdout.write(`e2e: archaeology → ${asked}\n`);
+        const subjectPath = pathById.get(target.subject) ?? '';
+        if (!asked.includes(subjectPath)) {
+          failures.push({
+            what: 'archaeology',
+            detail: `the prompt does not name the file it is about: "${asked}"`,
+          });
+        }
+
+        // **Every row is a commit, rendered as one.** A row still showing a raw
+        // `c:` id means the console fell back to printing the identifier.
+        const rows = await seededPage.locator('.choice-path').allInnerTexts();
+        const raw = rows.filter((row) => /^c:[0-9a-f]{12}$/.test(row.trim()));
+        if (raw.length > 0) {
+          failures.push({
+            what: 'archaeology',
+            detail: `${raw.length} of ${rows.length} rows render as a bare commit id`,
+          });
+        }
+        const dated = rows.filter((row) => /^\d{4}-\d{2}-\d{2}\s/.test(row.trim()));
+        if (dated.length !== rows.length) {
+          failures.push({
+            what: 'archaeology',
+            detail: `${rows.length - dated.length} of ${rows.length} rows do not read as a commit`,
+          });
+        }
+        await seededPage.screenshot({ path: join(SHOT_DIR, 'archaeology.png') });
+
+        // **Matched on the sha the row prints, not on a reconstructed label.**
+        // `innerText` returns *rendered* text, so the label's double spaces
+        // arrive collapsed to one — comparing against the string the code built
+        // fails for a reason that has nothing to do with the board. The sha is
+        // what the row claims and it is unique, which is also the property the
+        // `.first()` landmine asks for.
+        const wanted = new Set(target.truth.map((id) => id.slice(2)));
+        let clicked = 0;
+        for (let i = 0; i < rows.length; i++) {
+          const sha = /\b([0-9a-f]{12})\b/.exec(rows[i] ?? '')?.[1];
+          if (sha === undefined || !wanted.has(sha)) continue;
+          await seededPage.locator('.choice-button').nth(i).click();
+          clicked++;
+        }
+        if (clicked !== target.truth.length) {
+          failures.push({
+            what: 'archaeology',
+            detail: `${clicked} of ${target.truth.length} answer commits were on the board`,
+          });
+        }
+        await seededPage.locator('.console-submit').click();
+        await seededPage.waitForSelector('.console-score', { timeout: 5000 });
+        const score = (await seededPage.locator('.console-score').innerText())
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!score.includes('100%')) {
+          failures.push({ what: 'archaeology', detail: `the atlas's own answer key scored "${score}"` });
+        }
+
+        // **The disclosure rule that no unit test can see from inside a verb.**
+        // The reveal may state a relation and never an identity: naming another
+        // file this commit touched would hand over that commit's Placement key
+        // (ADR-0019 decision 9). Checked against every *other* path in the repo.
+        const revealed = [
+          ...(await seededPage.locator('.console-instruction').allInnerTexts()),
+          ...(await seededPage.locator('.note-why').allInnerTexts()),
+        ].join(' ');
+        const leaked = [...pathById.values()].filter(
+          (path) => path !== subjectPath && revealed.includes(path),
+        );
+        if (leaked.length > 0) {
+          failures.push({
+            what: 'archaeology',
+            detail: `the reveal names ${leaked.length} file(s) it must not: ${leaked.slice(0, 3).join(', ')}`,
+          });
+        }
+        await seededPage.screenshot({ path: join(SHOT_DIR, 'archaeology-graded.png') });
+
+        await seededPage.locator('.console-submit').click();
+        await seededPage.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+        await seededPage.locator('.hud-notes').click();
+        await seededPage.waitForSelector('.notes-panel', { timeout: 5000 });
+        // The note names the *file*, and its members are commits — the field
+        // notes resolved a member through `refById` until this change, so this
+        // note would have been absent with nothing to say it had gone.
+        const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
+        const mine = claims.find((claim) => claim.includes(subjectPath) && claim.includes('commit'));
+        if (mine === undefined) {
+          failures.push({
+            what: 'archaeology',
+            detail: `no field note claims commits for ${subjectPath}, which was just proved`,
+          });
+        } else if (mine.includes('hops') || mine.includes('depend')) {
+          failures.push({ what: 'archaeology', detail: `an Archaeology note talks in import hops: "${mine}"` });
+        }
+        await seededPage.screenshot({ path: join(SHOT_DIR, 'archaeology-notes.png') });
+      } finally {
+        for (const error of seededErrors) failures.push({ what: 'console', detail: error });
+        await context.close();
+      }
+    }
+
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });
   } finally {
     await browser.close();

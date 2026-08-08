@@ -64,8 +64,8 @@
  * installed.
  */
 
-import type { Graph, IsoDate, NodeRef } from '../atlas/index.js';
-import { nodeAt } from '../atlas/index.js';
+import type { CommitId, Graph, IsoDate, NodeRef } from '../atlas/index.js';
+import { commitIdFor, nodeAt } from '../atlas/index.js';
 import { BAND_THRESHOLDS } from './types.js';
 import { scoreSet } from './score.js';
 import { directoryOf, nameTokens } from './paths.js';
@@ -234,6 +234,211 @@ export function gradeHeuristics(
     );
     // The real scorer, not a reimplementation of it. If the pass threshold
     // moves, this moves with it — the same property ADR-0007 gave `isGameable`.
+    const { score } = scoreSet(picked, truthIds);
+    scores.push([heuristic, score]);
+    if (score >= threshold) beatenBy.push(heuristic);
+  }
+
+  return { passed: beatenBy.length === 0, beatenBy, scores };
+}
+
+// ---------------------------------------------------------------------------
+// the other side of the board: candidates that are commits
+// ---------------------------------------------------------------------------
+
+/**
+ * Archaeology's set — ADR-0019 decision 6.
+ *
+ * A **separate function** below rather than one generalised `guess`, because the
+ * two families share nothing but `scoreSet`: everything above filters a list of
+ * *files* by path, churn or last-seen date, and everything here filters a list of
+ * *commits* by message, date or width. The abstraction that unified them would
+ * be a `pick(candidate) => boolean` with four incompatible closures behind it,
+ * which is a longer way to write two functions.
+ *
+ * **Each of these four is live on exactly one repo, and deleting either half as
+ * dead would be wrong.** `broadKnown` refuses boards here and none on hono; the
+ * other three refuse none here and dozens on hono. Same profile ADR-0018
+ * measured for `recency`, same cause: this repo is days old, so its dates barely
+ * vary and its messages rarely name files, while hono's Placement deck is too
+ * sparse to price many widths. A gate justified from one repo alone would have
+ * been half deleted.
+ *
+ * ## `recentK` is here, and ADR-0019 had it the other way round
+ *
+ * That document decided this set as `{mentions, endpoints, oldestK, broadKnown}`
+ * and left `recentK` out **on a measurement**: its throwaway probe scored
+ * `oldestK` beating band A on 24 of hono's boards and `recentK` on none. Run
+ * through the real generator both numbers move, and they swap:
+ *
+ *     firings (boards beaten)      ark    hono
+ *     mentions                       0      11
+ *     endpoints                      0       3
+ *     broadKnown                     1       0
+ *     oldestK                        0       0
+ *     recentK                        0       3
+ *
+ * So excluding `recentK` would ship **3 boards on hono that a player beats by
+ * ticking the newest rows**, for no reason except that a superseded probe said
+ * the guess was dead. ADR-0019's own rule — a heuristic has to be a guess the
+ * board actually invites — selects it, and its own text flagged the contingency:
+ * *"it is dead under this configuration"*. This is that criterion applied to
+ * re-measured data, not a new decision.
+ *
+ * **`oldestK` stays at zero firings, and that is not the same as dead.** Both
+ * are invited by the *same structural fact*: decision 3 spreads the key over the
+ * date ordering, so the key always contains the oldest **and** the newest
+ * toucher. `oldestK` loses because the distractor padding is spread across the
+ * window rather than ranked, which is §8.3 working as designed — supply the
+ * board with the thing that makes the naive guess wrong, and still score it.
+ * Measured: it is one design change away from firing (newest-first padding takes
+ * it to 1 on hono, dropping the window filter to 2), so it is a canary that
+ * catches a regression rather than a branch that cannot run. Its mean score is
+ * 0.169 here and 0.150 on hono against a 0.78 bar.
+ *
+ * Two guesses are deliberately **absent**:
+ *
+ *  - `window`, "tick everything inside the file's lifetime". Not a heuristic at
+ *    all: the pool filter (decision 5) makes every candidate contemporary, so
+ *    this guess *is* select-everything, which ADR-0007's sizing rule already
+ *    holds below the pass threshold by arithmetic. Measured on every shipped
+ *    board of both repos, it maxes out at **0.462** — the bound the sizing rule
+ *    predicts, not a coincidence. Two statements of one rule, and the weaker one
+ *    able to go stale.
+ *  - `directory`, for ADR-0018's reason, unchanged: the members have no
+ *    directory.
+ */
+export type CommitHeuristicId =
+  | 'mentions'
+  | 'endpoints'
+  | 'oldestK'
+  | 'recentK'
+  | 'broadKnown';
+
+export const COMMIT_TRACE_HEURISTICS: readonly CommitHeuristicId[] = [
+  'mentions',
+  'endpoints',
+  'oldestK',
+  'recentK',
+  'broadKnown',
+];
+
+/** The file a commit board is about, as the *player* can see it. */
+export interface TraceSubject {
+  /** The subject file's own name tokens — what a message would have to name. */
+  readonly words: ReadonlySet<string>;
+  /** The subject's `firstSeen` and `lastSeen`, which the inspector prints. */
+  readonly firstSeen: IsoDate | null;
+  readonly lastSeen: IsoDate | null;
+  /**
+   * Whether an earlier verb's reveal has printed this commit's file count.
+   *
+   * The player's knowledge, not the atlas's: `broadKnown` is only a guess a
+   * player can *make* for commits somebody told them the width of, and
+   * `disclosure.ts` is the record of who was told what. Scoring it over every
+   * commit would refuse boards for a strategy nobody could have used, which is
+   * the mistake `directory` is left out to avoid.
+   */
+  readonly widthKnown: (commit: CommitId) => boolean;
+}
+
+/**
+ * The parts of a commit a structure-blind reader can see on the board.
+ *
+ * Structural rather than `CommitRecord` so the generator can pass its own
+ * `EligibleCommit` without rebuilding one — the two agree on every field a guess
+ * below actually reads, and listing them here says which those are. `wide` and
+ * `issue` are deliberately absent: neither is on screen, so neither may enter a
+ * guess about what a player could do.
+ */
+export interface GateCommit {
+  readonly sha: string;
+  readonly date: IsoDate;
+  readonly subject: string;
+  /** Read only for its **length** — the width `broadKnown` ranks by. */
+  readonly files: readonly NodeRef[];
+}
+
+export interface CommitGateVerdict {
+  readonly passed: boolean;
+  readonly beatenBy: readonly CommitHeuristicId[];
+  readonly scores: readonly (readonly [CommitHeuristicId, number])[];
+}
+
+function commitGuess(
+  heuristic: CommitHeuristicId,
+  subject: TraceSubject,
+  candidates: readonly GateCommit[],
+  size: number,
+): GateCommit[] {
+  if (heuristic === 'mentions') {
+    // The mirror of `name`: there, the prompt's words are matched against the
+    // board's filenames; here the *subject's* filename is matched against the
+    // board's messages. Same reader, same effort, opposite direction.
+    return candidates.filter((commit) =>
+      messageTokens(commit.subject).some((token) => subject.words.has(token)),
+    );
+  }
+  if (heuristic === 'endpoints') {
+    // Two dates in the inspector against a column of dates on the board. The
+    // key always contains both ends, because decision 3 spreads it over the
+    // date ordering — which is exactly why this has to be scored rather than
+    // assumed harmless.
+    return candidates.filter(
+      (commit) => commit.date === subject.firstSeen || commit.date === subject.lastSeen,
+    );
+  }
+  if (heuristic === 'broadKnown') {
+    // The widest, among the commits an earlier reveal has priced. `size`
+    // because, like `churn`, width has no natural cut and a threshold would be
+    // a magic number.
+    return [...candidates]
+      .filter((commit) => subject.widthKnown(commitIdFor(commit.sha)))
+      .sort((a, b) => b.files.length - a.files.length || byteOrder(a.sha, b.sha))
+      .slice(0, size);
+  }
+  if (heuristic === 'recentK') {
+    return [...candidates]
+      .sort((a, b) => byteOrder(b.date, a.date) || byteOrder(a.sha, b.sha))
+      .slice(0, size);
+  }
+  // `oldestK` and `recentK`: the board alone hands both over, since every row
+  // shows a date and the list is served in date order. They are one guess read
+  // from each end, and the key contains both ends by construction (decision 3),
+  // so scoring only one of them was an asymmetry with no argument behind it.
+  return [...candidates]
+    .sort((a, b) => byteOrder(a.date, b.date) || byteOrder(a.sha, b.sha))
+    .slice(0, size);
+}
+
+function byteOrder(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Split a commit message the same way `textSubject` does. */
+function messageTokens(message: string): string[] {
+  return message
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0);
+}
+
+export function gradeCommitHeuristics(
+  subject: TraceSubject,
+  candidates: readonly GateCommit[],
+  truth: readonly GateCommit[],
+  heuristics: readonly CommitHeuristicId[] = COMMIT_TRACE_HEURISTICS,
+  threshold = CTRL_F_THRESHOLD,
+): CommitGateVerdict {
+  const truthIds = truth.map((commit) => commitIdFor(commit.sha));
+  const scores: [CommitHeuristicId, number][] = [];
+  const beatenBy: CommitHeuristicId[] = [];
+
+  for (const heuristic of heuristics) {
+    const picked = commitGuess(heuristic, subject, candidates, truth.length).map((commit) =>
+      commitIdFor(commit.sha),
+    );
     const { score } = scoreSet(picked, truthIds);
     scores.push([heuristic, score]);
     if (score >= threshold) beatenBy.push(heuristic);

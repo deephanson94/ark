@@ -371,6 +371,66 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   not the log the atlas is built from. Drift is what happens when the same measurement moves; this
   was a different measurement wearing its name. (It did pay for itself once: the merge-commit fact
   above is real, and means every merge is invisible to a commit-membership verb.)
+- **The bug you already fixed is still there, one line down, in the same function.** ADR-0018 found
+  `notes.ts` resolving a *subject* through `refById` and `continue`ing on the miss, which would have
+  dropped every Placement note in silence; it fixed that field and left the loop directly below
+  resolving each **member** the same way. A milestone later Archaeology's members became commits and
+  the identical defect was live again — same file, same function, same `continue`, four lines apart.
+  The same session found `cli.ts` carrying a comment explaining why a commit *subject* must be
+  filtered out of a coverage count, sitting above a loop that did not filter the *members*. **A fix
+  written for one field is evidence about its neighbours, not a fence around itself**: when you
+  repair a shape assumption, grep the enclosing function for every other read of the same shape
+  before you close the file.
+- **A gate heuristic measured on a prototype can be exactly backwards.** ADR-0019 decided its Ctrl+F
+  set from a throwaway probe that scored `oldestK` beating 24 of hono's boards and `recentK` beating
+  none — so it shipped the first and excluded the second, in writing, with the exclusion justified by
+  the measurement. Run through the real generator the two swap: **`oldestK` fires 0/0 and `recentK`
+  refuses 3 hono boards.** Nothing about the reasoning was wrong; the prototype simply had a different
+  distractor mix, and the guess a board invites depends on what else is on the board. The ADR's own
+  hedge — *"it is dead under this configuration"* — is the sentence that saved it. So **a heuristic
+  excluded on a measurement must be re-scored when the thing it was measured against is replaced**,
+  and "we measured it and shipped it anyway" is the sentence to avoid in both directions.
+- **A fixture can be so regular that every assertion passes vacuously.** Archaeology's first unit
+  fixture gave each commit its own date, which looks like tidiness and is a degenerate case: a file
+  touched exactly twice has a key of `{first, last}`, which is precisely what the `endpoints` guess
+  picks, so the gate refused every 2-toucher board and the fixture shipped **one**. Twelve assertions
+  about choice sets, windows and distractor mixes ran against that single board and passed. Nothing
+  was red, nothing was wrong, and nothing was being tested. Real repos land several commits a day.
+  **Check the size of the population your fixture actually produces before trusting a suite over it**
+  — the count is one line and it is the difference between a suite and a decoration.
+- **Adding the fourth of something reveals the first three never had it.** Writing Archaeology's
+  invariant into `tests/atlas/` showed that **Placement's had never been checked on the real atlas**
+  — `candidates ∩ files(commit) = truth` lived only in a unit fixture, for a whole milestone, in a
+  verb whose ADR is mostly an argument about that exact certification. The suite looked complete
+  because every verb had *a* test. When you add a peer to an existing family, list what the family is
+  checked for and check the list against each member, not against the newcomer.
+
+- **A figure about this repo is measured on the tree that does not yet contain it.** The session that
+  built Archaeology re-measured ADR-0019's tables — the ADR's own instruction — and wrote every ark
+  figure down wrong: node counts included an untracked probe script, and commit counts predated the
+  commit the section claimed to be measured at. **The hono column reproduced perfectly**, which is
+  the only reason the cause was findable at all. This is not the measured-constant landmine (a number
+  going stale); it is narrower: **the act of recording a measurement about a self-indexing repo
+  changes the thing measured**, so a figure taken from the working tree is false the moment it is
+  committed. Measure on a clean clone of a *named* commit — `git clone . /tmp/x && git -C /tmp/x
+  checkout <sha>` — and put the sha in the prose. Then the number stays checkable forever instead of
+  for one commit.
+- **Two individually-honest panels can state contradictory facts, and no suite can see it.** The
+  Archaeology reveal computed "how many commits touched this file" from the *eligible* set and the
+  field note computed it from the *retained* set. Each surface was internally consistent, each had
+  passing tests, and they disagreed on **21 of 26 boards** — with the reveal printing *"that is every
+  commit in this window that touched X"* over a record that held more, which is **false and
+  falsifiable by the player with one `git log`**. A test asserts a state; this defect lives *between*
+  two states, exactly as ADR-0016's vanishing wires did between two frames. When two surfaces
+  describe the same population, assert that they **agree**, not that each is individually right.
+- **A relation over a set of one is an identity.** A reveal that deliberately says *"it changed a file
+  that usually moves with this one"* rather than naming the file — because the name is another verb's
+  answer key — names it anyway whenever the subject has exactly one co-change partner. Measured at 4
+  such notes on hono, 2 naming a shipped Placement key member. The rule looked safe because the
+  *sentence* contains no path; safety actually rested on the set being big enough to be ambiguous,
+  which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
+  the size of the set you are quantifying over.**
+
 - **Four of seven review findings were a sentence contradicting a number in the same document.** Not
   a wrong measurement — a right one, written up backwards: a paragraph that measured a leak on 5 of
   27 boards and closed by calling it a leak "the product does not have"; a justification resting on
@@ -443,14 +503,14 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 and M3 delivered; M4 is two verbs of three, and the third is now designed but not built; the
-first three rungs toward the third-person world are shipped.** §13's M4 is *Companion, Placement,
-Archaeology* — **Companion and Placement ship; Archaeology has an accepted ADR
-([ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)) and no code**
-(see Next action). This line said "M4 delivered" for two sessions while one verb existed, which is
+**M2, M3 and M4 are delivered; the first three rungs toward the third-person world are shipped.**
+§13's M4 is *Companion, Placement, Archaeology* and **all three ship**, with
+[ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md) built rather than
+merely accepted. This line said "M4 delivered" for two sessions while one verb existed, which is
 exactly how a milestone gets skipped: the roadmap lives in `NORTH-STAR.md` §13 and a session reads it
-first, but it reads *this* line for what is already done. **A decision is not a delivery** — do not
-let the next edit of this paragraph turn an ADR into a shipped verb.
+first, but it reads *this* line for what is already done. **A decision is not a delivery** — the next
+edit of this paragraph must not turn an ADR into a shipped verb. M5 is next by the roadmap
+(tree-sitter, 3–4 more languages); the Next action below argues for one smaller thing first.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
 Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
@@ -472,20 +532,38 @@ north-up — and `n` and the HUD compass are the ways back to north, with shift-
 straightened the map would undo the turn every time a player used the most ordinary control there
 is.
 
-**Three verbs ship.** `src/verbs/blastRadius/` asks what depends on a file;
+**Four verbs ship.** `src/verbs/blastRadius/` asks what depends on a file;
 `src/verbs/companion/` asks what *changes with* it — the first verb graded on git rather than on
 imports, and the one that reaches the edgeless files the import graph structurally cannot;
 `src/verbs/placement/` shows a real commit's message and asks which files it changed
-(**[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**). Together they leave 16
-of this repo's 127 nodes unprovable where Blast Radius alone leaves 39; on hono 142 against 269.
-Placement's subject is a **commit, not a file** — `Challenge.subject` is a `SubjectId` discriminated
-by its own prefix (`n:` a node, `c:` a retained commit), and the shell asks *whether* a subject is
-placeable and *what it is called* without ever asking what it is about. It certifies a wrong answer
-from a commit's own **positive** file list rather than from absence, which is why it needs neither
-ADR-0014's truncated-walk refusal nor its shallow-clone one. §8.3's distractor strategies pick the
-wrong answers for each verb — Placement adds a fifth, `mentioned`, a file the message names and the
-diff does not — difficulty is computed per §8.4, and the player has a challenge console over the map
-with partial credit, a derived per-file reveal, and fog that lifts on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
+(**[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**); `src/verbs/archaeology/`
+shows a file and asks which commits landed on it
+(**[ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)**). Together
+they leave 19 of this repo's 140 nodes unprovable where Blast Radius alone leaves 52; on hono 138
+against 269. (Measured at `11c92c0` on a clean clone — ark indexes itself, so a figure about this
+repo is only checkable if it names the commit it was taken at, and the commit carrying the sentence
+is always one later than the one it describes.)
+
+**Both halves of the id union are now real in every role.** Placement's *subject* is a commit and
+Archaeology's *members* are — `Challenge.subject`, `.candidates` and `.truth` are all `AtlasId`,
+discriminated by the id's own prefix (`n:` a node, `c:` a retained commit), and the shell asks
+*whether* an id is placeable and *what it is called* without ever asking what it is about. The type
+was `SubjectId` until it had two roles. **Neither widening produced a single compiler error** —
+`NodeId` and `CommitId` are both aliases of `string` — so both were found by grepping every read; the
+landmine below is the list.
+
+The two history verbs are the two projections of one incidence relation, so they share
+`src/verbs/commits.ts`'s eligibility rule entirely, and both certify a wrong answer from a commit's
+own **positive** file list rather than from absence — which is why neither needs ADR-0014's
+truncated-walk refusal, and why both do need its shallow-clone one for a different mechanism.
+Archaeology adds the one rule no other verb has: **a commit an earlier verb's reveal has already
+placed here is not an answer**, off the board entirely rather than merely out of the key.
+
+§8.3's distractor strategies pick the wrong answers for each verb — Placement adds `mentioned`, a
+file the message names and the diff does not; Archaeology adds its mirror, a commit whose message
+names the subject and whose diff does not — difficulty is computed per §8.4, and the player has a
+challenge console over the map with partial credit, a derived per-member reveal, and fog that lifts
+on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
 over the straight import lines, gated by
 **[ADR-0016](./docs/decisions/0016-a-history-wire-is-drawn-only-where-no-board-is-open.md)** — a wire
 appears only where *neither* of its files still carries an open Companion board, which is pillar 3
@@ -493,8 +571,8 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. ~80 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npx ark index .` produces
-a valid ~208 KiB atlas in ~510 ms (measured at the commit that added Placement).
+sentence. ~89 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npx ark index .` produces
+a valid ~250 KiB atlas in ~455 ms (measured at `11c92c0`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -539,69 +617,51 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **build Archaeology.** The design is settled and measured —
-**[ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)** — so this is
-implementation, not another design session. §6.2's *"what problem kept recurring?"* is not gradeable;
-the reduction is **recognition instead of generation**: subject a **file**, board **commits**, truth
-the commits whose own recorded file list names it, `candidates ∩ touchedBy(subject) = truth` for the
-fourth time. Tier 5. Measured supply as decided: **22 boards here, 54 on hono**, keys of 2–6 commits.
+Next action: **the negative witness.** Every wrong pick on every board already has a *known reason
+class* — the generator chose it as a sibling, a name-alike, a structurally-near non-dependent, a
+co-change ghost, or a commit whose message names the file it never touched — and no reveal says
+which. The reveals explain a wrong pick by re-deriving a reason from the graph, which is honest and
+is not the same thing: the generator knows why it offered that answer, and throwing that away means
+the sharpest lesson on the board is reconstructed rather than stated.
 
-**Do these in this order; the first one gates the rest.**
-
-1. **The verb-blind disclosure accumulator.** ADR-0019 decision 7: a fact an earlier reveal already
-   stated is not an answer. Placement's reveal names the files a commit touched, which *is* a member
-   of those files' Archaeology keys — **55.6% of this repo's key members, and 15 of 66 boards
-   entirely**. Each verb declares the facts its reveal gives away; `build.ts` accumulates them in
-   generation order; a later verb reads a set of facts, never another verb's deck. This is the first
-   time one verb's output constrains another's, and nothing downstream is correct without it.
-2. **Widen a member from a node to a node-or-commit**, as ADR-0018 widened a subject. `ATLAS_VERSION`
-   6 → 7 and `docs/atlas-format.md` §2/§3.6 in the same commit. Six places assume a *member* is a
-   file, and they are listed in the ADR's consequences. The worst is `save.ts`'s `asIds`, whose
-   comment states the false rule in words — *"a member is always a file whatever the subject is"* —
-   and which silently drops what the next write then erases. **Third instance of that class in that
-   one file.**
-3. **Then the generator**, with the pool filtered to the subject's own `[firstSeen, lastSeen]`
-   (decision 5 — this is what makes the free date guess degenerate into select-everything) and the
-   gate at `{mentions, endpoints, oldestK}`.
-
-Four things the ADR pins that are easy to undo by accident. **The gate is four heuristics and each is
-live on exactly one repo** — `broadKnown` refuses 5 here and 0 on hono, the other three refuse 0 here
-and 33 on hono: do not delete either half as dead, and do not justify the set from one repo.
-**Order a node's challenge bucket by tier explicitly** — `challengesById` takes atlas id order, and
-`archaeology-` sorts before `blast-`, so the map's click path would serve tier 5 before tier 3 and
-falsify `main.ts`'s own comment. **The reveal must not name the other files a commit touched**, which
-would hand over Placement's key for it — ADR-0014's finding 3, running the other way. And **the
-disclosure record carries two kinds of fact**, `(commit, file)` for decision 7's exclusion and
-`(commit, width)` for the width gate; both come from the same accumulator.
-
-**Both candidates the earlier entries named are dead, and the figure a session "corrected" was right
-the first time.** Revert detection: **0** here, 1 in hono's window. Issue linkage: **0 retained
-commits here** — the sixteen `#N` references in the log are all `Merge pull request #N` subjects, and
-merge commits get no file list from `--name-status`, so none of them is ever retained; on hono it is
-356 distinct issues across 359 retained commits, a 1:1 lookup rather than a question, and it would
-still need the commit **body** that `history.ts` does not keep. *Measure this off `atlas.json`, never
-off `git log` — the ADR briefly said 16 because it counted the walked log where the question is about
-retained supply.* Birth cohorts die too: this
-repo's 128 files have **three** distinct `firstSeen` dates. Rename lineage: 1 node here against 77 on
-hono. *Every date-derived signal here is near-degenerate because this repo is three days old — treat
-the ark column as a floor and never justify a history decision from it alone.*
-
-Two things Placement measured that the implementation session will still want. **ADR-0005's
-`maxCommits` does not bound a commit-subject verb**: on this repo the cap never fires, and on hono
-`maxChallengesFor` binds first. And **`wide` is a pillar-3 judgement, not a guardrail-4 one**:
-`wideCommitFiles` (25) and `maxCommitFiles` (64) are independent, so a wide commit's file list is
-complete unless it is *also* long, and the truncation that really costs a key announces itself in
-`report.truncations` with its own limit in `kept`.
-
-Then **the negative witness**: a wrong pick already has a known reason class — sibling, name-alike,
-structurally-near non-dependent, co-change ghost — the generator *chose* it for that reason, and the
-reveal never says which. The one design fork, found before it was queued: the strategy provenance
-either ships in the atlas (a schema change, so `ATLAS_VERSION` and `docs/atlas-format.md` in the same
-commit) or is re-derived player-side from the graph, which needs no bump. Decide that first.
+**Decide the one design fork before writing anything**, because it decides whether this is a schema
+change: strategy provenance either ships in the atlas — `Challenge` gains a per-candidate strategy
+label, so `ATLAS_VERSION` 7 → 8 and `docs/atlas-format.md` in the same commit (guardrail 5) — or is
+re-derived player-side from the graph, which needs no bump and no migration but can disagree with
+what the generator actually did. The second is cheaper and is the one that can go quietly wrong; the
+first is the honest record and costs schema surface on every challenge. Measure the byte cost against
+the 5 MB ceiling before choosing, and note that `report.distractorMix` already carries the aggregate,
+so this is about *which* wrong answer rather than *how many*.
 
 Then the **overlapping Companion answer keys** in the generator, and after those the **phenomenon
 catalogue** — a repo-independent vocabulary of ~30–60 structural phenomena, the atom that would let
 anything *transfer* to another repo, which is the other half of risk #1.
+
+**Four things about Archaeology a later session will want.** `oldestK` fires **zero times on both repos** where ADR-0019 predicted 24 on hono, and it is
+kept as a canary rather than a live gate — the reasoning and the counterfactuals that revive it are
+in that ADR's *Re-measured* section, and **the honest reading is that it is one distractor-mix change
+away from mattering**, not that it is dead — with the caveat that document now records: decision 6's
+written rule ("fires on neither repo → out") condemns `oldestK` exactly as it condemned `recentK`,
+and keeping it means the operative rule is really "keep a guess the board invites when scoring it is
+free". That is defensible and it is not what was written down.
+
+`recentK` is in the set *because* the re-measurement
+found it refusing 3 hono boards after the ADR excluded it for firing zero times; that is the ADR's
+own criterion applied to better data, and it is the only place the implementation changed a decision.
+And **`uncertain` is not a refusal this verb can make** — `commitSupply` refuses every commit
+touching a barred node, so a contested file has no eligible touchers at all; the branch was
+unreachable and is gone — and so was **`tooFewCommits`**, a *second* dead refusal in the same
+six-row table, found only when a review checked the table against the code rather than against the
+argument. And the reveal's *"relations, never identities"* rule is guarded by a **set-size check**:
+over a set of one, the existential names the file. Do not simplify either guard away.
+
+**M5 is what the roadmap says next** (tree-sitter, 3–4 more languages, NORTH-STAR §13) and it is the
+larger bet: the scanner is ES-modules-only, so a Python or Go repo still produces a map with no edges
+and no questions. The negative witness is argued for first only because it is small, it improves
+every existing board rather than adding a fifth verb, and pillar 5's distractor subsystem is the one
+§8.3 calls "a real subsystem, not a helper function". If a session would rather open M5, that is a
+defensible call and not a deviation.
+
 
 The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radius set is
 `subjectsPassed` and returns subjects only, so a file unlocks its own cone by passing its own

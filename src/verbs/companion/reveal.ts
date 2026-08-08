@@ -51,7 +51,7 @@ export function revealOf(
     const together = row.get(ref);
     notes.push({
       id,
-      path,
+      label: path,
       kind,
       // A co-change pair is not a path through anything — there is no chain of
       // files to walk. Leaving this empty is the honest answer; inventing a
@@ -73,7 +73,7 @@ export function revealOf(
     (a, b) =>
       ORDER[a.kind] - ORDER[b.kind] ||
       (row.get(refById.get(b.id) ?? -1) ?? 0) - (row.get(refById.get(a.id) ?? -1) ?? 0) ||
-      byteCompare(a.path, b.path),
+      byteCompare(a.label, b.label),
   );
 
   // How many partners the matrix knows about, against how many were on the

@@ -77,7 +77,7 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
       distance === null ? [] : routeTo(routes, ref).map((step) => nodeAt(graph, step).path);
     notes.push({
       id,
-      path,
+      label: path,
       kind,
       distance,
       route,
@@ -96,7 +96,7 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
     (a, b) =>
       ORDER[a.kind] - ORDER[b.kind] ||
       (b.distance ?? 0) - (a.distance ?? 0) ||
-      byteCompare(a.path, b.path),
+      byteCompare(a.label, b.label),
   );
 
   return {

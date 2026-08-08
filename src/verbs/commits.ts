@@ -1,11 +1,22 @@
 /**
- * Which commits Placement is allowed to ask about, and why the others are not.
+ * Which commits a history verb is allowed to ask about, and why the others are
+ * not.
  *
- * Placement's ground truth is `history.commits[].files` — the indexed files a
- * commit touched. That is a **positive record**, so this verb's relationship to
- * guardrail 4 differs from Companion's, and the difference is worth stating
- * precisely — because a first draft of this file stated it *imprecisely* and
- * shipped a wrong answer key.
+ * **Shared by Placement and Archaeology**, which is why this sits at
+ * `src/verbs/` rather than inside either — the same precedent `difficulty.ts`,
+ * `gate.ts` and `paths.ts` set when Companion landed. The two verbs are the two
+ * projections of one incidence relation (*commit → which files?* and
+ * *file → which commits?*), so **the record they read is the same record** and
+ * every reason below applies unchanged to both. A copy inside Archaeology would
+ * have been the one thing CLAUDE.md forbids outright: one verb importing from
+ * another's directory, or worse, two eligibility rules that can drift apart
+ * while both look right.
+ *
+ * The ground truth on both sides is `history.commits[].files` — the indexed
+ * files a commit touched. That is a **positive record**, so these verbs'
+ * relationship to guardrail 4 differs from Companion's, and the difference is
+ * worth stating precisely — because a first draft of this file stated it
+ * *imprecisely* and shipped a wrong answer key.
  *
  *   Companion certifies a distractor by **absence** from the co-change matrix,
  *   so every channel that drops a pair — the pair cap, the count floor, the
@@ -13,12 +24,13 @@
  *   a certified exclusion. That is why a truncated walk refuses the whole repo
  *   there.
  *
- *   Placement certifies a distractor by **absence from one commit's own
- *   recorded file list**. How far back the walk went genuinely does not enter
- *   into it: retained commits are the newest walked, so a walk that stopped
- *   early removes whole commits and corrupts none. `windowTruncated` is
- *   therefore not needed here, and copying it over would delete the deck on
- *   every large repo for nothing.
+ *   Both verbs here certify a distractor by **absence from one commit's own
+ *   recorded file list** — Placement asking whether a *file* is missing from
+ *   it, Archaeology whether the *subject* is. How far back the walk went
+ *   genuinely does not enter into either: retained commits are the newest
+ *   walked, so a walk that stopped early removes whole commits and corrupts
+ *   none. `windowTruncated` is therefore not needed here, and copying it over
+ *   would delete the deck on every large repo for nothing.
  *
  * ## The shallow clone is a different mechanism, and it does bite
  *
@@ -33,7 +45,11 @@
  *
  * Nothing downstream can tell that record from a real 3-file commit, so
  * Placement ships a board quoting a true commit message over an answer key
- * naming files it never touched. Measured on a purpose-built fixture: a repo
+ * naming files it never touched — and **the same record hurts Archaeology
+ * worse**: it says that commit touched *every indexed file*, so the commit
+ * enters the answer key of every subject in the repo as a member that never
+ * touched it. Same signal, same whole-repo refusal, a blast radius larger by
+ * the file count (ADR-0019 decision 4). Measured on a purpose-built fixture: a repo
  * of 8 files that later grew to 38, cloned at depth 2, produces a board for
  * *"wave one lands"* whose key contains three `base*.ts` files that predate it
  * by eight commits, and whose `touched` says 23 against a true 15.
@@ -73,7 +89,7 @@
  * it. Tested first it fires exactly when the cap bit, and reports the
  * guardrail-4 reason rather than the pillar-3 one.
  *
- * ## One limit this verb has and cannot certify away
+ * ## One limit these verbs have and cannot certify away
  *
  * `touched` is built by mapping each historical path through `alias`, which is
  * only as good as `git log -M`'s rename detection. A rename with a heavy rewrite
@@ -83,11 +99,12 @@
  * not against what a human would call the same file. That is the accuracy trade
  * NORTH-STAR §7.2 makes for the whole product ("an 85%-accurate import graph
  * that works everywhere"), stated here rather than hidden behind the word
- * *provably*.
+ * *provably*. Read from Archaeology's side it says the same thing backwards: a
+ * rename with a heavy rewrite hides an older commit's touch of today's file, so
+ * that commit is offered as a wrong answer.
  */
 
-import type { Atlas, CommitRecord, NodeRef, SubjectId } from '../../atlas/index.js';
-import { commitIdFor } from '../../atlas/index.js';
+import type { Atlas, NodeRef } from '../atlas/index.js';
 
 export interface EligibleCommit {
   /** Abbreviated sha, as `CommitRecord.sha` carries it. */
@@ -124,7 +141,7 @@ export interface CommitSupply {
 }
 
 /**
- * Everything this verb may ask about, in the atlas's own commit order.
+ * Everything a history verb may ask about, in the atlas's own commit order.
  *
  * A commit is refused whole. Dropping only its contested members would leave
  * the remaining list looking complete while it is not — the certification a
@@ -191,44 +208,14 @@ export function commitSupply(atlas: Atlas): CommitSupply {
   return { eligible, barred, refused, fileCap, shallow };
 }
 
-const BY_ID = new WeakMap<Atlas, ReadonlyMap<string, CommitRecord>>();
-
 /**
- * The commit a subject id names, or null when this atlas no longer holds it.
+ * The commit-id lookup that used to live here is now `commitAt` on the `Graph`,
+ * and the label is `commitLabel` in `../members.js`.
  *
- * Null is a normal outcome, not an error: the commit window slides with every
- * reindex, so a save earned against last month's atlas can name a commit that
- * has fallen out of it. ADR-0011 decision 3 says a claim the atlas can no longer
- * support is dropped rather than shown stale, and returning null is how that
- * happens here.
- *
- * **Indexed, memoised per atlas — and the comment this replaces was wrong about
- * its own cost.** It claimed to be "called once per note and once per reveal",
- * which is true of the panel and false of `livenessOf`: restoring a save asks
- * `stillHolds` once per *node* per stored pass, so a linear scan here is
- * `O(nodes × commits)` string builds at load — 1.8 M of them for one Placement
- * pass on a svelte-sized repo. Same `WeakMap` shape `indexCoChange` uses, for
- * the same reason.
+ * Both moved because ADR-0019 made them shared: an `AtlasId` can be a commit in
+ * *any* role now, so the console's choice rows, the field notes' proved list and
+ * two verbs all need the same two answers. The memo this file carried — a
+ * `WeakMap<Atlas, …>` built because the lookup had no home on the structure
+ * every caller already holds — is gone with it: `buildGraph` indexes the commits
+ * beside the nodes, once.
  */
-export function commitOf(atlas: Atlas, subject: SubjectId): CommitRecord | null {
-  let index = BY_ID.get(atlas);
-  if (index === undefined) {
-    const built = new Map<string, CommitRecord>();
-    for (const commit of atlas.history.commits) built.set(commitIdFor(commit.sha), commit);
-    index = built;
-    BY_ID.set(atlas, built);
-  }
-  return index.get(subject) ?? null;
-}
-
-/**
- * What to call a commit on screen: its abbreviated sha and its own subject line.
- *
- * The message is quoted, never paraphrased. Guardrail 2 forbids authoring
- * content about a particular project; repeating what the repo already says
- * about itself is derived content, and it is the only thing that makes this
- * verb's prompt mean anything.
- */
-export function labelOf(commit: CommitRecord): string {
-  return `${commit.sha} — "${commit.subject}"`;
-}

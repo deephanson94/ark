@@ -15,7 +15,7 @@
  * the exact opposite of what ADR-0002 and §7 exist to protect.
  */
 
-import type { NodeId, RepoMeta, VerbId } from '../atlas/index.js';
+import type { AtlasId, NodeId, RepoMeta, VerbId } from '../atlas/index.js';
 import { VERB_IDS, isCommitId, isNodeId } from '../atlas/index.js';
 import type { Pass, Progress } from './progress.js';
 import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
@@ -53,9 +53,40 @@ export function storageKeyFor(repo: Pick<RepoMeta, 'root' | 'name'>): string {
   return repo.root === null ? `ark:name:${repo.name}` : `ark:${repo.root}`;
 }
 
-function asIds(value: unknown): NodeId[] {
+/**
+ * `surveyed` — **node ids only, and this one really is node-only.**
+ *
+ * `surveyed` is a set of squares on the map: it records what the player was
+ * shown, and a commit has no square. `progress.ts` filters non-nodes out on the
+ * way in for the same reason, so a `c:` id here could only have come from a
+ * hand-edited save.
+ */
+function asNodeIds(value: unknown): NodeId[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is NodeId => typeof item === 'string' && isNodeId(item));
+}
+
+/**
+ * `proved` — a place **or** an event, and this function is why the widening
+ * mattered.
+ *
+ * This was `asNodeIds`, and the comment beside its caller stated the rule in
+ * words: *"`proved` stays node-only, because a member is always a file whatever
+ * the subject is."* ADR-0019 makes that false — Archaeology proves **commits** —
+ * and the failure mode is the silent one this file already has two records of:
+ * a member this filter drops is gone at parse and **erased by the next write**,
+ * so an Archaeology pass would survive its own session and die on the second,
+ * with nothing anywhere to say so. Third instance of that exact class in this
+ * one file, after `VERB_IDS` and `asPass`.
+ *
+ * The filter is not removed, only widened: an id matching neither shape is still
+ * junk, and a save is untrusted input.
+ */
+function asMemberIds(value: unknown): AtlasId[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is AtlasId => typeof item === 'string' && (isNodeId(item) || isCommitId(item)),
+  );
 }
 
 function asPass(value: unknown): Pass | null {
@@ -73,10 +104,12 @@ function asPass(value: unknown): Pass | null {
   // failure the paragraph above describes for `VERB_IDS`, one field down: a
   // pass this rejects is dropped at parse and erased by the next write, so
   // every Placement pass would have been silently destroyed on the second
-  // session rather than failing anywhere a test could see it. `proved` stays
-  // node-only, because a member is always a file whatever the subject is.
+  // session rather than failing anywhere a test could see it.
+  //
+  // **And so is a member** (ADR-0019) — see `asMemberIds`, where the same
+  // sentence was written down as a rule and was false one verb later.
   if (typeof subject !== 'string' || !(isNodeId(subject) || isCommitId(subject))) return null;
-  return { verb: verb as VerbId, subject, proved: asIds(record['proved']) };
+  return { verb: verb as VerbId, subject, proved: asMemberIds(record['proved']) };
 }
 
 /**
@@ -102,7 +135,7 @@ export function parseProgress(text: string | null): Progress {
   const passes = (Array.isArray(record['passes']) ? record['passes'] : [])
     .map(asPass)
     .filter((pass): pass is Pass => pass !== null);
-  return { version: SAVE_VERSION, surveyed: asIds(record['surveyed']), passes };
+  return { version: SAVE_VERSION, surveyed: asNodeIds(record['surveyed']), passes };
 }
 
 export function serializeProgress(progress: Progress): string {
