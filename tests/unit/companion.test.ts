@@ -292,8 +292,6 @@ describe('grading and wording', () => {
     }
     // The summary names the subject and says how much of its history the board
     // left out — the sampling admission ADR-0008 requires, in this verb's unit.
-    // The summary names the subject and says how much of its history the board
-    // left out — the sampling admission ADR-0008 requires, in this verb's unit.
     expect(reveal.summary).toContain(reveal.subject);
     // **And it puts nothing on the map.** The map draws imports and has no
     // co-change channel, so borrowing the import cone here would render a cone
@@ -409,6 +407,38 @@ describe('a walk that stopped short refuses the whole repo (guardrail 4)', () =>
     expect(result.report.walkTruncated).toBe(true);
     expect(result.challenges).toEqual([]);
     expect(result.report.skipped).toContainEqual(['windowTruncated', 1]);
+  });
+
+  it('refuses a shallow clone, where the count comparison sees nothing wrong', () => {
+    // The second way the walk falls short, and the one a count cannot detect:
+    // `totalCommits` is `git rev-list --count HEAD`, which on a `--depth` clone
+    // counts only what is *present*. So `commitsWalked == totalCommits` and the
+    // comparison above is satisfied while history is cut at the graft boundary.
+    //
+    // `repo.root` is already null in exactly that case (ADR-0011), which is why
+    // this needs no new atlas field. Not a corner case: `git.ts` records that
+    // both large repos an earlier session measured were `--depth` clones.
+    const full = withHistory(fixtureAtlas(), pairs);
+    expect(full.repo.root).not.toBeNull();
+    expect(generateWithReport(full).challenges.length).toBeGreaterThan(0);
+
+    const shallow = validateAtlas({ ...full, repo: { ...full.repo, root: null } });
+    // The count comparison alone would still say everything is fine.
+    expect(shallow.history.commitsWalked).toBe(full.history.commitsWalked);
+    const result = generateWithReport(shallow);
+    expect(result.report.walkTruncated).toBe(true);
+    expect(result.challenges).toEqual([]);
+  });
+
+  it('still asks about a repo with no history at all, rather than refusing it', () => {
+    // `root` is null there too, but `present` is false — risk #7 says tiers 1–4
+    // stay playable without git, and a repo with no commits has no co-change
+    // matrix to be wrong about. Refusing it would be the false positive that
+    // deletes a healthy deck.
+    const bare = fixtureAtlas();
+    expect(bare.repo.root).toBeNull();
+    expect(bare.history.present).toBe(false);
+    expect(generateWithReport(bare).report.walkTruncated).toBe(false);
   });
 });
 

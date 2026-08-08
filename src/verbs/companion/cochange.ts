@@ -80,10 +80,20 @@ export interface CoChangeIndex {
    * offered as a certified exclusion when it is a genuine companion — precisely
    * the wrong answer key guardrail 4 exists to prevent.
    *
-   * There is no bound to derive here, so the verb refuses the repo instead. It
-   * fires on none of ark, hono or svelte (36, 2,758 and 11,285 commits against
-   * a 20,000 ceiling); it would fire on TypeScript. A missing deck costs
-   * nothing and a wrong answer key costs trust permanently.
+   * **Two ways the walk can fall short, and only one is a count.**
+   *
+   *  - `maxCommitsWalked` stopped it: `commitsWalked` is less than the repo's
+   *    total. Fires on none of ark, hono or svelte (36, 2,758 and 11,285
+   *    commits against a 20,000 ceiling); it would fire on TypeScript.
+   *  - **The clone is shallow.** `totalCommits` comes from
+   *    `git rev-list --count HEAD`, which on a `--depth` clone counts only what
+   *    is *present* — so the comparison sees nothing wrong while history is cut
+   *    at the graft boundary. Caught by `repo.root`, which ADR-0011 already
+   *    makes null in exactly that case. Not a corner case: `git.ts` records
+   *    that both large repos an earlier session measured were `--depth` clones.
+   *
+   * Either way there is no bound to derive, so the verb refuses the repo. A
+   * missing deck costs nothing and a wrong answer key costs trust permanently.
    */
   readonly walkTruncated: boolean;
   /**
@@ -182,7 +192,12 @@ function buildIndex(atlas: Atlas): CoChangeIndex {
     maxCount,
     wideLimit: atlas.history.wideLimit,
     capBit,
-    walkTruncated: atlas.history.commitsWalked < totalCommits,
+    // `root === null` with history present means a shallow clone — or a root we
+    // could not read, which falls on the refusing side, the direction guardrail
+    // 4 wants.
+    walkTruncated:
+      atlas.history.commitsWalked < totalCommits ||
+      (atlas.history.present && atlas.repo.root === null),
   };
 }
 

@@ -29,7 +29,7 @@ Two things make that harder than it looks.
 | `minCoChangeCount` (2) | pairs seen fewer times than this |
 | `wideCommitFiles` (25) | commits touching more indexed files than this, entirely |
 | `maxCoChangePairs` (8,000) | the tail of the matrix, sorted by count descending |
-| `maxCommitsWalked` (20,000) | **the older end of history, entirely** — see decision 7 |
+| `maxCommitsWalked` (20,000) | **the older end of history, entirely** — see decision 6 |
 
 So "this pair is not in the matrix" does **not** mean "these files never changed
 together". A generator that read absence as zero would offer a genuine companion
@@ -140,6 +140,18 @@ the atlas — `commitsWalked` against the `commits` truncation's `kept + dropped
 — and reported as `windowTruncated`. It fires on none of ark (36 commits), hono
 (2,758) or svelte (11,285); it would fire on TypeScript. A missing deck costs
 nothing and a wrong answer key costs trust permanently.
+
+**A shallow clone is the same channel and had to be added separately.**
+`totalCommits` comes from `git rev-list --count HEAD`, which on a `--depth`
+clone counts only what is *present* — so `commitsWalked == totalCommits` and the
+comparison above sees nothing wrong, while history really is cut at the graft
+boundary and a pair coupled beyond it ships as a certified exclusion. This is
+not a corner case: `git.ts` records that both large repos an earlier session
+measured were `--depth` clones. It needs no new atlas field, because
+`repo.root` is already null exactly when the clone is shallow or the root is
+unreadable (ADR-0011), so `history.present && repo.root === null` is the
+condition — and the unreadable case falls on the refusing side, which is the
+direction guardrail 4 wants.
 
 **7. The naive guess this verb is measured against is churn, not adjacency.**
 
