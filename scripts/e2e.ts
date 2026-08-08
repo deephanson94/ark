@@ -329,6 +329,95 @@ async function main(): Promise<number> {
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
 
+      // ---- history wires -------------------------------------------------
+      //
+      // ADR-0016's liveness gate, and it is the whole reason `wires` is in the
+      // HUD string. Simulating the supply in node proves the *arithmetic*; only
+      // this proves a stroke reached the canvas. CLAUDE.md's landmine is
+      // explicit that a fallback nobody counted is worse than no fallback, and
+      // a gate that never opens is the same defect wearing a different hat.
+      //
+      // The subject is chosen rather than stumbled upon, because the endpoint
+      // gate makes "answer any Companion question" an unreliable trigger: a
+      // wire is withheld while *either* end still carries an open board. So
+      // pick a subject that carries **only** a Companion question (no Blast
+      // Radius one to be served first) and whose key contains a file that is
+      // not itself a Companion subject — 24 of this repo's 27 qualify, and one
+      // answer is then enough to leave a wire standing.
+      const companionSubjects = new Set(
+        atlas.challenges.filter((c) => c.verb === 'companion').map((c) => c.subject),
+      );
+      const blastSubjects = new Set(
+        atlas.challenges.filter((c) => c.verb === 'blastRadius').map((c) => c.subject),
+      );
+      const wireTarget = atlas.challenges.find(
+        (c) =>
+          c.verb === 'companion' &&
+          !blastSubjects.has(c.subject) &&
+          c.truth.some((t) => !companionSubjects.has(t)),
+      );
+      const wireTargetPath = wireTarget === undefined ? '' : (pathById.get(wireTarget.subject) ?? '');
+      let wireHit: { x: number; y: number } | null = null;
+      for (let row = 1; row < 26 && wireHit === null; row++) {
+        for (let column = 1; column < 40 && wireHit === null; column++) {
+          const x = box.x + (box.width * column) / 40;
+          const y = box.y + (box.height * row) / 26;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-path').count()) === 0) continue;
+          if ((await page.locator('.inspector-path').innerText()).trim() !== wireTargetPath) continue;
+          wireHit = { x, y };
+        }
+      }
+
+      if (wireTarget === undefined) {
+        failures.push({ what: 'wires', detail: 'no companion-only subject in this atlas to play' });
+      } else if (wireHit === null) {
+        failures.push({ what: 'wires', detail: `${wireTargetPath} never appeared under the cursor grid` });
+      } else {
+        await page.mouse.click(wireHit.x, wireHit.y);
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.console-panel', { timeout: 5000 });
+        const verb = (await page.locator('.console-verb').innerText()).trim().toLowerCase();
+        if (verb !== 'companion') {
+          failures.push({ what: 'wires', detail: `expected a companion board, got ${verb}` });
+        }
+        const wanted = new Set(wireTarget.truth.map((id) => pathById.get(id) ?? ''));
+        const options = await page.locator('.choice-button').count();
+        for (let i = 0; i < options; i++) {
+          const button = page.locator('.choice-button').nth(i);
+          if (wanted.has((await button.innerText()).trim())) await button.click();
+        }
+        await page.locator('.console-submit').click();
+        await page.waitForSelector('.console-score', { timeout: 5000 });
+
+        // The reveal must promise only what the map will actually draw. The
+        // shipped bug this guards against ran the other way — the panel said
+        // "now drawn on the map" beside a map that had stopped drawing it.
+        const summary = (await page.locator('.console-evidence, .console-summary').allInnerTexts())
+          .join(' ')
+          .trim();
+        process.stdout.write(`e2e: companion summary → ${summary.replace(/\s+/g, ' ')}\n`);
+
+        await page.locator('.console-submit').click();
+        await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+        await page.waitForFunction(
+          () => /(\d+) wires/.test(document.querySelector('.hud-detail')?.textContent ?? ''),
+          undefined,
+          { timeout: 5000 },
+        );
+        const wires = Number(
+          /(\d+) wires/.exec(await page.locator('.hud-detail').innerText())?.[1] ?? '0',
+        );
+        process.stdout.write(`e2e: history wires after one companion pass → ${wires}\n`);
+        if (wires <= 0) {
+          failures.push({
+            what: 'wires',
+            detail: `passing ${wireTargetPath} drew no co-change wire — the gate never opened`,
+          });
+        }
+        await page.screenshot({ path: join(SHOT_DIR, 'wires.png') });
+      }
+
       // ---- persistence -------------------------------------------------
       // The only check that M3's first rung actually works. Everything in
       // `save.test.ts` is a fake store; this is a real browser, a real reload,

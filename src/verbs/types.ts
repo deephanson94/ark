@@ -144,16 +144,25 @@ export interface Reveal {
    * withholding the picture would make `summary` a lie ("now drawn on the map"
    * beside a map that is not drawing it).
    *
+   * `coChangeTies` means the pairs this reveal has just **named in words** may
+   * now be drawn as history wires. Deliberately the named pairs and not the
+   * subject's whole co-change row: the summary sentence states the row's
+   * *cardinality* ("has changed with N files in all"), while the notes state
+   * the *identities* of the board members only. Drawing the row would put 31
+   * pairs on this repo's map that no reveal ever named — 18% of the finished
+   * layer — which is a new disclosure dressed as a rendering. See ADR-0016.
+   *
    * `nothing` means this verb revealed something the map has no channel for.
-   * Companion is `nothing` today: the map draws imports and has no history
-   * channel at all, which is the thing the next rung is for.
+   * No verb returns it today; it is kept because a verb that reveals a relation
+   * the map cannot draw must be able to say so rather than borrow a channel
+   * that means something else, which is how the first three leaks happened.
    *
    * On the contract rather than in the console because *"which cone may be
    * drawn"* is a claim about a verb's own answer, and this codebase has three
    * separate instances on record of that judgement being made outside the verb
    * and getting it wrong.
    */
-  readonly unlocks: 'importRadius' | 'nothing';
+  readonly unlocks: 'importRadius' | 'coChangeTies' | 'nothing';
 }
 
 /**

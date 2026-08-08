@@ -22,6 +22,8 @@ import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
 import { columns } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
+import type { Tie, Ties } from './ties.js';
+import { tieWidth, tiesAt } from './ties.js';
 import { visibleEdges, visibleNodes } from './scene.js';
 import { levelFor, styleFor } from './zoom.js';
 
@@ -40,6 +42,17 @@ export interface FrameInput {
    * always-visible summits and always labelled, at every zoom level.
    */
   readonly peaks: ReadonlySet<NodeRef>;
+  /**
+   * Co-change wires the player has earned the right to see (`ties.ts`).
+   *
+   * Handed in already filtered, like everything else here — this module draws
+   * what it is given and never decides who may see what. That property is what
+   * kept the three ADR-0014 leaks out of `draw.ts` and into the modules that
+   * actually know which verb is asking.
+   */
+  readonly ties: Ties;
+  /** Whose wires draw bright rather than at rest. */
+  readonly tieFocus: NodeRef | null;
 }
 
 export interface FrameStats {
@@ -49,6 +62,13 @@ export interface FrameStats {
   readonly level: string;
   /** Peaks actually drawn this frame. A measured value, for the liveness test. */
   readonly peaksDrawn: number;
+  /**
+   * Wires actually stroked this frame. Measured for the same reason
+   * `peaksDrawn` is: CLAUDE.md's landmine says a path that never executes is
+   * worse than no path, and the only way to know this one fires is to count it
+   * on a real repo rather than to assert it in a fixture.
+   */
+  readonly tiesDrawn: number;
 }
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -58,8 +78,19 @@ const REGION_LABEL_PADDING = 10;
 
 const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 
+/**
+ * How far a history wire bows off the straight line, as a fraction of its span.
+ *
+ * Shallow on purpose. Enough that the eye separates an arc from an import line
+ * instantly — including where the two connect the same pair, which is the case
+ * that carries the lesson — and not so much that a wire wanders across nodes it
+ * has nothing to do with. Curvature is the channel; distance is not.
+ */
+const TIE_BOW = 0.16;
+
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks } = input;
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus } =
+    input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
 
@@ -102,6 +133,54 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   }
   context.setLineDash([]);
   context.globalAlpha = 1;
+
+  // ---- history wires ----------------------------------------------------
+  //
+  // The co-change relation, drawn as shallow arcs so it separates from the
+  // straight import lines *before* colour registers — which matters because
+  // many companions also import each other, and a straight wire would hide
+  // underneath the import edge exactly where the lesson is ("coupled twice
+  // over", `companion/reveal.ts`'s `whyYes`).
+  //
+  // Drawn at **every** zoom level, unlike imports. There are at most a few
+  // dozen, they are earned rather than structural, and the long cross-region
+  // wires — the ones that say "these two move together and nothing connects
+  // them" — are exactly what territory zoom is for.
+  //
+  // `a < b` in every `Tie`, so the bow direction is a property of the pair and
+  // a wire does not flip sides between frames.
+  let tiesDrawn = 0;
+  const focused = tiesAt(ties, tieFocus);
+  const bright = new Set(focused);
+  const arc = (tie: Tie, colour: string, alpha: number): void => {
+    const from = scene.nodes[tie.a];
+    const to = scene.nodes[tie.b];
+    if (from === undefined || to === undefined) return;
+    if (!onScreen.has(tie.a) && !onScreen.has(tie.b)) return;
+    const a = project(from);
+    const b = project(to);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    // Control point: the midpoint pushed perpendicular by a fixed fraction of
+    // the span, so curvature reads the same at every distance.
+    context.quadraticCurveTo(
+      (a.x + b.x) / 2 - dy * TIE_BOW,
+      (a.y + b.y) / 2 + dx * TIE_BOW,
+      b.x,
+      b.y,
+    );
+    context.strokeStyle = colour;
+    context.globalAlpha = alpha;
+    context.lineWidth = tieWidth(tie.count) * Math.min(1, Math.max(0.45, camera.scale));
+    context.stroke();
+    tiesDrawn += 1;
+  };
+  for (const tie of ties.all) if (!bright.has(tie)) arc(tie, INK.tieRest, 1);
+  for (const tie of focused) arc(tie, INK.tie, 1);
+  context.globalAlpha = 1;
+  context.lineWidth = 1;
 
   // ---- nodes ------------------------------------------------------------
   for (const node of nodes) {
@@ -288,7 +367,14 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   }
 
   context.restore();
-  return { nodesDrawn: nodes.length, edgesDrawn: edges.length, labelsDrawn, level, peaksDrawn };
+  return {
+    nodesDrawn: nodes.length,
+    edgesDrawn: edges.length,
+    labelsDrawn,
+    level,
+    peaksDrawn,
+    tiesDrawn,
+  };
 }
 
 
@@ -315,6 +401,14 @@ export function drawOrbitFrame(
   const level = levelFor(camera.scale);
   const style = styleFor(level);
 
+  // **`ties` is deliberately not destructured, and the orbit draws no history
+  // wires this session.** Stated rather than omitted, because an omission looks
+  // identical to an oversight and CLAUDE.md's landmine says to grep every read
+  // of shared player state and ask which verb's claim it is. The reason is
+  // geometric, not editorial: a `Tie` is a curve through the *flat* plane, and
+  // ADR-0013 gives every node a height, so the same arc in the orbit would
+  // either pierce the columns it passes or need a projection nothing has
+  // decided yet. `tiesDrawn: 0` below is therefore honest rather than a stub.
   context.save();
   context.fillStyle = INK.ground;
   context.fillRect(0, 0, viewport.width, viewport.height);
@@ -479,6 +573,7 @@ export function drawOrbitFrame(
   return {
     nodesDrawn: ordered.length,
     edgesDrawn,
+    tiesDrawn: 0,
     labelsDrawn: placed.length,
     level,
     // **Named peaks**, not "peaks I looped past". The flat map draws summit

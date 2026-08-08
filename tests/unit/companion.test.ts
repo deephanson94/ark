@@ -293,13 +293,22 @@ describe('grading and wording', () => {
     // The summary names the subject and says how much of its history the board
     // left out — the sampling admission ADR-0008 requires, in this verb's unit.
     expect(reveal.summary).toContain(reveal.subject);
-    // **And it puts nothing on the map.** The map draws imports and has no
-    // co-change channel, so borrowing the import cone here would render a cone
-    // the player never earned — and, by the containment argument in `depthFor`,
-    // expose part of the open Blast Radius answer for every file under it. This
-    // is the leak that has now been produced three separate ways; the verb
-    // declaring what it revealed is what stops a fourth.
-    expect(reveal.unlocks).toBe('nothing');
+    // **It puts history wires on the map, and specifically not the import
+    // cone.** Borrowing `importRadius` here would render a cone the player
+    // never earned and — by the containment argument in `depthFor` — expose
+    // part of the open Blast Radius answer for every file under it. That is the
+    // leak this codebase has produced three separate ways; the verb declaring
+    // what it revealed is what stops a fourth.
+    expect(reveal.unlocks).toBe('coChangeTies');
+    // **The sentence must not promise a drawing the map will not make.** A wire
+    // is withheld while either of its files still carries an open Companion
+    // board, so "now drawn on the map" is false for 79% of the pairs named here
+    // by the time the panel closes. The claim is about the record; the timing is
+    // stated. Asserting the *absence* of the tempting phrase, because that is
+    // the regression — a later session tightening the wording back up.
+    expect(reveal.summary).toContain('history wire');
+    expect(reveal.summary).toContain("once both files' questions are answered");
+    expect(reveal.summary).not.toContain('now drawn');
   });
 });
 

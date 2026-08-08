@@ -28,6 +28,8 @@ import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, provedThrou
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
+import type { Ties } from './ties.js';
+import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
@@ -106,6 +108,48 @@ function start(scene: Scene, root: HTMLElement): void {
   let tracedRadius: ReadonlySet<NodeId> = provedThrough(progress, liveness, 'blastRadius');
 
   /**
+   * The history wires the map may currently draw, and which of them burn bright.
+   *
+   * **Not `provedThrough`, and that is the first half of the rule.** The obvious
+   * move is to reuse the helper `tracedRadius` uses, which returns subjects
+   * *and the members the player picked correctly in someone else's question*.
+   * For imports that is bounded by containment — a member's cone is a subset of
+   * the cone it was proved inside. Co-change has no containment: a member's row
+   * reaches anywhere on the map. Simulated over this repo's deck, that gate
+   * draws **89 members of still-open answer keys in a single frame**, across 28
+   * of 40 subjects. Fifth instance of ADR-0014's bug class, caught by measuring
+   * instead of by reading — ADR-0016.
+   *
+   * **And there is exactly one gate, which is the second half.** An earlier
+   * version of this file drew every pair the open reveal named — ungated, on
+   * the argument that the panel a few pixels away was naming them anyway — and
+   * kept the gated layer underneath. It was measurably wrong: **79% of the
+   * wires that flash at the grade vanish when the panel closes**, 6 promised
+   * and 1 kept on the board the e2e happens to play, and nothing at all on 4 of
+   * 40. That is the exact defect the `onGraded` comment below records shipping
+   * once already — a panel saying "now drawn on the map" beside a map that is
+   * not drawing it. One rule, one place: every one of ADR-0014's leaks was a
+   * rule that lived twice.
+   */
+  let ties: Ties = NO_TIES;
+  let tieFocus: NodeRef | null = null;
+
+  const retie = (): void => {
+    const answered = answeredKeys(progress, liveness);
+    const passed: Challenge[] = [];
+    const openBoards = new Set<NodeRef>();
+    for (const bucket of challengesById.values()) {
+      for (const challenge of bucket) {
+        if (challenge.verb !== 'companion') continue;
+        const ref = scene.graph.refById.get(challenge.subject);
+        if (answered.has(answerKey(challenge.verb, challenge.subject))) passed.push(challenge);
+        else if (ref !== undefined) openBoards.add(ref);
+      }
+    }
+    ties = tiesNamedBy(scene.atlas, scene.graph, passed, openBoards);
+  };
+
+  /**
    * What is under the pointer, in whichever view is on screen.
    *
    * One function, used by hover and by click, because the two paths disagreeing
@@ -124,6 +168,7 @@ function start(scene: Scene, root: HTMLElement): void {
     progress = next;
     fog = deriveFog(progress, liveness, shore);
     tracedRadius = provedThrough(progress, liveness, 'blastRadius');
+    retie();
     saveProgress(store, saveKey, progress);
   };
 
@@ -173,6 +218,8 @@ function start(scene: Scene, root: HTMLElement): void {
     selector = { ...selector, answered };
   };
   retally();
+  // Wires a restored save has already earned, before the first frame.
+  retie();
 
   const regionOf = (subject: NodeId): string => {
     const ref = scene.graph.refById.get(subject);
@@ -194,6 +241,22 @@ function start(scene: Scene, root: HTMLElement): void {
    * imports S then `dependents(D) ⊆ dependents(S)`, so hovering any suspected
    * member of the answer reads off the rest.
    */
+  /**
+   * Whose wires burn bright.
+   *
+   * A node with no drawn wires focuses nothing, so this is `null` for every
+   * unproven node **and** for every proven one the history has nothing to say
+   * about — which is the honest rendering of an edgeless file rather than a
+   * special case for it.
+   *
+   * Note what this deliberately does *not* do: it never asks whether the node
+   * is understood, proved or surveyed. `ties` was already gated when it was
+   * built; asking a second question here would be a second place for the rule
+   * to live, and every one of ADR-0014's leaks was a rule that lived twice.
+   */
+  const focusFor = (node: SceneNode | null): NodeRef | null =>
+    node !== null && ties.byNode.has(node.ref) ? node.ref : null;
+
   const depthFor = (node: SceneNode): number =>
     tracedRadius.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
 
@@ -241,6 +304,10 @@ function start(scene: Scene, root: HTMLElement): void {
   const hud = createHud(scene.atlas, [notebook.toggle]);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade, reveal) {
+      // Before `remember`, which recomputes the wires: the verb says what it
+      // revealed, and a reveal that named its pairs licenses drawing them
+      // whatever the score. Same rule as `importRadius` one branch down, same
+      // reason — guardrail 6, and a `summary` that would otherwise be a lie.
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
       retally();
@@ -283,6 +350,7 @@ function start(scene: Scene, root: HTMLElement): void {
             ref,
             reveal.unlocks === 'importRadius' ? FULL_RADIUS : depthFor(node),
           );
+          tieFocus = focusFor(node);
         }
       }
       describe(selected);
@@ -313,6 +381,7 @@ function start(scene: Scene, root: HTMLElement): void {
     // unlabelled dot is arriving nowhere.
     camera = centreOn(camera, node, DISTRICT_SCALE);
     radius = blastRadius(scene, node.ref, depthFor(node));
+    tieFocus = focusFor(node);
     describe(node);
     invalidate();
   });
@@ -350,6 +419,8 @@ function start(scene: Scene, root: HTMLElement): void {
         radius,
         questions: unanswered,
         peaks,
+        ties,
+        tieFocus,
       };
       const stats =
         orbit === null
@@ -361,7 +432,11 @@ function start(scene: Scene, root: HTMLElement): void {
         // `peaks` is in the HUD because it is the only measured proof that
         // ADR-0013's elevation reaches a pixel. CLAUDE.md: a measurement of
         // "how many X" needs a gate proving X happened, and the e2e reads this.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks`,
+        // `wires` is here for the identical reason and it is the newer of the
+        // two claims, so it is the one more likely to be quietly false: a gate
+        // that never opens draws a layer nobody ever sees, and simulating the
+        // supply in node proves the *arithmetic*, not that a stroke happened.
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires`,
         unanswered.size,
       );
       // Recomputed, never latched: a pass can decay and a reindex can resurrect
@@ -423,9 +498,11 @@ function start(scene: Scene, root: HTMLElement): void {
     // Hovering previews the question — "change this, what imports it?" — at the
     // depth `depthFor` allows, which for anything unproven is one hop.
     radius = found === null ? null : blastRadius(scene, found.ref, depthFor(found));
+    tieFocus = focusFor(found);
     if (found !== null) describe(found);
     else if (selected !== null) {
       radius = blastRadius(scene, selected.ref, depthFor(selected));
+      tieFocus = focusFor(selected);
       describe(selected);
     } else describe(null);
     canvas.style.cursor = found === null ? 'grab' : 'pointer';
@@ -443,8 +520,10 @@ function start(scene: Scene, root: HTMLElement): void {
     if (found !== null) {
       remember(recordSurvey(progress, [found.id]));
       radius = blastRadius(scene, found.ref, depthFor(found));
+      tieFocus = focusFor(found);
     } else {
       radius = null;
+      tieFocus = null;
     }
     describe(found);
     invalidate();

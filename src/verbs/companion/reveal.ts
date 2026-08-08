@@ -82,15 +82,36 @@ export function revealOf(
   // reused).
   const partners = row.size;
   const shown = challenge.truth.length;
+  // **What this sentence may promise, and what it must not.**
+  //
+  // The obvious wording — "now drawn on the map" — is false within one click.
+  // A wire is withheld while *either* of its files still carries an open
+  // Companion question, so 79% of the pairs named here are not on the map when
+  // the panel closes (6 named and 1 drawn on the board the e2e plays). That is
+  // the defect `main.ts`'s `onGraded` records shipping once already, in the
+  // other direction: a panel insisting the map was drawing something it had
+  // stopped drawing.
+  //
+  // So the claim is about the *record*, which is unconditional, and the timing
+  // is stated rather than glossed. A verb may say what it revealed; only the
+  // player knows what is on screen.
+  const wires = shown === 1 ? 'a history wire' : 'history wires';
+  const when = `, drawn once both files' questions are answered`;
   const summary =
     partners > shown
-      ? `${subjectPath} has changed with ${partners} files in all — ${partners - shown} more than this board asked about.`
-      : `That is every file the history records changing with ${subjectPath}.`;
+      ? `${subjectPath} has changed with ${partners} files in all — ${partners - shown} more than this board asked about. The ${shown} it did ask about ${shown === 1 ? 'becomes' : 'become'} ${wires}${when}.`
+      : `That is every file the history records changing with ${subjectPath}, and ${shown === 1 ? 'it becomes' : 'they become'} ${wires}${when}.`;
 
-  // The map has no co-change channel, so this reveal puts nothing on it — and
-  // it must not borrow the *import* cone to look like it did, which is the leak
-  // this verb has already produced three times.
-  return { subject: subjectPath, summary, unlocks: 'nothing', notes };
+  // **Exactly the pairs named above, and not the subject's row.** The sentence
+  // states how many partners exist; the notes state *which* of them were on the
+  // board. Drawing the row would put 31 pairs on this repo's finished map that
+  // no reveal ever named — 18% of the layer — and ADR-0011 decision 3 is
+  // precisely the rule that a count may be shown while a name must be earned.
+  //
+  // The count above is still `row.size`, deliberately: the gap between what
+  // exists and what was asked is the honest part, and hiding it to make the
+  // sentence tidier is how "which of these" stops being a fair question.
+  return { subject: subjectPath, summary, unlocks: 'coChangeTies', notes };
 }
 
 function whyYes(

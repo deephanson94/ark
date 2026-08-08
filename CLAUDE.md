@@ -229,6 +229,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   how many times it fires on a real repo before you write tests around it.** A path that never
   executes is worse than no path: it is code, comments and test surface asserting a behaviour the
   product does not have.
+- **A payoff that appears and then withdraws is a lie the tests cannot see.** The co-change layer
+  first shipped with two gates: an ungated flash of every pair the open reveal named, over a gated
+  persistent layer. It reads perfectly in the moment and the reveal said *"now drawn on the map"* —
+  and **79% of those wires vanish when the panel closes** (6 promised, 1 kept, and 4 of 40 boards
+  keep nothing at all). Every suite passed, because a suite checks a state and this defect lives in
+  the *transition* between two. It surfaced only from asking "how many of the things I just promised
+  are still there one click later" and computing it. So when a rendering is gated, **count what
+  survives the gate, not what the gate emits** — and prefer one rule to two, since every one of
+  ADR-0014's leaks was a rule that lived twice.
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human
@@ -318,7 +327,12 @@ graph structurally cannot. Together they leave 27 of this repo's 113 nodes unpro
 Radius alone leaves 35; on hono 178 against 269, on svelte 3,283 against 3,776. The four §8.3
 distractor strategies pick the wrong answers for each, difficulty is computed per §8.4, and the
 player has a challenge console over the map with partial credit, a derived per-file reveal, and fog
-that lifts on what you prove. **Progress survives a
+that lifts on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
+over the straight import lines, gated by
+**[ADR-0016](./docs/decisions/0016-a-history-wire-is-drawn-only-where-no-board-is-open.md)** — a wire
+appears only where *neither* of its files still carries an open Companion board, which is pillar 3
+rather than a disclosure rule, because ink on the map is a lookup where text in a closed panel is a
+memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown. 49 KiB of JS, zero runtime
 dependencies, first paint ~240 ms. `npx ark index .` produces a valid ~101 KiB atlas in ~270 ms.
@@ -363,24 +377,13 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **draw the co-change relation on the map.** Companion asks about a coupling the player
-is never shown — the map has no history channel at all — so the reveal does all the teaching, and
-§4's "fog lifts around what you proved" is only half kept: a Companion pass lifts fog on what it
-proved and changes nothing else on screen. It is the one change that would make the new verb's
-payoff match Blast Radius's, and the data is already in the atlas.
+Next action: **map rotation between challenges.** `docs/prior-art.md` §4.4 has called it the
+highest-leverage lowest-cost item in the whole writeup for two sessions now and it is still not done:
+map-derived spatial memory is **orientation-locked**, ours is north-up forever, and the verbs pick an
+arbitrary subject each time — so we are training exactly the alignment-specific knowledge the
+evidence says does not transfer.
 
-**A measured correction to the brief this session inherited**: `maxCommitFiles` does **not** limit
-the git verbs' co-change signal. The matrix is accumulated from `touched` *before* that truncation,
-and over every walked commit rather than the 500 retained — verified against `git log`, where hono's
-`context.ts`/`context.test.ts` pair scores 72 and the newest 500 commits contain about 5 of them.
-What actually bounds Companion is `maxCommitsWalked` (20,000), `wideCommitFiles` (25) and
-`maxCoChangePairs` (8,000, which has never bitten on any repo measured). `maxCommitFiles` limits
-**Placement and Archaeology**, whose ground truth *is* a retained commit's file list — which is one
-reason neither of them was the verb to build first.
-
-Then, in evidence order: **map rotation between challenges** (`docs/prior-art.md` §4.4 — map-derived
-spatial memory is *orientation-locked*, ours is north-up forever, and it is the highest-leverage
-lowest-cost item in the whole writeup); **the negative witness** (a wrong pick already has a known
+Then, in evidence order: **the negative witness** (a wrong pick already has a known
 reason class — sibling, name-alike, distance n±1, co-change ghost — and we never say it); and **the
 phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that would give
 the product an atom that *transfers* to another repo, which is risk #1.
