@@ -15,7 +15,7 @@ import type { Camera, Viewport } from '../../src/player/camera.js';
 import { worldToScreen } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
 import { NORTH, rotate } from '../../src/player/camera.js';
-import { DEFAULT_ORBIT, OVERHEAD, columns, pickColumn, project, tip } from '../../src/player/orbit.js';
+import { DEFAULT_ORBIT, OVERHEAD, pickColumn, projectAll, project, tip } from '../../src/player/orbit.js';
 
 const camera: Camera = { x: 40, y: -15, scale: 1.7, bearing: NORTH };
 const viewport: Viewport = { width: 900, height: 600 };
@@ -160,7 +160,7 @@ describe('columns', () => {
     // buffer and therefore no WebGL yet.
     const near = node(0, 90, 2, 'n:00000000000a');
     const far = node(0, -90, 2, 'n:00000000000b');
-    const drawn = columns([near, far], { x: 0, y: 0, scale: 1, bearing: NORTH }, viewport, DEFAULT_ORBIT);
+    const drawn = projectAll([near, far], { x: 0, y: 0, scale: 1, bearing: NORTH }, viewport, DEFAULT_ORBIT).ordered;
     expect(drawn.map((c) => c.node.id)).toEqual(['n:00000000000b', 'n:00000000000a']);
     // And the nearer one really is lower on screen, which is what "nearer" means
     // in a tipped view — the assertion above would pass on a reversed sort if
@@ -171,8 +171,8 @@ describe('columns', () => {
   it('breaks a depth tie on id, so two machines draw the same frame', () => {
     const a = node(-10, 0, 1, 'n:00000000000a');
     const b = node(10, 0, 1, 'n:00000000000b');
-    const forwards = columns([a, b], camera, viewport, DEFAULT_ORBIT).map((c) => c.node.id);
-    const backwards = columns([b, a], camera, viewport, DEFAULT_ORBIT).map((c) => c.node.id);
+    const forwards = projectAll([a, b], camera, viewport, DEFAULT_ORBIT).ordered.map((c) => c.node.id);
+    const backwards = projectAll([b, a], camera, viewport, DEFAULT_ORBIT).ordered.map((c) => c.node.id);
     expect(forwards).toEqual(backwards);
   });
 });
@@ -234,5 +234,63 @@ describe('pickColumn', () => {
     const target = node(12, -7, 5, 'n:00000000000a');
     const flat = worldToScreen(camera, viewport, target);
     expect(pickColumn([target], camera, viewport, straightDown, flat)?.id).toBe('n:00000000000a');
+  });
+});
+
+describe('the cull', () => {
+  // Measured on a synthetic 2,000-node grid before this was written, because a
+  // cull that never fires is a filter asserting a behaviour the product does
+  // not have: **0% culled at a fitted territory view** (the whole map is on
+  // screen, so there is nothing to drop), **61% at district**, **93% at
+  // street**. The saving is the sort and the per-column draw; projection is
+  // O(n) either way.
+
+  /** Same shape as `node`, but with distinct refs so `byRef` can hold both. */
+  const at = (x: number, y: number, ref: number): SceneNode => ({
+    ...node(x, y, 1, `n:00000000000${ref}`),
+    ref,
+  });
+
+  it('drops a column that projects off the side, and keeps one that does not', () => {
+    const camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+    const { ordered } = projectAll([at(0, 0, 0), at(40_000, 0, 1)], camera, viewport, DEFAULT_ORBIT);
+    expect(ordered.map((c) => c.node.ref)).toEqual([0]);
+  });
+
+  it('still projects the culled column, so an edge to it can be drawn', () => {
+    // The whole subtlety. Edges are looked up by ref; dropping the projection
+    // of an off-screen endpoint would delete a line the player can see most of,
+    // which is what a naive cull does.
+    const camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+    const { ordered, byRef } = projectAll(
+      [at(0, 0, 0), at(40_000, 0, 1)],
+      camera,
+      viewport,
+      DEFAULT_ORBIT,
+    );
+    expect(ordered).toHaveLength(1);
+    expect(byRef.size).toBe(2);
+  });
+
+  it('drops a column that projects off the top or the bottom', () => {
+    // **The x test alone let a mutation removing the vertical cull survive.**
+    // The vertical extent is `[top.y, base.y]` — the column is lifted above its
+    // footing — so the two edges need different ends of it, which is exactly
+    // the asymmetry an x-only test cannot see.
+    const camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+    const above = projectAll([at(0, -40_000, 0)], camera, viewport, DEFAULT_ORBIT);
+    const below = projectAll([at(0, 40_000, 0)], camera, viewport, DEFAULT_ORBIT);
+    expect(above.ordered).toHaveLength(0);
+    expect(below.ordered).toHaveLength(0);
+    expect(above.byRef.size).toBe(1);
+  });
+
+  it('culls nothing when the whole world is on screen', () => {
+    // The anti-vacuity twin: a cull that dropped columns here would be cutting
+    // visible ink, and the measurement above says this is the fitted case.
+    const camera: Camera = { x: 0, y: 0, scale: 0.2, bearing: NORTH };
+    expect(
+      projectAll([at(-200, -200, 0), at(200, 200, 1)], camera, viewport, DEFAULT_ORBIT).ordered,
+    ).toHaveLength(2);
   });
 });

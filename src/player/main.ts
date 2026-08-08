@@ -29,6 +29,7 @@ import {
 } from './camera.js';
 import { createConsole } from './challenge.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
+import type { Box } from './labels.js';
 import type { Fog } from './fog.js';
 import { coverage, landmarks } from './fog.js';
 import { GOLDEN_TURN, TURN_MS, bearingDuring } from './heading.js';
@@ -566,15 +567,50 @@ function start(scene: Scene, root: HTMLElement): void {
     invalidate();
   });
 
+  const legend = createLegend(scene);
   root.replaceChildren(
     canvas,
     hud.root,
-    createLegend(scene),
+    legend,
     inspector.root,
     guide.root,
     notebook.root,
     challengePanel.root,
   );
+
+  /**
+   * Where the DOM panels stand over the canvas, so labels are not placed
+   * underneath them.
+   *
+   * **Measured on change, not per frame.** `getBoundingClientRect` forces a
+   * layout, and the HUD's text is rewritten every frame just above the draw
+   * call, so reading it in the render path would mean a forced reflow at 60 Hz
+   * for geometry that moves only when a panel opens, closes or reflows. A
+   * `ResizeObserver` gives the exact update for free; `resize()` covers the
+   * corner-anchored panels that *move* without changing size.
+   */
+  let chrome: Box[] = [];
+  const panels = [hud.root, legend, inspector.root, guide.root];
+  function measureChrome(): void {
+    const host = root.getBoundingClientRect();
+    chrome = panels
+      .filter((panel) => panel.isConnected && panel.offsetParent !== null)
+      .map((panel) => {
+        const box = panel.getBoundingClientRect();
+        return {
+          left: box.left - host.left,
+          top: box.top - host.top,
+          width: box.width,
+          height: box.height,
+        };
+      })
+      .filter((box) => box.width > 0 && box.height > 0);
+  }
+  const chromeObserver = new ResizeObserver(() => {
+    measureChrome();
+    invalidate();
+  });
+  for (const panel of panels) chromeObserver.observe(panel);
 
   function resize(): void {
     // The pivot's screen point was captured in the *old* viewport; a resized
@@ -587,6 +623,9 @@ function start(scene: Scene, root: HTMLElement): void {
     canvas.width = Math.round(viewport.width * ratio);
     canvas.height = Math.round(viewport.height * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    // A corner-anchored panel moves on a resize without changing size, so the
+    // observer above never fires for it.
+    measureChrome();
     invalidate();
   }
 
@@ -607,6 +646,7 @@ function start(scene: Scene, root: HTMLElement): void {
         hovered,
         selected,
         radius,
+        chrome,
         questions: unanswered,
         peaks,
         ties,
@@ -819,6 +859,19 @@ function start(scene: Scene, root: HTMLElement): void {
       // is tipped, so the turn lands before the view changes under it.
       landTurn();
       orbit = orbit === null ? DEFAULT_ORBIT : null;
+      // **Re-fit on the way in, and only on the way in.** The orbit lifts every
+      // column above its footing and pushes the whole world down by a headroom
+      // term, so a camera framed for the flat map puts the tallest files off the
+      // top edge — you press `o` and the thing the view exists to show is the
+      // thing that leaves. Fitting the *flat* bounds is the honest frame for
+      // that: X and Y are untouched by the projection (ADR-0009's "additive,
+      // preserving today's X,Y"), and the extra height is what `fitScale` gives
+      // margin for.
+      //
+      // Coming back out does **not** re-fit, because the flat map is where
+      // spatial memory lives and a camera the player moved is theirs. The
+      // asymmetry is the point, not an omission.
+      if (orbit !== null) camera = fit(scene.bounds, viewport, camera.bearing);
       invalidate();
     }
     if (event.key === 'Enter') {

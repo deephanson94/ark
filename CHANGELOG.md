@@ -1373,3 +1373,55 @@ One line per iteration: what changed, and what to do next.
   decide first whether strategy provenance ships in the atlas (schema bump) or is re-derived
   player-side (no bump). Then the **overlapping Companion answer keys**, and then the **phenomenon
   catalogue** for risk #1.
+
+- **Three known bugs closed, each measured before it was touched.**
+
+  **A co-change cell is one fact, so it gets one question.** ADR-0012 issues each answer *key* once
+  and says nothing about keys that *overlap*; CLAUDE.md has carried that as the open half since M4.
+  The sharp case turned out to be **symmetry**: the atlas stores a pair as `[a, b, count]` once, so
+  "B changed with A" and "A changed with B" are one fact read from either end, and grading both means
+  the reveal on the first board names a member of the second. Measured before the fix — **35 of ark's
+  40 Companion boards held a mutual member, and 38% of every key slot in the deck (74 of 196) was
+  handed over by another board's reveal**; one board gave away 4 of its 6. On hono, 6%. After: **zero
+  on both**, deck size unchanged (the cap binds either way), at a cost of 6 more unprovable nodes on
+  hono. Deliberately **not** applied to Blast Radius, where a mutual pair is an *import cycle* —
+  "streaming reaches components" and "components reaches streaming" are two distinct reachability
+  claims about two subjects, both true and both worth asking. Symmetry of the relation is the licence,
+  and only co-change has it. One mutation survived the first three assertions: sizing the key off the
+  full ranking while sampling from what is left makes `size` bigger than the key it produces, which
+  spends the missing slots on nothing — the board comes up short of a full choice set and `reach` is
+  divided by a size the key does not have. Pinned by asserting every board carries all 20 candidates,
+  which is true of all 131 across this repo's three decks.
+
+  **Labels stopped being drawn underneath the panels.** The HUD, the legend, the inspector and the
+  guide are DOM siblings of the canvas, so the renderer could not see them and a label placed beneath
+  one was drawn, counted, and invisible — a slot spent on nothing out of a budget of about 35. They
+  now arrive as `occupied` boxes, which is the mechanism region labels have used since M1; the rects
+  are measured by a `ResizeObserver` rather than per frame, because `getBoundingClientRect` forces a
+  layout and the HUD's text is rewritten immediately above the draw call. Visible in the artifacts:
+  three `docs/decisions/…md` names ran under the HUD's right edge before, none now. A mutation
+  removing the chrome from the node pass **survived the whole suite**, because `labels.test.ts` pins
+  the placer and nothing pinned the *wiring* — so the three call sites now go through one helper that
+  closes over the chrome and cannot drop it, and `tests/unit/draw.test.ts` gates it with a stub 2D
+  context.
+
+  **The orbit culls, and re-fits on the way in.** It borrowed the flat map's screen-space cull
+  (ADR-0017), and the subtlety is that only the *draw list* is cut: every node is still projected into
+  the by-ref map, so an edge from an on-screen column to an off-screen one still draws the part the
+  player can see — the same distinction `visibleEdges` makes on the flat map. Measured on a synthetic
+  2,000-node grid before writing it, because a cull that never fires is a filter asserting a behaviour
+  the product does not have: **0% culled at a fitted territory view** (nothing to drop — the old
+  comment's "the sort dominates" was right about *that* view and only that one), **61% at district,
+  93% at street**. Entering the orbit now re-fits, because lifting every column above its footing puts
+  the tallest files off the top edge — you press `o` and the thing the view exists to show is the
+  thing that leaves. Leaving does **not** re-fit: the flat map is where spatial memory lives and a
+  camera the player moved is theirs. 6 of 6 mutations caught, two only after the first pass — the
+  vertical cull had no test at all, since a column's extent is `[top.y, base.y]` and an x-only test
+  cannot see the asymmetry.
+
+  **Next**: unchanged — **Archaeology**, M4's third and last, which needs an ADR before any code
+  because §6.2's wording is not deterministically gradeable and revert detection is the candidate
+  reshaping. Then the **negative witness**. Still open and deliberately not touched here: the twins a
+  duplicate answer key drops are never mentioned to the player — `cone(A) = cone(B)` is a true derived
+  fact that ADR-0011 decision 3 says must be *shown* rather than proved, so it wants a decision about
+  where before it wants code.

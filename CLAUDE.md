@@ -502,16 +502,13 @@ The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radi
 question and by nothing else. It was a divergence from ADR-0008 decision 1 rather than an open
 question — measured at 26 of 40 boards exposable, all recovering their key byte-exact, before.
 
-Smaller and still open: **overlapping Companion answer keys** in the generator (ADR-0012 issues each
-key once but says nothing about keys that *overlap*, and the fix is to window mutual members the way
-0012 re-asks colliding subjects); the twins a duplicate answer key drops are never mentioned to the player
-(`cone(A) = cone(B)` is a true derived fact and must be *shown*, not proved — ADR-0011 decision 3);
-node labels near the top edge draw underneath the inspector and HUD; the orbit does not re-fit on
-entry and has no frustum cull — and now that the flat map culls in screen space through its own
-projection (ADR-0017), that is the obvious thing for the orbit to borrow. And one measurement only a
-human can take: **`npm run raster` on real hardware** — 45/33/43 fps is a headless software floor,
-ADR-0009's P1′ gates the renderer on it, and it should now be measured on a *turned* map, since
-oblique headings are the normal case and were never what it sampled.
+Still open, and it is a design question rather than a defect: **the twins a duplicate answer key
+drops are never mentioned to the player**. `cone(A) = cone(B)` is a true derived fact and by ADR-0011
+decision 3 it must be *shown*, never proved — so it wants a decision about where it is shown before
+any code. And one measurement only a human can take: **`npm run raster` on real hardware** —
+45/33/43 fps is a headless software floor, ADR-0009's P1′ gates the renderer on it, and it should now
+be measured on a *turned* map, since oblique headings are the normal case and were never what it
+sampled.
 
 The verb seam was the real work of M4, and the third verb measured what it is worth. `difficulty.ts`,
 `gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb; `reveal`, the reveal's
