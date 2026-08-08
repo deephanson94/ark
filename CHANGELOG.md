@@ -991,3 +991,37 @@ One line per iteration: what changed, and what to do next.
   and only the owner can close them: `npm run raster` on real hardware (ADR-0009's P1′) and S1's
   recall-experiment design, which ADR-0009 records as a breach and which gates the next rung of the
   third-person direction.
+
+- **Deleted `pages.yml`, so a red check means something again.** Not a feature — a correction. The
+  Pages workflow had failed on **every run it ever had**: run #1 on `626513c` (master before M4) and
+  run #2 on `a50462b` (master after it), both at `actions/configure-pages@v5` with
+  *"Get Pages site failed ... Error: Not Found"*. The build half was fine — the step before the
+  failure printed `publishing ark @ a50462bcbc4a / 113 nodes, 328 edges, 80 challenges` — and the
+  deploy was impossible: **the repo is private**, Pages there needs a paid plan, and the workflow
+  passed `enablement: false` so it would not enable Pages even where it could. The premise had been
+  wrong since the workflow was written, *and was written down in it*: its header said "it is a public
+  repo, so its atlas may be shared (§7)". A comment that states a fact is not evidence of it.
+  **The cost was never the missing demo.** A demo nobody can reach costs nothing; a check that has
+  never once been green teaches every future session that a red X here is background noise — and it
+  already did. Last session reported "CI green" three separate times while only ever opening `ci.yml`
+  runs on its own branch, and the human found it. That is the mirror of the `npm run raster` landmine:
+  an instrument that always reads good gets believed, and one that always reads bad stops being read.
+  Guardrail 7 says never leave the build broken, and a permanently failing workflow is a broken build
+  everyone has agreed to ignore. Both the mechanism and "list the workflows before you claim they
+  passed" are now landmines in CLAUDE.md.
+  **Its zero-challenge guard was not migrated, because it is already held twice and more strongly** —
+  `tests/atlas/atlas.test.ts` asserts `> 20` challenges on a freshly built atlas, and `scripts/e2e.ts`
+  carries the identical `=== 0` refusal *and then* builds the real bundle, serves it, answers a
+  question and reads back a grade. **Checked by mutation rather than by reading**: forcing the deck to
+  `[]` turned 11 tests red across two files, including the one carrying the count. Deleted rather than
+  disabled (`if: false` rots silently against `actions/*` bumps and the build commands it duplicates)
+  and rather than made non-fatal (`continue-on-error` would turn an honestly red check into a green
+  one deploying nothing — the exact landmine, on purpose). **[ADR-0015](./docs/decisions/0015-pages-is-not-deployed-while-the-repo-is-private.md)**
+  records the reversal trigger — the repo going public — and the one-line restore from git, so the
+  next session finds a decision instead of an oversight to helpfully undo.
+  **Next** is unchanged and is the real work: **draw the co-change relation on the map.** Companion
+  asks about a coupling the player is never shown, so its reveal does all the teaching and §4's "fog
+  lifts around what you proved" is only half kept. Then, in evidence order: **map rotation between
+  challenges** (`docs/prior-art.md` §4.4, still the highest-leverage lowest-cost item in the writeup),
+  the **negative witness**, and the **phenomenon catalogue** for risk #1. Still owner-only:
+  `npm run raster` on real hardware (ADR-0009's P1′) and S1's recall-experiment design.

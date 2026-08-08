@@ -14,9 +14,11 @@ export default defineConfig({
   root: 'src/player',
   publicDir: 'public',
   // Relative asset urls, so one build works from any path: `ark play` serves
-  // `dist/player` at the root, GitHub Pages serves a project site under
+  // `dist/player` at the root, and a project-site host would serve it under
   // `/<repo>/`. An absolute base would 404 every asset on one of the two, and
   // the atlas is already fetched relatively (`main.ts`'s `ATLAS_URL`).
+  // (Nothing publishes to a subpath today — ADR-0015 — but the setting costs
+  // nothing and `ark play` needs it anyway.)
   base: './',
   build: {
     outDir: '../../dist/player',
