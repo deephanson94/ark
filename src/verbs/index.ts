@@ -22,6 +22,7 @@ export type {
   NoteKind,
   Prompt,
   Reveal,
+  RevealChannel,
   RevealNote,
   SetAnswer,
   SetPhrasing,
@@ -41,6 +42,8 @@ export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from './difficulty.js';
 export type { GateVerdict, HeuristicId } from './gate.js';
 export { CTRL_F_THRESHOLD, HISTORY_HEURISTICS, PATH_HEURISTICS, gradeHeuristics } from './gate.js';
 export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths.js';
+import type { RevealChannel } from './types.js';
+import type { VerbId } from '../atlas/index.js';
 import { blastRadius } from './blastRadius/index.js';
 import { companion } from './companion/index.js';
 
@@ -59,3 +62,22 @@ export { companion } from './companion/index.js';
  * player's progress.
  */
 export const VERBS = { blastRadius, companion } as const;
+
+/**
+ * Which map channel a verb's answers may be rendered into.
+ *
+ * The one place the question *"may this be drawn?"* is answered, so that no
+ * code outside a verb's own directory ever names a verb to decide it. Before
+ * this existed the player reconstructed the licence as
+ * `challenge.verb !== 'companion'`, hard-coded in two files — which is exactly
+ * the seam M4 spent its budget building, undone by the next feature that
+ * needed it.
+ *
+ * **An unknown id draws nothing, and that direction is load-bearing.** An atlas
+ * may name a verb this build does not have — `VERB_IDS` is validated at load,
+ * but a save or a hand-edited atlas can still carry one — and the safe answer
+ * to "may I draw an answer I do not understand?" is no.
+ */
+export function channelOf(verb: VerbId): RevealChannel {
+  return VERBS[verb as keyof typeof VERBS]?.channel ?? 'nothing';
+}

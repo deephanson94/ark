@@ -170,6 +170,17 @@ are few, earned, and the long cross-region wires are what territory zoom is for.
 
 ---
 
+**6. The licence lives on the `Verb` contract, not in the shell.**
+
+`Reveal.unlocks` cannot carry this rule alone: it is a fact about one grade and
+lives as long as the panel does, while the map must rebuild the same licence from
+a **restored save**, where no `Reveal` has ever existed. The first implementation
+reconstructed it by name — `challenge.verb !== 'companion'`, hard-coded in two
+files — which is the "nothing outside a verb names a verb" seam M4 spent its
+whole budget building, undone by the next feature that needed it. `Verb.channel`
+is the static twin, `channelOf()` is the single place the question is answered,
+and an unknown id draws nothing.
+
 ## Consequences
 
 - **`Reveal.unlocks` gains `coChangeTies`.** `nothing` stays on the contract
@@ -180,6 +191,14 @@ are few, earned, and the long cross-region wires are what territory zoom is for.
   a curve through the flat plane; ADR-0013 gives every node a height, so the same
   arc in the orbit would pierce the columns it passes or need a projection
   nothing has decided. `tiesDrawn: 0` there is honest, not a stub.
+- **The orbit shows no wires, and the player is not told why.** The arc is built
+  in *screen* space, so it transfers unchanged; what is undecided is only the
+  anchor (top, like the orbit's existing import wires, or base) and how a wire
+  occludes against the columns it crosses. Top-to-top is the obvious candidate.
+  The cost until then is real: Companion's summary promises wires "drawn once
+  both files' questions are answered", and one keystroke into the orbit the ink
+  is gone and the HUD reads `0 wires`. A mild instance of the promised-versus-
+  drawn defect decision 3 exists to remove.
 - **The e2e picks its subject rather than stumbling on one.** The endpoint gate
   makes "answer any Companion question" an unreliable trigger, so the script
   selects a subject carrying only a Companion board whose key contains a
@@ -206,6 +225,32 @@ distractors, so it never isolates the key; `cone(M)` does, precisely. Measured o
 this repo: **20 of 40 Blast Radius subjects**, up to 12 at once. This ADR does not
 fix it — the fix is either excluding member-unlocks whose own board is open, or
 accepting and documenting it — but it must not go back to being assumed fine.
+
+**A wire beside an open *Blast Radius* board is a distractor, not an answer —
+measured rather than assumed.** The gate checks Companion boards only, so a
+licensed wire can sit next to an open blast question about the same subject.
+Worst case simulated (every Companion board cleared, no blast board answered):
+**12 of 40** blast boards have a candidate wired to their subject, **37 of 800**
+candidates across the deck. Of those wired candidates **41% are blast truth,
+against a 27% base rate** — a weak signal that is wrong more often than right,
+which is exactly §8.3's fourth distractor class, the one NORTH-STAR calls the
+*best* wrong answers *because getting them wrong is itself a lesson*. Widening
+the gate would delete a teaching signal rather than close a leak. Re-measure if a
+repo's two decks overlap much more than this one's.
+
+**The reindex path is not covered, and the module's central sentence goes false
+across it.** `retie()` licenses the *current* atlas's `challenge.truth` off a
+stored `(verb, subject)` pass, so once a reindex regenerates the deck an answered
+subject's truth can differ from what was revealed when the pass was earned — and
+the map then draws pairs no reveal named *to this player*. It is not an open-board
+leak (the pass retires the subject's question, partners stay gated), and it is
+defensible under ADR-0011's shown/proved split as material of a retired question.
+But "what is drawn is exactly the pairs some reveal has named" is a claim about
+one atlas, and namedness is unreconstructible because the save stores `proved`,
+not named. The conservative fix, if this ever matters: draw `pass.proved`-derived
+pairs after a head change, since `proved ⊆ named` always. Symmetrically, a stored
+pass whose subject leaves the regenerated deck loses its wires entirely — fog and
+notes key to the pass record, wires key to the current deck.
 
 ## Rejected alternatives
 

@@ -23,7 +23,7 @@ import { coverage, landmarks } from './fog.js';
 import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, turn } from './orbit.js';
 import type { Progress } from './progress.js';
-import { VERBS } from '../verbs/index.js';
+import { VERBS, channelOf } from '../verbs/index.js';
 import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, provedThrough, recordSurvey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
@@ -140,7 +140,7 @@ function start(scene: Scene, root: HTMLElement): void {
     const openBoards = new Set<NodeRef>();
     for (const bucket of challengesById.values()) {
       for (const challenge of bucket) {
-        if (challenge.verb !== 'companion') continue;
+        if (channelOf(challenge.verb) !== 'coChangeTies') continue;
         const ref = scene.graph.refById.get(challenge.subject);
         if (answered.has(answerKey(challenge.verb, challenge.subject))) passed.push(challenge);
         else if (ref !== undefined) openBoards.add(ref);
@@ -304,10 +304,14 @@ function start(scene: Scene, root: HTMLElement): void {
   const hud = createHud(scene.atlas, [notebook.toggle]);
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade, reveal) {
-      // Before `remember`, which recomputes the wires: the verb says what it
-      // revealed, and a reveal that named its pairs licenses drawing them
-      // whatever the score. Same rule as `importRadius` one branch down, same
-      // reason — guardrail 6, and a `summary` that would otherwise be a lie.
+      // **The two channels do not behave alike here, and that is deliberate.**
+      // `importRadius` below draws the cone on *any* grade, pass or fail,
+      // because its reveal has already named every member and withholding the
+      // picture would make the sentence a lie. Wires do the opposite: they wait
+      // for the pass, and Companion's summary is worded to promise only that
+      // ("drawn once both files' questions are answered"). An earlier version
+      // drew them on every grade like the cone, and 79% of what it promised was
+      // gone by the next click — ADR-0016 decision 3.
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
       retally();

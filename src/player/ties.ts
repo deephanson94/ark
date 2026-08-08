@@ -59,6 +59,7 @@
 
 import type { Atlas, Challenge, NodeRef } from '../atlas/index.js';
 import type { Graph } from '../atlas/index.js';
+import { channelOf } from '../verbs/index.js';
 
 /**
  * One wire. `a < b` always, so a pair has exactly one identity and a symmetric
@@ -86,8 +87,13 @@ function pairKey(a: NodeRef, b: NodeRef): string {
 }
 
 /**
- * The counts, indexed both ways. Rebuilt per call rather than memoised: this
- * runs when a grade lands or a save is restored, not per frame.
+ * The counts, under one normalised key per pair — `pairKey` orders the ends, so
+ * a single entry serves both directions.
+ *
+ * Rebuilt per call rather than memoised. The call happens on every `remember()`,
+ * which includes a plain map click and not only a grade, so "rare" is the wrong
+ * word for it; it is cheap that matters, and at the 8,000-pair cap this is a
+ * few thousand map writes against a pointer event.
  */
 function countIndex(atlas: Atlas): Map<string, number> {
   const counts = new Map<string, number>();
@@ -98,12 +104,11 @@ function countIndex(atlas: Atlas): Map<string, number> {
 /**
  * The wires named by these reveals.
  *
- * `revealed` is the Companion challenges whose answer the player has been
- * shown; `openBoards` is every Companion subject whose question is still live.
- * Caller decides what those mean — see `main.ts`, where the transient rendering
- * at the moment of a grade and the persistent layer after a pass are
- * deliberately gated differently, exactly as they already are for the import
- * cone.
+ * `revealed` is the challenges whose answer the player has **passed**;
+ * `openBoards` is every co-change subject whose question is still live. There is
+ * exactly one caller and exactly one gate — see ADR-0016 decision 3 for the
+ * transient second layer that was built, measured at 79% of its own promise
+ * evaporating on the next click, and removed.
  *
  * **Every pair is re-checked against the live matrix.** A save outlives the
  * atlas that produced it (ADR-0011: the key is `repo.root`, not `repo.head`),
@@ -121,7 +126,10 @@ export function tiesNamedBy(
   const seen = new Map<string, Tie>();
 
   for (const challenge of revealed) {
-    if (challenge.verb !== 'companion') continue;
+    // The verb's own declaration, never its name. `Reveal.unlocks` cannot
+    // serve here — a restored save has no `Reveal` — so the licence is the
+    // static twin on the contract.
+    if (channelOf(challenge.verb) !== 'coChangeTies') continue;
     const subject = graph.refById.get(challenge.subject);
     if (subject === undefined || openBoards.has(subject)) continue;
     for (const member of challenge.truth) {

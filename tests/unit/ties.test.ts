@@ -14,9 +14,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
+import type { Atlas, Challenge, NodeId, VerbId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { NO_TIES, tieWidth, tiesAt, tiesNamedBy } from '../../src/player/ties.js';
+import { channelOf } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 const FILES = [
@@ -102,15 +103,16 @@ describe('the wires a reveal has named', () => {
     const ties = tiesNamedBy(atlas, graph, [
       companionChallenge(atlas, 'src/a.ts', ['src/b.ts', 'src/c.ts']),
     ]);
-    const paths = ties.all.map((tie) => [atlas.nodes[tie.a]?.path, atlas.nodes[tie.b]?.path]);
-    expect(paths).toEqual([
-      ['src/a.ts', 'src/b.ts'],
-      ['src/a.ts', 'src/c.ts'],
-    ]);
+    // Unordered pairs, sorted — the hash order of the fixture's refs is not a
+    // fact about the code under test.
+    const paths = ties.all
+      .map((tie) => [atlas.nodes[tie.a]?.path, atlas.nodes[tie.b]?.path].sort().join(' '))
+      .sort();
+    expect(paths).toEqual(['src/a.ts src/b.ts', 'src/a.ts src/c.ts']);
     // The whole point of ADR-0016: `a—d` is real, it is in the matrix, and no
     // reveal has named it. Drawing the row instead of the named pairs is the
     // one-line change this assertion exists to catch.
-    expect(paths).not.toContainEqual(['src/a.ts', 'src/d.ts']);
+    expect(paths).not.toContain('src/a.ts src/d.ts');
   });
 
   it('carries the real commit count, not a placeholder', () => {
@@ -130,7 +132,11 @@ describe('the wires a reveal has named', () => {
     const stale = companionChallenge(atlas, 'src/a.ts', ['src/b.ts', 'src/e.ts']);
     const ties = tiesNamedBy(atlas, buildGraph(atlas), [stale]);
     expect(ties.all).toHaveLength(1);
-    expect(atlas.nodes[ties.all[0]?.b ?? -1]?.path).toBe('src/b.ts');
+    // Compared as an unordered set: node refs come from a content hash, so
+    // which end lands in `.a` is not a fact about this code.
+    expect(
+      [atlas.nodes[ties.all[0]?.a ?? -1]?.path, atlas.nodes[ties.all[0]?.b ?? -1]?.path].sort(),
+    ).toEqual(['src/a.ts', 'src/b.ts']);
   });
 
   it('gives an unordered pair one identity, however the reveals arrive', () => {
@@ -157,7 +163,7 @@ describe('the wires a reveal has named', () => {
     expect(ties.all[0]?.a).toBeLessThan(ties.all[0]?.b ?? -1);
   });
 
-  it('ignores a verb that is not Companion', () => {
+  it('ignores a verb whose channel is not this one', () => {
     const atlas = fixture([['src/a.ts', 'src/b.ts', 4]]);
     const blast = {
       ...companionChallenge(atlas, 'src/a.ts', ['src/b.ts']),
@@ -165,6 +171,25 @@ describe('the wires a reveal has named', () => {
       evidence: { kind: 'importGraph', depth: 2 },
     } as Challenge;
     expect(tiesNamedBy(atlas, buildGraph(atlas), [blast]).all).toHaveLength(0);
+  });
+
+  it('draws nothing for a verb this build does not have', () => {
+    // `channelOf` falls closed on an unknown id. An atlas can name a verb this
+    // build lacks — `VERB_IDS` is checked at load, but a save or a hand-edited
+    // atlas can still carry one — and the safe answer to "may I draw an answer
+    // I do not understand?" is no. Without this assertion the fallback could be
+    // flipped to `coChangeTies` and every suite still passed.
+    const atlas = fixture([['src/a.ts', 'src/b.ts', 4]]);
+    const unknown = {
+      ...companionChallenge(atlas, 'src/a.ts', ['src/b.ts']),
+      verb: 'trace',
+    } as unknown as Challenge;
+    expect(tiesNamedBy(atlas, buildGraph(atlas), [unknown]).all).toHaveLength(0);
+    expect(channelOf('trace' as VerbId)).toBe('nothing');
+    // And the two verbs that do exist declare a channel each, so the lookup is
+    // not vacuously answering "nothing" to everything.
+    expect(channelOf('companion')).toBe('coChangeTies');
+    expect(channelOf('blastRadius')).toBe('importRadius');
   });
 
   it('indexes both endpoints, so focusing a node is a lookup', () => {
@@ -203,30 +228,48 @@ describe('the gate the obvious implementation would have used', () => {
     // This is the assertion the whole module exists for, in miniature.
     //
     // `a—b` and `b—c` are both in the matrix. The player has answered `a`'s
-    // question, so `a—b` was named to them in words. `b`'s own question is
-    // still open and its answer key contains `c`.
+    // board, so `a—b` was named to them in words. `b` is itself a Companion
+    // subject, its question is still open, and its key contains `c`.
     //
-    // The tempting gate — "draw the wires of everything in
-    // `provedThrough(progress, liveness, 'companion')`" — puts `b` in the
+    // The tempting gate — draw the wires of everything in
+    // `provedThrough(progress, liveness, 'companion')` — puts `b` in the
     // drawable set, because `b` was a member the player picked correctly. It
     // would then draw `b—c` and hand over `b`'s answer. Measured on the real
-    // deck that gate exposes 89 open-key members in a single frame.
+    // deck, that gate exposes 89 open-key members in a single frame.
     const atlas = fixture([
       ['src/a.ts', 'src/b.ts', 6],
       ['src/b.ts', 'src/c.ts', 5],
     ]);
     const graph = buildGraph(atlas);
+    const ref = (path: string): number => atlas.nodes.findIndex((n) => n.path === path);
     const answered = companionChallenge(atlas, 'src/a.ts', ['src/b.ts']);
     const stillOpen = companionChallenge(atlas, 'src/b.ts', ['src/c.ts']);
-
-    const ties = tiesNamedBy(atlas, graph, [answered]);
     const openKey = new Set(stillOpen.truth);
-    const bRef = atlas.nodes.findIndex((node) => node.path === 'src/b.ts');
+
+    // While `b`'s board is open, nothing incident to `b` may be drawn — not
+    // even `a—b`, which the player *was* told, because the ink sits beside the
+    // question it helps answer.
+    expect(tiesNamedBy(atlas, graph, [answered], new Set([ref('src/b.ts')])).all).toHaveLength(0);
+
+    // Once `b`'s board is answered too, both wires are legitimate — and the
+    // loop below is the one that would notice `c` arriving early. `checked` is
+    // not decoration: the first version of this loop read
+    // `tie.a === bRef ? tie.b : tie.a === bRef ? tie.a : null`, whose second
+    // ternary repeats the first condition, so `other` was always null and **the
+    // assertion inside ran zero times**. A gate needs proof it opened; that is
+    // what `npm run raster` cost two rewrites to learn.
+    const ties = tiesNamedBy(atlas, graph, [answered]);
+    let checked = 0;
     for (const tie of ties.all) {
-      const other = tie.a === bRef ? tie.b : tie.a === bRef ? tie.a : null;
+      const other =
+        tie.a === ref('src/b.ts') ? tie.b : tie.b === ref('src/b.ts') ? tie.a : null;
       if (other === null) continue;
+      checked++;
       expect(openKey.has(atlas.nodes[other]?.id ?? '')).toBe(false);
     }
+    expect(checked).toBeGreaterThan(0);
+    // `b—c` is in the matrix and no reveal named it, so it is absent whatever
+    // the gate says.
     expect(ties.all).toHaveLength(1);
   });
 
@@ -247,7 +290,9 @@ describe('the gate the obvious implementation would have used', () => {
 
     const gated = tiesNamedBy(atlas, graph, named, new Set([ref('src/c.ts')]));
     expect(gated.all).toHaveLength(1);
-    expect(atlas.nodes[gated.all[0]?.b ?? -1]?.path).toBe('src/b.ts');
+    expect(
+      [atlas.nodes[gated.all[0]?.a ?? -1]?.path, atlas.nodes[gated.all[0]?.b ?? -1]?.path].sort(),
+    ).toEqual(['src/a.ts', 'src/b.ts']);
 
     // Same reveals, `c`'s board now closed: the withheld wire arrives. Nothing
     // is permanently hidden — the layer converges to every named pair, which is

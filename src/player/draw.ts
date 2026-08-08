@@ -152,11 +152,17 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   let tiesDrawn = 0;
   const focused = tiesAt(ties, tieFocus);
   const bright = new Set(focused);
-  const arc = (tie: Tie, colour: string, alpha: number): void => {
+  const arc = (tie: Tie, colour: string): void => {
     const from = scene.nodes[tie.a];
     const to = scene.nodes[tie.b];
     if (from === undefined || to === undefined) return;
-    if (!onScreen.has(tie.a) && !onScreen.has(tie.b)) return;
+    // **No endpoint cull.** The obvious `!onScreen(a) && !onScreen(b) → skip`
+    // is wrong for this relation in the case that matters most: at street zoom
+    // a long cross-region wire has *both* ends off screen exactly when you are
+    // standing between them, so the one wire you most want to see is the one
+    // that disappears. Import edges can afford that cull because they are short
+    // and there are 337 of them; wires are bounded by the deck (at most ~6 per
+    // board) and there are 3 on this repo's map after two passes.
     const a = project(from);
     const b = project(to);
     const dx = b.x - a.x;
@@ -172,14 +178,15 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       b.y,
     );
     context.strokeStyle = colour;
-    context.globalAlpha = alpha;
     context.lineWidth = tieWidth(tie.count) * Math.min(1, Math.max(0.45, camera.scale));
     context.stroke();
     tiesDrawn += 1;
   };
-  for (const tie of ties.all) if (!bright.has(tie)) arc(tie, INK.tieRest, 1);
-  for (const tie of focused) arc(tie, INK.tie, 1);
-  context.globalAlpha = 1;
+  // Rest first, focus over it. The two states differ by alpha *inside* the
+  // colour (`INK.tieRest` against `INK.tie`), not by `globalAlpha`, so a wire
+  // never inherits a leftover alpha from the edge pass above.
+  for (const tie of ties.all) if (!bright.has(tie)) arc(tie, INK.tieRest);
+  for (const tie of focused) arc(tie, INK.tie);
   context.lineWidth = 1;
 
   // ---- nodes ------------------------------------------------------------
@@ -403,12 +410,22 @@ export function drawOrbitFrame(
 
   // **`ties` is deliberately not destructured, and the orbit draws no history
   // wires this session.** Stated rather than omitted, because an omission looks
-  // identical to an oversight and CLAUDE.md's landmine says to grep every read
-  // of shared player state and ask which verb's claim it is. The reason is
-  // geometric, not editorial: a `Tie` is a curve through the *flat* plane, and
-  // ADR-0013 gives every node a height, so the same arc in the orbit would
-  // either pierce the columns it passes or need a projection nothing has
-  // decided yet. `tiesDrawn: 0` below is therefore honest rather than a stub.
+  // identical to an oversight.
+  //
+  // The honest reason is smaller than "the geometry does not exist". The arc is
+  // built in *screen* space — project both ends, bow perpendicular to the
+  // projected segment — so it transfers to the orbit unchanged, and the wires
+  // section already draws straight import edges between column tops with a
+  // deliberate under/over split. What is undecided is only **which anchor**
+  // (top, like the import wires, or base, where the footing is) and how a wire
+  // occludes against the columns it crosses. Top-to-top is the obvious
+  // candidate and this is a rung, not a blocker.
+  //
+  // The cost is player-visible and is recorded in ADR-0016: Companion's summary
+  // promises wires "drawn once both files' questions are answered", and a
+  // player one keystroke into the orbit sees earned ink gone and the HUD read
+  // `0 wires`. `tiesDrawn: 0` is therefore accurate rather than a stub — but
+  // accurate about an absence the player has not been told to expect.
   context.save();
   context.fillStyle = INK.ground;
   context.fillRect(0, 0, viewport.width, viewport.height);

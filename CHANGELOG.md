@@ -1075,6 +1075,19 @@ One line per iteration: what changed, and what to do next.
   question gets `FULL_RADIUS` while its *own* board is open, and by ADR-0008's invariant the lit set
   ∩ that board is the key byte-exact. Hovering S does not substitute — `cone(S)` overapproximates and
   never isolates it. **20 of 40 Blast Radius subjects, up to 12 at once.**
+  **A second-opinion review after shipping found four defects, none of them in the logic.** The gate
+  itself survived — no sequence draws a wire beside an open board. What it caught: two comments still
+  describing the *deleted* two-gate design as current, which together were a rebuild kit for the 79%
+  defect; `Reveal.unlocks: 'coChangeTies'` **read by nothing**, with the real licence hard-coded as
+  `challenge.verb !== 'companion'` in two files — M4's "nothing outside a verb names a verb" seam
+  quietly undone, so the licence is now `Verb.channel` and `channelOf()`; a **loop whose assertion ran
+  zero times** in the very test the file calls its most important (a ternary repeating its own
+  condition, so the leak check rested entirely on a length assertion); and an endpoint cull that drops
+  a long wire exactly when you stand between its ends. Also measured on request: a wire beside an open
+  *Blast Radius* board predicts blast-membership at **41% against a 27% base rate** — a §8.3 class-4
+  distractor, not an answer, so the gate stays Companion-only. That the findings are all in comments,
+  a dead contract value, an unrun loop and an unsimulated future is the point: the load-bearing
+  decisions were measured before they were argued, and measurement does not reach those places.
   **Next**: **map rotation between challenges.** `docs/prior-art.md` §4.4 has called it the
   highest-leverage lowest-cost item in the writeup for three sessions and it is still undone —
   map-derived spatial memory is orientation-locked, ours is north-up forever, and the verbs pick an
