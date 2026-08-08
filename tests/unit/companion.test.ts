@@ -12,10 +12,15 @@ import { describe, expect, it } from 'vitest';
 import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { PASS_THRESHOLD, scoreSet } from '../../src/verbs/index.js';
+import { VERBS, channelOf } from '../../src/verbs/index.js';
 import { companion, generateWithReport, indexCoChange } from '../../src/verbs/companion/index.js';
 import { ASSUMED_MIN_CO_CHANGE } from '../../src/verbs/companion/cochange.js';
 import { DEFAULT_HISTORY_LIMITS, buildHistory } from '../../src/indexer/history.js';
 import { atlasWith } from '../fixtures/atlas.js';
+
+/** Every channel the contract allows. A verb declaring anything else is a typo
+ *  the type system catches at build time and this catches in a fixture. */
+const VERB_CHANNELS = ['importRadius', 'coChangeTies', 'nothing'];
 
 /** The truncation tag the indexer writes for a capped co-change matrix. */
 const COCHANGE_TAG = 'coChange' as const;
@@ -300,6 +305,15 @@ describe('grading and wording', () => {
     // leak this codebase has produced three separate ways; the verb declaring
     // what it revealed is what stops a fourth.
     expect(reveal.unlocks).toBe('coChangeTies');
+    // …and it agrees with the *static* twin the map actually reads. Pinned
+    // generically over `VERBS` rather than verb by verb, because two literals
+    // asserted separately drift the moment a third verb exists — and the map
+    // reads `channel`, so a verb whose reveal disagreed would announce one
+    // channel and draw into another.
+    for (const verb of Object.values(VERBS)) {
+      expect(VERB_CHANNELS).toContain(verb.channel);
+      expect(channelOf(verb.id)).toBe(verb.channel);
+    }
     // **The sentence must not promise a drawing the map will not make.** A wire
     // is withheld while either of its files still carries an open Companion
     // board, so "now drawn on the map" is false for 79% of the pairs named here

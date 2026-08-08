@@ -66,12 +66,20 @@ export const VERBS = { blastRadius, companion } as const;
 /**
  * Which map channel a verb's answers may be rendered into.
  *
- * The one place the question *"may this be drawn?"* is answered, so that no
- * code outside a verb's own directory ever names a verb to decide it. Before
- * this existed the player reconstructed the licence as
+ * The one place the question *"may this history wire be drawn?"* is answered,
+ * so that no code outside a verb's own directory names a verb to decide it.
+ * Before this existed the player reconstructed the licence as
  * `challenge.verb !== 'companion'`, hard-coded in two files — which is exactly
  * the seam M4 spent its budget building, undone by the next feature that
  * needed it.
+ *
+ * **The other channel is not routed through here yet, and saying so is the
+ * point.** The import cone's restored-save licence is still
+ * `provedThrough(progress, liveness, 'blastRadius')`, naming the verb in
+ * `main.ts`. Same class of fact, still hard-coded, and it predates this
+ * function rather than being introduced by it — but a comment claiming *no*
+ * code names a verb would be the kind of overclaim this repo keeps having to
+ * correct.
  *
  * **An unknown id draws nothing, and that direction is load-bearing.** An atlas
  * may name a verb this build does not have — `VERB_IDS` is validated at load,

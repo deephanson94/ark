@@ -238,6 +238,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   are still there one click later" and computing it. So when a rendering is gated, **count what
   survives the gate, not what the gate emits** — and prefer one rule to two, since every one of
   ADR-0014's leaks was a rule that lived twice.
+- **A measured constant written into prose is false by the next commit, and ark measures itself.**
+  A review spot-checked ADR-0016's figures against the data: the structural ones reproduced *to the
+  digit*, and two did not — "all 174 pairs" (the matrix was 173, then 180, then 200) and "24 of 27
+  qualify" (it was 22 of 24). Neither was ever true; both were transcription drift from an atlas that
+  had moved. The same rot hid "49 KiB of JS" and "31 companion challenges" in this file's own Current
+  state for two sessions. The fix is not more care: it is **preferring the invariant to the count** —
+  "every pair the matrix records is sampleable" holds forever where "all 174 pairs" holds for one
+  commit — and, where a number really is the point, **naming the commit it was measured at**.
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human
@@ -321,7 +329,7 @@ Press **`o`** for the orbit view: every file a column standing on its 2D footing
 it to the pixel. Still zero runtime dependencies.
 
 **Two verbs ship.** `src/verbs/blastRadius/` asks what depends on a file (40 challenges here);
-`src/verbs/companion/` asks what *changes with* it (31 here, 54 on hono, 508 on svelte) — the first
+`src/verbs/companion/` asks what *changes with* it (40 here, 54 on hono, 508 on svelte) — the first
 verb graded on git rather than on imports, and the one that reaches the edgeless files the import
 graph structurally cannot. Together they leave 27 of this repo's 113 nodes unprovable where Blast
 Radius alone leaves 35; on hono 178 against 269, on svelte 3,283 against 3,776. The four §8.3
@@ -334,8 +342,11 @@ appears only where *neither* of its files still carries an open Companion board,
 rather than a disclosure rule, because ink on the map is a lookup where text in a closed panel is a
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
-**Field notes** record what you proved — never what you were shown. 49 KiB of JS, zero runtime
-dependencies, first paint ~240 ms. `npx ark index .` produces a valid ~101 KiB atlas in ~270 ms.
+**Field notes** record what you proved — never what you were shown. ~65 KiB of JS, zero runtime
+dependencies, first paint ~340 ms. `npx ark index .` produces a valid ~160 KiB atlas in ~390 ms.
+**Every number in this section is a measurement of one commit and ark indexes itself**, so they all
+drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
+than quote.
 
 The semantics are **[ADR-0008](./docs/decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md)**
 and are not open: truth is the unbounded transitive dependent set, the generator maintains

@@ -1088,6 +1088,20 @@ One line per iteration: what changed, and what to do next.
   distractor, not an answer, so the gate stays Companion-only. That the findings are all in comments,
   a dead contract value, an unrun loop and an unsimulated future is the point: the load-bearing
   decisions were measured before they were argued, and measurement does not reach those places.
+  **A third review, of the merged diff, found the fix commit had reproduced its own first finding.**
+  The corrected orbit bullet was *appended* to ADR-0016's Consequences without deleting the one it
+  replaced, so the document of record carried two adjacent bullets contradicting each other about the
+  same thing — a superseded description left standing as current, committed by the commit that fixed
+  exactly that. It also spot-checked the ADR's figures against the data: the structural ones reproduce
+  **to the digit**, and two did not — "all 174 pairs" (the matrix was 173, then 180, then 200) and
+  "24 of 27 qualify" (22 of 24). The same rot was already sitting in CLAUDE.md's Current state ("49
+  KiB of JS", "31 companion challenges"). The fix is not more care: **prefer the invariant to the
+  count** — "every pair the matrix records is sampleable" holds forever where "all 174" holds for one
+  commit — and name the commit where a number really is the point. New landmine. Also from that
+  review: the generic `unlocks`-vs-`channel` pin (two literals asserted separately drift the moment a
+  third verb exists), and `channelOf`'s docstring softened, because it claimed *no* code outside a
+  verb names a verb while the import cone's restored-save licence is still
+  `provedThrough(…, 'blastRadius')` — an overclaim in the exact comment written to fix an overclaim.
   **Next**: **map rotation between challenges.** `docs/prior-art.md` §4.4 has called it the
   highest-leverage lowest-cost item in the writeup for three sessions and it is still undone —
   map-derived spatial memory is orientation-locked, ours is north-up forever, and the verbs pick an

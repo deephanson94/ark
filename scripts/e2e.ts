@@ -342,8 +342,9 @@ async function main(): Promise<number> {
       // wire is withheld while *either* end still carries an open board. So
       // pick a subject that carries **only** a Companion question (no Blast
       // Radius one to be served first) and whose key contains a file that is
-      // not itself a Companion subject — 24 of this repo's 27 qualify, and one
-      // answer is then enough to leave a wire standing.
+      // not itself a Companion subject. Almost all of them do, and one answer is
+      // then enough to leave a wire standing — `.find()` needs one, so this does
+      // not depend on a count that changes every commit.
       const companionSubjects = new Set(
         atlas.challenges.filter((c) => c.verb === 'companion').map((c) => c.subject),
       );

@@ -8,6 +8,12 @@
   (*"what a Companion pass unlocks on the map"*). Inherits ADR-0011's
   proved-versus-shown discipline unchanged.
 - **Context**: the rung after M4. Companion asks about a coupling the player is never shown.
+- **Figures**: measured on this repo at `ef0d8de`, except the Blast Radius overlap
+  paragraph, which is one commit later. **Every number here moves**, because ark
+  indexes itself and each commit changes its own matrix — by `b058070` the deck's
+  200 pairs had made "79% vanish" into 59% and the gate table's 89 into 87. The
+  argument rests on the ratios and the signs, never the digits; re-measure before
+  quoting one.
 
 ---
 
@@ -44,8 +50,9 @@ baseline the grade measures beyond. It is the answer key, pre-sorted, best first
 
 **On this repo the key usually *is* the whole row.** Measured `|truth| / |row|`
 over the shipped deck: **median 1.00** (min 0.29). There is no subset of a node's
-partners that is not key material. The floor is 2 and the matrix minimum is 2, so
-all 174 pairs are sampleable into some key.
+partners that is not key material. And the floor is 2 while the matrix's own
+minimum is 2, so **every pair the matrix records** is sampleable into some key —
+there is no quiet tail of pairs too weak to be answer material.
 
 A visible count threshold would also rebuild ADR-0014's Problem 2 in ink: that
 ADR exists to remove the middle band, and a map drawing pairs at or above N
@@ -187,10 +194,6 @@ and an unknown id draws nothing.
   though no verb returns it now: a verb that reveals a relation the map cannot
   draw must be able to say so rather than borrow a channel meaning something
   else, which is how the first three leaks happened.
-- **The orbit draws no wires**, and says so rather than omitting them. A `Tie` is
-  a curve through the flat plane; ADR-0013 gives every node a height, so the same
-  arc in the orbit would pierce the columns it passes or need a projection
-  nothing has decided. `tiesDrawn: 0` there is honest, not a stub.
 - **The orbit shows no wires, and the player is not told why.** The arc is built
   in *screen* space, so it transfers unchanged; what is undecided is only the
   anchor (top, like the orbit's existing import wires, or base) and how a wire
@@ -202,7 +205,9 @@ and an unknown id draws nothing.
 - **The e2e picks its subject rather than stumbling on one.** The endpoint gate
   makes "answer any Companion question" an unreliable trigger, so the script
   selects a subject carrying only a Companion board whose key contains a
-  non-subject — 24 of this repo's 27 qualify.
+  non-subject. Almost every companion-only subject qualifies and the script needs
+  exactly one, so this is robust to the deck changing under it — which it does on
+  every commit.
 
 ## What this does not fix, named so it is not mistaken for solved
 

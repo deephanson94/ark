@@ -161,8 +161,14 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     // a long cross-region wire has *both* ends off screen exactly when you are
     // standing between them, so the one wire you most want to see is the one
     // that disappears. Import edges can afford that cull because they are short
-    // and there are 337 of them; wires are bounded by the deck (at most ~6 per
-    // board) and there are 3 on this repo's map after two passes.
+    // and there are a few hundred; wires are bounded by the *deck* — at most one
+    // per key member per passed board — rather than by the repo.
+    //
+    // That bound is loose on a large repo and worth stating: svelte carries 508
+    // Companion boards, so a full clear there is on the order of a thousand
+    // curves stroked every frame, in a renderer already measured under its
+    // 50 fps budget. If `npm run raster` is ever run on real hardware
+    // (ADR-0009's P1′), measure a cleared deck, not an empty one.
     const a = project(from);
     const b = project(to);
     const dx = b.x - a.x;
