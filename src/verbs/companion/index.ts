@@ -29,13 +29,27 @@
  * subset-selection verb reduces to one `Grade`.
  */
 
-import type { Challenge, Graph, NodeId } from '../../atlas/index.js';
+import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
+import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
-import type { GenerateOptions, Prompt, SetAnswer, SetPhrasing, Verb } from '../types.js';
+import type {
+  GenerateOptions,
+  NoteFacts,
+  NoteProse,
+  NoteWeights,
+  Prompt,
+  SetAnswer,
+  SetPhrasing,
+  Verb,
+} from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { indexCoChange } from './cochange.js';
 import { generateCompanion } from './generate.js';
 import { revealOf } from './reveal.js';
+
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many;
+}
 
 export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string): Prompt {
   const evidence = challenge.evidence;
@@ -95,11 +109,38 @@ export const companion: Verb = {
    * earned at: ADR-0011 stores what was proved, not what it was proved against,
    * and re-deriving a threshold the save never recorded would invent a fact.
    */
-  stillHolds(graph: Graph, subject: NodeId, member: NodeId) {
+  stillHolds(graph: Graph, subject: SubjectId, member: NodeId) {
     const ref = graph.refById.get(subject);
     const memberRef = graph.refById.get(member);
     if (ref === undefined || memberRef === undefined) return false;
     return indexCoChange(graph.atlas).rows.get(ref)?.has(memberRef) === true;
+  },
+  subjectLabel(graph: Graph, subject: SubjectId) {
+    const ref = graph.refById.get(subject);
+    return ref === undefined ? null : nodeAt(graph, ref).path;
+  },
+  /** Shared commits. The population is every partner the matrix records. */
+  noteWeights(graph: Graph, subject: SubjectId): NoteWeights {
+    const weights = new Map<NodeId, number>();
+    const ref = graph.refById.get(subject);
+    if (ref === undefined) return weights;
+    for (const [member, count] of indexCoChange(graph.atlas).rows.get(ref) ?? []) {
+      weights.set(idOf(graph, member), count);
+    }
+    return weights;
+  },
+  noteProse(facts: NoteFacts): NoteProse {
+    const count = facts.proved.length;
+    const names = facts.proved.map((file) => file.path).join(', ');
+    const claim =
+      `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+      `${plural(count, 'changes', 'change')} with ${facts.subjectLabel} — ${names} — ` +
+      `the strongest sharing ${facts.farthest} ${plural(facts.farthest, 'commit', 'commits')}.`;
+    const revealed =
+      facts.population > count
+        ? `It has changed with ${facts.population} ${plural(facts.population, 'file', 'files')} in all — the other ${facts.population - count} revealed to you, never proved.`
+        : null;
+    return { claim, revealed };
   },
 };
 

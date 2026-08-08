@@ -262,6 +262,49 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   state for two sessions. The fix is not more care: it is **preferring the invariant to the count** —
   "every pair the matrix records is sampleable" holds forever where "all 174 pairs" holds for one
   commit — and, where a number really is the point, **naming the commit it was measured at**.
+- **A subject is not necessarily a node, and for two milestones nothing in the player knew that.**
+  `Challenge.subject` was typed `NodeId`, which is `string`, so when Placement's subject became a
+  commit the compiler saw **nothing** — and nine separate places had baked in the assumption. Three
+  were the field notes (ruler, sentence *and* label), which would have dropped every Placement note
+  in silence or claimed a sha had direct importers. The worst was `save.ts`, where `asPass` required
+  `isNodeId(subject)`: a pass it rejects is dropped at parse and erased by the next write, so every
+  Placement pass would have died on the second session — **the identical failure that file's own
+  comment describes for `VERB_IDS`, one field down and unnoticed**. The others put a commit id in
+  `surveyed`, decayed every Placement pass at restore, keyed a deck bucket no node can resolve, made
+  the guide's button look live and do nothing, and counted "questions left" off the map's *ring* set
+  so the HUD read *"36 questions ringed on the map"* over a map with none. None of these was findable
+  by type-checking or by any existing test. What found them was grepping every read of
+  `challenge.subject` and `pass.subject` and asking *what am I assuming this names?* — so **when a
+  type is an alias for `string`, the alias is a comment, and the assumptions it licenses live in
+  every reader.**
+- **A counterfactual is only as good as the thing it holds fixed.** ADR-0018's first draft claimed
+  the churn gate refused *"25 of 37 commits, leaving a deck of 8"* without `busy` distractors. Run
+  through the real generator it is 10 and 31, and deleting the strategy *alone* moves the number from
+  1 to 3 — because the `distant` padding walks the churn ordering busiest-first, so high-churn wrong
+  answers reach the board anyway. The prototype that produced the original figure filled boards with
+  the **lowest**-churn files it could find, which manufactured the effect it then measured. It
+  changed two knobs and named one. The same ADR did it a second time in the same session — "+0.36 s
+  of index time on hono", from comparing the branch against `master`, two trees with different file
+  counts; measured properly the cost is inside the noise. Measuring first is not enough on its own:
+  **say what the counterfactual holds fixed, and check that it holds it.**
+- **The soft spot is where the change is proudest.** ADR-0018 spent more words on one paragraph than
+  on anything else — the argument that Placement certifies a wrong answer from a commit's *positive*
+  file list, so absence cannot hurt it — and that paragraph is where the wrong answer key was. It was
+  correct about the walk window and then applied to a shallow clone, which is a different mechanism:
+  a `--depth N` clone's oldest commit has no parent, so git diffs it against the empty tree and
+  `--name-status` calls it *an add of the entire worktree*. A repo of 8 files grown to 38 and cloned
+  at depth 2 shipped a board whose key held three files predating the commit by eight commits. Nothing
+  in the type system or the suite could see it; a reviewer told to attack the argument found it in one
+  step. **When a decision record leans hard on one paragraph, that paragraph is the thing to hand
+  someone and say "break this".**
+- **Two true facts in two different files can be a pillar-3 leak that neither file can see.** The
+  Placement prompt prints a commit's date. The inspector prints every node's *last seen*. Neither is a
+  disclosure; together they are "tick the candidates whose dates match", which beat band A on **16 of
+  hono's 54 shipped boards** and on **none** of ark's 37. Every existing gate heuristic came from
+  asking *what does this board invite?* inside one verb; this one needed asking *what else is on
+  screen at the same time?* The three-way alignment ADR-0014 decision 7 describes — map giveaway,
+  naive guess, gate heuristic — is a checklist to run against **every** field the UI prints, not only
+  the one the verb is about.
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human
@@ -333,13 +376,12 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
-**M2 and M3 delivered; M4 is one verb of three; the first three rungs toward the third-person world
-are shipped.** §13's M4 is *Companion, Placement, Archaeology* — **Companion ships and the other two
-were never built.** What M4 actually delivered was the harder half, the seam that lets a verb be
-added without editing the console, the notes or the map; the two remaining verbs are now cheap in a
-way Companion was not. This line said "M4 delivered" for two sessions, which is exactly how a
-milestone gets skipped: the roadmap lives in `NORTH-STAR.md` §13 and a session reads it first, but it
-reads *this* line for what is already done.
+**M2 and M3 delivered; M4 is two verbs of three; the first three rungs toward the third-person world
+are shipped.** §13's M4 is *Companion, Placement, Archaeology* — **Companion and Placement ship;
+Archaeology was never built and cannot be built as §6.2 states it** (see Next action). This line said
+"M4 delivered" for two sessions while one verb existed, which is exactly how a milestone gets
+skipped: the roadmap lives in `NORTH-STAR.md` §13 and a session reads it first, but it reads *this*
+line for what is already done.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
 Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
@@ -361,22 +403,29 @@ north-up — and `n` and the HUD compass are the ways back to north, with shift-
 straightened the map would undo the turn every time a player used the most ordinary control there
 is.
 
-**Two verbs ship.** `src/verbs/blastRadius/` asks what depends on a file (40 challenges here);
-`src/verbs/companion/` asks what *changes with* it (40 here, 54 on hono, 508 on svelte) — the first
-verb graded on git rather than on imports, and the one that reaches the edgeless files the import
-graph structurally cannot. Together they leave 27 of this repo's 113 nodes unprovable where Blast
-Radius alone leaves 35; on hono 178 against 269, on svelte 3,283 against 3,776. The four §8.3
-distractor strategies pick the wrong answers for each, difficulty is computed per §8.4, and the
-player has a challenge console over the map with partial credit, a derived per-file reveal, and fog
-that lifts on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
+**Three verbs ship.** `src/verbs/blastRadius/` asks what depends on a file;
+`src/verbs/companion/` asks what *changes with* it — the first verb graded on git rather than on
+imports, and the one that reaches the edgeless files the import graph structurally cannot;
+`src/verbs/placement/` shows a real commit's message and asks which files it changed
+(**[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**). Together they leave 16
+of this repo's 127 nodes unprovable where Blast Radius alone leaves 39; on hono 142 against 269.
+Placement's subject is a **commit, not a file** — `Challenge.subject` is a `SubjectId` discriminated
+by its own prefix (`n:` a node, `c:` a retained commit), and the shell asks *whether* a subject is
+placeable and *what it is called* without ever asking what it is about. It certifies a wrong answer
+from a commit's own **positive** file list rather than from absence, which is why it needs neither
+ADR-0014's truncated-walk refusal nor its shallow-clone one. §8.3's distractor strategies pick the
+wrong answers for each verb — Placement adds a fifth, `mentioned`, a file the message names and the
+diff does not — difficulty is computed per §8.4, and the player has a challenge console over the map
+with partial credit, a derived per-file reveal, and fog that lifts on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
 over the straight import lines, gated by
 **[ADR-0016](./docs/decisions/0016-a-history-wire-is-drawn-only-where-no-board-is-open.md)** — a wire
 appears only where *neither* of its files still carries an open Companion board, which is pillar 3
 rather than a disclosure rule, because ink on the map is a lookup where text in a closed panel is a
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
-**Field notes** record what you proved — never what you were shown. ~68 KiB of JS, zero runtime
-dependencies, first paint ~310 ms. `npx ark index .` produces a valid ~160 KiB atlas in ~390 ms.
+**Field notes** record what you proved — never what you were shown, and the *verb* writes the
+sentence. ~80 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npx ark index .` produces
+a valid ~208 KiB atlas in ~510 ms (measured at the commit that added Placement).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -421,21 +470,22 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the Placement verb** — M4's second of three, and the owner's call to close the
-milestone. Ground truth is `history.commits`: `truth` is a commit's `files`, the prompt is its
-subject. Measured at `b732e99` before anyone designs around it: 42 commits retained, **38 not wide**
-(a `wide` commit's `files` list is *truncated*, so its key is incomplete — guardrail 4), 14 with 2–6
-files, and **12 whose subject does not name one of its own files**, which is the Ctrl+F-safe supply
-against Blast Radius's 40. Two further traps are already known: the history budget (ADR-0005) was
-tuned for the co-change matrix and now silently decides this verb's deck size — `npm run budget`
-reports 12 commits dropped — and §8.3's four distractor strategies are written for a *file* subject,
-not a commit.
+Next action: **Archaeology, M4's third and last — and it cannot be built as §6.2 states it.**
+*"This file was rewritten three times. What problem kept recurring?"* is not deterministically
+gradeable, so guardrail 3 (no model in the grading path) and guardrail 4 (no uncertain ground truth)
+both bite. It needs reshaping into something git answers exactly — **revert detection is the
+strongest candidate** — and that is a decision to take in an ADR *before* any code. Do not open the
+session by writing a generator.
 
-**Then Archaeology, which cannot be built as §6.2 states it.** *"This file was rewritten three times.
-What problem kept recurring?"* is not deterministically gradeable, so guardrail 3 (no model in the
-grading path) and guardrail 4 (no uncertain ground truth) both bite. It needs reshaping into
-something git answers exactly — **revert detection is the strongest candidate** — and that is a
-decision to take in an ADR *before* any code. Do not open the session by writing a generator.
+Two things Placement measured that a session designing Archaeology will want, because both were
+assumed wrong before they were checked. **ADR-0005's `maxCommits` does not bound a commit-subject
+verb**: on this repo the cap never fires (45 retained against 500, and the 13 "dropped" in
+`report.truncations` are commits that touched no *indexed* file, which that entry conflates), and on
+hono, where it fires hard, `maxChallengesFor` binds first — 500 commits give 232 distinct boards and
+54 ship. And **`wide` is a pillar-3 judgement, not a guardrail-4 one**: `wideCommitFiles` (25) and
+`maxCommitFiles` (64) are independent, so a wide commit's file list is complete unless it is *also*
+long, and the truncation that really costs a key announces itself in `report.truncations` with its
+own limit in `kept`.
 
 Then **the negative witness**: a wrong pick already has a known reason class — sibling, name-alike,
 structurally-near non-dependent, co-change ghost — the generator *chose* it for that reason, and the
@@ -463,10 +513,18 @@ human can take: **`npm run raster` on real hardware** — 45/33/43 fps is a head
 ADR-0009's P1′ gates the renderer on it, and it should now be measured on a *turned* map, since
 oblique headings are the normal case and were never what it sampled.
 
-The verb seam was the real work of M4 and it is worth knowing what it now costs to add a third:
-`difficulty.ts`, `gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb, and
-`reveal`, the reveal's summary sentence, the grade's phrasing, the button label and `stillHolds` are
-all on the `Verb` contract. Nothing in the console, the notes or the map names a verb any more.
-`(verb, subject)` is the key everywhere `subject` used to be — saves, the deck, the selector's
-attempt counter — and **each of those was a live defect, not tidying**: keyed by subject, a full
-playthrough of this repo served 60 of its 71 questions and called the deck finished.
+The verb seam was the real work of M4, and the third verb measured what it is worth. `difficulty.ts`,
+`gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb; `reveal`, the reveal's
+summary sentence, the grade's phrasing, the button label, `stillHolds` and — since Placement —
+`subjectLabel`, `noteWeights` and `noteProse` are all on the `Verb` contract. Nothing in the console,
+the notes or the map names a verb. `(verb, subject)` is the key everywhere `subject` used to be —
+saves, the deck, the selector's attempt counter — and **each of those was a live defect, not
+tidying**: keyed by subject, a full playthrough of this repo served 60 of its 71 questions and called
+the deck finished.
+
+**What the seam did and did not buy, measured on verb #3.** It bought everything about *asking*: the
+console, map, grader, deck and selector needed no edit to hold a third verb, and `VERBS` gained one
+line. It bought nothing about *what a subject is* — see the landmine below — and the field notes,
+which M4 never revisited, still chose their ruler and their sentence with a verb name and an `else`.
+So: adding a verb whose subject is a file is now genuinely cheap. Adding one that changes a shape the
+shell reads is exactly as expensive as the number of readers that shape has.

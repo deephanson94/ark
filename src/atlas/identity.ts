@@ -42,3 +42,22 @@ export function nodeIdFor(originPath: string): string {
 export function isNodeId(value: string): boolean {
   return /^n:[0-9a-f]{12}$/.test(value);
 }
+
+/**
+ * `c:` + the 12-hex abbreviated sha a `CommitRecord` already carries.
+ *
+ * A challenge's subject is a **place or an event** (ADR-0018), and which one it
+ * is has to be answerable without knowing which verb asked — the player's fog,
+ * save and map all read a subject and only one of those two kinds belongs on a
+ * canvas. So the discrimination lives in the value's own prefix, matching
+ * `nodeIdFor`'s existing `n:` convention, and needs no second field to say
+ * which arm is populated.
+ */
+export function commitIdFor(sha: string): string {
+  return `c:${sha.slice(0, 12)}`;
+}
+
+/** Shape check only — says nothing about whether the commit is in a given atlas. */
+export function isCommitId(value: string): boolean {
+  return /^c:[0-9a-f]{12}$/.test(value);
+}

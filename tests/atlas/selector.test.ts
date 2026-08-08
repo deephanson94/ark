@@ -21,7 +21,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
+import type { Atlas, Challenge, SubjectId } from '../../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../../src/indexer/build.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
@@ -29,12 +29,17 @@ import { answerKey } from '../../src/player/progress.js';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 let atlas: Atlas;
-let regionOf: (subject: NodeId) => string;
+let regionOf: (subject: SubjectId) => string | null;
 
 beforeAll(async () => {
   atlas = await buildAtlas(indexOptions(ROOT));
   const byId = new Map(atlas.nodes.map((node) => [node.id, node.region]));
-  regionOf = (subject) => byId.get(subject) ?? '';
+  // Null, exactly as `main.ts` resolves it: a Placement subject is a commit and
+  // has no square on the map. Returning `''` made every pair of Placement
+  // questions look like two questions about the same region — 34 consecutive
+  // "same region" pairs on this repo, from a signal that was really "neither of
+  // these is anywhere".
+  regionOf = (subject) => byId.get(subject) ?? null;
 }, 60_000);
 
 const truthKey = (challenge: Challenge): string => challenge.truth.join('\n');
@@ -142,8 +147,16 @@ describe('a full playthrough of this repo', () => {
   it('keeps the tour moving across the map', () => {
     // Not zero: the last question has nowhere else to go, and the rule relaxes
     // rather than blocking. One is the measured floor, not an aspiration.
+    //
+    // Restricted to pairs that are both *on* the map, because that is what the
+    // property is about. A Placement subject is a commit with no region, and
+    // counting two of those as "the same region" measures nothing.
     const order = challenges(playthrough(() => 'pass'));
-    expect(consecutive(order, (a, b) => regionOf(a.subject) === regionOf(b.subject))).toBeLessThan(3);
+    const sameRegion = consecutive(order, (a, b) => {
+      const region = regionOf(a.subject);
+      return region !== null && regionOf(b.subject) === region;
+    });
+    expect(sameRegion).toBeLessThan(3);
   });
 
   it('opens on the easiest question and ends having served every one', () => {
@@ -184,24 +197,44 @@ describe('a full playthrough of this repo', () => {
 });
 
 describe('every rank component earns its place on real data', () => {
-  /** How many times a component's value differed from the winner's rivals. */
-  function relaxations(order: readonly Challenge[]): { region: number } {
-    let region = 0;
-    for (let i = 1; i < order.length; i++) {
-      const previous = order[i - 1];
-      const served = order[i];
-      if (previous === undefined || served === undefined) continue;
-      if (regionOf(served.subject) === regionOf(previous.subject)) region++;
+  it('the region term changes a real choice on this deck', () => {
+    // **This used to assert the opposite and it stopped being true.** The old
+    // form counted how often the constraint had to be *relaxed* — consecutive
+    // questions in one region — on the reasoning that a term never overridden is
+    // decoration. On an 80-question deck that happened; on 116 it does not,
+    // because with a third verb added the selector can always find a different
+    // region and the constraint simply always wins.
+    //
+    // Which is the term working perfectly, not the term being dead — so the old
+    // check was measuring failure and calling it liveness. This measures the
+    // thing the heading claims, in the same shape as the overlap test below:
+    // run the rank with and without the term against one shared history and
+    // count the picks that differ. A term that changed no pick would fail here
+    // however large the deck grew. Measured at the commit that added Placement:
+    // 19 of 116 — but the assertion is the invariant, not the number, because
+    // ark indexes itself and the deck moves under it.
+    const answered = new Set<string>();
+    let previous: Challenge | null = null;
+    let diverged = 0;
+    for (let step = 0; step < atlas.challenges.length; step++) {
+      const withRegion = suggestNext(atlas.challenges, regionOf, {
+        answered,
+        attempts: new Map(),
+        previous,
+      });
+      // Neutralised: with no subject anywhere, `sameRegion` is 0 for every
+      // candidate and the term cannot break a tie.
+      const without = suggestNext(atlas.challenges, () => null, {
+        answered,
+        attempts: new Map(),
+        previous,
+      });
+      if (withRegion === null) break;
+      if (withRegion.id !== without?.id) diverged++;
+      previous = withRegion;
+      answered.add(answerKey(withRegion.verb, withRegion.subject));
     }
-    return { region };
-  }
-
-  it('the region constraint has to be relaxed at least once', () => {
-    // Measured, and recorded here so a future change that makes the branch dead
-    // shows up as a failing test rather than as code nobody notices.
-    const perfect = relaxations(challenges(playthrough(() => 'pass')));
-    const mixed = relaxations(challenges(playthrough((step) => (step % 2 === 0 ? 'pass' : 'fail'))));
-    expect(perfect.region + mixed.region).toBeGreaterThan(0);
+    expect(diverged).toBeGreaterThan(0);
   });
 
   it('the overlap tiebreak changes a real choice on this deck', () => {

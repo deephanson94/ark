@@ -59,7 +59,7 @@
  * reading a hot region counter should know it means "one region", not "bug".
  */
 
-import type { Challenge, NodeId } from '../atlas/index.js';
+import type { Challenge, SubjectId } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
 import { answerKey } from './progress.js';
 
@@ -184,9 +184,14 @@ function rankLess(a: Rank, b: Rank): boolean {
  */
 export function suggestNext(
   deck: readonly Challenge[],
-  regionOf: (subject: NodeId) => string,
+  regionOf: (subject: SubjectId) => string | null,
   state: SelectorState,
 ): Challenge | null {
+  // Null means "this subject is not anywhere on the map" — a commit (ADR-0018),
+  // or a node the atlas no longer holds. The region constraint then simply does
+  // not apply, rather than two placeless subjects counting as neighbours: a
+  // shared *absence* of region is not the same-neighbourhood signal this rank
+  // term exists to penalise.
   const previousRegion = state.previous === null ? null : regionOf(state.previous.subject);
 
   let best: Challenge | null = null;

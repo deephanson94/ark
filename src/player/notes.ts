@@ -38,79 +38,48 @@
  * that no longer exists goes dormant — retained in storage, absent here.
  */
 
-import type { Graph, NodeId, VerbId } from '../atlas/index.js';
-import { byteCompare, dependents, idOf, nodeAt } from '../atlas/index.js';
-import { indexCoChange } from '../verbs/companion/index.js';
+import type { Graph, SubjectId, VerbId } from '../atlas/index.js';
+import { byteCompare, nodeAt } from '../atlas/index.js';
+import type { NoteFacts, NoteProse, ProvedFile } from '../verbs/index.js';
+import { VERBS } from '../verbs/index.js';
 import type { Liveness, Progress } from './progress.js';
 import { livePasses } from './progress.js';
 
-export interface ProvedFile {
-  readonly path: string;
-  /**
-   * How far this file sits from the subject, in the unit its verb measures in:
-   * import hops for Blast Radius, shared commits for Companion. At least 1.
-   *
-   * One field rather than two because a note only ever renders one verb's
-   * claim, and `noteProse` says which unit it is in. Two nullable fields would
-   * make every reader ask which one is populated.
-   */
-  readonly weight: number;
-}
+export type { NoteProse, ProvedFile };
 
-export interface FieldNote {
+export interface FieldNote extends NoteFacts {
   readonly verb: VerbId;
-  readonly subject: NodeId;
-  readonly subjectPath: string;
-  /** Sorted by weight, then path. Never empty — an empty note is dropped. */
-  readonly proved: readonly ProvedFile[];
-  /** The largest `weight` among `proved`. */
-  readonly farthest: number;
-  /**
-   * The size of the subject's full population **today** — its transitive
-   * dependents, or its co-change partners.
-   *
-   * This is *revealed*, not proved, and the prose has to say so. It is
-   * recomputed rather than stored, because it is a property of the current
-   * atlas and the player's claim is about the files, not the count.
-   */
-  readonly radius: number;
+  readonly subject: SubjectId;
 }
 
 /**
  * Every note the record supports against the atlas currently loaded.
  *
- * Ordered by radius descending, then subject path — biggest thing you know
+ * Ordered by population descending, then subject label — biggest thing you know
  * first, and derived from the graph, so two machines showing the same save show
  * the same page.
- */
-/**
- * How far each node sits from the subject, in the unit this verb measures in.
  *
- * The two verbs have genuinely different rulers and neither can be expressed in
- * the other. Before M4 this was a bare `dependents()` call, and a Companion pass
- * reaching it would have found no import distance for any of its members and
- * been **silently dropped** — the note would simply not appear, with nothing to
- * say it had gone.
+ * **Nothing in this file knows what any verb asks, and that is the third time
+ * the rule had to be applied here.** `weightsFor` and `noteProse` were both
+ * `verb === 'companion' ? … : …`, with Blast Radius as the *else* — so a third
+ * verb inherited a claim about import hops by default, and Placement's notes
+ * would have read *"all of them direct importers"* about a commit. `subjectPath`
+ * was the same shape one field over: `nodeAt(refById.get(subject))` is
+ * `undefined` for a commit id, and the `continue` below would have dropped every
+ * Placement note in silence. Wording, ruler and label are all on the `Verb`
+ * contract now.
  */
-function weightsFor(graph: Graph, verb: VerbId, subjectRef: number): Map<NodeId, number> {
-  const weights = new Map<NodeId, number>();
-  if (verb === 'companion') {
-    const row = indexCoChange(graph.atlas).rows.get(subjectRef);
-    for (const [ref, count] of row ?? []) weights.set(idOf(graph, ref), count);
-    return weights;
-  }
-  for (const [ref, distance] of dependents(graph, subjectRef, Infinity)) {
-    weights.set(idOf(graph, ref), distance);
-  }
-  return weights;
-}
-
 export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness): FieldNote[] {
   const notes: FieldNote[] = [];
   for (const pass of livePasses(progress, liveness)) {
-    const subjectRef = graph.refById.get(pass.subject);
-    if (subjectRef === undefined) continue;
-    const weights = weightsFor(graph, pass.verb, subjectRef);
+    const verb = VERBS[pass.verb as keyof typeof VERBS];
+    // An atlas or a save may name a verb this build does not have. Skipping is
+    // the same answer `channelOf` gives to the same question: a claim nothing
+    // here understands is not rendered as knowledge.
+    if (verb === undefined) continue;
+    const subjectLabel = verb.subjectLabel(graph, pass.subject);
+    if (subjectLabel === null) continue;
+    const weights = verb.noteWeights(graph, pass.subject);
 
     const proved: ProvedFile[] = [];
     for (const member of pass.proved) {
@@ -135,60 +104,32 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
     notes.push({
       verb: pass.verb,
       subject: pass.subject,
-      subjectPath: nodeAt(graph, subjectRef).path,
+      subjectLabel,
       proved,
       farthest: Math.max(...proved.map((file) => file.weight)),
-      radius: weights.size,
+      population: weights.size,
     });
   }
   notes.sort(
     (a, b) =>
-      b.radius - a.radius ||
-      byteCompare(a.subjectPath, b.subjectPath) ||
+      b.population - a.population ||
+      byteCompare(a.subjectLabel, b.subjectLabel) ||
       byteCompare(a.verb, b.verb),
   );
   return notes;
 }
 
-export interface NoteProse {
-  /** What the player proved. Safe to state as knowledge. */
-  readonly claim: string;
-  /** What they were shown. Null when there is nothing beyond the claim. */
-  readonly revealed: string | null;
-}
-
-function plural(count: number, one: string, many: string): string {
-  return count === 1 ? one : many;
-}
-
 /**
- * A note in words. Repo-agnostic templates (guardrail 2) — every specific
- * string in the output came out of the atlas.
+ * A note in words, written by the verb that earned it.
+ *
+ * Repo-agnostic templates only (guardrail 2) — every specific string in the
+ * output came out of the atlas. See `fieldNotes` for why this dispatches rather
+ * than branching.
  */
 export function noteProse(note: FieldNote): NoteProse {
-  const count = note.proved.length;
-  const names = note.proved.map((file) => file.path).join(', ');
-
-  // Each verb's sentence states its own relation in its own unit. A single
-  // template would have had to describe a co-change count as a distance.
-  const claim =
-    note.verb === 'companion'
-      ? `You proved ${count} ${plural(count, 'file', 'files')} that ` +
-        `${plural(count, 'changes', 'change')} with ${note.subjectPath} — ${names} — ` +
-        `the strongest sharing ${note.farthest} ${plural(note.farthest, 'commit', 'commits')}.`
-      : `You proved ${count} ${plural(count, 'file', 'files')} that ` +
-        `${plural(count, 'depends', 'depend')} on ${note.subjectPath} — ${names} — ` +
-        `${note.farthest === 1 ? 'all of them direct importers' : `the farthest ${note.farthest} hops away`}.`;
-
-  // The gap between what was proved and what the map shows is exactly the
-  // sampled part of the answer key (ADR-0008). Naming it as *revealed* is what
-  // keeps the sentence above honest; collapsing the two would restore §9's
-  // unprovable example.
-  const revealed =
-    note.radius > count
-      ? note.verb === 'companion'
-        ? `It has changed with ${note.radius} ${plural(note.radius, 'file', 'files')} in all — the other ${note.radius - count} revealed to you, never proved.`
-        : `Its full radius — ${note.radius} ${plural(note.radius, 'file', 'files')} — is revealed on your map.`
-      : null;
-  return { claim, revealed };
+  const verb = VERBS[note.verb as keyof typeof VERBS];
+  // Unreachable from `fieldNotes`, which has already dropped an unknown verb.
+  // Kept because this is exported and the types demand a total function.
+  if (verb === undefined) return { claim: '', revealed: null };
+  return verb.noteProse(note);
 }

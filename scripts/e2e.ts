@@ -26,6 +26,7 @@ import { build, preview } from 'vite';
 import type { Atlas } from '../src/atlas/index.js';
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
+import { storageKeyFor } from '../src/player/save.js';
 import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -818,6 +819,175 @@ async function main(): Promise<number> {
     const backDetail = (await page.locator('.hud-detail').innerText()).trim();
     if (backDetail.includes('orbit')) {
       failures.push({ what: 'orbit', detail: `o did not return to the flat map: ${backDetail}` });
+    }
+
+    // ---- Placement: a question with no place on the map -----------------
+    //
+    // ADR-0018's liveness gate. Placement's subject is a commit, so it is
+    // unreachable from the map — no node carries it, no ring shows it, and the
+    // grid scan above can never find it. The *only* way in is the guide, and
+    // the guide is exactly the code path a placeless subject broke: it looked
+    // up the subject's node, found nothing, and returned, leaving a live-looking
+    // button that did nothing.
+    //
+    // Reaching one honestly costs 80 answered questions, because §5's tiers are
+    // the progression and this verb is tier 6 — so the deck is seeded through
+    // the *supported* restore path instead, in its own context so the run above
+    // is untouched. That makes this a test of two things at once: a save
+    // carrying `c:` subjects, and the console rendering a verb the shell has
+    // never been able to name.
+    const placementDeck = atlas.challenges.filter((entry) => entry.verb === 'placement');
+    if (placementDeck.length === 0) {
+      failures.push({ what: 'placement', detail: 'the atlas shipped no Placement questions at all' });
+    } else {
+      const seeded = JSON.stringify({
+        version: 1,
+        surveyed: [],
+        passes: atlas.challenges
+          .filter((entry) => entry.verb !== 'placement')
+          .map((entry) => ({ verb: entry.verb, subject: entry.subject, proved: entry.truth })),
+      });
+      const key = storageKeyFor(atlas.repo);
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const seededPage = await context.newPage();
+      const seededErrors: string[] = [];
+      seededPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') seededErrors.push(message.text());
+      });
+      try {
+        await seededPage.addInitScript(
+          ([storageKey, value]) => window.localStorage.setItem(String(storageKey), String(value)),
+          [key, seeded],
+        );
+        await seededPage.goto(url, { waitUntil: 'networkidle' });
+        await seededPage.waitForSelector('canvas.map', { timeout: 15_000 });
+
+        const leftBefore = Number.parseInt(
+          /(\d+) left/.exec((await seededPage.locator('.guide-caption').innerText()).trim())?.[1] ??
+            '0',
+          10,
+        );
+        if (leftBefore !== placementDeck.length) {
+          // The counter used to be the map's *ring* set, which a commit subject
+          // never joins — so it read 0 here while a third of the deck waited.
+          failures.push({
+            what: 'placement',
+            detail: `guide says ${leftBefore} left with ${placementDeck.length} Placement questions unanswered`,
+          });
+        }
+        // The HUD's own sentence, which is a claim about the **map**. It counted
+        // off the deck and read "36 questions ringed on the map" over a map with
+        // no rings at all, because a commit subject never joins the ring set.
+        const ringed = (await seededPage.locator('.hud-quests').innerText()).trim();
+        if (ringed.includes(`${placementDeck.length} questions ringed on the map`)) {
+          failures.push({
+            what: 'placement',
+            detail: `the HUD counts placeless questions as ringed: "${ringed}"`,
+          });
+        }
+        const action = (await seededPage.locator('.guide-action').innerText()).trim();
+        if (!action.toLowerCase().includes('open')) {
+          failures.push({
+            what: 'placement',
+            detail: `the control offers to travel to a subject with no position: "${action}"`,
+          });
+        }
+        await seededPage.screenshot({ path: join(SHOT_DIR, 'placement-guide.png') });
+
+        await seededPage.locator('.guide-action').click();
+        await seededPage.waitForSelector('.console-panel', { timeout: 5000 });
+        // Lowercased: the header is `text-transform: uppercase`, so `innerText`
+        // returns rendered text and not the string the verb supplied.
+        const verb = (await seededPage.locator('.console-verb').innerText()).trim().toLowerCase();
+        if (verb !== 'placement') {
+          failures.push({ what: 'placement', detail: `the guide opened a ${verb} board` });
+        }
+        const asked = (await seededPage.locator('.console-question').innerText()).trim();
+        process.stdout.write(`e2e: placement → ${asked}\n`);
+        // The question quotes a commit message the atlas holds. Derived, never
+        // authored (guardrail 2) — and this is what proves it.
+        // Matched on the **quoted** message and required to be unique: a bare
+        // substring test picks the wrong board whenever one retained commit's
+        // message is a prefix of another's ("Fix" inside "Fix tests"), which is
+        // the `.first()` landmine wearing a different hat.
+        const matches = placementDeck.filter(
+          (entry) =>
+            entry.evidence.kind === 'commit' && asked.includes(`"${entry.evidence.subject}"`),
+        );
+        if (matches.length > 1) {
+          failures.push({
+            what: 'placement',
+            detail: `${matches.length} retained commits match the prompt — cannot say which board was played`,
+          });
+        }
+        const played = matches.length === 1 ? matches[0] : undefined;
+        if (played === undefined) {
+          failures.push({
+            what: 'placement',
+            detail: `the prompt quotes no commit this atlas retained: "${asked}"`,
+          });
+        } else {
+          const wanted = new Set(played.truth.map((id) => pathById.get(id) ?? ''));
+          const options = await seededPage.locator('.choice-button').count();
+          let clicked = 0;
+          for (let i = 0; i < options; i++) {
+            const button = seededPage.locator('.choice-button').nth(i);
+            if (!wanted.has((await button.innerText()).trim())) continue;
+            await button.click();
+            clicked++;
+          }
+          if (clicked !== played.truth.length) {
+            failures.push({
+              what: 'placement',
+              detail: `${clicked} of ${played.truth.length} answer files were on the board`,
+            });
+          }
+          await seededPage.screenshot({ path: join(SHOT_DIR, 'placement.png') });
+          await seededPage.locator('.console-submit').click();
+          await seededPage.waitForSelector('.console-score', { timeout: 5000 });
+          const score = (await seededPage.locator('.console-score').innerText())
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!score.includes('100%')) {
+            failures.push({ what: 'placement', detail: `the atlas's own answer key scored "${score}"` });
+          }
+          // `.console-instruction` is where `Reveal.summary` renders after a
+          // grade — the sentence the *verb* writes about its own answer.
+          const summary = (await seededPage.locator('.console-instruction').allInnerTexts()).join(' ');
+          const sha = played.subject.slice(2);
+          if (!summary.includes(sha)) {
+            failures.push({
+              what: 'placement',
+              detail: `the reveal never names the commit it graded: "${summary.trim()}"`,
+            });
+          }
+          await seededPage.screenshot({ path: join(SHOT_DIR, 'placement-graded.png') });
+          await seededPage.locator('.console-submit').click();
+          await seededPage.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+
+          // The note. `notes.ts` looked a subject up through `refById`, which
+          // returns nothing for a commit id and `continue`d — so this note
+          // would have been absent with nothing anywhere to say it had gone.
+          await seededPage.locator('.hud-notes').click();
+          await seededPage.waitForSelector('.notes-panel', { timeout: 5000 });
+          const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
+          const mine = claims.find((claim) => claim.includes(sha));
+          if (mine === undefined) {
+            failures.push({
+              what: 'placement',
+              detail: `no field note names ${sha}, which was just proved`,
+            });
+          } else if (mine.includes('hops') || mine.includes('depend')) {
+            // The sentence Blast Radius's template would have produced about a
+            // sha, which is why the note contract moved onto the verb.
+            failures.push({ what: 'placement', detail: `a Placement note talks in import hops: "${mine}"` });
+          }
+          await seededPage.screenshot({ path: join(SHOT_DIR, 'placement-notes.png') });
+        }
+      } finally {
+        for (const error of seededErrors) failures.push({ what: 'console', detail: error });
+        await context.close();
+      }
     }
 
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });

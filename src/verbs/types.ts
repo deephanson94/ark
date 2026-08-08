@@ -10,7 +10,7 @@
  * testable, and structurally incapable of having a model in the path.
  */
 
-import type { Atlas, Challenge, Graph, NodeId, VerbId } from '../atlas/index.js';
+import type { Atlas, Challenge, Graph, NodeId, SubjectId, VerbId } from '../atlas/index.js';
 
 export interface Grade {
   /** 0..1. Never negative — a wrong pick teaches, it does not subtract. */
@@ -95,6 +95,45 @@ export interface Prompt {
    * owns all of it.
    */
   readonly action: string;
+}
+
+/**
+ * How far one proved member sits from a note's subject, in the unit its verb
+ * measures in: import hops, shared commits, or — for a relation with no
+ * gradient at all — a flat 1.
+ *
+ * The verb supplies these (`Verb.noteWeights`), because the player module that
+ * used to compute them did it with `verb === 'companion' ? … : …` and the
+ * *else* arm was Blast Radius. A third verb inherits that arm silently, which
+ * is how a Placement note would have come to say "all of them direct
+ * importers" about a commit.
+ */
+export type NoteWeights = ReadonlyMap<NodeId, number>;
+
+/** A field note's two sentences: what was proved, and what was merely shown. */
+export interface NoteProse {
+  /** What the player proved. Safe to state as knowledge. */
+  readonly claim: string;
+  /** What they were shown. Null when there is nothing beyond the claim. */
+  readonly revealed: string | null;
+}
+
+/** One proved member of a note, with its weight in the verb's own unit. */
+export interface ProvedFile {
+  readonly path: string;
+  readonly weight: number;
+}
+
+/** Everything `Verb.noteProse` needs to write a note. Assembled by `notes.ts`. */
+export interface NoteFacts {
+  /** The subject's display name — a path, or a commit's own label. */
+  readonly subjectLabel: string;
+  /** Sorted by weight, then path. Never empty. */
+  readonly proved: readonly ProvedFile[];
+  /** The largest `weight` among `proved`. */
+  readonly farthest: number;
+  /** The size of the subject's full population **today**. Revealed, not proved. */
+  readonly population: number;
 }
 
 export type NoteKind = 'correct' | 'missed' | 'spurious';
@@ -233,10 +272,36 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * ADR-0011 decision 3: provenance is immutable, but the claim about *today*
    * is re-checked before it renders as knowledge. The check is **per verb**
    * because the claims differ — "still depends on" for Blast Radius, "still
-   * changes with" for Companion — and applying one verb's rule to the other's
-   * pass would drop true claims and keep false ones.
+   * changes with" for Companion, "was still in that commit" for Placement —
+   * and applying one verb's rule to another's pass would drop true claims and
+   * keep false ones.
    */
-  stillHolds(graph: Graph, subject: NodeId, member: NodeId): boolean;
+  stillHolds(graph: Graph, subject: SubjectId, member: NodeId): boolean;
+  /**
+   * What to call this subject on screen, or null when the atlas no longer has
+   * it.
+   *
+   * On the contract because a subject is a place **or** an event (ADR-0018) and
+   * only the verb knows which of its atlas's sections to look in. `notes.ts`
+   * resolved this with `nodeAt(graph, refById.get(subject))` — correct for two
+   * verbs and, for a commit id, `undefined`, which `continue`s: the note would
+   * simply never appear, with nothing anywhere to say it had gone. That is the
+   * same silent-drop failure `weightsFor` was written to stop, one field over.
+   */
+  subjectLabel(graph: Graph, subject: SubjectId): string | null;
+  /**
+   * How far each member of the subject's population sits from it, in this
+   * verb's own unit — and, by its key set, **what that population is today**.
+   *
+   * Recomputed from the atlas rather than stored, so a note follows a rename
+   * and decays when the repo does (ADR-0011 decision 3).
+   */
+  noteWeights(graph: Graph, subject: SubjectId): NoteWeights;
+  /**
+   * A field note in words. Repo-agnostic templates only (guardrail 2) — every
+   * specific string must have come out of the atlas.
+   */
+  noteProse(facts: NoteFacts): NoteProse;
 }
 
 /**

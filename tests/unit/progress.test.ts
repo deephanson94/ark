@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
-import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
+import { buildGraph, commitIdFor, validateAtlas } from '../../src/atlas/index.js';
 import {
   EMPTY_PROGRESS,
   UNCHECKED,
@@ -314,5 +314,87 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
     // Guardrail: a pass on one verb retiring the other verb's board would
     // silently shrink the deck by half on every repo.
     expect(answered.has(answerKey('blastRadius', idFor('src/a.ts')))).toBe(false);
+  });
+});
+
+describe('a commit subject moves through the record without ever reaching the map', () => {
+  // ADR-0018: Placement's subject is an event, not a place. The record keys on
+  // it exactly as it keys on a node — a string is a string — but the *fog* is a
+  // property of the map, and a commit has no square on it.
+  const atlas = validateAtlas({
+    ...atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts']),
+    repo: {
+      ...atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts']).repo,
+      head: 'f'.repeat(40),
+      headDate: '2026-01-01',
+      root: 'e'.repeat(40),
+    },
+    history: {
+      ...atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts']).history,
+      present: true,
+      commitsWalked: 1,
+      commitsRetained: 1,
+      window: { from: '2026-01-01', to: '2026-01-01' },
+      commits: [
+        {
+          sha: 'abcdef123456',
+          date: '2026-01-01',
+          subject: 'a commit',
+          files: [0, 1],
+          wide: false,
+          issue: null,
+        },
+      ],
+    },
+  });
+  const graph = buildGraph(atlas);
+  const commit = commitIdFor('abcdef123456');
+  const nodeIds = atlas.nodes.map((node) => node.id);
+  const commitChallenge: Challenge = {
+    id: 'placement-abcdef123456',
+    verb: 'placement',
+    tier: 6,
+    difficulty: 0.4,
+    subject: commit,
+    candidates: [...nodeIds].sort(),
+    truth: [nodeIds[0] ?? ''].sort(),
+    evidence: { kind: 'commit', subject: 'a commit', date: '2026-01-01', touched: 2 },
+  };
+
+  it('never puts a commit id in `surveyed`, which is a set of files', () => {
+    const grade = gradeSet(commitChallenge, { picked: commitChallenge.truth }, BLAST_PHRASING);
+    const { progress } = applyGrade(EMPTY_PROGRESS, commitChallenge, grade);
+    expect(progress.surveyed).not.toContain(commit);
+    expect(progress.surveyed).toEqual([...nodeIds].sort());
+  });
+
+  it('never puts a commit id in `understood` either, but does promote what was proved', () => {
+    const grade = gradeSet(commitChallenge, { picked: commitChallenge.truth }, BLAST_PHRASING);
+    const { progress } = applyGrade(EMPTY_PROGRESS, commitChallenge, grade);
+    const fog = deriveFog(progress, livenessOf(graph, VERBS));
+    expect([...fog.understood]).toEqual([nodeIds[0]]);
+  });
+
+  it('keeps the pass while the commit is in the window, and drops it once it is not', () => {
+    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? '']);
+    expect(answeredKeys(passed, livenessOf(graph, VERBS))).toContain(
+      answerKey('placement', commit),
+    );
+    const slid = buildGraph(
+      validateAtlas({
+        ...atlas,
+        history: { ...atlas.history, commits: [], commitsRetained: 0 },
+      }),
+    );
+    expect(answeredKeys(passed, livenessOf(slid, VERBS)).size).toBe(0);
+  });
+
+  it('offers a commit subject to no map unlock, whatever verb asks for one', () => {
+    // `subjectsPassed` feeds the map's radius licence, which resolves each id
+    // through `refById`. A commit id would resolve to nothing there — the
+    // filter is what keeps that from being a silent miss.
+    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? '']);
+    const live = livenessOf(graph, VERBS);
+    expect(subjectsPassed(passed, live, 'placement').size).toBe(0);
   });
 });

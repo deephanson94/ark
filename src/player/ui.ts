@@ -49,6 +49,7 @@ export interface Hud {
     level: string,
     stats: string,
     questionsLeft: number,
+    ringed: number,
     bearing: number,
   ): void;
 }
@@ -56,8 +57,19 @@ export interface Hud {
 export interface GuideView {
   /** `null` when every question has been passed. */
   readonly next: Challenge | null;
-  /** The suggestion's display name. */
+  /** The suggestion's display name, from the verb that asks about it. */
   readonly path: string | null;
+  /**
+   * False when the suggestion has no position on the map — a commit subject
+   * (ADR-0018), or a node this atlas no longer holds.
+   *
+   * The control's *action* changes with it, which is the one place ADR-0011's
+   * "takes you to a landmark, does not open a question" needs a qualifier: with
+   * nowhere to go, panning the map is not a weaker version of the affordance,
+   * it is nothing at all. So the button opens the question, and says so, rather
+   * than looking live and doing nothing.
+   */
+  readonly placed: boolean;
   /** True when the player is already standing on the suggestion. */
   readonly arrived: boolean;
   readonly questionsLeft: number;
@@ -90,7 +102,7 @@ export function createGuide(onSuggest: () => void): Guide {
   const root = el('div', 'guide', [button, caption]);
   return {
     root,
-    update({ next, path, arrived, questionsLeft }) {
+    update({ next, path, placed, arrived, questionsLeft }) {
       if (next === null) {
         button.disabled = true;
         button.textContent = 'every question answered';
@@ -100,6 +112,11 @@ export function createGuide(onSuggest: () => void): Guide {
         return;
       }
       button.disabled = false;
+      if (!placed) {
+        button.textContent = 'Open the next question';
+        caption.textContent = `${questionsLeft} left · next is ${path ?? 'a question with no place on the map'}`;
+        return;
+      }
       // Once you are standing on the suggestion the button has already done its
       // job, and saying "next is draw.ts" while you are on draw.ts reads as a
       // control that did nothing. It stays live — panning away and pressing it
@@ -189,7 +206,7 @@ export function createHud(
 
   return {
     root,
-    update(coverage, level, stats, questionsLeft, bearing) {
+    update(coverage, level, stats, questionsLeft, ringed, bearing) {
       compass.update(bearing);
       bar.style.width = `${(coverage.fraction * 100).toFixed(1)}%`;
       // Two numbers, deliberately separate. Surveyed is what you have looked
@@ -199,10 +216,17 @@ export function createHud(
       // Short enough not to wrap in a 296 px panel: the first version read
       // "N questions left — ringed on the map", took two lines, and pushed the
       // stats line into a third.
+      // **Two numbers, because since ADR-0018 they can differ.** A Placement
+      // subject is a commit, which carries no ring, so a deck with only those
+      // left would have read "36 questions ringed on the map" over a map with
+      // none — a sentence about the map, counted off the deck. The short form
+      // survives for the case where they agree, which is most of a session.
       quests.textContent =
         questionsLeft === 0
           ? 'every question answered'
-          : `${questionsLeft} question${questionsLeft === 1 ? '' : 's'} ringed on the map`;
+          : ringed === questionsLeft
+            ? `${questionsLeft} question${questionsLeft === 1 ? '' : 's'} ringed on the map`
+            : `${questionsLeft} left · ${ringed} ringed on the map`;
       detail.textContent = `${level} · ${stats}`;
     },
   };

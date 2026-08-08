@@ -32,9 +32,9 @@
  * reconstructible from anything else.
  */
 
-import type { NodeId, VerbId } from '../atlas/index.js';
+import type { NodeId, SubjectId, VerbId } from '../atlas/index.js';
 import type { Graph } from '../atlas/index.js';
-import { byteCompare } from '../atlas/index.js';
+import { byteCompare, commitIdFor, isNodeId } from '../atlas/index.js';
 import type { Challenge } from '../atlas/index.js';
 import type { Grade } from '../verbs/index.js';
 import { PASS_THRESHOLD } from '../verbs/index.js';
@@ -53,7 +53,14 @@ export const SAVE_VERSION = 1;
  */
 export interface Pass {
   readonly verb: VerbId;
-  readonly subject: NodeId;
+  /**
+   * A node id, or a commit id for a verb that asks about an event (ADR-0018).
+   *
+   * Opaque here: the save keys on it, orders on it and compares it, and never
+   * needs to know which kind it is. That is what let Placement's key be
+   * `(verb, subject)` like everyone else's.
+   */
+  readonly subject: SubjectId;
   /** The truth members the player actually picked. Sorted, unique. */
   readonly proved: readonly NodeId[];
 }
@@ -94,7 +101,7 @@ export function recordSurvey(progress: Progress, ids: Iterable<NodeId>): Progres
 export function recordPass(
   progress: Progress,
   verb: VerbId,
-  subject: NodeId,
+  subject: SubjectId,
   proved: Iterable<NodeId>,
 ): Progress {
   const passes = [...progress.passes];
@@ -130,7 +137,12 @@ export function applyGrade(
   grade: Grade,
   threshold = PASS_THRESHOLD,
 ): Progression {
-  let next = recordSurvey(progress, [challenge.subject, ...challenge.candidates]);
+  // **Node ids only.** `surveyed` and `understood` are sets of *files* — the
+  // fog is a property of the map — and a commit has no square on it. Filtering
+  // here rather than inside `recordSurvey` keeps the filter next to the one
+  // place a non-node subject can enter the record.
+  const seen = [challenge.subject, ...challenge.candidates].filter(isNodeId);
+  let next = recordSurvey(progress, seen);
   const passed = grade.score >= threshold;
   if (passed) next = recordPass(next, challenge.verb, challenge.subject, grade.correct);
   return { progress: next, unlocked: passed };
@@ -150,8 +162,15 @@ export function applyGrade(
  * claim as current knowledge would be a worse lie than showing nothing.
  */
 export interface Liveness {
-  /** True when this id names a node in the atlas now loaded. */
-  exists(id: NodeId): boolean;
+  /**
+   * True when this id names something the atlas now loaded still contains — a
+   * node, or (for a commit subject) a retained commit.
+   *
+   * Both arms are the same question and it is deliberately **not** asked of the
+   * verb: "is this still here?" is a fact about the atlas, and answering it by
+   * prefix keeps it total for an id whose verb this build does not have.
+   */
+  exists(id: SubjectId): boolean;
   /**
    * True when the claim `(verb, subject, member)` still holds.
    *
@@ -166,7 +185,7 @@ export interface Liveness {
    * The rule itself belongs to the verb (`Verb.stillHolds`), because only the
    * verb knows what it asserted.
    */
-  holds(verb: VerbId, subject: NodeId, member: NodeId): boolean;
+  holds(verb: VerbId, subject: SubjectId, member: NodeId): boolean;
 }
 
 /**
@@ -184,8 +203,13 @@ export const UNCHECKED: Liveness = { exists: () => true, holds: () => true };
  */
 export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
   const cones = new Map<string, ReadonlySet<NodeId>>();
+  const commits = new Set(graph.atlas.history.commits.map((commit) => commitIdFor(commit.sha)));
   return {
-    exists: (id) => graph.refById.has(id),
+    // A commit that has slid out of the atlas's window takes its pass with it,
+    // which is ADR-0011 decision 3 rather than a loss: the claim is still true
+    // of the repo, and nothing loaded can confirm it. The record is retained in
+    // storage, so a reindex that brings the commit back brings the note back.
+    exists: (id) => (isNodeId(id) ? graph.refById.has(id) : commits.has(id)),
     holds: (verb, subject, member) => {
       const key = `${verb}\n${subject}`;
       let cone = cones.get(key);
@@ -211,7 +235,7 @@ export function livenessOf(graph: Graph, verbs: VerbLookup): Liveness {
 
 /** Just enough of `VERBS` to check a claim. Injected so this module stays pure. */
 export type VerbLookup = Readonly<Partial<Record<VerbId, { stillHolds: StillHolds }>>>;
-type StillHolds = (graph: Graph, subject: NodeId, member: NodeId) => boolean;
+type StillHolds = (graph: Graph, subject: SubjectId, member: NodeId) => boolean;
 
 /**
  * The stored passes that the current atlas still bears out, each narrowed to
@@ -240,7 +264,7 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
 }
 
 /** The key a challenge is "answered" under. `(verb, subject)`, never `id`. */
-export function answerKey(verb: VerbId, subject: NodeId): string {
+export function answerKey(verb: VerbId, subject: SubjectId): string {
   return `${verb}\n${subject}`;
 }
 
@@ -308,7 +332,10 @@ export function subjectsPassed(
 ): Set<NodeId> {
   const subjects = new Set<NodeId>();
   for (const pass of livePasses(progress, liveness)) {
-    if (pass.verb === verb) subjects.add(pass.subject);
+    // `isNodeId` because the caller draws a cone around each member: a commit
+    // subject has no position, and letting one through would make the map's
+    // unlock set contain an id `refById` cannot resolve.
+    if (pass.verb === verb && isNodeId(pass.subject)) subjects.add(pass.subject);
   }
   return subjects;
 }
@@ -331,8 +358,13 @@ export function deriveFog(
 
   const understood = new Set<NodeId>();
   for (const pass of livePasses(progress, liveness)) {
-    understood.add(pass.subject);
-    surveyed.add(pass.subject);
+    // A commit subject un-fogs nothing of its own — it is not on the map. Its
+    // proved members still promote, below, which is the whole of what a
+    // Placement pass reveals.
+    if (isNodeId(pass.subject)) {
+      understood.add(pass.subject);
+      surveyed.add(pass.subject);
+    }
     for (const member of pass.proved) {
       understood.add(member);
       surveyed.add(member);

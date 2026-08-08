@@ -48,6 +48,8 @@ import type { GenerationResult } from '../verbs/blastRadius/index.js';
 import { generateWithReport } from '../verbs/blastRadius/index.js';
 import type { GenerationResult as CompanionResult } from '../verbs/companion/index.js';
 import { generateWithReport as generateCompanionWithReport } from '../verbs/companion/index.js';
+import type { GenerationResult as PlacementResult } from '../verbs/placement/index.js';
+import { generateWithReport as generatePlacementWithReport } from '../verbs/placement/index.js';
 import type { GenerateOptions } from '../verbs/index.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../verbs/index.js';
 
@@ -85,6 +87,7 @@ export interface IndexResult {
   readonly generation: {
     readonly blastRadius: GenerationResult;
     readonly companion: CompanionResult;
+    readonly placement: PlacementResult;
   };
 }
 
@@ -359,17 +362,20 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   // shared budget would make the second verb's coverage depend on how much
   // supply the first happened to find, which is backwards — the whole measured
   // argument for Companion is that it reaches files Blast Radius cannot. The
-  // cost is bounded: a challenge serialises to roughly 600 bytes, so two full
-  // decks at 2,000 files is ~300 KiB against a 5 MB ceiling.
+  // cost is bounded: a challenge serialises to roughly 600 bytes, so three full
+  // decks at 2,000 files is ~450 KiB against a 5 MB ceiling.
   const blast = generateWithReport(validated, options.generate);
   const companionResult = generateCompanionWithReport(validated, options.generate);
-  const challenges = [...blast.challenges, ...companionResult.challenges].sort((a, b) =>
-    byteCompare(a.id, b.id),
-  );
+  const placementResult = generatePlacementWithReport(validated, options.generate);
+  const challenges = [
+    ...blast.challenges,
+    ...companionResult.challenges,
+    ...placementResult.challenges,
+  ].sort((a, b) => byteCompare(a.id, b.id));
 
   return {
     atlas: validateAtlas({ ...validated, challenges }),
-    generation: { blastRadius: blast, companion: companionResult },
+    generation: { blastRadius: blast, companion: companionResult, placement: placementResult },
   };
 }
 

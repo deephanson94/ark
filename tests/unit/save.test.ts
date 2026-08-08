@@ -14,7 +14,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NodeId } from '../../src/atlas/index.js';
-import { EMPTY_PROGRESS, applyGrade, recordPass, recordSurvey } from '../../src/player/progress.js';
+import {
+  EMPTY_PROGRESS,
+  SAVE_VERSION,
+  applyGrade,
+  recordPass,
+  recordSurvey,
+} from '../../src/player/progress.js';
 import type { SaveStore } from '../../src/player/save.js';
 import {
   loadProgress,
@@ -177,5 +183,35 @@ describe('the storage edge', () => {
     });
     saveProgress(store, 'ark:x', progress);
     expect(loadProgress(store, 'ark:x')).toEqual(progress);
+  });
+});
+
+describe('a commit subject survives a round trip', () => {
+  // ADR-0018. `asPass` checked `isNodeId(subject)` and nothing else, which is
+  // the same shape as the `VERB_IDS` hazard the file's own comment describes:
+  // a pass this rejects is dropped at parse and erased by the next write, so
+  // every Placement pass would have been destroyed on the second session with
+  // nothing anywhere to say so.
+  const commitPass = {
+    version: SAVE_VERSION,
+    surveyed: [],
+    passes: [{ verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] }],
+  };
+
+  it('keeps a pass whose subject is a commit', () => {
+    const restored = parseProgress(JSON.stringify(commitPass));
+    expect(restored.passes).toEqual([
+      { verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] },
+    ]);
+  });
+
+  it('still rejects a subject that is neither shape', () => {
+    const bogus = { ...commitPass, passes: [{ ...commitPass.passes[0], subject: 'nonsense' }] };
+    expect(parseProgress(JSON.stringify(bogus)).passes).toEqual([]);
+  });
+
+  it('still rejects a commit id in `proved`, because a member is always a file', () => {
+    const bogus = { ...commitPass, passes: [{ ...commitPass.passes[0], proved: ['c:0123456789ab'] }] };
+    expect(parseProgress(JSON.stringify(bogus)).passes[0]?.proved).toEqual([]);
   });
 });

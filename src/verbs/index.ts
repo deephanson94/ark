@@ -19,7 +19,11 @@ export type {
   Band,
   GenerateOptions,
   Grade,
+  NoteFacts,
   NoteKind,
+  NoteProse,
+  NoteWeights,
+  ProvedFile,
   Prompt,
   Reveal,
   RevealChannel,
@@ -39,16 +43,26 @@ export type { SetScore } from './score.js';
 export { gradeSet, isGameable, scoreSet, selectAllScore } from './score.js';
 export type { DifficultyInput } from './difficulty.js';
 export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from './difficulty.js';
-export type { GateVerdict, HeuristicId } from './gate.js';
-export { CTRL_F_THRESHOLD, HISTORY_HEURISTICS, PATH_HEURISTICS, gradeHeuristics } from './gate.js';
+export type { GateSubject, GateVerdict, HeuristicId } from './gate.js';
+export {
+  COMMIT_HEURISTICS,
+  CTRL_F_THRESHOLD,
+  HISTORY_HEURISTICS,
+  PATH_HEURISTICS,
+  gradeHeuristics,
+  pathSubject,
+  textSubject,
+} from './gate.js';
 export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths.js';
 import type { RevealChannel } from './types.js';
 import type { VerbId } from '../atlas/index.js';
 import { blastRadius } from './blastRadius/index.js';
 import { companion } from './companion/index.js';
+import { placement } from './placement/index.js';
 
 export { blastRadius, promptFor } from './blastRadius/index.js';
 export { companion } from './companion/index.js';
+export { placement } from './placement/index.js';
 
 /**
  * Every verb, by id. The console looks a challenge's verb up here and asks it
@@ -61,7 +75,7 @@ export { companion } from './companion/index.js';
  * shape twice" rule broken in the place where breaking it silently discards a
  * player's progress.
  */
-export const VERBS = { blastRadius, companion } as const;
+export const VERBS = { blastRadius, companion, placement } as const;
 
 /**
  * Which map channel a verb's answers may be rendered into.

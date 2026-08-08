@@ -12,8 +12,8 @@
  * the repo at all.
  */
 
-import type { Atlas, Challenge, NodeId, NodeRef } from '../atlas/index.js';
-import { parseAtlas } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeId, NodeRef, SubjectId } from '../atlas/index.js';
+import { isNodeId, parseAtlas } from '../atlas/index.js';
 import type { Camera, Point } from './camera.js';
 import {
   NORTH,
@@ -311,11 +311,28 @@ function start(scene: Scene, root: HTMLElement): void {
   // and the HUD's counter both read.
   const challengesById = new Map<NodeId, Challenge[]>();
   for (const challenge of scene.atlas.challenges) {
+    // **Node subjects only.** This map is the map's click path — "what does this
+    // file get asked about" — and a commit is not a file. Keying one in here
+    // would put a bucket in the deck's tally that no node can ever resolve, so
+    // the HUD's "questions left" would count a ring nobody can see.
+    if (!isNodeId(challenge.subject)) continue;
     const bucket = challengesById.get(challenge.subject);
     if (bucket === undefined) challengesById.set(challenge.subject, [challenge]);
     else bucket.push(challenge);
   }
   const unanswered = new Set<NodeRef>();
+  /**
+   * How many questions are left **in the deck**, which is not the same number as
+   * `unanswered.size`.
+   *
+   * `unanswered` is a set of *nodes* carrying an open question — it draws the
+   * map's rings, and a node with two open verbs is one ring. The HUD and the
+   * guide were reading it as a question count, which was right only while every
+   * subject was a node and every node carried at most one. Placement's subjects
+   * are commits (ADR-0018), so reading the ring set would have shown "0 left"
+   * over a third of a deck nobody had played.
+   */
+  let openQuestions = 0;
   // Session-scoped, never persisted: ADR-0011 decision 2 forbids storing a
   // cursor, and a position in the rotation is a cursor.
   let selector: SelectorState = NO_HISTORY;
@@ -335,6 +352,9 @@ function start(scene: Scene, root: HTMLElement): void {
       const open = bucket.some((c) => !answered.has(answerKey(c.verb, c.subject)));
       if (ref !== undefined && open) unanswered.add(ref);
     }
+    openQuestions = scene.atlas.challenges.filter(
+      (challenge) => !answered.has(answerKey(challenge.verb, challenge.subject)),
+    ).length;
     // The selector reads the *same* set, so the HUD counter, the map's rings
     // and the button can never disagree about what is left.
     selector = { ...selector, answered };
@@ -343,9 +363,9 @@ function start(scene: Scene, root: HTMLElement): void {
   // Wires a restored save has already earned, before the first frame.
   retie();
 
-  const regionOf = (subject: NodeId): string => {
+  const regionOf = (subject: SubjectId): string | null => {
     const ref = scene.graph.refById.get(subject);
-    return ref === undefined ? '' : (scene.atlas.nodes[ref]?.region ?? '');
+    return ref === undefined ? null : (scene.atlas.nodes[ref]?.region ?? null);
   };
   const nextUp = (): Challenge | null =>
     suggestNext(scene.atlas.challenges, regionOf, selector);
@@ -515,13 +535,23 @@ function start(scene: Scene, root: HTMLElement): void {
    * question: §4's loop is "pick a landmark", and ADR-0011 calls suggested-next
    * an affordance rather than a mode. The map stays the frame; the existing
    * "answer this" control is one keystroke away once you arrive.
+   *
+   * **Unless there is no landmark.** A commit subject has no position
+   * (ADR-0018), so there is nothing to pan to and the rule above has nothing to
+   * protect — its whole argument is that the map should stay the frame, and a
+   * button that silently does nothing does not keep it there, it just breaks.
+   * So a placeless suggestion opens its question, and `ui.ts` labels the control
+   * for what it will actually do.
    */
   const guide = createGuide(() => {
     const challenge = nextUp();
     if (challenge === null) return;
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
-    if (node === undefined) return;
+    if (node === undefined) {
+      challengePanel.open(challenge);
+      return;
+    }
     // Before touching the camera: a turn in flight owns `x`/`y` every frame.
     landTurn();
     selected = node;
@@ -597,6 +627,7 @@ function start(scene: Scene, root: HTMLElement): void {
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
         `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires`,
+        openQuestions,
         unanswered.size,
         camera.bearing,
       );
@@ -607,9 +638,22 @@ function start(scene: Scene, root: HTMLElement): void {
         upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
       guide.update({
         next: upcoming,
-        path: upcomingRef === undefined ? null : (scene.nodes[upcomingRef]?.label ?? null),
+        // The map's own short label when the subject is on the map; otherwise
+        // the verb's name for its subject, because only the verb knows what a
+        // commit is called. The shell asks *whether* it is placed and *what* it
+        // is called, and never what it is about.
+        path:
+          upcomingRef !== undefined
+            ? (scene.nodes[upcomingRef]?.label ?? null)
+            : upcoming === null
+              ? null
+              : (VERBS[upcoming.verb as keyof typeof VERBS]?.subjectLabel(
+                  scene.graph,
+                  upcoming.subject,
+                ) ?? null),
+        placed: upcomingRef !== undefined,
         arrived: upcoming !== null && selected?.id === upcoming.subject,
-        questionsLeft: unanswered.size,
+        questionsLeft: openQuestions,
       });
     }
     requestAnimationFrame(frame);

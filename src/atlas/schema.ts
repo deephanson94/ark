@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 5;
+export const ATLAS_VERSION = 6;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -23,6 +23,32 @@ export const ATLAS_VERSION = 5;
  * fog-of-war and field notes survive a refactor (ADR-0002).
  */
 export type NodeId = string;
+
+/**
+ * A commit identity: `c:` + the 12-hex abbreviated sha in `CommitRecord.sha`.
+ *
+ * Not interchangeable with a `NodeId` and deliberately shaped so that no code
+ * can mistake one for the other — see `SubjectId`.
+ */
+export type CommitId = string;
+
+/**
+ * What a challenge is *about*: a place in the repo, or an event in its history.
+ *
+ * Until M4's third verb this was always a `NodeId`, and the whole player read it
+ * as one — the fog promotes it, the map flies to it, the deck indexes questions
+ * by it. Placement's subject is a **commit** (NORTH-STAR §6.2), which has no
+ * position on a map and no fog to lift, so the type had to admit both.
+ *
+ * The two arms are told apart by the id's own prefix (`isNodeId` /
+ * `isCommitId`) rather than by a companion `subjectKind` field, and rather than
+ * by asking the verb. That matters for one specific reason recorded in
+ * ADR-0018: *"can this subject be drawn?"* is a question about the id, not about
+ * the verb that used it, and every leak this codebase has found came from
+ * verb-blind state being interpreted by verb-specific code. A prefix keeps the
+ * answer verb-blind and total.
+ */
+export type SubjectId = NodeId | CommitId;
 
 /** An index into `Atlas.nodes`. Used everywhere size matters. */
 export type NodeRef = number;
@@ -199,8 +225,18 @@ export interface CommitRecord {
   readonly subject: string;
   /** Indexed files this commit touched, as node indices, sorted ascending. */
   readonly files: readonly NodeRef[];
-  /** True when the commit touched more files than the co-change cap, so it was
-   *  excluded from the co-change matrix and its `files` list may be truncated. */
+  /**
+   * True when the commit touched more indexed files than `History.wideLimit`,
+   * so it was excluded from the co-change matrix entirely (ADR-0005).
+   *
+   * **It says nothing about truncation, and an earlier version of this comment
+   * implied it did** ("its `files` list may be truncated"). Wideness and
+   * truncation are independent caps — `wideCommitFiles` 25 against
+   * `maxCommitFiles` 64 — so a wide commit's list is complete unless it is also
+   * long, and a *cut* list announces itself in `report.truncations` with its own
+   * limit in `kept`. The distinction matters because one is a pillar-3
+   * judgement and the other is a guardrail-4 failure.
+   */
   readonly wide: boolean;
   /** First `#NNNN` in the subject, if any. */
   readonly issue: number | null;
@@ -235,7 +271,7 @@ export interface History {
   readonly commits: readonly CommitRecord[];
 }
 
-export type VerbId = 'blastRadius' | 'companion';
+export type VerbId = 'blastRadius' | 'companion' | 'placement';
 
 /**
  * Every verb id, sorted. **The only list.**
@@ -248,7 +284,7 @@ export type VerbId = 'blastRadius' | 'companion';
  * dropped at parse and erased by the next write, so a stale list silently
  * destroys a player's progress rather than merely failing to validate.
  */
-export const VERB_IDS: readonly VerbId[] = ['blastRadius', 'companion'];
+export const VERB_IDS: readonly VerbId[] = ['blastRadius', 'companion', 'placement'];
 
 export type Evidence =
   | {
@@ -303,6 +339,28 @@ export type Evidence =
        * leaves the sentence describing the old one is half a fix.
        */
       readonly atMost: number;
+    }
+  | {
+      readonly kind: 'commit';
+      /**
+       * The commit's subject line, exactly as `CommitRecord.subject` records
+       * it. Carried here because `prompt()` is pure over `(challenge, pathOf)`
+       * and has no atlas to look it up in — the same reason `coChange` carries
+       * `wideLimit`.
+       *
+       * It is **derived, not authored**: guardrail 2 forbids hand-written
+       * content about a particular project, and quoting what the repo already
+       * says about itself is the opposite of writing it.
+       */
+      readonly subject: string;
+      readonly date: IsoDate;
+      /**
+       * How many indexed files the commit touched **in all**. `truth` is a
+       * sample of them (ADR-0018), so this is what the reveal states as
+       * *revealed* rather than proved — the same distinction ADR-0011 draws
+       * between a note's claim and its radius.
+       */
+      readonly touched: number;
     };
 
 export interface Challenge {
@@ -312,7 +370,11 @@ export interface Challenge {
   readonly tier: 1 | 2 | 3 | 4 | 5 | 6;
   /** Computed, never authored. NORTH-STAR §8.4. */
   readonly difficulty: number;
-  readonly subject: NodeId;
+  /**
+   * A node id for a verb that asks about a file, a commit id for one that asks
+   * about an event. Told apart by prefix — see `SubjectId`.
+   */
+  readonly subject: SubjectId;
   /**
    * The choice set shown to the player. Sorted; never contains `subject`.
    *
@@ -320,6 +382,12 @@ export interface Challenge {
    * — every candidate that depends on the subject at any depth is in the answer
    * key, and any dependent that is not is absent from the board entirely. That
    * is what lets a hub ship a sampled answer key without lying (ADR-0008).
+   *
+   * `companion` and `placement` hold the same shape against their own relation:
+   * `candidates ∩ companions(subject) = truth` (ADR-0014) and
+   * `candidates ∩ files(commit) = truth` (ADR-0018). Three verbs, one rule —
+   * every candidate is either in the answer key or certified out of it, and the
+   * middle of the range is kept off the board rather than graded.
    */
   readonly candidates: readonly NodeId[];
   /** The correct subset. Non-empty, sorted, always a subset of `candidates`. */

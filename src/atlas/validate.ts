@@ -10,7 +10,7 @@
  * wrong answer key.
  */
 
-import { isNodeId, nodeIdFor } from './identity.js';
+import { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
 import { byteCompare, isStrictlySorted } from './order.js';
 import { ATLAS_VERSION, VERB_IDS } from './schema.js';
 import type {
@@ -380,9 +380,19 @@ export function coChangeOrder(x: CoChangePair, y: CoChangePair): number {
 
 function validateEvidence(value: unknown, at: string): Evidence {
   const r = asRecord(value, at);
-  const kind = asMember(r['kind'], `${at}.kind`, ['importGraph', 'coChange'] as const);
+  const kind = asMember(r['kind'], `${at}.kind`, ['importGraph', 'coChange', 'commit'] as const);
   if (kind === 'importGraph') {
     return { kind, depth: asIntAtLeast(r['depth'], `${at}.depth`, 1) };
+  }
+  if (kind === 'commit') {
+    const subject = asString(r['subject'], `${at}.subject`);
+    if (subject.length > 120) fail(`${at}.subject`, `must be <= 120 chars, got ${subject.length}`);
+    return {
+      kind,
+      subject,
+      date: asDate(r['date'], `${at}.date`),
+      touched: asIntAtLeast(r['touched'], `${at}.touched`, 1),
+    };
   }
   return {
     kind,
@@ -395,13 +405,30 @@ function validateEvidence(value: unknown, at: string): Evidence {
   };
 }
 
-function validateChallenge(value: unknown, at: string, ids: ReadonlySet<string>): Challenge {
+function validateChallenge(
+  value: unknown,
+  at: string,
+  ids: ReadonlySet<string>,
+  commits: ReadonlySet<string>,
+): Challenge {
   const r = asRecord(value, at);
   const id = asString(r['id'], `${at}.id`);
   if (id.length === 0) fail(`${at}.id`, 'must not be empty');
 
+  // A subject is a place **or** an event (ADR-0018), told apart by its own
+  // prefix, and each arm is checked against the section that has to contain it.
+  // Accepting "either a node or a commit" without looking at the prefix would
+  // let a typo'd node id pass as a missing commit and vice versa — a dangling
+  // reference is exactly what this validator exists to refuse (Appendix A:
+  // "an atlas with a dangling edge must throw, not degrade").
   const subject = asString(r['subject'], `${at}.subject`);
-  if (!ids.has(subject)) fail(`${at}.subject`, `${subject} is not a node in this atlas`);
+  if (isCommitId(subject)) {
+    if (!commits.has(subject)) {
+      fail(`${at}.subject`, `${subject} is not a retained commit in this atlas`);
+    }
+  } else if (!ids.has(subject)) {
+    fail(`${at}.subject`, `${subject} is not a node in this atlas`);
+  }
 
   const candidates = asSortedStrings(r['candidates'], `${at}.candidates`);
   if (candidates.length === 0) fail(`${at}.candidates`, 'must not be empty');
@@ -436,6 +463,31 @@ function validateChallenge(value: unknown, at: string, ids: ReadonlySet<string>)
   const tier = asIntAtLeast(r['tier'], `${at}.tier`, 1);
   if (tier > 6) fail(`${at}.tier`, `expected 1..6, got ${tier}`);
 
+  const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
+  // **The subject's kind and the evidence's kind must agree.** Not a verb rule —
+  // the validator cannot import verbs, and does not need to: `commit` evidence
+  // describes an event and a `c:` id names one, so the two are the same claim
+  // written twice and disagreeing is a dangling reference in disguise. Without
+  // it a challenge with a node subject and commit evidence validates cleanly and
+  // renders as `On  a commit landed: ""`, which is the player guessing at a
+  // shape (guardrail 5).
+  if ((evidence.kind === 'commit') !== isCommitId(subject)) {
+    fail(
+      `${at}.evidence.kind`,
+      `${evidence.kind} evidence with a ${isCommitId(subject) ? 'commit' : 'node'} subject`,
+    );
+  }
+  // The answer key is a sample of the population, so it can never be larger
+  // than it. Stated here because `touched` is the number the reveal calls
+  // *revealed but not proved*, and a population smaller than the proof would
+  // make that sentence arithmetic nonsense.
+  if (evidence.kind === 'commit' && evidence.touched < truth.length) {
+    fail(
+      `${at}.evidence.touched`,
+      `commit touched ${evidence.touched} indexed file(s) but the answer key holds ${truth.length}`,
+    );
+  }
+
   return {
     id,
     verb: asMember(r['verb'], `${at}.verb`, VERB_IDS),
@@ -444,7 +496,7 @@ function validateChallenge(value: unknown, at: string, ids: ReadonlySet<string>)
     subject,
     candidates,
     truth,
-    evidence: validateEvidence(r['evidence'], `${at}.evidence`),
+    evidence,
   };
 }
 
@@ -554,8 +606,9 @@ export function validateAtlas(value: unknown): Atlas {
   }
 
   const ids = new Set(nodes.map((node) => node.id));
+  const commitIds = new Set(history.commits.map((commit) => commitIdFor(commit.sha)));
   const challenges = asArray(root['challenges'], 'atlas.challenges').map((challenge, i) =>
-    validateChallenge(challenge, `atlas.challenges[${i}]`, ids),
+    validateChallenge(challenge, `atlas.challenges[${i}]`, ids, commitIds),
   );
   if (!isStrictlySorted(challenges.map((challenge) => challenge.id))) {
     fail('atlas.challenges', 'must be sorted by id and free of duplicate ids');
