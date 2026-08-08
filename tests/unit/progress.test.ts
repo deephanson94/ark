@@ -327,6 +327,7 @@ describe('a commit subject moves through the record without ever reaching the ma
       ...atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts']).repo,
       head: 'f'.repeat(40),
       headDate: '2026-01-01',
+      root: 'e'.repeat(40),
     },
     history: {
       ...atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts']).history,

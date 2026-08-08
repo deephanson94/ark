@@ -287,6 +287,24 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   of index time on hono", from comparing the branch against `master`, two trees with different file
   counts; measured properly the cost is inside the noise. Measuring first is not enough on its own:
   **say what the counterfactual holds fixed, and check that it holds it.**
+- **The soft spot is where the change is proudest.** ADR-0018 spent more words on one paragraph than
+  on anything else — the argument that Placement certifies a wrong answer from a commit's *positive*
+  file list, so absence cannot hurt it — and that paragraph is where the wrong answer key was. It was
+  correct about the walk window and then applied to a shallow clone, which is a different mechanism:
+  a `--depth N` clone's oldest commit has no parent, so git diffs it against the empty tree and
+  `--name-status` calls it *an add of the entire worktree*. A repo of 8 files grown to 38 and cloned
+  at depth 2 shipped a board whose key held three files predating the commit by eight commits. Nothing
+  in the type system or the suite could see it; a reviewer told to attack the argument found it in one
+  step. **When a decision record leans hard on one paragraph, that paragraph is the thing to hand
+  someone and say "break this".**
+- **Two true facts in two different files can be a pillar-3 leak that neither file can see.** The
+  Placement prompt prints a commit's date. The inspector prints every node's *last seen*. Neither is a
+  disclosure; together they are "tick the candidates whose dates match", which beat band A on **16 of
+  hono's 54 shipped boards** and on **none** of ark's 37. Every existing gate heuristic came from
+  asking *what does this board invite?* inside one verb; this one needed asking *what else is on
+  screen at the same time?* The three-way alignment ADR-0014 decision 7 describes — map giveaway,
+  naive guess, gate heuristic — is a checklist to run against **every** field the UI prints, not only
+  the one the verb is about.
 - **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
   failed on every run it ever had — before M4 landed and after it — while a session reported CI green
   three separate times, because it only ever opened `ci.yml` runs on its own branch. The human

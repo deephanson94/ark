@@ -216,7 +216,7 @@ describe('a note about a commit, which is not a file', () => {
   const base = atlasWith(['src/one.ts', 'src/two.ts', 'src/three.ts']);
   const withHistory = validateAtlas({
     ...base,
-    repo: { ...base.repo, head: 'b'.repeat(40), headDate: '2026-02-02' },
+    repo: { ...base.repo, head: 'b'.repeat(40), headDate: '2026-02-02', root: 'c'.repeat(40) },
     history: {
       ...base.history,
       present: true,

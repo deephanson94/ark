@@ -26,16 +26,27 @@
  * How far back the walk went cannot make it wrong. `commits.ts` carries the full
  * argument and the three refusals that *do* apply.
  *
- * ## The sample is spread, not sliced
+ * ## The sample is spread across a path ordering, and the ordering is the point
  *
- * `truth` is `size` files taken at even intervals across the commit's
- * path-sorted list rather than its first `size`. The counts are identical either
- * way — 36 boards on this repo, 230 on hono, measured both ways — so this is not
- * a supply decision. It is about what the key *teaches*: slicing hands every
- * wide commit the same alphabetically-first files (here, the repo root's
- * `CHANGELOG.md` and `CLAUDE.md` over and over), where a spread shows a
- * cross-section of where the change actually landed, which is the question the
- * verb is asking.
+ * `truth` is `size` files taken at even intervals across the commit's files
+ * **sorted by path**, rather than its first `size`.
+ *
+ * The sort is not decoration and this comment claimed it for a while without it.
+ * `commit.files` holds `NodeRef`s ascending, and `atlas.nodes` is ordered by
+ * **node id** — an FNV-1a hash of the origin path (`identity.ts`) — so a
+ * commit's file list arrives in a deterministic *hash shuffle*, not in path
+ * order. Spreading over that is spreading over noise: it is stable, and it means
+ * nothing. Sorting first is what makes the sample the thing the verb is asking
+ * about — a cross-section of *where* the change landed, one file from each part
+ * of the tree it touched, rather than six files that happen to hash early.
+ *
+ * Slicing is rejected for the reason that then becomes true: over a path
+ * ordering it hands every wide commit the same alphabetically-first files, which
+ * on a repo whose root holds its documents is `CHANGELOG.md` and `CLAUDE.md`
+ * over and over. The counts are identical either way — 36 boards on this repo
+ * and 54 on hono, with the same refusal breakdown, measured by running the
+ * generator both ways — so this is a choice about what the key teaches, not
+ * about supply.
  *
  * Nothing here consults `Math.random()`; every ordering is total and tie-broken
  * on node id.
@@ -84,7 +95,13 @@ export type SkipReason =
   /** Another commit already asks this exact answer key. */
   | 'duplicateKey'
   /** Dropped to stay inside `maxChallenges`. */
-  | 'capped';
+  | 'capped'
+  /**
+   * The clone is shallow, so its oldest commit's file list is git's diff
+   * against the empty tree rather than its own change. Counted once, not once
+   * per commit — it is a fact about the atlas, not about a question.
+   */
+  | 'shallowClone';
 
 export interface GenerationReport {
   readonly commitsConsidered: number;
@@ -95,6 +112,8 @@ export interface GenerationReport {
   readonly sampled: number;
   /** `maxCommitFiles`, recovered from the truncation report. Null if it never bit. */
   readonly fileCap: number | null;
+  /** True when the clone is shallow, so no question could be asked at all. */
+  readonly shallow: boolean;
   /** Nodes barred from every role by contested lineage. */
   readonly contestedNodes: number;
   /** Nodes no Placement question can ever lift the fog from. */
@@ -131,6 +150,9 @@ export function generatePlacement(
  * `round(i·(L−1)/(size−1))` over a list at least as long as the sample), so the
  * result never collapses to fewer than `size` files. `retain()` uses the same
  * arithmetic to keep both ends and the middle of a difficulty ordering.
+ *
+ * Order-agnostic on purpose: the caller decides what "evenly across" means by
+ * choosing the ordering. See the header on why that ordering is by path.
  */
 export function spread<T>(files: readonly T[], size: number): T[] {
   if (size >= files.length) return [...files];
@@ -203,8 +225,13 @@ export function generateWithReport(
     }
     if (size === 0) return 'tooFewDistractors';
 
-    const truthRefs = spread(commit.files, size);
-    const words = textSubject(commit.subject).words;
+    // Sorted by path *here* rather than in `commits.ts`, so that the eligible
+    // record keeps the atlas's own order and only the sample is re-ordered.
+    const byPath = [...commit.files].sort((a, b) =>
+      byteCompare(nodeAt(graph, a).path, nodeAt(graph, b).path),
+    );
+    const truthRefs = spread(byPath, size);
+    const words = textSubject(commit.subject, commit.date).words;
     const want = Math.min(pool.size, options.candidateCount - size);
     const distractors = selectDistractors(
       { graph, corpus, anchors: truthRefs, words, pool },
@@ -214,10 +241,11 @@ export function generateWithReport(
 
     const verdict = gradeHeuristics(
       graph,
-      // The prompt shows the commit's message and nothing else, so the words in
-      // it are the whole of what a Ctrl+F reader has to work with. `gate.ts`'s
-      // `name` heuristic scores exactly that guess.
-      textSubject(commit.subject),
+      // The prompt shows the commit's message **and its date**, which are the
+      // whole of what a structure-blind reader has to work with — the message
+      // matched against filenames (`name`) and the date against the inspector's
+      // `last seen` column (`recency`). Both are scored.
+      textSubject(commit.subject, commit.date),
       candidateRefs,
       truthRefs,
       COMMIT_HEURISTICS,
@@ -340,6 +368,7 @@ export function generateWithReport(
       keyRange: kept.length === 0 ? null : [narrowest, widest],
       sampled,
       fileCap: supply.fileCap,
+      shallow: supply.shallow,
       contestedNodes: supply.barred.size,
       // **Truth members only, and the subject is deliberately not counted.**
       // For the other two verbs the subject is a node and passing its question

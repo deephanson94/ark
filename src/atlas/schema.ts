@@ -225,8 +225,18 @@ export interface CommitRecord {
   readonly subject: string;
   /** Indexed files this commit touched, as node indices, sorted ascending. */
   readonly files: readonly NodeRef[];
-  /** True when the commit touched more files than the co-change cap, so it was
-   *  excluded from the co-change matrix and its `files` list may be truncated. */
+  /**
+   * True when the commit touched more indexed files than `History.wideLimit`,
+   * so it was excluded from the co-change matrix entirely (ADR-0005).
+   *
+   * **It says nothing about truncation, and an earlier version of this comment
+   * implied it did** ("its `files` list may be truncated"). Wideness and
+   * truncation are independent caps — `wideCommitFiles` 25 against
+   * `maxCommitFiles` 64 — so a wide commit's list is complete unless it is also
+   * long, and a *cut* list announces itself in `report.truncations` with its own
+   * limit in `kept`. The distinction matters because one is a pillar-3
+   * judgement and the other is a guardrail-4 failure.
+   */
   readonly wide: boolean;
   /** First `#NNNN` in the subject, if any. */
   readonly issue: number | null;

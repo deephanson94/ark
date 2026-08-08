@@ -26,6 +26,14 @@
  * Self-contained per CLAUDE.md: generation, grading, wording, the reveal and the
  * field note all live under this directory. `grade` is the shared `gradeSet` —
  * every subset-selection verb reduces to one `Grade`.
+ *
+ * The seam claim, stated at the width it actually holds: **nothing in the
+ * console, the map, the field notes, the deck or the selector names this verb**,
+ * and `VERBS` gained one line. The *indexer* does name it — `build.ts` runs the
+ * generator and `cli.ts` prints its refusals — exactly as it names the other two,
+ * because a report about what a verb declined has nowhere else to live. A
+ * blanket "nothing outside this directory names it" would be the kind of
+ * overclaim this repo keeps having to walk back.
  */
 
 import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';

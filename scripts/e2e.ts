@@ -906,10 +906,21 @@ async function main(): Promise<number> {
         process.stdout.write(`e2e: placement → ${asked}\n`);
         // The question quotes a commit message the atlas holds. Derived, never
         // authored (guardrail 2) — and this is what proves it.
-        const played = placementDeck.find(
+        // Matched on the **quoted** message and required to be unique: a bare
+        // substring test picks the wrong board whenever one retained commit's
+        // message is a prefix of another's ("Fix" inside "Fix tests"), which is
+        // the `.first()` landmine wearing a different hat.
+        const matches = placementDeck.filter(
           (entry) =>
-            entry.evidence.kind === 'commit' && asked.includes(entry.evidence.subject),
+            entry.evidence.kind === 'commit' && asked.includes(`"${entry.evidence.subject}"`),
         );
+        if (matches.length > 1) {
+          failures.push({
+            what: 'placement',
+            detail: `${matches.length} retained commits match the prompt — cannot say which board was played`,
+          });
+        }
+        const played = matches.length === 1 ? matches[0] : undefined;
         if (played === undefined) {
           failures.push({
             what: 'placement',

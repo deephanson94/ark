@@ -1341,6 +1341,29 @@ One line per iteration: what changed, and what to do next.
   which is the term working perfectly being read as the term being dead. It measures divergence
   against a neutralised rank instead (19 of 116).
 
+  **A post-ship review found five things, and one of them was a wrong answer key.** Placement's whole
+  guardrail-4 argument is that it certifies a wrong answer from a commit's own *positive* file list,
+  so absence cannot hurt it — and the first version of that argument concluded it therefore needed no
+  shallow-clone refusal either. **It does.** A `--depth N` clone's oldest commit has no parent, so git
+  diffs it against the empty tree and `--name-status` reports it as *adding the entire worktree*.
+  Reproduced end to end: a repo of 8 files grown to 38 and cloned at depth 2 shipped a board for
+  *"wave one lands"* whose key held three files predating it by eight commits, over a `touched` of 23
+  against a true 15. Refused whole now, on ADR-0014's own `repo.root === null` signal. The argument
+  was right about the walk window and wrong about a mechanism it had filed under the same heading —
+  which is a better description of how this class of bug happens than "we didn't think of it".
+  Also found: **`truncated` was a branch that could never run** (`wideCommitFiles` 25 < `maxCommitFiles`
+  64, and `wide` was tested first) in a file whose own header quotes the dead-path landmine; **the
+  sample was never sorted** while decision 4 said "path-sorted" and reasoned from an alphabetical
+  clustering the atlas's *hash* ordering does not have; **`commitOf` claimed a cost it did not have**,
+  scanning `O(nodes × commits)` at save-restore rather than once per panel. And one nobody had paired:
+  the prompt prints the commit's **date**, the inspector prints every node's **last seen**, so ticking
+  the matching dates is as structure-blind as a guess gets — it beat band A on **16 of hono's 54
+  shipped boards** and on **none** of ark's 37, which is the sharpest argument yet that measuring on a
+  second repo is not optional. `recency` joins `COMMIT_HEURISTICS`; it refuses 63 more boards on hono
+  and costs the deck nothing, because the cap backfills. 8 of 8 further mutations caught — one only
+  after the replacement test *survived*, because with twelve files and a six-file key a hash ordering
+  contains both path-extremes about a quarter of the time.
+
   **Next**: **Archaeology**, M4's third and last — and it **cannot be built as §6.2 states it**.
   *"This file was rewritten three times. What problem kept recurring?"* is not deterministically
   gradeable, so guardrails 3 and 4 both bite; it needs reshaping into something git answers exactly,

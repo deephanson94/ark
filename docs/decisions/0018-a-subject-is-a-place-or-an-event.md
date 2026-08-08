@@ -58,8 +58,10 @@ the validator exists to refuse.
 candidates ∩ files(commit) = truth
 ```
 
-Every candidate is either in the answer key or a file the commit **provably did not touch**. A
-twelve-file commit ships a six-file key and the other six appear nowhere on the board. This is the
+Every candidate is either in the answer key or a file the commit's **recorded list does not name**. A
+twelve-file commit ships a six-file key and the other six appear nowhere on the board. (Not
+"provably": see the rename caveat at the end of decision 3 — the certification is against the history
+git detected, and saying *provably* claimed more than that.) This is the
 third use of one shape — ADR-0008 removed a depth bound, ADR-0014 refused a count boundary, and both
 for the same reason: a candidate sitting just outside the line traps the player who *does* know the
 repo.
@@ -67,45 +69,91 @@ repo.
 `evidence.touched` states the commit's full width, so the reveal can name what sampling left out as
 **revealed** rather than folding it into the claim (ADR-0011 decision 3).
 
-### 3. This verb certifies from a positive record, so most of ADR-0014's refusals do not apply
+### 3. This verb certifies from a positive record — and that argument was overdrawn once
 
 Companion certifies a distractor by **absence** from the co-change matrix. Four independent channels
 drop pairs, and one of them — the walk window — is not boundable at all, which is why ADR-0014
 decision 6 refuses an entire repo whose walk stopped short, and why a shallow clone is refused
 besides.
 
-Placement certifies by absence from **one commit's own recorded file list**. That list is complete
-for every commit the atlas retained, and how far back the walk went cannot make it wrong. So there is
-no `windowTruncated` here and no shallow-clone refusal, and adding either "for symmetry" would delete
-the deck on every large repo in exchange for nothing.
+Placement certifies by absence from **one commit's own recorded file list**. The walk window
+genuinely cannot make that wrong: retained commits are the newest walked, so a walk that stopped
+early removes whole commits and corrupts none. There is no `windowTruncated` here, and copying it
+over would delete the deck on every large repo for nothing.
 
-What does bite is anything that makes a *retained* commit's list incomplete or uninformative:
+> **A shallow clone is a different mechanism, and the first version of this decision got it wrong.**
+> It concluded from the above that the shallow-clone refusal was unnecessary too. It is not. A
+> `--depth N` clone's oldest commit has no parent, so git diffs it against the *empty tree* and
+> `git log --name-status` reports it as **adding the entire worktree**:
+>
+> ```
+> $ git clone --depth 2 …  &&  git log --name-status
+> 218bbe4 third: add c only
+> A a.ts   A b.ts   A c.ts          ← a.ts and b.ts predate it
+> ```
+>
+> Nothing downstream can tell that from a real three-file commit. Demonstrated end to end on a
+> purpose-built fixture — a repo of 8 files that grew to 38, cloned at depth 2 — which shipped a
+> board for *"wave one lands"* whose answer key held three `base*.ts` files predating it by eight
+> commits, and whose `touched` said 23 against a true 15. **A wrong answer key, in the field, from an
+> argument that was right about one channel and applied to another.**
+>
+> The refusal is the whole repo, on ADR-0014's own signal: `history.present && repo.root === null`,
+> null exactly when the clone is shallow or the root is unreadable (ADR-0011). Refusing only the
+> boundary commit would be tighter and is not available — the oldest *retained* commit need not be
+> the boundary once `maxCommits`, or a commit touching no indexed file, gets between them.
 
-| refusal | why | measured on ark @ `7d855d6` |
-|---|---|---|
-| `truncated` | `maxCommitFiles` cut the list, so the key is incomplete — guardrail 4 | 0 (the cap never fired) |
-| `wide` | more than `history.wideLimit` indexed files: a vendoring commit or a mass reformat, ADR-0005's own judgement — **pillar 3, not guardrail 4** | 4 |
-| `uncertain` | a member with contested rename lineage, ADR-0014 decision 4 | 0 (24 on hono) |
+What else makes a *retained* commit's list untrustworthy:
+
+| refusal | why | measured on ark | on hono |
+|---|---|---|---|
+| `shallowClone` | the oldest commit's list is a diff against the empty tree — guardrail 4 | 0 (full clone) | 0 (full clone) |
+| `truncated` | `maxCommitFiles` cut the list, so the key is incomplete — guardrail 4 | 0 | 0 |
+| `wide` | more than `history.wideLimit` indexed files: a vendoring commit or a mass reformat, ADR-0005's own judgement — **pillar 3, not guardrail 4** | 5 | 1 |
+| `uncertain` | a member with contested rename lineage, ADR-0014 decision 4 | 0 | 24 |
 
 The `truncated` limit is **recovered, not assumed**: the truncation entry's `kept` *is*
 `maxCommitFiles`, so the affected commits are identifiable exactly. ADR-0014 rejected carrying the
-indexer's caps in the atlas to save schema surface; this one need not be carried either, because a
-cap that bit already says so with its own value.
+indexer's caps in the atlas to save schema surface; this one need not be carried either.
 
-The schema's wording is loose here and is worth correcting in passing: it says a `wide` commit's
-"files list may be truncated". With the indexer's defaults (`wideCommitFiles` 25, `maxCommitFiles`
-64) a wide commit's list is complete unless it is *also* long. Wideness and truncation are
-independent, and only the second is a guardrail-4 problem.
+**`truncated` is tested before `wide`, and that ordering is load-bearing.** After it, the branch can
+never be taken: truncation needs > 64 files and wideness needs > 25, so with the shipped limits every
+truncatable commit is already wide and refused a branch earlier. It would have been code, a comment
+and a unit test asserting a behaviour the product does not have — CLAUDE.md's dead-path landmine, in
+the decision that cites it. First, it fires exactly when the cap bit and reports the guardrail-4
+reason rather than the pillar-3 one.
 
-### 4. The sample is spread across the commit, not sliced off its front
+The schema's wording was loose here and is now corrected rather than merely noted: it said a `wide`
+commit's "files list may be truncated". With the indexer's defaults a wide commit's list is complete
+unless it is *also* long. Wideness and truncation are independent, and only the second is a
+guardrail-4 problem.
 
-`truth` is `size` files taken at even intervals across the commit's path-sorted list.
+**One limit this verb has and cannot certify away.** `touched` maps each historical path through
+`alias`, which is only as good as `git log -M`'s rename detection: a rename with a heavy rewrite is
+reported as delete+add, so an older commit's list omits today's file under its old name and the
+generator offers it as a wrong answer. The exclusion is certified against *the rename history git
+detected*, not against what a human would call the same file. That is NORTH-STAR §7.2's stated trade
+for the whole product, and it is why the word **provably** does not appear in `commits.ts` any more.
 
-**The counts are identical either way** — 36 boards here and 54 on hono, with the same refusal
-breakdown, measured by running the generator both ways — so this is not a supply decision. It is
-about what the key teaches. Slicing hands every wide commit the same alphabetically-first files,
-which on a repo whose root holds its documents means `CHANGELOG.md` and `CLAUDE.md` over and over; a
-spread shows a cross-section of where the change landed, which is the question the verb is asking.
+### 4. The sample is spread across the commit's files **sorted by path**
+
+`truth` is `size` files taken at even intervals across the commit's files in path order.
+
+**The sort is the decision, and the first version of this section claimed it without the code doing
+it.** `commit.files` holds `NodeRef`s ascending and `atlas.nodes` is ordered by node **id** — an
+FNV-1a hash of the origin path — so a commit's file list arrives in a deterministic *hash shuffle*.
+Spreading over that is spreading over noise: stable, and meaningless. Sorting first is what makes the
+sample the thing the verb asks about — a cross-section of *where* the change landed rather than six
+files that happen to hash early. A post-ship review caught the gap between the sentence and the code;
+the code moved to meet the sentence.
+
+Slicing is then rejected for the reason that becomes true once the order is by path: it hands every
+wide commit the same alphabetically-first files, which on a repo whose root holds its documents is
+`CHANGELOG.md` and `CLAUDE.md` over and over.
+
+**The counts are identical either way** — 37 boards here and 54 on hono, same refusal breakdown,
+measured by running the generator both ways — so this is a choice about what the key teaches, not
+about supply.
 
 ### 5. The Ctrl+F gate reads the commit message, and `directory` is left out
 
@@ -120,6 +168,17 @@ would have meant inventing a home for the subject — most plausibly the directo
 answers — which the player cannot read off the prompt, so it would delete questions for a strategy
 nobody could have used. `gate.ts`'s existing rule, applied: a heuristic has to be a guess the verb's
 own board actually invites.
+
+**`recency` is present, and it was missing until a post-ship review paired two facts nobody had put
+side by side.** The prompt prints the commit's **date**; the inspector prints every node's **last
+seen**. So "tick every candidate whose last-seen date is the one in the question" is as
+structure-blind as a guess can be, and it is free. Measured before deciding: it beat band A on **16
+of hono's 54 shipped boards**, at a flat 1.00 on several — and on **none** of ark's 37 (mean 0.348,
+best 0.71), which is the clearest argument yet that a second repo is not optional. Adding it refuses
+63 more boards on hono and **costs the deck nothing**, because the deck cap backfills from the 232
+available; afterwards the guess beats no shipped board on either repo (hono's mean falls 0.431 →
+0.201, best 1.00 → 0.75). This is ADR-0014 decision 7's three-way alignment — map giveaway, naive
+guess, gate heuristic — which had two of its three legs for this verb.
 
 ### 6. `busy` is the flagship distractor, and the measurement is the whole argument
 
@@ -165,10 +224,14 @@ reaches this verb.
 
 Mostly true, and the exception is worth more than the confirmation.
 
-**Free, as designed.** The console, the map, the grader, the progression selector and the deck needed
-no edit to *know about* Placement. `VERBS` gained one line. The prompt, the instruction, the button
-label, the reveal, the summary sentence, the grade's phrasing and `stillHolds` were all already on the
-`Verb` contract, and the verb filled them in. Nothing outside `src/verbs/placement/` names this verb.
+**Free, as designed.** The console, the map, the field notes, the progression selector and the deck
+needed no edit to *know about* Placement. `VERBS` gained one line. The prompt, the instruction, the
+button label, the reveal, the summary sentence, the grade's phrasing and `stillHolds` were all already
+on the `Verb` contract, and the verb filled them in. The *indexer* names it — `build.ts` runs the
+generator, `cli.ts` prints its refusals — exactly as it names the other two, because a report about
+what a verb declined has nowhere else to live. (An earlier draft of this line said "nothing outside
+`src/verbs/placement/` names this verb", which is the kind of overclaim this document keeps having to
+walk back.)
 
 **Not free: everything that assumed a subject is a node.** Nine places, each a real defect rather than
 a type error:
@@ -214,10 +277,11 @@ same move that closed `tracedRadius`, applied before shipping rather than a mile
   affordance and not a mode — *"the map stays the frame"* — and with a placeless subject that
   argument has nothing to protect: a button that silently does nothing does not keep the map as the
   frame, it just breaks. So the control changes its own label and opens the board.
-- **Measured supply.** 36 challenges on ark from 41 eligible commits (1 `ctrlF`, 4 `duplicateKey`);
-  54 on hono, capped by `maxChallengesFor(425)` from 232 distinct boards. Together the three verbs
-  leave **16 of ark's 125 nodes** unprovable where Blast Radius alone leaves 39, and 142 of hono's
-  425 where Blast Radius alone leaves 269.
+- **Measured supply.** 37 challenges on ark from 42 eligible commits (1 `ctrlF`, 4 `duplicateKey`);
+  54 on hono, capped by `maxChallengesFor(425)` from what the gate and the dedupe leave. Together the
+  three verbs leave **13 of ark's 127 nodes** unprovable where Blast Radius alone leaves 39, and 142
+  of hono's 425 where Blast Radius alone leaves 269. Ark indexes itself, so every figure here moves
+  with the next commit — the invariants above do not.
 - **Index cost**: **not measurable.** Three runs each with the verb's deck cap at 0 and at its
   normal value: 443–467 ms here against 458–470 ms without, and 1690–1871 ms on hono against
   1843–1876 ms without — the without-runs are *slower* on hono, which is how you know you are
@@ -239,6 +303,9 @@ same move that closed `tracedRadius`, applied before shipping rather than a mile
   cap to throw away. Revisit if `maxChallengesFor` ever rises.
 - **Whether a commit deserves a place on the map.** It has none today and the verb is honest about
   it. A history channel that put commits somewhere is a genuine design question and a separate one.
+- **Whether the boundary commit alone could be refused** instead of the whole shallow clone. It
+  would need a way to identify it from the atlas, and the oldest retained commit is not it. Worth
+  revisiting only if shallow clones become a common way people point Ark at a repo.
 - **The overlapping-answer-key question ADR-0012 leaves open** is untouched here. Placement dedupes
   identical keys and, unlike Blast Radius, does **not** re-ask with a disjoint window: a collision
   there means two commits touched the same files, and a second window would ask about files this
@@ -260,3 +327,37 @@ about the verb, which is the direction every leak in this codebase has run.
 **Rank the sample by churn, ascending, to dodge the churn gate.** It would raise the deck without
 `busy` distractors. It is also choosing the answer key to be hard, which is authoring — §8.4 computes
 difficulty *from* the key and must not have the key chosen to flatter it.
+
+---
+
+## Found after shipping, by an adversarial review of the finished code
+
+Five findings, and the shape of them is worth as much as the fixes.
+
+1. **A wrong answer key on a shallow clone** — decision 3's box above. The argument was right about
+   the walk window and wrong about a mechanism it had filed under the same heading. Reproduced end to
+   end before it was fixed.
+2. **`truncated` was a dead branch**, unreachable with the shipped limits because `wide` was tested
+   first — in a file whose own header quotes CLAUDE.md's dead-path landmine, and with a unit test
+   constructing a truncation entry the indexer can never emit. Reordered.
+3. **The sample was not sorted**, while decision 4 said it was "path-sorted" and reasoned from
+   alphabetical clustering that the atlas's hash ordering does not have. The code moved to meet the
+   sentence, and the test that should have caught it was itself wrong twice — first asserting a
+   property true under either ordering, then asserting both ends of the *hash* order, which
+   **survived the mutation** because with twelve files and a six-file key the hash order includes
+   both path-extremes about a quarter of the time. It now compares the whole key against `spread`
+   over the sorted paths.
+4. **A structure-blind guess nobody had scored**: the prompt shows the commit's date and the
+   inspector shows every node's *last seen*. 16 of hono's 54 shipped boards fell to it. `recency` is
+   in `COMMIT_HEURISTICS` now, at no cost to the deck.
+5. **A false comment about its own cost**: `commitOf` said it was "called once per note and once per
+   reveal", which is true of the panel and false of `livenessOf` — restoring a save asks `stillHolds`
+   once per *node* per stored pass, so the linear scan was `O(nodes × commits)` string builds at
+   load. Memoised, on the same `WeakMap` shape `indexCoChange` uses.
+
+**What the five have in common** is that none was findable by the type system or by any suite: three
+are sentences that stopped matching their code, one is a branch that cannot run, and one is a pairing
+of two true facts — a date in a prompt and a date in a panel — that no single file could see. The
+review's own summary put it best: the soft spot was *exactly where the change was proudest*. The
+completeness argument in `commits.ts` is the paragraph this ADR spent the most words on, and it is
+where the wrong answer key was.

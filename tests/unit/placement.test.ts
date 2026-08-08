@@ -82,7 +82,9 @@ function fixture(
     ...bare,
     // `history.present` and `repo.head` must agree, so a fixture with commits
     // needs a head. Ark's own atlas is the reason that invariant exists.
-    repo: { ...bare.repo, head: 'a'.repeat(40), headDate: '2026-01-01' },
+    // `root` too, not just `head`: a null root means a shallow clone, which
+    // ADR-0018 refuses whole — so a fixture without one silently tests nothing.
+    repo: { ...bare.repo, head: 'a'.repeat(40), headDate: '2026-01-01', root: 'b'.repeat(40) },
     nodes,
     history: {
       ...bare.history,
@@ -204,6 +206,38 @@ describe('guardrail 4: what this verb refuses to ask about', () => {
     expect(challenge.candidates).not.toContain(contested);
   });
 
+  it('refuses a shallow clone whole, because its oldest commit lists the entire tree', () => {
+    // **The defect this ADR shipped with, and a post-ship review found.** A
+    // `--depth N` clone's oldest commit has no parent, so git diffs it against
+    // the empty tree and `--name-status` reports it as adding the whole
+    // worktree. Reproduced end to end before this test was written: a repo of 8
+    // files that grew to 38, cloned at depth 2, shipped a board for "wave one
+    // lands" whose key held three files predating it by eight commits.
+    //
+    // `repo.root` is null exactly when the clone is shallow or the root is
+    // unreadable (ADR-0011), which is the same signal ADR-0014 uses.
+    const atlas = fixture([PLAIN]);
+    const shallow = validateAtlas({ ...atlas, repo: { ...atlas.repo, root: null } });
+    const { report } = generateWithReport(shallow, OPTIONS);
+    expect(report.shallow).toBe(true);
+    expect(report.generated).toBe(0);
+    expect(new Map(report.skipped).get('shallowClone')).toBe(1);
+  });
+
+  it('refuses a cut file list before it refuses a wide one, or the branch is dead', () => {
+    // With the shipped limits (`wideCommitFiles` 25 < `maxCommitFiles` 64) every
+    // commit long enough to be truncated is already wide, so ordering
+    // `truncated` after `wide` makes it a branch that can never be taken — the
+    // dead-path landmine, in the change that quotes it. Tested first it reports
+    // the guardrail-4 reason instead of the pillar-3 one.
+    const atlas = fixture([{ ...PLAIN, paths: [...CHANGED, ...FILLER.slice(0, 2)], wide: true }], {
+      fileCap: 6,
+    });
+    const skips = new Map(generateWithReport(atlas, OPTIONS).report.skipped);
+    expect(skips.get('truncated')).toBe(1);
+    expect(skips.get('wide')).toBeUndefined();
+  });
+
   it('asks nothing at all of a repo with no history', () => {
     // Risk #7: tiers 1–4 stay playable on a repo with no commits, which means
     // this verb contributes nothing rather than throwing.
@@ -257,8 +291,12 @@ describe('pillar 3: the Ctrl+F gate reads the commit message', () => {
   });
 
   it('refuses a board the busiest-files guess wins, which is this verb’s live threat', () => {
-    // Measured, not hypothetical: with no high-churn wrong answers on the board
-    // this gate refused 25 of 37 eligible commits on ark and left a deck of 8.
+    // Measured, not hypothetical: with no high-churn wrong answer anywhere on
+    // the board this gate refuses 10 of ark's eligible commits and 141 of
+    // hono's, against 1 and 119 as shipped. (An earlier version of this comment
+    // said "25 of 37, a deck of 8" — a prototype's figure that `distractors.ts`
+    // and ADR-0018 both retract, and that survived here after they were
+    // corrected. A number copied into three places is corrected in one.)
     // Here the answer key *is* the busiest set and nothing else has any churn,
     // which is that situation in miniature.
     const atlas = fixture([PLAIN], {
@@ -272,9 +310,39 @@ describe('pillar 3: the Ctrl+F gate reads the commit message', () => {
     expect(new Map(report.skipped).get('ctrlF')).toBe(1);
   });
 
-  it('does not score the directory guess, because a commit has no directory', () => {
+  it('refuses a board where the inspector’s "last seen" column gives the answer', () => {
+    // **Found by a post-ship review and confirmed by measurement, not argued.**
+    // The prompt prints the commit's date and the inspector prints every node's
+    // `last seen`, so ticking the candidates whose dates match needs no idea of
+    // what changed with what. It beat band A on 16 of hono's 54 boards, at a
+    // flat 1.00 on several, and on ark on none — which is why a second repo is
+    // not optional. Adding it to the gate cost hono's deck nothing (the cap
+    // backfills) and refused 63 more boards.
+    const atlas = fixture([PLAIN]);
+    const dated = validateAtlas({
+      ...atlas,
+      nodes: atlas.nodes.map((node) => ({
+        ...node,
+        // Only the commit's own files carry the commit's date, so the guess is
+        // exactly right — the board that must be refused.
+        firstSeen: '2026-01-01',
+        lastSeen: CHANGED.includes(node.path) ? '2026-01-01' : '2025-06-06',
+      })),
+    });
+    const { report } = generateWithReport(dated, OPTIONS);
+    expect(report.generated).toBe(0);
+    expect(new Map(report.skipped).get('ctrlF')).toBe(1);
+  });
+
+  it('scores exactly the three guesses this board invites, and no others', () => {
     const { report } = generateWithReport(fixture([PLAIN]), OPTIONS);
-    expect(report.heuristicMean.map(([id]) => id).sort()).toEqual(['churn', 'name']);
+    // `directory` is absent because a commit has no directory — a heuristic a
+    // board cannot invite would delete questions for a strategy nobody could use.
+    expect(report.heuristicMean.map(([id]) => id).sort()).toEqual([
+      'churn',
+      'name',
+      'recency',
+    ]);
   });
 });
 
@@ -295,21 +363,33 @@ describe('the sample is spread across the commit rather than sliced off its fron
     }
   });
 
-  it('keeps both ends of a commit wider than its key', () => {
-    // **The first version of this test asserted the key spanned more than one
-    // directory, and it survived its own mutation**: `atlasWith` orders nodes by
-    // the *hash* of their path, so slicing a fixture commit already produces a
-    // scattered set and the assertion was true either way. What actually
-    // separates a spread from a slice is that the spread ends where the commit
-    // ends — so that is what this checks.
+  it('keeps the first and last path of a commit wider than its key', () => {
+    // **This test has been wrong twice and the second time was informative.**
+    // Version one asserted the key spanned more than one directory and survived
+    // its own mutation, because `atlasWith` orders nodes by the *hash* of their
+    // path so even a slice comes out scattered. Version two asserted both ends
+    // of the commit's `files` array — which was the hash order too, so it was
+    // testing that a spread spreads over noise.
+    //
+    // A post-ship review caught what both versions missed: the ADR claimed the
+    // sample ran over a **path-sorted** list and the code did not sort. Now it
+    // does, and this is the property that makes the claim true — the key reaches
+    // the alphabetically first and last file the commit touched, which a slice
+    // over any ordering cannot promise.
+    // **Specified exactly, not sampled.** A first version asserted only that the
+    // key held the alphabetically first and last file, and it *survived* the
+    // mutation that removes the sort — with twelve files and a six-file key the
+    // hash order happens to include both ends about a quarter of the time, and
+    // on this fixture it did. Comparing the whole key against `spread` over the
+    // sorted paths leaves no room for a coincidence.
     const wide = [...CHANGED, ...FILLER.slice(0, 8)];
     const atlas = fixture([{ ...PLAIN, paths: wide }]);
-    const files = atlas.history.commits[0]?.files ?? [];
     const challenge = only(atlas);
-    expect(challenge.truth.length).toBeLessThan(files.length);
-    const idAt = (ref: number | undefined): string => atlas.nodes[ref ?? -1]?.id ?? '';
-    expect(challenge.truth).toContain(idAt(files[0]));
-    expect(challenge.truth).toContain(idAt(files[files.length - 1]));
+    expect(challenge.truth.length).toBeLessThan(wide.length);
+    const idOfPath = (path: string): string =>
+      atlas.nodes.find((node) => node.path === path)?.id ?? '';
+    const expected = spread([...wide].sort(), challenge.truth.length).map(idOfPath);
+    expect([...challenge.truth].sort()).toEqual([...expected].sort());
   });
 });
 
@@ -339,6 +419,35 @@ describe('a commit subject is a place the map does not have', () => {
       validateAtlas({
         ...atlas,
         challenges: [{ ...challenge, subject: commitIdFor('ffffffffffff') }],
+      }),
+    ).toThrow(AtlasValidationError);
+  });
+
+  it('refuses commit evidence under a node subject, and the reverse', () => {
+    // The two are the same claim written twice, so disagreeing is a dangling
+    // reference in disguise — and the render is `On  a commit landed: ""`,
+    // which is the player guessing at a shape (guardrail 5). Checkable without
+    // knowing any verb, which is why the validator can hold it.
+    const atlas = fixture([PLAIN]);
+    const challenge = only(atlas);
+    const nodeId = atlas.nodes[0]?.id ?? '';
+    expect(() =>
+      validateAtlas({
+        ...atlas,
+        challenges: [
+          {
+            ...challenge,
+            subject: nodeId,
+            candidates: challenge.candidates.filter((id) => id !== nodeId),
+            truth: challenge.truth.filter((id) => id !== nodeId),
+          },
+        ],
+      }),
+    ).toThrow(AtlasValidationError);
+    expect(() =>
+      validateAtlas({
+        ...atlas,
+        challenges: [{ ...challenge, evidence: { kind: 'importGraph', depth: 2 } }],
       }),
     ).toThrow(AtlasValidationError);
   });

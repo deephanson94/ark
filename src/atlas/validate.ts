@@ -464,6 +464,19 @@ function validateChallenge(
   if (tier > 6) fail(`${at}.tier`, `expected 1..6, got ${tier}`);
 
   const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
+  // **The subject's kind and the evidence's kind must agree.** Not a verb rule —
+  // the validator cannot import verbs, and does not need to: `commit` evidence
+  // describes an event and a `c:` id names one, so the two are the same claim
+  // written twice and disagreeing is a dangling reference in disguise. Without
+  // it a challenge with a node subject and commit evidence validates cleanly and
+  // renders as `On  a commit landed: ""`, which is the player guessing at a
+  // shape (guardrail 5).
+  if ((evidence.kind === 'commit') !== isCommitId(subject)) {
+    fail(
+      `${at}.evidence.kind`,
+      `${evidence.kind} evidence with a ${isCommitId(subject) ? 'commit' : 'node'} subject`,
+    );
+  }
   // The answer key is a sample of the population, so it can never be larger
   // than it. Stated here because `touched` is the number the reveal calls
   // *revealed but not proved*, and a population smaller than the proof would

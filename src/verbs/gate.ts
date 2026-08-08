@@ -64,13 +64,13 @@
  * installed.
  */
 
-import type { Graph, NodeRef } from '../atlas/index.js';
+import type { Graph, IsoDate, NodeRef } from '../atlas/index.js';
 import { nodeAt } from '../atlas/index.js';
 import { BAND_THRESHOLDS } from './types.js';
 import { scoreSet } from './score.js';
 import { directoryOf, nameTokens } from './paths.js';
 
-export type HeuristicId = 'directory' | 'name' | 'churn';
+export type HeuristicId = 'directory' | 'name' | 'churn' | 'recency';
 
 /** What Blast Radius is checked against. Unchanged from M2 — see the header. */
 export const PATH_HEURISTICS: readonly HeuristicId[] = ['directory', 'name'];
@@ -85,8 +85,16 @@ export const HISTORY_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 
  * for the subject — most plausibly the directory holding the most answers,
  * which the player cannot read off the prompt and which would therefore delete
  * questions for a strategy nobody could have used.
+ *
+ * `recency` **is** here, and it was added after shipping because a post-ship
+ * review noticed the pairing and a measurement confirmed it. Placement's prompt
+ * prints the commit's date; the inspector prints every node's *last seen*. So
+ * "tick every candidate whose last-seen date is the one in the question" needs
+ * no idea of what changed with what — and it beat band A on **16 of hono's 54
+ * boards**, scoring a flat 1.00 on several. On ark it beats none (mean 0.348,
+ * best 0.71), which is exactly why measuring on a second repo is not optional.
  */
-export const COMMIT_HEURISTICS: readonly HeuristicId[] = ['name', 'churn'];
+export const COMMIT_HEURISTICS: readonly HeuristicId[] = ['name', 'churn', 'recency'];
 
 /**
  * Band A. Read the header for why this is not the pass threshold.
@@ -119,12 +127,20 @@ export interface GateSubject {
   readonly home: string | null;
   /** The words the prompt shows, already tokenised and lowercased. */
   readonly words: ReadonlySet<string>;
+  /**
+   * A date the prompt shows, or null when it shows none.
+   *
+   * Here because the inspector prints every node's `lastSeen`, so a date in the
+   * question is a date the player can match against a column — no different in
+   * kind from a filename, and `recency` scores it.
+   */
+  readonly date: IsoDate | null;
 }
 
 /** A file subject: its own directory, and its own name's tokens. */
 export function pathSubject(graph: Graph, subject: NodeRef): GateSubject {
   const path = nodeAt(graph, subject).path;
-  return { home: directoryOf(path), words: new Set(nameTokens(path)) };
+  return { home: directoryOf(path), words: new Set(nameTokens(path)), date: null };
 }
 
 /**
@@ -135,7 +151,7 @@ export function pathSubject(graph: Graph, subject: NodeRef): GateSubject {
  * name-similar strategy exists to punish. A gate that only matched whole words
  * would miss the leak it was installed for.
  */
-export function textSubject(text: string): GateSubject {
+export function textSubject(text: string, date: IsoDate | null = null): GateSubject {
   const words = new Set<string>();
   for (const token of text
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -143,7 +159,7 @@ export function textSubject(text: string): GateSubject {
     .split(/[^a-z0-9]+/)) {
     if (token.length > 0) words.add(token);
   }
-  return { home: null, words };
+  return { home: null, words, date };
 }
 
 /**
@@ -176,6 +192,15 @@ function guess(
     if (subject.home === null) return [];
     const home = subject.home;
     return candidates.filter((ref) => directoryOf(nodeAt(graph, ref).path) === home);
+  }
+  if (heuristic === 'recency') {
+    // Structure-blind in the purest form available: two dates, one in the
+    // question and one in the inspector, compared by eye. No cut and no
+    // parameter — the filter *is* the guess, exactly as `directory` and `name`
+    // are filters rather than top-k.
+    if (subject.date === null) return [];
+    const when = subject.date;
+    return candidates.filter((ref) => nodeAt(graph, ref).lastSeen === when);
   }
   if (heuristic === 'churn') {
     return [...candidates]

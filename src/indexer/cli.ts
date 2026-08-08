@@ -140,7 +140,17 @@ function summarise(
   }
 
   for (const [reason, count] of placement.skipped) {
+    if (reason === 'shallowClone') continue; // said in full below
     lines.push(`placement   declined ${count} commit(s): ${reason}`);
+  }
+  if (placement.shallow) {
+    // The whole-repo refusal, said out loud. A shallow clone's oldest commit is
+    // diffed against the empty tree, so git reports it as adding the whole
+    // worktree — an answer key naming files it never touched (ADR-0018).
+    lines.push(
+      'placement   REFUSED the repo: a shallow clone records its oldest commit as adding' +
+        ' the entire worktree, so its file list is not its own change',
+    );
   }
   if (placement.keyRange !== null) {
     const [narrowest, widest] = placement.keyRange;
