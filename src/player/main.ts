@@ -14,14 +14,26 @@
 
 import type { Atlas, Challenge, NodeId, NodeRef } from '../atlas/index.js';
 import { parseAtlas } from '../atlas/index.js';
-import type { Camera } from './camera.js';
-import { centreOn, fit, pan, screenToWorld, zoomAt } from './camera.js';
+import type { Camera, Point } from './camera.js';
+import {
+  NORTH,
+  centreOn,
+  facingNorth,
+  fit,
+  pan,
+  pivotAround,
+  rotate,
+  screenToWorld,
+  worldToScreen,
+  zoomAt,
+} from './camera.js';
 import { createConsole } from './challenge.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Fog } from './fog.js';
 import { coverage, landmarks } from './fog.js';
+import { GOLDEN_TURN, TURN_MS, bearingDuring } from './heading.js';
 import type { Orbit } from './orbit.js';
-import { DEFAULT_ORBIT, pickColumn, turn } from './orbit.js';
+import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { VERBS, channelOf } from '../verbs/index.js';
 import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, provedThrough, recordSurvey } from './progress.js';
@@ -68,7 +80,71 @@ function start(scene: Scene, root: HTMLElement): void {
   const context = maybeContext;
 
   let viewport = { width: 0, height: 0 };
-  let camera: Camera = { x: 0, y: 0, scale: 1 };
+  /**
+   * Where the player is looking, including **which way up**.
+   *
+   * The bearing is session state and is **never persisted**, like the
+   * selector's attempt counts and for the same reason — ADR-0011 decision 2
+   * forbids storing a cursor, and an orientation into the rotation is one.
+   * Arriving north-up every session is the point rather than a limitation:
+   * north-up is the canonical map and ADR-0009's D1 overview, and a restored
+   * heading would anchor the player back to one alignment, which is the thing
+   * `heading.ts` exists to break.
+   */
+  let camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+
+  /**
+   * What holds still while the world turns, and where on screen it holds.
+   *
+   * `null` turns about the middle of the viewport. After a grade it is the file
+   * just graded, at wherever it was standing — so the landmark whose radius is
+   * on screen stays put and the map revolves around it. That is the difference
+   * between the turn reading as *this place has other angles* and reading as
+   * *the tool shuffled the map*.
+   */
+  type Pivot = { anchor: Point; at: Point } | null;
+  /** A turn in flight: where the map was facing, where it is going, and when it set off. */
+  let turning: { from: number; to: number; startedAt: number; pivot: Pivot } | null = null;
+  /**
+   * Some people should not be shown a spinning world. The turn still happens —
+   * the map has to end up where the next question is asked from — it just
+   * arrives without the motion.
+   */
+  const stillness =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /**
+   * What the map should turn about: the given node if it is on screen, else
+   * nothing, which means the middle of the viewport.
+   *
+   * On screen is a real condition rather than a nicety. Pivoting about a point
+   * beyond the edge swings the whole view through an arc whose radius is the
+   * distance to it, which is a camera flying sideways rather than a world
+   * turning.
+   */
+  const pivotOn = (node: SceneNode | null): Pivot => {
+    if (node === null) return null;
+    const at = worldToScreen(camera, viewport, node);
+    if (at.x < 0 || at.x > viewport.width || at.y < 0 || at.y > viewport.height) return null;
+    return { anchor: { x: node.x, y: node.y }, at };
+  };
+
+  const applyBearing = (bearing: number, pivot: Pivot): void => {
+    camera =
+      pivot === null
+        ? { ...camera, bearing }
+        : pivotAround(camera, viewport, pivot.anchor, pivot.at, bearing);
+  };
+
+  const turnTo = (target: number, pivot: Pivot): void => {
+    if (stillness) {
+      applyBearing(target, pivot);
+      turning = null;
+    } else {
+      turning = { from: camera.bearing, to: target, startedAt: performance.now(), pivot };
+    }
+    invalidate();
+  };
 
   // `progress` is the state; `fog` is a view of it (ADR-0011). Everything the
   // player earns is written to the record and the fog is re-derived, so there
@@ -301,7 +377,24 @@ function start(scene: Scene, root: HTMLElement): void {
   };
   notebook.toggle.addEventListener('click', refreshNotes);
 
-  const hud = createHud(scene.atlas, [notebook.toggle]);
+  const hud = createHud(scene.atlas, () => turnTo(facingNorth(camera), null), [notebook.toggle]);
+
+  /**
+   * Set by a grade, spent when the panel closes: **the map turns between
+   * challenges, not during one.**
+   *
+   * Two callbacks rather than one because the two moments are different. The
+   * turn is worth nothing behind the scrim — the player would close the console
+   * onto a world that had silently moved, which is disorientation without the
+   * correspondence that makes it teachable. Turning as the map comes back means
+   * the reveal is on screen while it happens, so there is a shape to follow
+   * round.
+   *
+   * Every grade, pass or fail, exactly like the reveal itself: guardrail 6 says
+   * a wrong answer never costs anything, and a heading that only advanced on a
+   * pass would make the turn a reward and the flat map a punishment.
+   */
+  let turnPending = false;
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade, reveal) {
       // **The two channels do not behave alike here, and that is deliberate.**
@@ -357,10 +450,15 @@ function start(scene: Scene, root: HTMLElement): void {
           tieFocus = focusFor(node);
         }
       }
+      turnPending = true;
       describe(selected);
       invalidate();
     },
     onClose() {
+      if (turnPending) {
+        turnPending = false;
+        turnTo(camera.bearing + GOLDEN_TURN, pivotOn(selected));
+      }
       invalidate();
     },
   });
@@ -411,6 +509,12 @@ function start(scene: Scene, root: HTMLElement): void {
   }
 
   function frame(): void {
+    if (turning !== null) {
+      const elapsed = performance.now() - turning.startedAt;
+      applyBearing(bearingDuring(turning.from, turning.to, elapsed, TURN_MS), turning.pivot);
+      if (elapsed >= TURN_MS) turning = null;
+      dirty = true;
+    }
     if (dirty) {
       dirty = false;
       const frameInput = {
@@ -442,6 +546,7 @@ function start(scene: Scene, root: HTMLElement): void {
         // supply in node proves the *arithmetic*, not that a stroke happened.
         `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires`,
         unanswered.size,
+        camera.bearing,
       );
       // Recomputed, never latched: a pass can decay and a reindex can resurrect
       // its question, so a stored "you are finished" would go on lying.
@@ -460,6 +565,14 @@ function start(scene: Scene, root: HTMLElement): void {
 
   // ---- interaction ------------------------------------------------------
   let dragging = false;
+  /**
+   * Whether this drag turns the map instead of moving it.
+   *
+   * Read once, at pointer-down, rather than per move: a shift key pressed or
+   * released mid-drag would otherwise switch the gesture under the player's
+   * hand. In the orbit every drag turns, which is the rung's whole intervention.
+   */
+  let turningDrag = false;
   let moved = 0;
   let lastX = 0;
   let lastY = 0;
@@ -471,6 +584,7 @@ function start(scene: Scene, root: HTMLElement): void {
 
   canvas.addEventListener('pointerdown', (event) => {
     dragging = true;
+    turningDrag = event.shiftKey;
     moved = 0;
     lastX = event.clientX;
     lastY = event.clientY;
@@ -484,14 +598,25 @@ function start(scene: Scene, root: HTMLElement): void {
       moved += Math.abs(dx) + Math.abs(dy);
       lastX = event.clientX;
       lastY = event.clientY;
+      // The player's hand wins. An animation that keeps turning under a drag is
+      // the map fighting you, which is the defect `zoomAt` documents for zoom;
+      // the turn is an offer, not a transition the player has to sit through.
+      turning = null;
       if (orbit === null) {
-        camera = pan(camera, dx, dy);
+        // Shift-drag turns the flat map. The map turns on its own between
+        // challenges; this is the player's own hand on it, and it is the same
+        // gesture the orbit uses, on the same value.
+        if (turningDrag) camera = rotate(camera, dx * 0.006);
+        else camera = pan(camera, dx, dy);
       } else {
         // Drag turns the world. This is the whole intervention: motion parallax
         // over a structure you stay outside of is what the measured 3D win is
         // made of, and it beat stereo in the study that separated them
-        // (`docs/prior-art.md` §2).
-        orbit = turn(orbit, dx * 0.006, -dy * 0.004);
+        // (`docs/prior-art.md` §2). Horizontal turns the camera — the *same*
+        // bearing the flat map uses, so `o` never changes which way you face —
+        // and vertical tips the eye, which only this view has.
+        camera = rotate(camera, dx * 0.006);
+        orbit = tip(orbit, -dy * 0.004);
       }
       invalidate();
       return;
@@ -543,10 +668,13 @@ function start(scene: Scene, root: HTMLElement): void {
       const factor = Math.exp(-event.deltaY * 0.0015);
       // In orbit, zoom about the viewport centre rather than the pointer.
       // `zoomAt` keeps the world point *under the cursor* fixed, and it works
-      // that out with the flat inverse — which in a rotated, foreshortened view
-      // names a different place than the one being pointed at, so the map slides
-      // out from under the wheel. Centre-anchored zoom is the honest version
-      // until the camera itself carries the projection.
+      // that out with the flat inverse. That inverse now carries the bearing —
+      // so the *turn* is no longer the discrepancy — but pitch, foreshortening
+      // and lift still live outside it, so in a tipped view the cursor still
+      // names a different place than the one being pointed at and the map would
+      // slide out from under the wheel. Centre-anchored zoom stays the honest
+      // version here until the orbit has an inverse of its own; `pickColumn` is
+      // that inverse for hit-testing and does it in screen space instead.
       camera = zoomAt(
         camera,
         viewport,
@@ -569,8 +697,18 @@ function start(scene: Scene, root: HTMLElement): void {
     }
     if (challengePanel.isOpen() || notebook.isOpen()) return;
     if (event.key === 'f') {
-      camera = fit(scene.bounds, viewport);
+      // Fit *at the current heading*, never back to north: `f` answers "show me
+      // all of it", and a fit that also straightened the map would quietly undo
+      // the turn every time the player used the most ordinary control there is.
+      camera = fit(scene.bounds, viewport, camera.bearing);
       invalidate();
+    }
+    if (event.key === 'n') {
+      // The way back. Guardrail 6 in a keystroke: the map turning between
+      // challenges must never be something the player cannot get out of.
+      // About the middle of the screen, not about a selection — "straighten
+      // this view" is a claim about the view.
+      turnTo(facingNorth(camera), null);
     }
     if (event.key === 'o') {
       // One key there, the same key back. ADR-0009's D1 — the overview survives
@@ -595,7 +733,7 @@ function start(scene: Scene, root: HTMLElement): void {
   const observer = new ResizeObserver(() => {
     resize();
     if (!framed && viewport.width > 1 && viewport.height > 1) {
-      camera = fit(scene.bounds, viewport);
+      camera = fit(scene.bounds, viewport, camera.bearing);
       framed = true;
     }
   });
@@ -605,7 +743,11 @@ function start(scene: Scene, root: HTMLElement): void {
   // it is ever clicked.
   refreshNotes();
   resize();
-  camera = fit(scene.bounds, viewport);
+  // The arrival state is north-up: the canonical map, the one every previous
+  // session learned, and ADR-0009's D1 overview. The heading is never restored
+  // from the save (ADR-0011 decision 2) — it is earned again, one grade at a
+  // time.
+  camera = fit(scene.bounds, viewport, NORTH);
   frame();
 }
 

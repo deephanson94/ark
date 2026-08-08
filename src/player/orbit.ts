@@ -45,47 +45,49 @@
 import type { Camera, Point, Viewport } from './camera.js';
 import type { SceneNode } from './scene.js';
 
-/** Where the eye is. `yaw` turns the world; `pitch` tips it toward overhead. */
+/**
+ * How far the eye is tipped, and how tall a layer stands.
+ *
+ * **Which way the eye is facing is not here — it is `camera.bearing`.** This
+ * interface carried a `yaw` of its own until the flat map learned to turn, and
+ * then there were two headings for one world: pressing `o` would have snapped
+ * the view back to whatever the orbit remembered, and the same concept would
+ * have been implemented in two places, which is the shape of nearly every
+ * defect this repo has had to fix twice. Turning and tipping are now separate
+ * verbs on separate records: `rotate()` on the camera, `tip()` here.
+ */
 export interface Orbit {
   /**
-   * Radians. At 0 the eye sits on the +Y side looking back toward −Y, so the
-   * flat map's north stays north and nothing a player has learned moves.
-   */
-  readonly yaw: number;
-  /**
    * Radians, 0..π/2. π/2 is straight down — which reproduces the flat map
-   * exactly, and is deliberately reachable: ADR-0009's D1 says the overview
-   * survives, and the cheapest way to keep that promise is to make the flat map
-   * a *position* of this camera rather than a different mode.
+   * exactly *at the same bearing*, and is deliberately reachable: ADR-0009's D1
+   * says the overview survives, and the cheapest way to keep that promise is to
+   * make the flat map a *position* of this camera rather than a different mode.
    */
   readonly pitch: number;
   /** World units of height per elevation layer. */
   readonly rise: number;
 }
 
-export const DEFAULT_ORBIT: Orbit = { yaw: 0, pitch: 1.05, rise: 26 };
+export const DEFAULT_ORBIT: Orbit = { pitch: 1.05, rise: 26 };
 
 /** Straight down. `project` then equals `worldToScreen`, to the pixel. */
-export const OVERHEAD: Orbit = { yaw: 0, pitch: Math.PI / 2, rise: 0 };
+export const OVERHEAD: Orbit = { pitch: Math.PI / 2, rise: 0 };
 
 const MIN_PITCH = 0.18;
 const MAX_PITCH = Math.PI / 2;
 
-export function turn(orbit: Orbit, dYaw: number, dPitch: number): Orbit {
-  return {
-    ...orbit,
-    yaw: orbit.yaw + dYaw,
-    pitch: Math.min(MAX_PITCH, Math.max(MIN_PITCH, orbit.pitch + dPitch)),
-  };
+/** Tip the eye toward the horizon or back toward overhead. */
+export function tip(orbit: Orbit, dPitch: number): Orbit {
+  return { ...orbit, pitch: Math.min(MAX_PITCH, Math.max(MIN_PITCH, orbit.pitch + dPitch)) };
 }
 
 /**
  * A node's footing and its top, in screen space.
  *
- * Yaw rotates about the map's centre, then pitch foreshortens the away-axis and
- * height lifts against it. At `pitch = π/2` the sine is 1 and the cosine 0, so
- * the away-axis is unforeshortened and height contributes nothing — the flat
- * map, exactly.
+ * The camera's bearing rotates about the map's centre, then pitch foreshortens
+ * the away-axis and height lifts against it. At `pitch = π/2` the sine is 1 and
+ * the cosine 0, so the away-axis is unforeshortened and height contributes
+ * nothing — the flat map, exactly, at whatever bearing the camera holds.
  */
 export interface Column {
   readonly node: SceneNode;
@@ -108,8 +110,8 @@ export function project(
   orbit: Orbit,
   node: { readonly x: number; readonly y: number; readonly elevation: number },
 ): { base: Point; top: Point; depth: number } {
-  const cos = Math.cos(orbit.yaw);
-  const sin = Math.sin(orbit.yaw);
+  const cos = Math.cos(camera.bearing);
+  const sin = Math.sin(camera.bearing);
   const dx = node.x - camera.x;
   const dy = node.y - camera.y;
   // Rotate about the camera's centre so turning does not slide the map away.

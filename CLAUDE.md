@@ -326,7 +326,15 @@ no questions until M5.
 
 Press **`o`** for the orbit view: every file a column standing on its 2D footing, height =
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
-it to the pixel. Still zero runtime dependencies.
+it to the pixel *at the same heading*. Still zero runtime dependencies.
+
+**The map turns between challenges**, by the golden angle, as the console closes
+(**[ADR-0017](./docs/decisions/0017-the-map-turns-between-challenges.md)**) — because map-derived
+spatial memory is orientation-locked and a north-up-forever map trains exactly the alignment-specific
+knowledge risk #1 says will not transfer. There is **one heading and it lives on the camera**:
+`Orbit` has no `yaw`, `rotate()` turns and `tip()` tips, and rotation is applied to coordinates
+rather than to the canvas, so labels never turn. It is never persisted — every session arrives
+north-up — and `n`, the HUD compass, shift-drag and a bearing-aware `f` are the ways out.
 
 **Two verbs ship.** `src/verbs/blastRadius/` asks what depends on a file (40 challenges here);
 `src/verbs/companion/` asks what *changes with* it (40 here, 54 on hono, 508 on svelte) — the first
@@ -342,8 +350,8 @@ appears only where *neither* of its files still carries an open Companion board,
 rather than a disclosure rule, because ink on the map is a lookup where text in a closed panel is a
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
-**Field notes** record what you proved — never what you were shown. ~65 KiB of JS, zero runtime
-dependencies, first paint ~340 ms. `npx ark index .` produces a valid ~160 KiB atlas in ~390 ms.
+**Field notes** record what you proved — never what you were shown. ~68 KiB of JS, zero runtime
+dependencies, first paint ~310 ms. `npx ark index .` produces a valid ~160 KiB atlas in ~390 ms.
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -388,22 +396,21 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **map rotation between challenges.** `docs/prior-art.md` §4.4 has called it the
-highest-leverage lowest-cost item in the whole writeup for two sessions now and it is still not done:
-map-derived spatial memory is **orientation-locked**, ours is north-up forever, and the verbs pick an
-arbitrary subject each time — so we are training exactly the alignment-specific knowledge the
-evidence says does not transfer.
+Next action: **the negative witness.** A wrong pick already has a known reason class — sibling,
+name-alike, distance n±1, co-change ghost — the distractor generator *chose* it for that reason, and
+the reveal never says which. The one moment the player is most ready to learn passes in silence.
 
-Then, in evidence order: **the negative witness** (a wrong pick already has a known
-reason class — sibling, name-alike, distance n±1, co-change ghost — and we never say it); and **the
-phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that would give
-the product an atom that *transfers* to another repo, which is risk #1.
+Then **the phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena that
+would give the product an atom that *transfers* to another repo, which is the other half of risk #1.
 
 Smaller and still open: the twins a duplicate answer key drops are never mentioned to the player
 (`cone(A) = cone(B)` is a true derived fact and must be *shown*, not proved — ADR-0011 decision 3);
 node labels near the top edge draw underneath the inspector and HUD; the orbit does not re-fit on
-entry and has no frustum cull. And one measurement only a human can take: **`npm run raster` on real
-hardware** — 45/33/43 fps is a headless software floor, and ADR-0009's P1′ gates the renderer on it.
+entry and has no frustum cull — and now that the flat map culls in screen space through its own
+projection (ADR-0017), that is the obvious thing for the orbit to borrow. And one measurement only a
+human can take: **`npm run raster` on real hardware** — 45/33/43 fps is a headless software floor,
+ADR-0009's P1′ gates the renderer on it, and it should now be measured on a *turned* map, since
+oblique headings are the normal case and were never what it sampled.
 
 The verb seam was the real work of M4 and it is worth knowing what it now costs to add a third:
 `difficulty.ts`, `gate.ts` and `paths.ts` live at `src/verbs/` rather than inside a verb, and

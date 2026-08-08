@@ -26,6 +26,7 @@ import { build, preview } from 'vite';
 import type { Atlas } from '../src/atlas/index.js';
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
+import { TURN_MS } from '../src/player/heading.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ATLAS_OUT = join(ROOT, 'src/player/public/atlas.json');
@@ -79,6 +80,44 @@ async function main(): Promise<number> {
   );
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    /**
+     * Wait out a turn.
+     *
+     * The map turns between challenges over `TURN_MS`, so anything that reads a
+     * pixel — or clicks a position found by an earlier scan — has to let it
+     * land first. Imported from the player rather than typed in here, because a
+     * hard-coded copy would silently stop covering the animation the day
+     * somebody lengthens it.
+     */
+    const settle = async (): Promise<void> => {
+      await page.waitForTimeout(TURN_MS + 140);
+    };
+    /** The compass's accessible name carries the heading in degrees. */
+    const heading = async (): Promise<number> =>
+      Number(/turned (\d+)°/.exec((await page.locator('.hud-compass').getAttribute('title')) ?? '')?.[1] ?? '-1');
+
+    /**
+     * A fingerprint of what is actually on the canvas.
+     *
+     * Every liveness gate in this script ends here, because `npm run raster`
+     * printed confident, plausible, completely false numbers twice before it
+     * had one. State that says the map turned is not the map having turned.
+     */
+    const hashCanvas = async (): Promise<string> =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas.map');
+        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
+        const context = canvas.getContext('2d');
+        if (context === null) return 'no-context';
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let hash = 2166136261;
+        for (let i = 0; i < data.length; i += 997) {
+          hash ^= data[i] ?? 0;
+          hash = Math.imul(hash, 16777619);
+        }
+        return String(hash >>> 0);
+      });
 
     const consoleErrors: string[] = [];
     /**
@@ -329,6 +368,50 @@ async function main(): Promise<number> {
       }
       await page.screenshot({ path: join(SHOT_DIR, 'after-grade.png') });
 
+      // ---- the map turns between challenges (ADR-0017) --------------------
+      //
+      // **The load-bearing assertion of the whole feature, and it is one
+      // comparison**: with the turn landed, hash the canvas, press `n`, hash
+      // again, and require the two to differ. That single check proves the
+      // grade turned the *map* — not a state variable, not the compass, which
+      // is CSS-rotated independently and would keep spinning over a dead map —
+      // and that the way back works, because if the grade had turned nothing
+      // the map would still be north-up and `n` would be a no-op.
+      //
+      // Everything else here is a name for the number. The pixels are the gate.
+      await settle();
+      // Frame the whole map at the new heading before anything scans it again:
+      // the turn pivots about the file just graded, so the camera moves as well
+      // as turns, and a later grid scan hunting a particular node needs it on
+      // screen. Exercises the bearing-aware `fit` while it is at it.
+      await page.keyboard.press('f');
+      await page.waitForTimeout(120);
+      const turnedTo = await heading();
+      process.stdout.write(`e2e: after one grade the map is turned ${turnedTo}°\n`);
+      if (turnedTo <= 2 || turnedTo >= 358) {
+        failures.push({
+          what: 'rotation',
+          detail: `grading a challenge left the map at ${turnedTo}° — it did not turn`,
+        });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'turned.png') });
+      const turnedMapPixels = await hashCanvas();
+
+      await page.keyboard.press('n');
+      await settle();
+      const northPixels = await hashCanvas();
+      const backTo = await heading();
+      process.stdout.write(`e2e: n → ${backTo}°\n`);
+      if (northPixels === turnedMapPixels) {
+        failures.push({
+          what: 'rotation',
+          detail: 'the heading changed but the canvas did not — bearing reaches no pixel',
+        });
+      }
+      if (backTo !== 0) {
+        failures.push({ what: 'rotation', detail: `n left the map at ${backTo}° instead of north` });
+      }
+
       // ---- history wires -------------------------------------------------
       //
       // ADR-0016's liveness gate, and it is the whole reason `wires` is in the
@@ -401,6 +484,8 @@ async function main(): Promise<number> {
 
         await page.locator('.console-submit').click();
         await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+        // That was a second grade, so a second turn is running.
+        await settle();
         await page.waitForFunction(
           () => /(\d+) wires/.test(document.querySelector('.hud-detail')?.textContent ?? ''),
           undefined,
@@ -451,6 +536,18 @@ async function main(): Promise<number> {
         .catch(() => false);
       const afterReload = (await page.locator('.hud-counts').innerText()).replace(/\s+/g, ' ').trim();
       process.stdout.write(`e2e: after reload → ${afterReload}\n`);
+      // ADR-0011 decision 2: a cursor is never persisted, and an orientation
+      // into the rotation is one. Every session arrives at the canonical map,
+      // which is also the only heading a returning player can already have
+      // learned. The pass above turned the map; the reload must not restore it.
+      const headingAfterReload = await heading();
+      process.stdout.write(`e2e: heading after reload → ${headingAfterReload}°\n`);
+      if (headingAfterReload !== 0) {
+        failures.push({
+          what: 'rotation',
+          detail: `the heading survived a reload at ${headingAfterReload}° — it is being persisted`,
+        });
+      }
       if (!restored) {
         failures.push({
           what: 'save',
@@ -617,21 +714,6 @@ async function main(): Promise<number> {
     // input that drove nothing, and a zoom level where the map rendered as a
     // sub-pixel smudge. Both looked like success. So the assertion here is not
     // "no error" — it is "the pixels changed, and changed again when turned".
-    const hashCanvas = async (): Promise<string> =>
-      page.evaluate(() => {
-        const canvas = document.querySelector('canvas.map');
-        if (!(canvas instanceof HTMLCanvasElement)) return 'no-canvas';
-        const context = canvas.getContext('2d');
-        if (context === null) return 'no-context';
-        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-        let hash = 2166136261;
-        for (let i = 0; i < data.length; i += 997) {
-          hash ^= data[i] ?? 0;
-          hash = Math.imul(hash, 16777619);
-        }
-        return String(hash >>> 0);
-      });
-
     const flatPixels = await hashCanvas();
     await page.keyboard.press('o');
     await page.waitForTimeout(220);

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Camera, Viewport } from '../../src/player/camera.js';
+import { NORTH } from '../../src/player/camera.js';
+import type { SceneNode } from '../../src/player/scene.js';
 import { blastRadius, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
 import { DISTRICT_SCALE, STREET_SCALE, levelFor, shortLabel, styleFor } from '../../src/player/zoom.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -45,12 +48,19 @@ describe('prepare', () => {
 
 describe('culling', () => {
   const scene = prepare(ATLAS);
+  /** A viewport small enough that the fixture does not all fit in it. */
+  const TIGHT: Viewport = { width: 3, height: 3 };
+  const on = (node: SceneNode, bearing = NORTH): Camera => ({
+    x: node.x,
+    y: node.y,
+    scale: 1,
+    bearing,
+  });
 
   it('keeps only what the viewport can see', () => {
     const first = scene.nodes[0];
     if (first === undefined) throw new Error('fixture has no nodes');
-    const tight = { minX: first.x - 1, minY: first.y - 1, maxX: first.x + 1, maxY: first.y + 1 };
-    const visible = visibleNodes(scene, tight, 1);
+    const visible = visibleNodes(scene, on(first), TIGHT);
     expect(visible.length).toBeLessThan(scene.nodes.length);
     expect(visible).toContain(first);
   });
@@ -58,13 +68,27 @@ describe('culling', () => {
   it('keeps a node whose centre is off screen but whose edge is not', () => {
     const first = scene.nodes[0];
     if (first === undefined) throw new Error('fixture has no nodes');
-    const justPast = {
-      minX: first.x + first.radius / 2,
-      minY: first.y - 1,
-      maxX: first.x + 100,
-      maxY: first.y + 1,
-    };
-    expect(visibleNodes(scene, justPast, 1)).toContain(first);
+    // Centred a little past the node, so its middle is outside the viewport
+    // and its disc still overlaps it.
+    const justPast: Camera = { x: first.x + 2 + first.radius / 2, y: first.y, scale: 1, bearing: NORTH };
+    expect(visibleNodes(scene, justPast, TIGHT)).toContain(first);
+  });
+
+  it('culls by where the map is turned to, not by an axis-aligned box', () => {
+    // The cull runs through the same projection that draws, so a node that
+    // leaves the viewport when the map turns is dropped when the map turns.
+    // A world-space bounding box cannot express that — it admits the corners of
+    // a diamond, measured at 2.17x the nodes actually on screen at 45 degrees
+    // on a 2,000-node cloud, on a renderer already under its frame budget.
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error('fixture has no nodes');
+    const wide: Viewport = { width: 400, height: 6 };
+    const far = scene.nodes.find(
+      (node) => Math.abs(node.x - first.x) > 20 && Math.abs(node.y - first.y) < 3,
+    );
+    if (far === undefined) throw new Error('fixture has no node off to the side');
+    expect(visibleNodes(scene, on(first), wide)).toContain(far);
+    expect(visibleNodes(scene, on(first, Math.PI / 2), wide)).not.toContain(far);
   });
 
   it('keeps an edge when either end is on screen', () => {
@@ -73,7 +97,14 @@ describe('culling', () => {
   });
 
   it('keeps everything when the viewport covers the whole atlas', () => {
-    expect(visibleNodes(scene, scene.bounds, 1)).toHaveLength(scene.nodes.length);
+    const whole: Camera = {
+      x: (scene.bounds.minX + scene.bounds.maxX) / 2,
+      y: (scene.bounds.minY + scene.bounds.maxY) / 2,
+      scale: 1,
+      bearing: NORTH,
+    };
+    const huge: Viewport = { width: 4000, height: 4000 };
+    expect(visibleNodes(scene, whole, huge)).toHaveLength(scene.nodes.length);
   });
 });
 
@@ -173,7 +204,7 @@ describe('cost at scale', () => {
     const scene = prepare(big);
     const started = performance.now();
     for (let i = 0; i < 60; i++) {
-      const visible = visibleNodes(scene, scene.bounds, 1);
+      const visible = visibleNodes(scene, { x: 0, y: 0, scale: 1, bearing: 0.7 }, { width: 4000, height: 4000 });
       visibleEdges(scene, new Set(visible.map((node) => node.ref)));
     }
     const perFrame = (performance.now() - started) / 60;
