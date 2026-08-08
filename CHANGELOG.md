@@ -1123,9 +1123,10 @@ One line per iteration: what changed, and what to do next.
   **[ADR-0017](./docs/decisions/0017-the-map-turns-between-challenges.md)**. No schema change, the
   indexer untouched, `test:determinism` byte-identical.
   **The schedule was decided by measurement and both candidates I brought to it were wrong.** A
-  heading hashed off `challenge.id` — the first design — collides on consecutive grades **14 times
-  in 80** on this deck: console closes, animation runs, map does not move, which is the
-  machinery-that-never-fires landmine wearing the feature's clothes. A pre-implementation review
+  heading hashed off `challenge.id` — the first design — fails to turn at all on **12 to 14 of 80**
+  consecutive grades (the deck is regenerated at every commit, so it is a range and not a constant;
+  the invariant is that uniform hashing collides once in K, forever): console closes, animation runs,
+  map does not move, which is the machinery-that-never-fires landmine wearing the feature's clothes. A pre-implementation review
   killed that correctly and proposed a coprime step of 135°, which fixes the zero-turns and fails
   the other way: three eighths of a turn is a **closed cycle**, so it visits eight headings and puts
   **10 of 80 questions back at exactly north-up**. 90° puts back 20. The golden angle is irrational

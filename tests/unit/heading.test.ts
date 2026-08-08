@@ -28,9 +28,10 @@ const SESSION = Array.from({ length: 80 }, (_, i) => (i + 1) * GOLDEN_TURN);
 
 describe('the schedule', () => {
   it('always turns, and always turns a long way', () => {
-    // A hashed heading — the rejected alternative — collided on consecutive
-    // grades 14 times in 80 on this deck, so the console closed, the animation
-    // ran, and the map did not move. A fixed step cannot do that.
+    // A hashed heading — the rejected alternative — fails to turn at all on
+    // roughly one consecutive pair in K, which measured 12 to 14 of 80 across
+    // two commits of this repo's own deck: the console closes, the animation
+    // runs, and the map does not move. A fixed step cannot do that.
     let previous = 0;
     for (const bearing of SESSION) {
       expect(apart(bearing, previous)).toBeGreaterThan(137);

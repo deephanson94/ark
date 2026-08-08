@@ -34,15 +34,23 @@ transfer.** That is not a rough edge in the mechanic; it is the mechanic trainin
 
 **Why an irrational fraction of a turn, measured rather than argued.** The step has to be irrational
 in units of a full turn or the sequence *closes*, and a closed sequence hands the player back the
-alignment the whole change exists to break. Over 80 headings — a full clear of this repo's deck at
-`0334d3e`:
+alignment the whole change exists to break. Over 80 headings — a full clear of this repo's deck:
 
 | step | distinct headings | consecutive turns of 0° | questions answered from exactly north |
 |---|---:|---:|---:|
-| hashed into 8 buckets | 8 | **14** | 10 |
+| hashed into 8 buckets | 8 | **12–14** | 15–17 |
 | 135° (3 of 8 — the reviewed alternative) | 8 | 0 | **10** |
 | 90° | 5 | 0 | **20** |
 | **golden, 137.5°** | **80** | **0** | **0** |
+
+**Read the ranges and the exact numbers differently, because they are different kinds of number.**
+The last three rows depend only on the step and the length of the deck: `n · 3/8` of a turn closes
+after eight, and 10 of 80 is arithmetic that will be true forever. The hash row depends on the
+*actual challenge ids*, and **ark indexes itself** — the deck is regenerated at every commit, so it
+was 14 and 17 at `0334d3e` and 12 and 15 at `0583978`, the commit that shipped this. Quoting either
+pair as *the* number is the transcription drift CLAUDE.md has a landmine for. The invariant is what
+survives: **a hashed heading fails to turn at all on roughly one consecutive pair in K, forever,
+because that is what uniform hashing does — and a fixed step cannot.**
 
 Two different defects, and each candidate has one. A **hashed** heading — a pure function of
 `challenge.id`, which was this ADR's first proposal — collides on consecutive grades once every K

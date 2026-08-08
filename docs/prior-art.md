@@ -261,7 +261,8 @@ chose. It is the highest-leverage, lowest-cost item in this entire document.
 > **DONE 2026-08-08 —
 > [ADR-0017](./decisions/0017-the-map-turns-between-challenges.md).** Grading a challenge turns the
 > map by the golden angle. The step is irrational in units of a turn on purpose: measured over a full
-> clear of this repo's deck, a hashed heading fails to turn at all 14 times in 80, and any round
+> clear of this repo's deck, a hashed heading fails to turn at all 12–14 times in 80 — a range
+> rather than a constant, because ark indexes itself and the deck moves every commit — and any round
 > number closes into a cycle that puts 10–20 of those 80 questions back at exactly north-up. §2's
 > closing point still stands over all of it — **nobody in this literature, us included, has measured
 > retained structural knowledge after the tool was taken away** — so this is the bet this section
