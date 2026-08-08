@@ -630,23 +630,39 @@ async function main(): Promise<number> {
       if (noteCount === 0) {
         failures.push({ what: 'notes', detail: 'passed a challenge and the notebook is empty' });
       } else {
-        const claim = (await page.locator('.field-note-claim').first().innerText()).trim();
-        const revealed = await page.locator('.field-note-revealed').first().count();
-        process.stdout.write(`e2e: note → ${claim}\n`);
-        if (!claim.startsWith('You proved')) {
-          failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+        // **Find the note by its subject, never by its position.** `fieldNotes`
+        // sorts by descending radius, then path, then verb — nothing to do with
+        // the order the player proved things in — so `.first()` was an ordering
+        // assumption that happened to hold. It held until a commit that changed
+        // only prose changed the deck (ark indexes itself), the grid scan landed
+        // on a different first subject, and this compared *some other pass's*
+        // note against this challenge's answer key. The check below cannot care
+        // what order the notebook is in.
+        const claims = (await page.locator('.field-note-claim').allInnerTexts()).map((text) =>
+          text.trim(),
+        );
+        const mine = claims.find((text) => text.includes(subject));
+        process.stdout.write(`e2e: note → ${mine ?? claims[0] ?? '(none)'}\n`);
+        // Every note, not just one: the surveyed/understood line is broken by
+        // any sentence stronger than what was earned, wherever it sits.
+        for (const claim of claims) {
+          if (!claim.startsWith('You proved')) {
+            failures.push({ what: 'notes', detail: `a note must claim only what was proved: "${claim}"` });
+          }
         }
-        if (challenge !== undefined && !claim.includes(String(challenge.truth.length))) {
+        if (mine === undefined) {
+          failures.push({ what: 'notes', detail: `no note names ${subject}, which was just proved` });
+        } else if (challenge !== undefined && !mine.includes(String(challenge.truth.length))) {
           failures.push({
             what: 'notes',
-            detail: `note claims a different count than the ${challenge.truth.length} files proved`,
+            detail: `note for ${subject} claims a different count than the ${challenge.truth.length} files proved: "${mine}"`,
           });
         }
-        // The full radius may appear, but only in the line labelled as revealed.
-        if (revealed > 0) {
-          const shown = (await page.locator('.field-note-revealed').first().innerText()).trim();
+        // The full radius may appear, but only in a line labelled as revealed —
+        // and that has to hold for every one of them, not for whichever is top.
+        for (const shown of await page.locator('.field-note-revealed').allInnerTexts()) {
           if (!shown.includes('revealed')) {
-            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown}"` });
+            failures.push({ what: 'notes', detail: `the radius is stated as knowledge: "${shown.trim()}"` });
           }
         }
       }

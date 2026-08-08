@@ -1172,6 +1172,15 @@ One line per iteration: what changed, and what to do next.
   **What this is not: a validated fix.** The studies demonstrate the deficit, not this cure, and
   §2's closing point — nobody in this literature has measured retained structural knowledge after
   the tool was taken away — applies to us. It is the evidence-directed bet §4.4 calls it.
+  **CI went red on a commit that changed only prose, and the reason is worth the landmine.** The
+  e2e checked the *first* field note against the *first* challenge it played; notes are sorted by
+  descending radius, which has nothing to do with the order you proved them in. It had passed for
+  four milestones because the two coincided. Then a documentation-only commit changed the deck — ark
+  indexes itself — the grid scan landed on a different first subject, and the assertion compared one
+  pass's note against another pass's answer key. The fix selects the note by the subject it *names*
+  and asserts the property over every row instead of the top one, which is strictly stronger;
+  mutation-checked by overstating a note's count. **`.first()` in a UI assertion is an ordering
+  assumption, and on a repo that indexes itself it is a time bomb.**
   **Next**: the **negative witness** — a wrong pick already has a known reason class (sibling,
   name-alike, distance n±1, co-change ghost) and the reveal never says which, so the one moment the
   player is most ready to learn passes in silence. Then the **phenomenon catalogue**, a

@@ -217,6 +217,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   **29.7 s on svelte against Blast Radius's 0.6**, pushing a full index from 22.5 s to 47.8 s. The
   generator asks for a choice set once per subject, so per-node work happens V² times. Precompute a
   corpus and invert the indexes; a documented landmine in one file does not protect the next one.
+- **`.first()` in a UI assertion is an ordering assumption, and it will be wrong on a repo that
+  changes.** The e2e checked the *first* field note against the *first* challenge it played. Notes
+  are sorted by descending radius (`notes.ts`), which has nothing to do with the order you proved
+  them in, so this was comparing an arbitrary pass's note against another pass's answer key — and it
+  passed for four milestones because the two happened to coincide. What exposed it was a commit that
+  changed **only prose**: ark indexes itself, so the deck moved, the grid scan landed on a different
+  first subject, and an assertion nobody had touched went red. Select the row by something it
+  *claims* (here, the subject path), and assert the property over *every* row rather than over the
+  top one.
 - **`innerText` returns *rendered* text.** An e2e assertion comparing a verb's title against
   `.console-verb` failed because the CSS is `text-transform: uppercase` and the DOM said
   `COMPANION`. The element's text and the string the code put there are not the same value.
