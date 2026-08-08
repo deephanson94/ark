@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NodeId } from '../../src/atlas/index.js';
-import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
+import { buildGraph, commitIdFor, validateAtlas } from '../../src/atlas/index.js';
 import { fieldNotes, noteProse } from '../../src/player/notes.js';
 import { EMPTY_PROGRESS, livenessOf, recordPass } from '../../src/player/progress.js';
 import { VERBS } from '../../src/verbs/index.js';
@@ -40,7 +40,7 @@ describe('what a note is built from', () => {
   it('names the files that were proved, with how far each reaches', () => {
     const notes = fieldNotes(graph, passOn('src/hub.ts', ['src/mid.ts', 'src/far.ts']), liveness);
     expect(notes).toHaveLength(1);
-    expect(notes[0]?.subjectPath).toBe('src/hub.ts');
+    expect(notes[0]?.subjectLabel).toBe('src/hub.ts');
     expect(notes[0]?.proved).toEqual([
       { path: 'src/mid.ts', weight: 1 },
       { path: 'src/far.ts', weight: 2 },
@@ -51,7 +51,7 @@ describe('what a note is built from', () => {
   it('keeps the full radius separate from what was proved', () => {
     // hub's real radius is {mid, far, wide} = 3; the player proved 1 of them.
     const notes = fieldNotes(graph, passOn('src/hub.ts', ['src/mid.ts']), liveness);
-    expect(notes[0]?.radius).toBe(3);
+    expect(notes[0]?.population).toBe(3);
     expect(notes[0]?.proved).toHaveLength(1);
   });
 
@@ -81,7 +81,7 @@ describe('what a note is built from', () => {
       idFor('src/wide.ts'),
     ]);
     const notes = fieldNotes(graph, both, liveness);
-    expect(notes.map((note) => note.subjectPath)).toEqual(['src/hub.ts', 'src/mid.ts']);
+    expect(notes.map((note) => note.subjectLabel)).toEqual(['src/hub.ts', 'src/mid.ts']);
   });
 
   it('follows a rename, because the record keys on node identity', () => {
@@ -118,7 +118,7 @@ describe('the prose claims exactly what was proved', () => {
   it('says nothing about a radius the player has fully proved', () => {
     const notes = fieldNotes(graph, passOn('src/mid.ts', ['src/far.ts']), liveness);
     const note = notes[0];
-    expect(note?.radius).toBe(1);
+    expect(note?.population).toBe(1);
     expect(note === undefined ? null : noteProse(note).revealed).toBeNull();
   });
 
@@ -148,7 +148,7 @@ describe('the prose claims exactly what was proved', () => {
       .filter((word) => word.includes('/'));
     expect(words.length).toBeGreaterThan(0);
     for (const word of words) {
-      expect([note.subjectPath, ...note.proved.map((f) => f.path)]).toContain(word);
+      expect([note.subjectLabel, ...note.proved.map((f) => f.path)]).toContain(word);
     }
   });
 });
@@ -203,5 +203,70 @@ describe('a note reads in the unit its verb measures in', () => {
     const prose = noteProse(notes[0]!);
     expect(prose.claim).toContain('depend');
     expect(prose.claim).not.toContain('commit');
+  });
+});
+
+describe('a note about a commit, which is not a file', () => {
+  // The seam's last gap, and the reason ADR-0018 put three more members on the
+  // `Verb` contract. `weightsFor` and `noteProse` were both
+  // `verb === 'companion' ? … : …` with Blast Radius as the *else*, and
+  // `subjectPath` resolved the subject through `refById` — so a Placement pass
+  // would have been dropped in silence, and if it had survived it would have
+  // claimed its members were direct importers of a sha.
+  const base = atlasWith(['src/one.ts', 'src/two.ts', 'src/three.ts']);
+  const withHistory = validateAtlas({
+    ...base,
+    repo: { ...base.repo, head: 'b'.repeat(40), headDate: '2026-02-02' },
+    history: {
+      ...base.history,
+      present: true,
+      commitsWalked: 1,
+      commitsRetained: 1,
+      window: { from: '2026-02-02', to: '2026-02-02' },
+      commits: [
+        {
+          sha: '0123456789ab',
+          date: '2026-02-02',
+          subject: 'move the retry budget',
+          files: [0, 1],
+          wide: false,
+          issue: null,
+        },
+      ],
+    },
+  });
+  const commitGraph = buildGraph(withHistory);
+  const commit = commitIdFor('0123456789ab');
+  const first = withHistory.nodes[0]?.id ?? '';
+  const record = recordPass(EMPTY_PROGRESS, 'placement', commit, [first]);
+
+  it('renders at all, rather than vanishing because the subject is not a node', () => {
+    const notes = fieldNotes(commitGraph, record, livenessOf(commitGraph, VERBS));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.subjectLabel).toBe('0123456789ab — "move the retry budget"');
+  });
+
+  it('says what changed in the commit, and never how many hops away it was', () => {
+    const notes = fieldNotes(commitGraph, record, livenessOf(commitGraph, VERBS));
+    const note = notes[0];
+    expect(note).toBeDefined();
+    if (note === undefined) return;
+    const prose = noteProse(note);
+    expect(prose.claim).toContain('changed in 0123456789ab');
+    expect(prose.claim).not.toContain('hops');
+    expect(prose.claim).not.toContain('depend');
+    // Two files touched, one proved: the gap is stated as revealed, never
+    // folded into the claim.
+    expect(prose.revealed).toContain('the other 1 revealed to you, never proved');
+  });
+
+  it('goes dormant when the commit slides out of the window', () => {
+    const slid = buildGraph(
+      validateAtlas({
+        ...withHistory,
+        history: { ...withHistory.history, commits: [], commitsRetained: 0 },
+      }),
+    );
+    expect(fieldNotes(slid, record, livenessOf(slid, VERBS))).toEqual([]);
   });
 });

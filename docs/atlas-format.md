@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 5**
+**Schema version: 6**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 5,
+  "version": 6,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -55,7 +55,14 @@ Two representations, split by purpose ([ADR-0004](decisions/0004-indices-for-bul
 | reference | type | used by |
 |---|---|---|
 | `NodeRef` | integer index into `nodes` | `edges`, `history.coChange`, `history.commits[].files` |
-| `NodeId` | `"n:"` + 12 hex chars | `challenges.subject`, `.candidates`, `.truth` |
+| `NodeId` | `"n:"` + 12 hex chars | `challenges.candidates`, `.truth`, and `.subject` for a verb that asks about a file |
+| `CommitId` | `"c:"` + the 12-hex `sha` of a retained commit | `challenges.subject` for a verb that asks about an event |
+
+`SubjectId` is the union of the last two, and **the prefix is the discriminator** — there is no
+companion `subjectKind` field. A subject is a place or an event, and *"can this be drawn on the
+map?"* has to be answerable without knowing which verb asked, because the fog, the save and the
+deck all read a subject and only one of the two kinds belongs on a canvas.
+[ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md).
 
 Bulk arrays use indices because size dominates there. The challenge fields use ids because
 `grade(challenge, answer)` must be self-contained (NORTH-STAR §8.1) and a `Grade`'s id arrays have
@@ -312,20 +319,26 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | field | type | notes |
 |---|---|---|
 | `id` | `string` | Stable within an atlas. |
-| `verb` | `VerbId` | `blastRadius` or `companion`. The full list is `VERB_IDS` in the schema — **the only one**. |
+| `verb` | `VerbId` | `blastRadius`, `companion` or `placement`. The full list is `VERB_IDS` in the schema — **the only one**. |
 | `tier` | `1..6` | Curriculum tier, NORTH-STAR §5. |
 | `difficulty` | `number` | `0..1`. **Computed, never authored** (NORTH-STAR §8.4). Generators normalise. |
-| `subject` | `NodeId` | The file the question is about. Never appears in `candidates`. |
+| `subject` | `SubjectId` | What the question is about: an `n:` node for `blastRadius` and `companion`, a `c:` retained commit for `placement`. Never appears in `candidates`. |
 | `candidates` | `NodeId[]` | Sorted. The choice set. Non-empty. |
 | `truth` | `NodeId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
-| `evidence` | `Evidence` | `{kind: "importGraph", depth}` or `{kind: "coChange", minCount, wideLimit, atMost}`. |
+| `evidence` | `Evidence` | `{kind: "importGraph", depth}`, `{kind: "coChange", minCount, wideLimit, atMost}`, or `{kind: "commit", subject, date, touched}`. |
 
-Both `evidence` variants carry a **measured** quantity rather than a bound the generator imposed:
+Every `evidence` variant carries a **measured** quantity rather than a bound the generator imposed:
 `depth` is the furthest hop this answer key actually travels
-([ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) §5), and
+([ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) §5),
 `minCount` is the weakest coupling that made this key
-([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)). Each verb's prompt may
-therefore state its own as a fact.
+([ADR-0014](decisions/0014-companion-truth-is-a-gap-not-a-threshold.md)), and `touched` is how many
+indexed files the commit changed in all. Each verb's prompt may therefore state its own as a fact.
+
+The `commit` variant also carries the commit's own `subject` line and `date`, because `prompt()` is
+pure over `(challenge, pathOf)` and has no atlas to look them up in — the same reason `coChange`
+carries `wideLimit`. Quoting a commit message is **derived** content, not authored: guardrail 2
+forbids writing prose about a particular project, and repeating what the repo already says about
+itself is the opposite of writing it.
 
 `atMost` is the other half of a Companion board's claim: what a candidate **outside** the answer key
 is certified at. Normally 1, raised when the pair cap bit. It exists because the instruction line
@@ -338,7 +351,8 @@ devtools to read the answer has opted out of the product. Do not obfuscate it.
 **`id` is stable within an atlas and nowhere else.** It is a convenience for ordering and lookup, not
 an identity that survives a reindex — the generator may renumber freely when the deck changes. So
 nothing outside the atlas may key on it: the player's save records a pass by `(verb, subject)`,
-because `subject` is a `NodeId` and *that* is stable by construction
+because a `SubjectId` is stable by construction — a `NodeId` hashes the origin path, and a `c:` id
+is a commit sha
 ([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)).
 
 A challenge should also not be passable by selecting everything. That requires
@@ -388,7 +402,26 @@ This is a **within-verb** property, deliberately not a schema rule the validator
 different verbs may honestly share an answer set, because they are asking different questions about
 the same files.
 
-> **Status at M3**: `blastRadius` generates. On this repo that is one challenge per subject with a
+#### The same invariant, three times
+
+Each verb keeps `candidates` split cleanly between the answer key and files certified *out* of it,
+with nothing in between for the player to guess at:
+
+| verb | invariant | what a distractor is certified as |
+|---|---|---|
+| `blastRadius` | `candidates ∩ dependents(subject, ∞) = truth` | reaches the subject by no import chain at all |
+| `companion` | `candidates ∩ companions(subject) = truth` | has co-changed at most `atMost` times |
+| `placement` | `candidates ∩ files(commit) = truth` | was not in that commit's recorded file list |
+
+The third is the only one certified from a **positive** record rather than from absence, which is
+why Placement needs neither the truncated-walk refusal nor the shallow-clone refusal ADR-0014
+decision 6 gives Companion: how far back the walk went cannot make a commit's own file list wrong.
+What it does refuse is a commit whose list the indexer may have cut (`report.truncations` with
+`what: "commitFiles"` — the entry's `kept` **is** the limit, so the affected commits are identifiable
+exactly), a `wide` commit, and any commit touching a node with contested rename lineage.
+[ADR-0018](decisions/0018-a-subject-is-a-place-or-an-event.md).
+
+> **Status at M4**: three verbs generate. On this repo that is one challenge per subject with a
 > non-empty radius, minus what the guardrails refuse. The CLI prints how many it declined and why,
 > how many subjects it re-asked with a second key, how much of each choice set came from a
 > principled distractor strategy rather than from `distant` padding, and **how many nodes no
@@ -404,15 +437,25 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `5`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `6`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
-a v2 atlas into a v1 build fails with
+an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v5, got v4 — reindex required
+atlas.version: this build reads atlas v6, got v5 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v5 → v6 has no migration, and reindexing is the whole of it.** `challenges[].subject` widened from
+`NodeId` to `SubjectId` and `Evidence` gained a `commit` variant, so a v5 atlas is *readable* — every
+v5 subject is a node id and still validates — but a v5 atlas contains no Placement questions, and
+synthesising them would mean inventing an answer key. The atlas is a derived artifact with a
+one-command rebuild (`npx ark index .`), so the error above is the correct outcome rather than a
+gap. **A save survives**: `SAVE_VERSION` is independent of this number, `(verb, subject)` keys are
+unchanged for the two existing verbs, and every restored claim is re-checked against the live graph
+anyway ([ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-notes-claim-only-what-was-proved.md)
+decision 3).
 
 Changes that do **not** need a bump: adding an enum member the player already ignores safely
 (it doesn't — the validator rejects unknown members, which is the point), or changing a *default*

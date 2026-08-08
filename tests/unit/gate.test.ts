@@ -11,7 +11,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { Atlas } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
-import { CTRL_F_THRESHOLD, HISTORY_HEURISTICS, PATH_HEURISTICS, gradeHeuristics } from '../../src/verbs/gate.js';
+import {
+  CTRL_F_THRESHOLD,
+  HISTORY_HEURISTICS,
+  PATH_HEURISTICS,
+  gradeHeuristics,
+  pathSubject,
+} from '../../src/verbs/gate.js';
 import { generateBlastRadius, generateWithReport } from '../../src/verbs/blastRadius/index.js';
 import { BAND_THRESHOLDS, PASS_THRESHOLD } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -53,7 +59,7 @@ describe('gradeHeuristics', () => {
       'src/c/unrelated.ts',
     ]);
     const truth = refs(atlas, ['src/a/one.ts', 'src/a/two.ts']);
-    const verdict = gradeHeuristics(buildGraph(atlas), subject ?? 0, candidates, truth);
+    const verdict = gradeHeuristics(buildGraph(atlas), pathSubject(buildGraph(atlas), subject ?? 0), candidates, truth);
     expect(verdict.passed).toBe(false);
     expect(verdict.beatenBy).toContain('directory');
     expect(new Map(verdict.scores).get('directory')).toBe(1);
@@ -68,7 +74,7 @@ describe('gradeHeuristics', () => {
       'src/c/unrelated.ts',
     ]);
     const truth = refs(atlas, ['src/b/subject.ts']);
-    const verdict = gradeHeuristics(buildGraph(atlas), subject ?? 0, candidates, truth);
+    const verdict = gradeHeuristics(buildGraph(atlas), pathSubject(buildGraph(atlas), subject ?? 0), candidates, truth);
     expect(verdict.beatenBy).toContain('name');
   });
 
@@ -81,7 +87,7 @@ describe('gradeHeuristics', () => {
       'src/c/unrelated.ts',
     ]);
     const truth = refs(atlas, ['src/c/unrelated.ts']);
-    const verdict = gradeHeuristics(buildGraph(atlas), subject ?? 0, candidates, truth);
+    const verdict = gradeHeuristics(buildGraph(atlas), pathSubject(buildGraph(atlas), subject ?? 0), candidates, truth);
     expect(verdict.passed).toBe(true);
     expect(verdict.beatenBy).toEqual([]);
   });
@@ -90,7 +96,7 @@ describe('gradeHeuristics', () => {
     // ADR-0008 shows depth 1 on hover by design and §8.4 measures `surprise`
     // against exactly that guess, so a question it answers is easy, not broken.
     const [subject] = refs(atlas, ['src/a/subject.ts']);
-    const verdict = gradeHeuristics(buildGraph(atlas), subject ?? 0, refs(atlas, ['src/a/one.ts']), refs(atlas, ['src/a/one.ts']));
+    const verdict = gradeHeuristics(buildGraph(atlas), pathSubject(buildGraph(atlas), subject ?? 0), refs(atlas, ['src/a/one.ts']), refs(atlas, ['src/a/one.ts']));
     expect(verdict.scores.map(([id]) => id).sort()).toEqual(['directory', 'name']);
   });
 });
@@ -155,7 +161,7 @@ describe('the generator refuses what it cannot repair', () => {
       expect(inDirectory.some((id) => !truth.has(id))).toBe(true);
       const verdict = gradeHeuristics(
         graph,
-        atlas.nodes.findIndex((n) => n.id === middle.subject),
+        pathSubject(graph, atlas.nodes.findIndex((n) => n.id === middle.subject)),
         middle.candidates.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
         middle.truth.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
       );
@@ -188,7 +194,7 @@ describe('the generator refuses what it cannot repair', () => {
         const subject = atlas.nodes.findIndex((n) => n.id === challenge.subject);
         const verdict = gradeHeuristics(
           graph,
-          subject,
+          pathSubject(graph, subject),
           challenge.candidates.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
           challenge.truth.map((id) => atlas.nodes.findIndex((n) => n.id === id)),
         );
@@ -235,7 +241,7 @@ describe('the churn heuristic (Companion)', () => {
     const truth = [refOf('lib/hot.ts'), refOf('vendor/warm.ts')];
     const verdict = gradeHeuristics(
       graph,
-      refOf('src/cold.ts'),
+      pathSubject(graph, refOf('src/cold.ts')),
       candidates,
       truth,
       HISTORY_HEURISTICS,
@@ -250,7 +256,7 @@ describe('the churn heuristic (Companion)', () => {
     const graph = buildGraph(churned);
     const candidates = churned.nodes.map((_, ref) => ref).filter((ref) => ref !== refOf('src/cold.ts'));
     const truth = [refOf('lib/hot.ts'), refOf('vendor/warm.ts')];
-    const verdict = gradeHeuristics(graph, refOf('src/cold.ts'), candidates, truth, PATH_HEURISTICS);
+    const verdict = gradeHeuristics(graph, pathSubject(graph, refOf('src/cold.ts')), candidates, truth, PATH_HEURISTICS);
     expect(verdict.scores.map(([id]) => id)).not.toContain('churn');
     expect(verdict.passed).toBe(true);
   });
@@ -264,7 +270,7 @@ describe('the churn heuristic (Companion)', () => {
     // answer cannot be scored against a one-file guess and the board survives.
     const verdict = gradeHeuristics(
       graph,
-      refOf('src/cold.ts'),
+      pathSubject(graph, refOf('src/cold.ts')),
       candidates,
       [refOf('lib/far.ts')],
       HISTORY_HEURISTICS,

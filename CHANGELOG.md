@@ -1248,3 +1248,97 @@ One line per iteration: what changed, and what to do next.
   reveal never says which), then the **phenomenon catalogue** for risk #1. The other half of
   ADR-0016's open pair — overlapping Companion answer keys, a *generator* defect that ADR-0012's
   once-per-key rule does not cover — is still open and is the natural companion to it.
+
+- **M4's second verb — Placement, and a subject that is not a place.** *"On 2026-08-07 a commit
+  landed: 'Rung 2: the world stands up, and it turns'. Which of these files did it change?"* —
+  graded against `history.commits[].files`, the third verb and the second read off git. 36 questions
+  here from 41 eligible commits, 54 on `honojs/hono` (capped from 232 distinct boards). The three
+  verbs together leave **16 of this repo's 127 nodes** unprovable where Blast Radius alone leaves 39;
+  on hono 142 against 269.
+
+  Semantics are **[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**, and the
+  invariant is ADR-0008's for the third time: `candidates ∩ files(commit) = truth`. Every candidate
+  is either in the answer key or a file the commit **provably did not touch**; a twelve-file commit
+  ships a six-file key and the other six appear nowhere on the board, so there is no boundary for
+  the player to guess at. What is *different* is the direction of the certification, and it is the
+  easy direction: both earlier verbs certify a wrong answer by **absence** — from a cone, from a
+  matrix — and absence is only as good as the walk behind it, which is why ADR-0014 refuses an entire
+  repo whose commit walk stopped short. A commit's file list is a positive record, complete for
+  every commit the atlas kept, so **Placement needs neither that refusal nor the shallow-clone one**;
+  what it does refuse is a `wide` commit (4 here), one whose list `maxCommitFiles` may have cut
+  (0 here — and the limit is *recovered* from the truncation entry's `kept` rather than assumed),
+  and any commit touching a node with contested lineage (0 here, 24 on hono).
+
+  **`ATLAS_VERSION` 5 → 6**, `docs/atlas-format.md` in the same commit. `Challenge.subject` widens
+  from `NodeId` to `SubjectId`, discriminated by the id's own prefix — `n:` a node, `c:` a retained
+  commit — with no `subjectKind` field and without asking the verb, because *"can this subject be
+  drawn?"* is a question about the id and every leak this repo has found came from verb-blind state
+  being interpreted by verb-specific code. There is no migration and reindexing is the whole of it;
+  a save survives untouched.
+
+  **The seam held where M4 built it, and failed in the one place M4 never looked.** The console, the
+  map, the grader, the deck and the selector needed no edit to know about a third verb: `VERBS`
+  gained one line, and nothing outside `src/verbs/placement/` names it. But **nine** places assumed a
+  subject is a node, each a live defect rather than a type error — `NodeId` is `string`, so the
+  compiler saw nothing. Three of them were the **field notes**, which chose their ruler *and* their
+  sentence with `verb === 'companion' ? … : …` and Blast Radius as the *else*, and resolved the
+  subject through `refById` — so a Placement note would have been dropped in silence, and had it
+  survived it would have read *"all of them direct importers"* about a sha. `subjectLabel`,
+  `noteWeights` and `noteProse` are on the `Verb` contract now. The worst of the other six was
+  `save.ts`: `asPass` required `isNodeId(subject)`, and a pass it rejects is dropped at parse and
+  erased by the next write — **the identical failure that file's own comment describes for
+  `VERB_IDS`, one field down**, which would have destroyed every Placement pass on the second
+  session with nothing anywhere to say so. The HUD and the guide both counted "questions left" off
+  the map's *ring* set, which a commit subject never joins: with only Placement left the HUD read
+  *"36 questions ringed on the map"* over a map with none, and the guide's button looked live and did
+  nothing.
+
+  **A claim in the ADR was falsified by the measurement it cited, before anyone else read it.**
+  `busy` — high-churn files the commit did not touch — leads the distractor mix at 35% because the
+  churn guess is this verb's live threat, and the first draft said so with a number from a
+  throwaway prototype: *"25 of 37 commits refused, a deck of 8"*. Run through the real generator it
+  is **10 and 31**, and deleting the strategy alone changes almost nothing (1 → 3 refusals) because
+  the `distant` padding walks the churn ordering busiest-first anyway. The prototype's fallback
+  preferred the *lowest*-churn files it could find and so manufactured the effect it measured. Both
+  the ADR and `distractors.ts` now carry the three-row table instead, and the lesson written down is
+  narrower than "measure first": **a counterfactual is only as good as the thing it holds fixed.**
+  The other measured choice went the other way and is recorded as a null result: sampling the key
+  *spread* across a commit rather than sliced off its front changes **no** count on either repo —
+  same deck, same refusals — so it is a choice about what the key teaches, not about supply.
+
+  Also measured rather than assumed, because the brief suspected it: **ADR-0005's `maxCommits` is not
+  what bounds this verb.** On ark the cap never fires (45 retained against 500 — the 13 "dropped" in
+  `report.truncations` are commits that touched no *indexed* file, which that entry conflates), and
+  on hono, where it fires hard, the **deck cap binds first**: 500 commits yield 232 distinct boards
+  and `maxChallengesFor` keeps 54. Raising it would make more boards for the deck cap to discard.
+
+  §8.3's four strategies are re-anchored from the subject's neighbourhood onto the answer key's, and
+  gain a fifth with no §8.3 analogue because §8.3's subject has no prose: **`mentioned`** — a file
+  whose own name is in the commit message and whose contents are not in the diff, which punishes
+  exactly the reading pillar 3 forbids serving. It fired 53 times here and 88 on hono. `gate.ts`'s
+  subject generalises from a node to *what the prompt puts in front of the player*; `directory` is
+  left out of the commit heuristic set because a commit has no directory and a guess the board cannot
+  invite would delete questions for a strategy nobody could use. Placement is **tier 6** (§5's
+  *"where does it go?"*, ground truth *"the actual commit that added it"*), so the selector serves
+  every tier-3 question first — the progression working as specified, and worth knowing because a
+  short session never reaches this verb.
+
+  20 of 20 mutations caught, one only after the first version of its test had *survived*: the spread
+  assertion checked that a key spanned two directories, which was true either way because the test
+  fixture orders nodes by the **hash** of their path. It asserts both ends of the commit now.
+  `test:e2e` plays a real Placement board through the guide — the only route in, since no node
+  carries one — from a seeded save, and asserts the note it writes talks in neither hops nor
+  dependence. One existing atlas test was rewritten rather than repaired: *"the region constraint has
+  to be relaxed at least once"* now fails on a 116-question deck because the constraint always wins,
+  which is the term working perfectly being read as the term being dead. It measures divergence
+  against a neutralised rank instead (19 of 116).
+
+  **Next**: **Archaeology**, M4's third and last — and it **cannot be built as §6.2 states it**.
+  *"This file was rewritten three times. What problem kept recurring?"* is not deterministically
+  gradeable, so guardrails 3 and 4 both bite; it needs reshaping into something git answers exactly,
+  and **revert detection is the strongest candidate**. That is an ADR before any code. Then the
+  **negative witness** — a wrong pick has a known reason class (sibling, name-alike, structurally-near
+  non-dependent, co-change ghost, and now *mentioned in the message*) and the reveal never says which;
+  decide first whether strategy provenance ships in the atlas (schema bump) or is re-derived
+  player-side (no bump). Then the **overlapping Companion answer keys**, and then the **phenomenon
+  catalogue** for risk #1.

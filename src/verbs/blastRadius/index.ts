@@ -18,13 +18,26 @@
  * which is the seam that makes adding the next verb free downstream.
  */
 
-import type { Challenge, Graph, NodeId } from '../../atlas/index.js';
-import { dependents } from '../../atlas/index.js';
+import type { Challenge, Graph, NodeId, SubjectId } from '../../atlas/index.js';
+import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
-import type { GenerateOptions, Prompt, SetAnswer, SetPhrasing, Verb } from '../types.js';
+import type {
+  GenerateOptions,
+  NoteFacts,
+  NoteProse,
+  NoteWeights,
+  Prompt,
+  SetAnswer,
+  SetPhrasing,
+  Verb,
+} from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { generateBlastRadius } from './generate.js';
 import { revealOf } from './reveal.js';
+
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many;
+}
 
 export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string): Prompt {
   return {
@@ -72,11 +85,42 @@ export const blastRadius: Verb = {
    * A Blast Radius claim is "this file reaches that one". It stops being true
    * when the import chain is deleted, so the live graph is the whole check.
    */
-  stillHolds(graph: Graph, subject: NodeId, member: NodeId) {
+  stillHolds(graph: Graph, subject: SubjectId, member: NodeId) {
     const ref = graph.refById.get(subject);
     const memberRef = graph.refById.get(member);
     if (ref === undefined || memberRef === undefined) return false;
     return dependents(graph, ref, Number.POSITIVE_INFINITY).has(memberRef);
+  },
+  subjectLabel(graph: Graph, subject: SubjectId) {
+    const ref = graph.refById.get(subject);
+    return ref === undefined ? null : nodeAt(graph, ref).path;
+  },
+  /** Import hops. The population is the subject's whole transitive cone. */
+  noteWeights(graph: Graph, subject: SubjectId): NoteWeights {
+    const weights = new Map<NodeId, number>();
+    const ref = graph.refById.get(subject);
+    if (ref === undefined) return weights;
+    for (const [member, distance] of dependents(graph, ref, Number.POSITIVE_INFINITY)) {
+      weights.set(idOf(graph, member), distance);
+    }
+    return weights;
+  },
+  noteProse(facts: NoteFacts): NoteProse {
+    const count = facts.proved.length;
+    const names = facts.proved.map((file) => file.path).join(', ');
+    const claim =
+      `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+      `${plural(count, 'depends', 'depend')} on ${facts.subjectLabel} — ${names} — ` +
+      `${facts.farthest === 1 ? 'all of them direct importers' : `the farthest ${facts.farthest} hops away`}.`;
+    // The gap between what was proved and what the map shows is exactly the
+    // sampled part of the answer key (ADR-0008). Naming it as *revealed* is
+    // what keeps the sentence above honest; collapsing the two would restore
+    // NORTH-STAR §9's unprovable example.
+    const revealed =
+      facts.population > count
+        ? `Its full radius — ${facts.population} ${plural(facts.population, 'file', 'files')} — is revealed on your map.`
+        : null;
+    return { claim, revealed };
   },
 };
 

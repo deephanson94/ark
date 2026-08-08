@@ -13,6 +13,7 @@ export type {
   AtlasNode,
   Challenge,
   CoChangePair,
+  CommitId,
   CommitRecord,
   Confidence,
   EdgeKind,
@@ -29,11 +30,12 @@ export type {
   RegionKind,
   RepoMeta,
   SkipCount,
+  SubjectId,
   Truncation,
   VerbId,
 } from './schema.js';
 
-export { isNodeId, nodeIdFor } from './identity.js';
+export { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
 export { byKey, byteCompare, isStrictlySorted, round2, sortedUnique } from './order.js';
 export {
   AtlasValidationError,

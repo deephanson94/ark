@@ -16,7 +16,7 @@
  */
 
 import type { NodeId, RepoMeta, VerbId } from '../atlas/index.js';
-import { VERB_IDS, isNodeId } from '../atlas/index.js';
+import { VERB_IDS, isCommitId, isNodeId } from '../atlas/index.js';
 import type { Pass, Progress } from './progress.js';
 import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
 
@@ -68,7 +68,14 @@ function asPass(value: unknown): Pass | null {
   // a pass naming a verb missing from the list is dropped at parse and erased by
   // the next write, so a stale copy destroys progress rather than failing loudly.
   if (typeof verb !== 'string' || !(VERB_IDS as readonly string[]).includes(verb)) return null;
-  if (typeof subject !== 'string' || !isNodeId(subject)) return null;
+  // **A subject is a node id *or* a commit id** (ADR-0018). This read
+  // `!isNodeId(subject)` until Placement landed, which is the identical
+  // failure the paragraph above describes for `VERB_IDS`, one field down: a
+  // pass this rejects is dropped at parse and erased by the next write, so
+  // every Placement pass would have been silently destroyed on the second
+  // session rather than failing anywhere a test could see it. `proved` stays
+  // node-only, because a member is always a file whatever the subject is.
+  if (typeof subject !== 'string' || !(isNodeId(subject) || isCommitId(subject))) return null;
   return { verb: verb as VerbId, subject, proved: asIds(record['proved']) };
 }
 

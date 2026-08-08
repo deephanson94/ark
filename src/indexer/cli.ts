@@ -12,7 +12,7 @@ import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-import { serializeAtlas } from '../atlas/index.js';
+import { isNodeId, serializeAtlas } from '../atlas/index.js';
 import type { Atlas } from '../atlas/index.js';
 import type { IndexResult } from './build.js';
 import { buildIndex, indexOptions } from './build.js';
@@ -86,6 +86,7 @@ function summarise(
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
   const blast = generation.blastRadius.report;
   const companion = generation.companion.report;
+  const placement = generation.placement.report;
   const lines = [
     `repo        ${atlas.repo.name} @ ${atlas.repo.head?.slice(0, 12) ?? 'no commits'}`,
     `nodes       ${atlas.nodes.length} files across ${atlas.regions.length} regions`,
@@ -94,6 +95,7 @@ function summarise(
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
     `blast       ${generation.blastRadius.challenges.length} of ${blast.subjectsConsidered} subjects with a radius`,
     `companion   ${generation.companion.challenges.length} of ${companion.subjectsConsidered} subjects with a change history`,
+    `placement   ${generation.placement.challenges.length} of ${placement.commitsConsidered} commits Ark may ask about`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
   ];
 
@@ -137,13 +139,35 @@ function summarise(
     );
   }
 
+  for (const [reason, count] of placement.skipped) {
+    lines.push(`placement   declined ${count} commit(s): ${reason}`);
+  }
+  if (placement.keyRange !== null) {
+    const [narrowest, widest] = placement.keyRange;
+    // How wide the shipped keys are, and how many of them are a *sample* of a
+    // wider commit. A deck of one-file answers is a deck about a repo whose
+    // commits never cross a boundary, which is worth knowing before reading
+    // anything into the scores.
+    lines.push(
+      `placement   answer keys hold ${narrowest}–${widest} files; ${placement.sampled} sampled from a wider commit`,
+    );
+  }
+  if (placement.fileCap !== null) {
+    lines.push(
+      `placement   commit file lists were cut at ${placement.fileCap} — commits at or over it are refused`,
+    );
+  }
+
   // The cost of every refusal above, in the currency the player feels: how much
   // of the map can never come out of the fog, because `progress.ts` promotes a
   // node only as a subject or as a picked answer. Reported for the two verbs
   // *together*, because a node either verb can reveal is not dark.
   const provable = new Set<string>();
   for (const challenge of atlas.challenges) {
-    provable.add(challenge.subject);
+    // `isNodeId` because a commit subject is not a node and cannot come out of
+    // the fog. Counting it here would have overstated coverage by one per
+    // Placement question — a report about the map, inflated by things not on it.
+    if (isNodeId(challenge.subject)) provable.add(challenge.subject);
     for (const id of challenge.truth) provable.add(id);
   }
   lines.push(
@@ -154,6 +178,7 @@ function summarise(
   for (const [label, mix] of [
     ['blast     ', blast.distractorMix],
     ['companion ', companion.distractorMix],
+    ['placement ', placement.distractorMix],
   ] as const) {
     const text = mix
       .filter(([, count]) => count > 0)

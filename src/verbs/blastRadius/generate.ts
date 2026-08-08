@@ -36,7 +36,7 @@ import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
 import { difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
-import { PATH_HEURISTICS, gradeHeuristics } from '../gate.js';
+import { PATH_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
 
 /** NORTH-STAR §5: predicting change propagation is tier 3, Coupling. */
 const TIER = 3;
@@ -527,7 +527,7 @@ export function generateWithReport(
     const distractors: readonly DistractorChoice[] = selectDistractors(context, want);
     const verdict = gradeHeuristics(
       graph,
-      subject,
+      pathSubject(graph, subject),
       [...truthRefs, ...distractors.map((choice) => choice.ref)],
       truthRefs,
       PATH_HEURISTICS,

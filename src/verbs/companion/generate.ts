@@ -62,7 +62,7 @@ import { buildGraph, byteCompare, nodeAt } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
-import { HISTORY_HEURISTICS, gradeHeuristics } from '../gate.js';
+import { HISTORY_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
 import type { CoChangeIndex } from './cochange.js';
 import { indexCoChange, rankCompanions } from './cochange.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
@@ -257,7 +257,7 @@ export function generateWithReport(
 
     const verdict = gradeHeuristics(
       graph,
-      subject,
+      pathSubject(graph, subject),
       candidateRefs,
       truthRefs,
       HISTORY_HEURISTICS,
