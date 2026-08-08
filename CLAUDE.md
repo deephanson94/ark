@@ -229,6 +229,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   how many times it fires on a real repo before you write tests around it.** A path that never
   executes is worse than no path: it is code, comments and test surface asserting a behaviour the
   product does not have.
+- **"CI is green" is a claim about *every* workflow, and there was more than one.** `pages.yml` had
+  failed on every run it ever had — before M4 landed and after it — while a session reported CI green
+  three separate times, because it only ever opened `ci.yml` runs on its own branch. The human
+  spotted it, not the agent. The mechanism is worth naming because it is not simple carelessness: a
+  check that is *permanently* red gets normalised into background noise, the mirror image of the
+  instrument that always reads good and therefore gets believed. So **list the workflows before you
+  claim they passed**, and check them on the branch the commit actually landed on. The failing
+  workflow is deleted (ADR-0015) precisely so that a red X on this repo means something again.
 
 ---
 
@@ -340,8 +348,12 @@ parallax, and loses from inside it. **P4 stands: the walkable avatar waits for t
 
 CI runs every suite on push and PR, including a three-platform check that the same commit yields a
 byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page,
-turns the world and fails on any console error. `pages.yml` publishes the player with Ark's own
-atlas and refuses to deploy one with zero challenges.
+turns the world and fails on any console error. **There is no Pages deploy** — `pages.yml` is
+deleted, not disabled, and **[ADR-0015](./docs/decisions/0015-pages-is-not-deployed-while-the-repo-is-private.md)**
+says why and gives the one-line restore: it failed on every run it ever had, because the repo is
+private and Pages there needs a paid plan. Its zero-challenge guard was not migrated because
+`test:atlas` (`> 20` on a fresh build) and `test:e2e` (which actually plays a question) already hold
+it more strongly — checked by mutation, not assumed.
 
 The M2 kill-point caveat — several pairs of subjects with identical answer keys — is **closed at the
 source**. **[ADR-0012](./docs/decisions/0012-an-answer-key-is-issued-once.md)**: the generator issues
