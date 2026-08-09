@@ -2087,3 +2087,117 @@ One line per iteration: what changed, and what to do next.
   re-weighting moved, are re-measured and stamped.
 
   **Next** is unchanged: packaging **`npx ark`**, then the **phenomenon catalogue**, then **M5**.
+
+- **M5's kill point, measured — and the language that fails is not the one that fails to parse.**
+  No production code: the deliverable is
+  [ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md) and the numbers
+  under it. Four repos, chosen for representativeness with the reasons written down *before* any
+  measurement, spanning the axis that decides ADR-0003 resolution — how imports name their targets:
+  flask `6a2f545b` (relative-heavy, the optimistic end), django `c9eb16a87e` (absolute intra-package,
+  no JS analogue), cobra `adbc881` (the **correctly external** case, 93.7% stdlib), hugo `44da08608`
+  (full-module-path internal). Imports were extracted with **each language's own parser** — Python's
+  `ast`, Go's `go/parser` — so every figure is a **ceiling** tree-sitter would have to earn rather
+  than a scanner's best effort. Three gates, because a probe that matches nothing reports 0/0 and
+  looks exactly like a language that does not work: liveness against an independent crude count (677
+  vs 695, 12,000 vs 12,099, 190 vs 200, 6,013 vs 6,151), a **partition** assertion that the three
+  outcomes sum to the site count, and parse failures counted rather than swallowed (0 / 6 of 2,928 /
+  0 / 0). The deck numbers come from ark's **real** generators through a scratch replay of `src/`
+  which, with the replay off, produces a **byte-identical** atlas to production on `b9f4d33`.
+
+  **Both languages resolve, and that was not the question.** Go 0.0% / 0.2% of import sites
+  unresolved, Python 6.2% / 1.4%. Yet **flask ships 0 Blast Radius boards of 30 subjects and django
+  16 of 976** — because ADR-0003's taint is *transitive*, so its cost is the unresolved rate **times
+  the closure depth**. hono and django have near-identical direct taint, **3.8% and 3.3%**, and
+  amplify by **1.55× and 21×**; django's mean dependency closure is **164.8** nodes against hono's
+  **17.3**. Resolution rate is not the kill-point metric. Neither Python residue is parser-fixable
+  either: **dist name ≠ import name** with no build-free mapping (`PIL`←Pillow, `yaml`←PyYAML) is 125
+  of django's 170, and **import roots are a runtime `sys.path` fact** is the other 45.
+
+  **Go ships at *package* granularity and only there.** At file granularity `treeSibling` — "same
+  directory, not a dependent" — offers a same-package file as a wrong answer on 172 of hugo's 244
+  boards, and **80 of those slots across 49 boards (20.1%) are verified wrong answer keys**: the
+  sibling really does reference a package-level identifier the subject declares. Guardrail 4 cannot
+  see it, because an intra-package reference is not an import and leaves no specifier to record —
+  ADR-0003's safety rests on a sentence untrue outside JS. Python has the same class idiomatically
+  rather than structurally: **562 string-named module dependencies on django, 3 on flask**. The first
+  Go count was **153**, from a test that counted *method* names — those live in a receiver's
+  namespace, not the package's, so `Close`/`Create`/`Write` matched across unrelated types.
+  Restricting to package-level declarations cut it to 80; the looser test overstated by **91%**.
+  Package granularity fixes the answer key, the fan-out and the budget at once: **1,955 nodes / 13.04
+  edges-per-node / 16.2 s** (ark's own `budget.ts` warns; ceiling 10 s, at *under* reference scale)
+  becomes **193 / 6.61**, and the invisible class is unrepresentable because the reference is inside a
+  node. The alternative — intra-package cliques — reads 42,794 edges and 21.9 per node.
+
+  **The defect that needed no parser, and is live on `master`.** Three documents said a Go or Python
+  repo *"produces a map with no edges and no questions"*. The second half is **false**: cobra indexes
+  to **17 nodes, all Markdown, and 48 challenges**; hugo to **1,049 nodes of which 1,016 are Markdown,
+  and 144 challenges** — a confident, playable game about the repository's *documentation*, with no
+  source on the map and `cli.ts`'s zero-challenge warning unable to fire. ADR-0024 decision 3 blocks
+  any new language behind fixing it. The good news inside it: **three of four verbs are already
+  language-agnostic**, so what M5 buys Python is a true map with the history deck attached to real
+  code, not the import verb.
+
+  **Step 0, and it was the bar M5 was about to be judged against.** `README.md` and `CLAUDE.md` both
+  recorded ark at **2.66 edges/node** — including the very instruction to measure a new language
+  against it. It reproduces **nowhere**: 2.57 at `0fac922`, the commit whose CHANGELOG recorded it,
+  2.54–2.59 across the window, and under no denominator (code-only reads 3.25 there). Ark is **3.42**
+  at `b9f4d33`; hono's 2.51 in the same sentence reproduces **to the digit** at `7075369e`, which is
+  what made the ark half diagnosable. The error understated ark's density by 0.76, so a language
+  scoring 2.7 would have read as *denser* than the bootstrap repo when it is 21% sparser.
+
+  Also recorded in **Known gaps**, found and deliberately not fixed: **`npm run test:unit` has an
+  undeclared dependency on `npm run build`** — 2 of 586 fail on a fresh clone because `serve.test.ts`
+  serves `dist/player`, and CI has always been green because `ci.yml` orders `build` first. The
+  testing table lists them as independent rows, which is what made this session read the red as its
+  own doing and refute two hypotheses before reproducing it on a clean clone of `b9f4d33`.
+  Verified: 586 unit + 99 atlas tests, byte-identical atlas, budgets inside ceiling, `npm run index`
+  clean on this repo. No production code changed.
+
+  **Next**: the **Markdown-map defect** (no parser needed, and ADR-0024 decision 3 gates M5 behind
+  it), then packaging **`npx ark`**, the **phenomenon catalogue**, and **M5 itself — Go first**,
+  because its verdict is unconditional where Python's is a smaller product than the roadmap implies.
+
+- **Post-ship adversarial review of the above, and it found the instrument as well as the argument.**
+  Six findings, every one in a category `CLAUDE.md` already names; all six independently reproduced
+  before being accepted. **The headline leak number was wrong and its adjective was worse.** §6.1's
+  *"80 verified wrong answers on 49 of 244 boards"* is **≤71 on ≤46 (18.9%)**, and "verified" is not a
+  word it was entitled to: `refs_go.go` counted every `ast.Ident`, so the `Fs` of `afero.Fs` matched a
+  subject declaring `Fs`, struct-field names and composite-literal keys matched, and **build-tag
+  variants** matched their own declarations — `testenv_unix.go` and `testenv_notunix.go` legally
+  declare the *same* package-level names, which **falsifies the uniqueness premise the fix was argued
+  from**. The count went 153 → 80 → 71 across three instruments, and the middle correction shipped
+  **inside the paragraph congratulating itself for testing the claim rather than the wording**, with
+  three more false-positive classes untouched twelve lines away. *The bug you already fixed is still
+  there, one line down* — in the showcase paragraph.
+
+  **The Python causal story was half right and its revisit condition was actively misleading.** The
+  document said the residue splits into two kinds — unrooted imports and the dist-name gap — and
+  offered solving both as the thing that would change the verdict. There is a **third** kind it folded
+  away, and that kind is the whole effect: **7 computed `import_module(<expression>)` sites out of
+  django's 12,000**, in `django/conf/__init__.py` and friends. Solving roots **and** dist-mappings
+  perfectly moves django from **84.0% to 83.7%** of blast-eligible subjects with a tainted closure;
+  the computed sites alone produce 83.7%. **0.06% of sites taint 83.7% of subjects.** So decision 2 is
+  *stronger* than the argument first given for it, §4 gains a §4.1, and the "what would change this"
+  section no longer sends the next session to build something worth 0.3 points. Position beats rate by
+  two orders of magnitude.
+
+  Three more, all prose against tables. **`AtlasNode.kind` is `'file'`** — `schema.ts:92` — and the
+  claim that the format "already" allowed `'dir' | 'symbol'` quoted **NORTH-STAR §7.1's sketch comment
+  as if it were the code**, in a sentence asserting decision 1's schema cost was already paid; it
+  needs an `ATLAS_VERSION` bump and a migration under guardrail 5. **Gating `treeSibling` would not
+  close the Go leak**: read off the atlas's own witness tokens the 665 same-directory wrong-answer
+  slots are `treeSibling` 389, `graphAdjacent` 129, `nameSimilar` 93, `coChange` 54, so gating it
+  leaves **42% on the boards** — the rejected alternative's price flattered it, which is the direction
+  that gets believed. And §7's pricing table **changes two knobs**, 13.04 being all-node and 6.61
+  Go-only; held to one it is 28.13 → 6.61, so the printed pair *understated* the fan-out artifact by
+  2.2×. Plus two arithmetic slips the tables themselves refute: "26 points" where §4 gives 22.0 direct
+  and 16.9 closure, and "all within 3%" where cobra's liveness gap is 5.0%.
+
+  **What survived attack, re-derived rather than assumed**: every row of §4's amplification table and
+  §5's deck table to the digit — including that flask's 30 refusals are **all** `uncertain` rather
+  than small-repo effects, and django's 949 of 976 likewise, so the closure story really is what
+  refuses the deck; §8's Markdown-map figures on all four production atlases; §0's stale-baseline
+  claim at every commit; and the harness's byte-identical inertness. **No decision flipped.**
+
+  **Next** is unchanged: the **Markdown-map defect**, then `npx ark`, the **phenomenon catalogue**,
+  and **M5 — Go first**.

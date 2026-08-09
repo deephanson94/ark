@@ -492,6 +492,41 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
   the size of the set you are quantifying over.**
 
+- **A guardrail whose cost is transitive is priced by the graph, not by the rate.** ADR-0003 refuses a
+  challenge when any candidate *or anything on its outgoing side* carries an unresolved import, so its
+  cost is the unresolved rate **times the closure depth** — and nothing about the rate predicts the
+  product. hono and django have near-identical direct taint (3.8% and 3.3%) and amplify to **5.9% and
+  68.8%**, because django's mean dependency closure is 164.8 nodes against hono's 17.3. django resolves
+  **98.6%** of its import sites and ships **16 Blast Radius boards of 976 subjects**; flask resolves
+  93.8% and ships **zero of 30**. A session that measured only "does the language resolve" would have
+  shipped a parser and found the deck afterwards. **When a rule walks a closure, measure the closure.**
+  **And then measure *where* the taint sits, because that is the real story and the rate-times-depth
+  version is a comfortable half of it.** A post-ship review made this session compute the
+  counterfactual it had skipped: solving Python's import roots **and** its dist-name-to-module gap —
+  the two causes this repo's own ADR first named as the things that would change the verdict — moves
+  django from 84.0% to **83.7%**. The whole effect is **7 computed `import_module(expr)` sites out of
+  12,000**, sitting in `django/conf/__init__.py` and friends, which everything reaches. 0.06% of sites
+  taint 83.7% of subjects. **Position beats rate by two orders of magnitude**, and a revisit condition
+  written from the rate would have sent the next session to build something worth 0.3 points.
+- **ADR-0003's safety rests on a sentence that is not true of every language: *an import we cannot
+  resolve is recorded*.** Where a dependency is not an import at all, there is no specifier, nothing
+  lands on `unresolved`, and guardrail 4 is blind by construction. Go's intra-package references are
+  the structural case — files in one package see each other's identifiers with no import — so
+  `treeSibling`, which picks *same-directory files that are not dependents*, picks them as **wrong
+  answers**: ≤71 slots across **≤46 of hugo's 244 boards**. Python's is the idiomatic case,
+  modules named by string literals in settings and registries: **562 pairs on django, 3 on flask** —
+  repo-dependent where Go's is universal. **Before adding a language, enumerate its dependencies that
+  are not imports**, and note that the first count of the Go leak was 153 because the test counted
+  *method* names, which live in a receiver's namespace rather than the package's; restricting to
+  package-level declarations cut it to 80. The looser test overstated by 91%.
+- **A suite can pass for a reason nobody wrote down, and the reason is the step before it.**
+  `npm run test:unit` fails 2 of 586 on a fresh clone — `serve.test.ts` serves `dist/player`, which
+  does not exist until `npm run build` has run — and CI has been green on every run it ever had
+  because `ci.yml` orders `build` before `test:unit`. The testing table lists them as independent rows
+  at different frequencies (*"every change"* for both), so following the table in the other order goes
+  red for a reason the table denies. This is the *pages.yml* landmine's mirror image: there, a
+  permanently-red check got normalised into noise; here, a permanently-green one hides an ordering
+  constraint. **Run the fast suite on a clean clone before trusting what it says about a clean clone.**
 - **Precision is not a grade, and a leak reported in the wrong units is not comparable to any bar.**
   ADR-0020 measured Archaeology's subtree hint against the Placement board it weakens and reported it
   **100%-precise on 9 of this repo's boards**, which reads as decisive and was carried forward for a
@@ -700,10 +735,14 @@ edit of this paragraph must not turn an ADR into a shipped verb. **M5 is next by
 (tree-sitter, 3–4 more languages), and the negative witness — the last rung, which improved every
 existing board rather than adding a fifth verb — is done.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
-plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
-Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
-allowed). The scanner is **ES modules only**, so a Python or Go repo produces a map with no edges and
-no questions until M5.
+plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node at
+`7075369e` — and the only outside repo where the generator had more supply than the deck cap
+allowed). Ark itself is **3.42** at `b9f4d33`, measured on a clean clone. *This line said 2.66 for
+five milestones and that figure reproduces nowhere* — 2.57 at `0fac922`, the commit whose CHANGELOG
+recorded it, and 2.54–2.59 across the window around it, under the only denominator that reproduces
+hono's 2.51 (edges ÷ **all** nodes; code-only reads 3.25 there). The hono half of the same sentence
+was exact, which is what made the ark half diagnosable. The scanner is **ES modules only**, so a
+Python or Go repo produces a map with no edges and no questions until M5.
 
 Press **`o`** for the orbit view: every file a column standing on its 2D footing, height =
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
@@ -871,26 +910,43 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: in rough order of size — packaging **`npx ark`**; the **phenomenon catalogue**; and
-**M5**. The two items this line used to lead with are gone: **the overlapping Companion answer keys**
-closed at `01202ac` and were listed as open in three documents for a milestone afterwards, and the
-**co-change distractor strategy for Placement** shipped as ADR-0023 — as a board improvement, because
-the claim that it would lower ADR-0022's exposure at the source was measured and is false on this
-repo.
+Next action: **the Markdown-map defect**, which needs no parser and which ADR-0024 decision 3 makes a
+precondition for any new language. Today a Go or Python repo does not index into a silhouette — it
+indexes into **a map of its Markdown with a full deck of questions about it**: cobra is 17 nodes, all
+Markdown, and **48 challenges**; hugo is 1,049 nodes of which 1,016 are Markdown, and **144
+challenges**; not one line of source is on either map, and `cli.ts`'s zero-challenge warning cannot
+fire because the count is 144. Three documents including this one said *"no edges and no questions"*
+— the first half was right and **the second was false for four milestones**. Then, in rough order of
+size: packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done);
+the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is
+the atom that would let anything *transfer* to another repo and the other half of risk #1; and **M5
+itself**, now that its kill point is decided — Go first, because its verdict is unconditional where
+Python's is a smaller product than the roadmap implies.
 
-Detail on the rest: packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
-catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
-would let anything *transfer* to another repo and the other half of risk #1; and **M5**, which is what
-the roadmap says (tree-sitter, 3–4 more languages) and is the largest bet — the scanner is
-ES-modules-only, so a Python or Go repo still produces a map with no edges and no questions.
+One more thing found on the way past and left unfixed, in **Known gaps** with its measurement:
+**`npm run test:unit` has an undeclared dependency on `npm run build`**. On a fresh clone it fails 2
+of 586 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
+always been green because `ci.yml` runs `build` before `test:unit`; the testing table above lists
+them as independent rows, which is exactly what makes a cold session read the red as its own doing.
+It cost this session ten minutes and two refuted hypotheses.
 
-**M5 needs a kill-point stated before a parser is written**, and it is the reason it is last here
-rather than next: ADR-0003 turns an unresolved import into no edge and guardrail 4 turns an uncertain
-cone into no challenge, so a language whose imports resolve poorly yields a sparse map and an empty
-deck **while every suite passes**. That is the instrument-that-measures-nothing landmine one level up:
-it will not look like a failure, it will look like a small repo. Measure resolution rate, edges/node
-against ark's 2.66 and hono's 2.51, and `report.unprovableNodes` on a real repo *first*, and be
-willing to write the ADR that says the language does not ship.
+**M5's kill point is measured and decided** —
+**[ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**, on flask
+`6a2f545b`, django `c9eb16a87e`, cobra `adbc881` and hugo `44da08608`, with each language's *own*
+parser so the figure is a ceiling tree-sitter would have to earn. **Both languages resolve, and that
+turned out not to be the question.** Go: 0.0% / 0.2% of import sites unresolved. Python: 6.2% / 1.4%.
+Yet **flask ships 0 Blast Radius boards of 30 subjects and django 16 of 976** — because ADR-0003's
+taint is *transitive*, so the cost is the unresolved rate **times the closure depth**: hono and django
+have near-identical direct taint (3.8% / 3.3%) and amplify by **1.55× and 21×**, django's mean closure
+being 164.8 against hono's 17.3. **Resolution rate is not the kill-point metric; `rate × mean closure`
+is.** Go ships at **package** granularity and only there — at file granularity, `treeSibling` offers a
+same-package file as a wrong answer on 172 of hugo's 244 boards and **up to 71 of those slots, across
+46 boards (18.9%), are wrong answer keys**, because an intra-package reference is not an import and
+leaves guardrail 4 nothing to refuse. (That count went 153 → 80 → **71** across three instruments;
+the ADR's §6.1 has the three false-positive classes and why the second correction shipped inside the
+paragraph boasting about the first.) Package granularity takes hugo from 1,955 nodes / 13.04
+edges-per-node / a 16.2 s index (ceiling 10 s) to **193 / 6.61** and makes the class unrepresentable.
+Python ships as a **history** language: the map and the three git verbs, never Blast Radius.
 
 Two things are on the record now and neither is a nit. **`RevealNote.route` is rendered nowhere**:
 Blast Radius has computed the import route since M2, three unit tests assert its shape, and the
