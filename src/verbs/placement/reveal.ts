@@ -28,10 +28,42 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
 /**
  * The negative witness: why the generator put this wrong answer here.
  *
- * Every class is speakable. Each is anchored on the **answer key**, whose
+ * Every class here is speakable. Each is anchored on the **answer key**, whose
  * members this board has already named, so none of these states a fact about a
  * file the player has not been shown — and the two that mention the import graph
  * mention it only as a relation to a file on this board.
+ *
+ * **`coChange` is absent, and it is the same refusal `blastRadius/reveal.ts`
+ * makes about the same relation.** That sentence would read *"a file that
+ * usually moves with one this commit changed"*, which is an existential over
+ * this board's answer key — and every pair it quantifies over is Companion's
+ * subject matter, stated by the product rather than inferred by the player.
+ * Measured on the shipped decks (clean clones, ark `d91ba27` and `honojs/hono`
+ * `7075369e`): of this repo's **98** co-change rows, **52 hold a pair that is a
+ * member of a shipped Companion board's answer key**; 29 of hono's 141. Blast
+ * Radius refuses the same relation at 11 of 15 rows here and 8 of 53 there — so
+ * this is 6.5× the rows and 4.7× the atoms of a class already refused at the
+ * smaller number.
+ *
+ * The argument the other way is real and is why ADR-0023 states it: Blast
+ * Radius's sentence is an **identity** with the subject where this one is an
+ * existential over a key of up to six.
+ *
+ * And the existential is not always one. On a **one-file answer key** the set it
+ * quantifies over has size 1, so *"one this commit changed"* names that file and
+ * the sentence becomes the pair — ADR-0019's set-size rule, met here as a
+ * property of the board rather than of the row. 8 rows here, **25 of hono's
+ * 141**. A `truth.length >= 2` guard would be legal under ADR-0020 decision 3
+ * (a board property, not a row property) and would still leave the other 90
+ * rows stating the disjunction, which is what is actually being withheld.
+ *
+ * **What withholding costs, stated rather than hidden.** `distant` ships **0**
+ * rows on both repos, so an unexplained row on a Placement board is now
+ * *uniquely* a co-change pick, and a player who works the class partition out
+ * across boards recovers the disjunction anyway. That is the price, and it is
+ * paid on ADR-0019's own line: a **stated** atom is refused, an **implied**
+ * relation is accepted. It is also why this is a class-wide silence and never a
+ * per-row one (ADR-0020 decision 3).
  *
  * `distant` is absent because it is padding rather than a strategy (ADR-0020).
  */
@@ -190,5 +222,10 @@ function whyNot(
   if (churn > 0) {
     return `edited in ${churn} commit${churn === 1 ? '' : 's'}, but not in this one.`;
   }
+  // A withheld `coChange` row lands on the arm above and never on this one: a
+  // pair only enters the matrix by being counted in a commit, so a partner's
+  // churn is at least its pair count. Withholding a class must not push a row
+  // onto a sentence that is false of it, and this is the one sentence here that
+  // could be.
   return 'no commit in the window has touched this file at all.';
 }

@@ -219,6 +219,23 @@ drawn: ADR-0012 issues each answer key once but says nothing about keys that
 reveal panel. The fix is generator-side — window mutual members the way ADR-0012
 re-asks colliding subjects — and it belongs to a later session.
 
+> **CLOSED at `01202ac`, and the sharp case was narrower than this paragraph
+> guessed.** It is not overlap in general, it is **symmetry**: the atlas stores a
+> pair as `[a, b, count]` once, so *"B changed with A"* and *"A changed with B"*
+> are one fact read from either end, and grading both hands the second board's
+> member away on the first. `companion/generate.ts` keeps a generator-wide
+> `claimed` set of pairs and refuses a repeat as `pairsClaimed`. Measured first —
+> **35 of ark's 40 boards held a mutual member and 38% of every key slot in the
+> deck (74 of 196) was handed over by another board**, one giving away 4 of its 6;
+> 6% on hono — and afterwards **zero on both**, deck size unchanged, at a cost of
+> 6 more unprovable nodes on hono. Not applied to Blast Radius, where a mutual
+> pair is an import cycle and the two reachability claims are genuinely distinct:
+> symmetry of the relation is the licence, and only co-change has it.
+>
+> Three documents went on listing this as open backlog for a milestone after it
+> shipped — the sentence *"it belongs to a later session"* is exactly the kind
+> that nothing re-reads. ADR-0023 tidied them up.
+
 **`tracedRadius`'s member half is an open defect, reclassified during this
 work.** `provedThrough(…, 'blastRadius')` includes members, so a file proved as a
 member of S's question gets `FULL_RADIUS` from `depthFor` while **its own** Blast

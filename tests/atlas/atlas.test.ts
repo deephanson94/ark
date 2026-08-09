@@ -903,6 +903,57 @@ describe('challenges', () => {
     expect(checked).toBeGreaterThan(20);
   });
 
+  it('offers a co-change wrong answer that really co-changes, and never names the pair', () => {
+    // ADR-0023, and it is ADR-0020's rule applied to a class that is *silent*:
+    // **test the claim, not the wording.** There is no sentence to check here,
+    // so what is checkable is the label — that a row the generator called
+    // `coChange` is a pair the matrix actually holds against a member of this
+    // board's own answer key, and that the panel still says nothing about it.
+    //
+    // Five false witness sentences shipped on this repo before anything checked
+    // one against its class; a withheld class has the same failure mode with no
+    // surface to notice it on.
+    const graph = buildGraph(atlas);
+    const partners = new Map<string, Set<string>>();
+    const link = (a: string, b: string): void => {
+      const bucket = partners.get(a);
+      if (bucket === undefined) partners.set(a, new Set([b]));
+      else bucket.add(b);
+    };
+    for (const [a, b] of atlas.history.coChange) {
+      link(nodeAt(graph, a).id, nodeAt(graph, b).id);
+      link(nodeAt(graph, b).id, nodeAt(graph, a).id);
+    }
+
+    let rows = 0;
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'placement')) {
+      const witness = readWitness(challenge);
+      const truth = new Set(challenge.truth);
+      const picked = challenge.candidates.filter((id) => witness.get(id) === 'coChange');
+      if (picked.length === 0) continue;
+      const reveal = placement.reveal(atlas, graph, challenge, {
+        score: 0,
+        correct: [...challenge.truth],
+        missed: [],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      const spoken = new Map(reveal.notes.map((note) => [note.id, note.witness]));
+      for (const id of picked) {
+        rows++;
+        expect(
+          challenge.truth.some((member) => partners.get(id)?.has(member) === true),
+          `${challenge.id} calls ${id} a co-change pick with no pair to a key member`,
+        ).toBe(true);
+        expect(spoken.get(id), `${challenge.id} speaks the withheld class for ${id}`).toBeNull();
+      }
+    }
+    // The population, counted before the assertions above are believed. An
+    // empty matrix — or a mix that never reaches this class — makes every line
+    // of this test pass over nothing.
+    expect(rows, 'no co-change wrong answer shipped at all').toBeGreaterThan(20);
+  });
+
   it('computes a difficulty that spans the range rather than clustering', () => {
     const difficulties = atlas.challenges.map((challenge) => challenge.difficulty);
     for (const value of difficulties) {

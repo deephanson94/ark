@@ -61,6 +61,7 @@ import { encodeWitness } from '../../atlas/witness.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_HEURISTICS, gradeHeuristics, textSubject } from '../gate.js';
 import { analyse } from '../companion/distractors.js';
+import { indexCoChange } from '../companion/cochange.js';
 import type { CommitSkip, EligibleCommit } from '../commits.js';
 import { commitSupply } from '../commits.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
@@ -148,6 +149,11 @@ export function generateWithReport(
   // sibling files record what doing this per subject cost; this one asks for a
   // choice set once per *commit*, which is the same trap with a different index.
   const corpus = analyse(graph);
+  // The matrix, inverted once and memoised per atlas. `coChange` asks for one
+  // row per answer-key member per commit, so the inversion must not happen
+  // inside `build` — the same trap the corpus above exists to avoid, on the
+  // other index. Read for presence only; see `DistractorContext.coChange`.
+  const coChange = indexCoChange(atlas);
   const cap = truthCap(options.candidateCount);
 
   const skipped = new Map<SkipReason, number>();
@@ -207,7 +213,7 @@ export function generateWithReport(
     const words = textSubject(commit.subject, commit.date).words;
     const want = Math.min(pool.size, options.candidateCount - size);
     const distractors = selectDistractors(
-      { graph, corpus, anchors: truthRefs, words, pool },
+      { graph, corpus, coChange, anchors: truthRefs, words, pool },
       want,
     );
     const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];

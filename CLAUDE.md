@@ -258,7 +258,11 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   changed **only prose**: ark indexes itself, so the deck moved, the grid scan landed on a different
   first subject, and an assertion nobody had touched went red. Select the row by something it
   *claims* (here, the subject path), and assert the property over *every* row rather than over the
-  top one.
+  top one. **Reading `[0]` to check a ranking is the same bug with no UI in it**: a test for
+  Placement's new `coChange` ordering read `picked[0]`, but `candidates` is sorted by **node id**, so
+  the assertion was checking the id sort and would have passed against any ranking that happened to
+  agree with it. Assert the picked *set* against the top of the ranking instead — a list's order is
+  a claim about the list you are reading, not about the code that filled it.
 - **`innerText` returns *rendered* text.** An e2e assertion comparing a verb's title against
   `.console-verb` failed because the CSS is `text-transform: uppercase` and the DOM said
   `COMPANION`. The element's text and the string the code put there are not the same value.
@@ -424,6 +428,27 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   was red, nothing was wrong, and nothing was being tested. Real repos land several commits a day.
   **Check the size of the population your fixture actually produces before trusting a suite over it**
   — the count is one line and it is the difference between a suite and a decoration.
+- **An upstream fix has to be able to reach the thing the leak is seeded at, and "upstream" is not
+  evidence that it does.** ADR-0022 closed a co-change guess by gating downstream and recorded that
+  the honest fix was probably upstream — put the partners on the board as wrong answers and the guess
+  stops being precise at the source. It reads as obviously right and it is **false here**: the guess
+  is seeded at a file wired to a *candidate*, and **58% of this repo's deciding seeds and 68% of
+  hono's are files the board never shows**, which a distractor anchored on the answer key cannot
+  touch. Held board-fixed, the strategy removes **zero** verdicts on ark. The version that would work
+  has to score the guess against the key to choose its wrong answers — i.e. `decidedBy` with a
+  different return type — so *the upstream fix, executed, is the downstream gate wearing a hat*. Two
+  lessons and the second is the transferable one: a sentence of the form *"and the real fix is
+  further up"* is a claim with a measurement attached, exactly like the fix itself; and **before
+  building a fix, check that the population it acts on is the population the failure runs on** — here
+  two co-change neighbourhoods that look like one until you count them.
+- **Withholding a class hides it only while another class is also silent.** ADR-0020's rule is
+  withhold by class, never by row, because a per-row guard makes the absence say which row it was on.
+  It is quieter about what happens when the silent *set* has one member with supply: Placement's
+  `distant` ships **0 rows on both repos**, so an unexplained row is now uniquely a co-change pick and
+  the silence states the disjunction the sentence would have. The rule still holds — an implied
+  relation is accepted where a stated atom is refused (ADR-0019) — but *"we withheld it"* is not the
+  same as *"the player cannot get it"*, and which one you have depends on a count nobody was taking.
+  Take it: how many classes are silent, and how many rows does each ship?
 - **Adding the fourth of something reveals the first three never had it.** Writing Archaeology's
   invariant into `tests/atlas/` showed that **Placement's had never been checked on the real atlas**
   — `candidates ∩ files(commit) = truth` lived only in a unit fixture, for a whole milestone, in a
@@ -769,7 +794,15 @@ because it is padding, not a strategy.
 
 §8.3's distractor strategies pick the wrong answers for each verb — Placement adds `mentioned`, a
 file the message names and the diff does not; Archaeology adds its mirror, a commit whose message
-names the subject and whose diff does not — difficulty is computed per §8.4, and the player has a
+names the subject and whose diff does not — and since
+**[ADR-0023](./docs/decisions/0023-the-best-wrong-answer-is-a-board-improvement-not-a-gate.md)**
+**every verb carries §8.3's *historically-coupled-but-not-structurally* class**, which that section
+calls the best wrong answers and which Placement was the last without: a file the matrix records
+moving with a file the commit changed, that the commit did not change. It is a **board improvement
+and nothing more** — the claim it was built to test, that it would lower ADR-0022's exposure at the
+source, was measured first and holding the board fixed it removes **not one verdict on this repo**
+(26 → 27 over 30 shared boards) and 5 of 24 on hono. Its class is **withheld**, on the refusal
+`blastRadius/reveal.ts` makes about the same relation. Difficulty is computed per §8.4, and the player has a
 challenge console over the map with partial credit, a derived per-member reveal, and fog that lifts
 on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
 over the straight import lines, gated by
@@ -825,10 +858,12 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: in rough order of size — **the overlapping Companion answer keys** in the generator; a
-**co-change distractor strategy for Placement**, which §8.3 calls the best class of wrong answer and
-which Placement is the only verb without (it would lower ADR-0022's exposure at the *source* rather
-than gating it); packaging **`npx ark`**; the **phenomenon catalogue**; and **M5**.
+Next action: in rough order of size — packaging **`npx ark`**; the **phenomenon catalogue**; and
+**M5**. The two items this line used to lead with are gone: **the overlapping Companion answer keys**
+closed at `01202ac` and were listed as open in three documents for a milestone afterwards, and the
+**co-change distractor strategy for Placement** shipped as ADR-0023 — as a board improvement, because
+the claim that it would lower ADR-0022's exposure at the source was measured and is false on this
+repo.
 
 Detail on the rest: packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
 catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that

@@ -11,6 +11,12 @@
  *
  *   busy         high churn, and this commit did not touch it. The flagship,
  *                and the ordering is measured rather than argued — see below.
+ *   coChange     the matrix records it moving with a file the commit changed,
+ *                and this commit did not move it. §8.3's
+ *                *historically-coupled-but-not-structurally* — the class it
+ *                calls the **best** wrong answers, "because getting them wrong
+ *                is itself a lesson" — and the one this verb went a milestone
+ *                without. Its witness is **withheld**; `reveal.ts` says why.
  *   structural   imports, or is imported by, a file the commit changed — and
  *                did not change with it. §8.3's graph-adjacent strategy, and
  *                the lesson is the sharpest this verb has: the compile-time
@@ -69,15 +75,23 @@
  * 29.7 s on svelte here — so the corpus and the two inverted indexes are
  * `companion/distractors.ts`'s, imported rather than rebuilt, and nothing below
  * tokenises a path.
+ *
+ * `coChange` reads a **third** shared index, `companion/cochange.ts`'s, for the
+ * same reason and one more: the matrix is already inverted ad hoc in four
+ * places in this tree, and a fifth copy is how two of them come to disagree.
+ * It is memoised per atlas, so asking for it here costs nothing where Companion
+ * has already asked.
  */
 
 import type { Graph, NodeRef } from '../../atlas/index.js';
 import { byteCompare } from '../../atlas/index.js';
 import { jaccard, sharedPrefix } from '../paths.js';
 import type { Corpus } from '../companion/distractors.js';
+import type { CoChangeIndex } from '../companion/cochange.js';
 
 export type StrategyId =
   | 'busy'
+  | 'coChange'
   | 'structural'
   | 'treeSibling'
   | 'nameSimilar'
@@ -89,12 +103,40 @@ export type StrategyId =
  * in the header; `mentioned` is last because its supply is thin — it exists at
  * all only when the message names a file the commit did not touch, which is
  * rare and, when it happens, the best wrong answer on the board.
+ *
+ * ## What `coChange`'s 0.15 was taken from, and what it was not
+ *
+ * A mix is a **budget**: a sixth strategy is paid for by the other five, so
+ * saying "we added the best class" without saying who paid is naming one knob
+ * and turning two (ADR-0018 §6, which this repo has now done twice).
+ *
+ * Taken: 0.05 each from `structural`, `treeSibling` and `nameSimilar` — §8.3's
+ * three anchors, in its own order of value, so the least-valued gives up the
+ * largest share of itself. **Not taken from `busy`**, which is not a preference:
+ * `busy` is the counterweight to `gate.ts`'s `churn` heuristic, the guess this
+ * verb's boards structurally invite (a commit's files are files that get
+ * committed to), and starving it would weaken a gate that refuses boards today.
+ * **Not taken from `mentioned`**, whose supply is thin enough that its quota
+ * rarely binds and whose picks are the sharpest on the board.
+ *
+ * Measured through the real generator on clean clones of ark at `d91ba27` and
+ * `honojs/hono` at `7075369e`, the shipped mix moves as declared — `busy`
+ * 244 → 242 and 357 → 354, i.e. inside the noise of a deck that reshuffles;
+ * `structural` 107 → 68 and 179 → 123; `treeSibling` 117 → 77 and 171 → 124;
+ * `nameSimilar` 78 → 69 and 148 → 108; `mentioned` 58 → 59 and 79 → 83. The
+ * gate is unmoved: `ctrlF` refusals 4 → 5 here and 182 → 181 there.
+ *
+ * The two deep-supply strategies give up more than their quota cut because the
+ * unspent-quota pass hands leftovers back in declared order, and before this
+ * they were the ones collecting them. That is the second knob, and it is the
+ * reason the counterfactual in ADR-0023 has a middle row.
  */
 export const TARGET_MIX: readonly (readonly [Exclude<StrategyId, 'distant'>, number])[] = [
   ['busy', 0.35],
-  ['structural', 0.2],
-  ['treeSibling', 0.2],
-  ['nameSimilar', 0.15],
+  ['coChange', 0.15],
+  ['structural', 0.15],
+  ['treeSibling', 0.15],
+  ['nameSimilar', 0.1],
   ['mentioned', 0.1],
 ];
 
@@ -106,6 +148,17 @@ export interface DistractorChoice {
 export interface DistractorContext {
   readonly graph: Graph;
   readonly corpus: Corpus;
+  /**
+   * The co-change matrix, inverted once per atlas.
+   *
+   * Read for **presence** only, which is why no bar is applied to it here.
+   * `index.floor` exists so Companion can certify an *absence* — the ceiling on
+   * what the pair cap could have hidden — and this strategy certifies nothing
+   * that way: a candidate's wrongness comes from `pool`, which the caller built
+   * from the commit's own positive file list. Every pair the matrix holds is a
+   * pair the repo really recorded, so presence needs no floor.
+   */
+  readonly coChange: CoChangeIndex;
   /**
    * The answer key's members — the files this board is anchored on. **Not**
    * every file the commit touched: an unsampled member must stay off the board
@@ -152,6 +205,54 @@ const busy: Strategy = (context, limit) => {
     ranked.push(ref);
   }
   return ranked;
+};
+
+/**
+ * Travels with the change, and did not travel in it.
+ *
+ * §8.3's *historically-coupled-but-not-structurally* — *"the best distractors,
+ * because getting them wrong is itself a lesson"* — re-anchored the way every
+ * other strategy in this file is: the subject's neighbourhood becomes the
+ * **answer key's** neighbourhood. A file the matrix records moving with a file
+ * this commit changed, that this commit did not change, is exactly the wrong
+ * answer a player reasoning *"these two always travel together"* should be
+ * punished by.
+ *
+ * Ranked by the strongest coupling to any anchor, because that is the pick a
+ * player is most likely to make and therefore the one that teaches most.
+ *
+ * `anchors`, **not the commit's whole membership**, for the reason every other
+ * strategy takes anchors: an unsampled member is off the board entirely, and a
+ * partner reached through one would be a candidate whose only relation is to a
+ * file the player was never shown.
+ *
+ * ## Cost
+ *
+ * One walk of at most `anchors.length` matrix rows per commit — the index is
+ * built once per atlas and memoised, and nothing here touches a node the matrix
+ * does not already name. See the header: the two sibling files record what a
+ * per-node loop inside a per-subject one costs, and this is the third verb to
+ * be handed that bill.
+ */
+const coChange: Strategy = (context, limit) => {
+  const compare = compareIds(context);
+  const scored = new Map<NodeRef, number>();
+  for (const anchor of context.anchors) {
+    const row = context.coChange.rows.get(anchor);
+    if (row === undefined) continue;
+    for (const [partner, count] of row) {
+      // `pool` has already removed every file the commit touched, sampled or
+      // not — so a partner that *is* a member cannot reach here. That is the
+      // invariant, and re-checking it here would be a second copy of it.
+      if (!context.pool.has(partner)) continue;
+      // Nearest anchor wins, on the same argument `treeSibling` uses: a file
+      // coupled 9 times to one member and twice to another is a 9-coupling.
+      if (count > (scored.get(partner) ?? 0)) scored.set(partner, count);
+    }
+  }
+  return [...scored.keys()]
+    .sort((a, b) => (scored.get(b) ?? 0) - (scored.get(a) ?? 0) || compare(a, b))
+    .slice(0, limit);
 };
 
 /**
@@ -284,6 +385,7 @@ const mentioned: Strategy = (context, limit) => {
 
 const STRATEGIES: Readonly<Record<Exclude<StrategyId, 'distant'>, Strategy>> = {
   busy,
+  coChange,
   structural,
   treeSibling,
   nameSimilar,

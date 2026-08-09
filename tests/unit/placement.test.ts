@@ -57,6 +57,16 @@ function fixture(
     readonly fileCap?: number;
     /** Extra import edges, for a test that needs one to cross a sampling boundary. */
     readonly links?: readonly (readonly [string, string])[];
+    /**
+     * Co-change pairs, `[a, b, count]` by path.
+     *
+     * **The fixture had none at all until `coChange` shipped**, which is the
+     * degenerate-fixture landmine waiting to happen: the strategy would have had
+     * zero supply, every assertion about it would have passed over an empty set,
+     * and the suite would have looked complete. Tests that use this count what
+     * it actually produced before believing anything else.
+     */
+    readonly coChange?: readonly (readonly [string, string, number])[];
   } = {},
 ): Atlas {
   const bare = atlasWith(
@@ -98,6 +108,16 @@ function fixture(
       // date descending, then sha ascending — `commitOrder`, which the
       // validator enforces. Every fixture commit shares a date, so this is sha.
       commits: [...records].sort((a, b) => (a.sha < b.sha ? -1 : 1)),
+      // count desc, then a asc, then b asc — `coChangeOrder`, enforced by the
+      // validator, so a fixture that got this wrong would throw rather than
+      // quietly test a matrix the player could never see.
+      coChange: (options.coChange ?? [])
+        .map(([a, b, count]) => {
+          const x = refOf(a);
+          const y = refOf(b);
+          return [Math.min(x, y), Math.max(x, y), count] as const;
+        })
+        .sort((p, q) => q[2] - p[2] || p[0] - q[0] || p[1] - q[1]),
     },
     report: {
       ...bare.report,
@@ -114,6 +134,47 @@ const PLAIN: CommitSpec = {
   sha: 'aaaaaaaaaaaa',
   subject: 'tighten the retry budget',
   paths: CHANGED,
+};
+
+/**
+ * A matrix for `PLAIN`: three partners of key members that the commit left
+ * alone, and one — `lib/alpha.ts` — that it changed.
+ *
+ * The touched pair is the point. §8.3's best distractor is only a distractor
+ * while it is provably *not* an answer, and a partner the commit moved is an
+ * answer; the fourth row is what makes "certified wrong" a thing this fixture
+ * can fail on rather than a thing it asserts about an empty set.
+ *
+ * The untouched three avoid `src/edge/part00.ts`, which imports
+ * `src/core/engine.ts` and would therefore be a `structural` pick first.
+ */
+const COUPLED: readonly (readonly [string, string, number])[] = [
+  ['src/core/engine.ts', 'src/edge/part05.ts', 9],
+  ['src/core/engine.ts', 'lib/alpha.ts', 7],
+  ['src/core/parse.ts', 'src/edge/part06.ts', 5],
+  ['docs/gamma.md', 'src/edge/part07.ts', 3],
+];
+
+/**
+ * Churn for the co-change fixture, and it is load-bearing.
+ *
+ * `busy` runs first and holds the largest quota, and in a fixture where every
+ * file has churn 1 it takes six files chosen by id — which swallowed all three
+ * partners and made the first version of these tests fail with *"the strategy
+ * produced nothing"*. Six decoys above every partner give `busy` its own supply,
+ * so what reaches the board through `coChange` reached it as a co-change pick.
+ * Each partner's churn is at least its pair count, as a real repo's must be.
+ */
+const COUPLED_CHURN: Readonly<Record<string, number>> = {
+  'src/edge/part10.ts': 20,
+  'src/edge/part11.ts': 20,
+  'src/edge/part12.ts': 19,
+  'src/edge/part13.ts': 19,
+  'src/edge/part14.ts': 18,
+  'src/edge/part15.ts': 18,
+  'src/edge/part05.ts': 9,
+  'src/edge/part06.ts': 5,
+  'src/edge/part07.ts': 3,
 };
 
 const OPTIONS = { ...DEFAULT_GENERATE_OPTIONS, maxChallenges: null, candidateCount: 20 } as const;
@@ -396,6 +457,79 @@ describe('the sample is spread across the commit rather than sliced off its fron
   });
 });
 
+describe('§8.3’s best wrong answer, pointed at a commit', () => {
+  function board(): {
+    readonly atlas: Atlas;
+    readonly challenge: Challenge;
+    readonly picked: readonly NodeId[];
+    readonly pathOf: (id: NodeId) => string;
+  } {
+    const atlas = fixture([PLAIN], { coChange: COUPLED, churn: COUPLED_CHURN });
+    const challenge = only(atlas);
+    const witness = readWitness(challenge);
+    const byId = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+    return {
+      atlas,
+      challenge,
+      picked: challenge.candidates.filter((id) => witness.get(id) === 'coChange'),
+      pathOf: (id) => byId.get(id) ?? '',
+    };
+  }
+
+  it('offers a file that moves with the change and did not move in it', () => {
+    const { challenge, picked, pathOf } = board();
+    // Count the population before believing anything about it: an empty matrix
+    // makes every line below vacuous, and this fixture had no matrix at all
+    // until this strategy existed.
+    expect(picked.length, 'the strategy produced nothing').toBeGreaterThan(1);
+    // **Strongest coupling first**, asserted as a set against the top of the
+    // ranking rather than by reading `picked[0]`: `candidates` is sorted by id,
+    // so position in it says nothing about the order the strategy chose in, and
+    // a first version of this line asserted the id ordering by accident.
+    const byStrength = ['src/edge/part05.ts', 'src/edge/part06.ts', 'src/edge/part07.ts'];
+    expect(picked.map(pathOf).sort()).toEqual(byStrength.slice(0, picked.length).sort());
+    for (const id of picked) expect(challenge.truth).not.toContain(id);
+  });
+
+  it('never offers a partner the commit itself changed, which would be an answer', () => {
+    const { atlas, challenge, picked, pathOf } = board();
+    // `lib/alpha.ts` is coupled to a key member at count 7 — the second-strongest
+    // pair in the matrix — and the commit changed it. Offering it as a wrong
+    // answer is the wrong-answer-key failure guardrail 4 exists to prevent.
+    for (const id of picked) expect(pathOf(id)).not.toBe('lib/alpha.ts');
+    expect(challenge.truth.map(pathOf)).toContain('lib/alpha.ts');
+    // And the invariant that guarantees it, re-checked on this fixture rather
+    // than assumed from the one three describes up: a matrix is a new way for a
+    // touched file to reach the pool.
+    const graph = buildGraph(atlas);
+    const commit = atlas.history.commits.find((c) => commitIdFor(c.sha) === challenge.subject);
+    const touched = new Set((commit?.files ?? []).map((ref) => graph.atlas.nodes[ref]?.id ?? ''));
+    expect(challenge.candidates.filter((id) => touched.has(id))).toEqual([...challenge.truth]);
+  });
+
+  it('withholds the class, and leaves the row a sentence that is true of it', () => {
+    const { atlas, challenge, picked } = board();
+    const reveal = placement.reveal(
+      atlas,
+      buildGraph(atlas),
+      challenge,
+      placement.grade(challenge, { picked: [...picked] }),
+    );
+    const rows = reveal.notes.filter((note) => picked.includes(note.id));
+    expect(rows).toHaveLength(picked.length);
+    for (const note of rows) {
+      // The pair is Companion's subject matter and the product does not state
+      // it (ADR-0023).
+      expect(note.witness, note.label).toBeNull();
+      // Withholding a class must not push a row onto a false sentence. A
+      // partner is in the matrix because a commit counted it, so its churn is
+      // never zero — the one arm of `whyNot` that would be false here.
+      expect(note.note, note.label).not.toContain('has touched this file at all');
+      expect(note.note.length, note.label).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('ADR-0012: an answer key is issued once', () => {
   it('refuses a second commit that touched exactly the same files', () => {
     const atlas = fixture([
@@ -543,10 +677,12 @@ describe('a commit subject is a place the map does not have', () => {
     for (const path of unsampled) expect(text, path).not.toContain(path);
   });
 
-  it('states the class that chose each wrong answer', () => {
-    // Placement withholds nothing: every class is anchored on the answer key,
-    // whose members the board has already named.
-    const atlas = fixture([PLAIN]);
+  it('states the class that chose each wrong answer, except the two it withholds', () => {
+    // Every class but `coChange` is anchored on the answer key, whose members
+    // the board has already named. `coChange` is anchored there too and is
+    // still withheld — the pair it would name is Companion's subject matter
+    // (ADR-0023, and `blastRadius/reveal.ts` refusing the same relation).
+    const atlas = fixture([PLAIN], { coChange: COUPLED, churn: COUPLED_CHURN });
     const challenge = only(atlas);
     const answers = new Set(challenge.truth);
     const wrong = challenge.candidates.filter((id) => !answers.has(id));
@@ -559,11 +695,18 @@ describe('a commit subject is a place the map does not have', () => {
     const witness = readWitness(challenge);
     const rows = reveal.notes.filter((note) => witness.has(note.id));
     expect(rows.length).toBeGreaterThan(5);
+    // Non-vacuity on **both** branches: a fixture with no co-change supply would
+    // pass every line below while testing only the speaking half.
+    const silent = rows.filter((note) => (witness.get(note.id) ?? '') === 'coChange');
+    expect(silent.length, 'no co-change row on this board').toBeGreaterThan(0);
+    expect(rows.length - silent.length).toBeGreaterThan(4);
     for (const note of rows) {
       const strategy = witness.get(note.id) ?? '';
-      // `distant` is padding, and padding has nothing to teach.
-      if (strategy === 'distant') expect(note.witness).toBeNull();
-      else expect(note.witness, strategy).not.toBeNull();
+      // `distant` is padding, and padding has nothing to teach; `coChange` has
+      // something to teach and is not allowed to say it.
+      if (strategy === 'distant' || strategy === 'coChange') {
+        expect(note.witness, strategy).toBeNull();
+      } else expect(note.witness, strategy).not.toBeNull();
     }
   });
 

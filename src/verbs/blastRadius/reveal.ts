@@ -53,9 +53,12 @@ export interface RevealNote extends VerbRevealNote {
  * count-descending, which is exactly Companion's answer key for the same
  * subject — so *"offered because it changes with the subject"* is the sentence
  * `whyNot` deleted below, reintroduced as a label. Measured on the shipped
- * decks: of this repo's 12 co-change distractors, 6 sit on a subject that also
- * carries a Companion board and **3 are members of that board's answer key**; on
- * `honojs/hono`, 6 and 3 of 53. The atlas still *records* `coChange` — that is
+ * decks at **`d91ba27`**: of this repo's **15** co-change distractors, **11 are
+ * members of a shipped Companion board's answer key**; **8 of hono's 53** at
+ * `7075369e`. *(This paragraph read "12 … 3" and "6 and 3 of 53", from an
+ * earlier commit it did not name — ark indexes itself, so an unstamped count is
+ * false by the next one. Re-measured by ADR-0023, which needed the comparison.)*
+ * The atlas still *records* `coChange` — that is
  * the honest provenance, and §7.1 puts `truth` in plaintext for the same reason
  * — and this table is the gate on what the panel says out loud.
  *

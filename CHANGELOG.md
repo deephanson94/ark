@@ -2002,3 +2002,57 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: the overlapping Companion answer keys, then a co-change distractor strategy for Placement
   — which would lower this exposure at the source rather than gating it.
+
+- **Placement gets §8.3's best wrong answer, and it does not lower the exposure it was supposed to.**
+  The Next action was a co-change distractor strategy for Placement — the one verb with no
+  *historically-coupled-but-not-structurally* class, and the lever ADR-0022 named for closing its leak
+  *"at the source rather than gating it"*. The strategy ships: a file the matrix records moving with a
+  file the commit changed, that the commit did not change, ranked strongest coupling first. **98 wrong
+  answers on this repo and 141 on hono**, where there were none. The upstream claim was measured
+  first and it is **false here**. Holding the board fixed — same commit, same answer key, only the
+  wrong answers differ — ADR-0022's verdicts go **26 → 27 on ark's 30 shared boards, falling on
+  exactly none of them**, and 24 → 19 on hono's 40. The reason is structural rather than tuning:
+  the guess is seeded at a file wired to a candidate, and **58% of this repo's deciding seeds and 68%
+  of hono's are files the board never shows** (19 of 33 and 19 of 28), which a distractor anchored on
+  the answer key cannot reach. The version that would reach them has to score the guess against the
+  key to pick its wrong answers — which is `decidedBy` with a different return type, so *the upstream
+  fix, executed, is the downstream gate wearing a hat*. **ADR-0022's gate stays, now measured rather
+  than argued.** ADR-0023.
+
+  **The mix is a budget and this one says who paid.** 0.05 each from `structural`, `treeSibling` and
+  `nameSimilar` — §8.3's three anchors, in its own order of value — and **nothing from `busy`**, which
+  is the counterweight to `gate.ts`'s `churn` heuristic and would have weakened a gate that refuses
+  boards today. Measured: `busy` 244 → 242 here and 357 → 354 on hono, `ctrlF` refusals 4 → 5 and
+  182 → 181. A middle row — the new mix with the strategy supplying nothing — is what separates the
+  re-weighting from the picks, and it earned its place: hono's raw verdict total falls 28 → 20 on the
+  **re-weighting alone**, which a naive before/after would have credited to the strategy.
+
+  **The class is withheld**, on the refusal `blastRadius/reveal.ts` makes about the same relation.
+  The sentence would be an existential over the answer key, and **52 of this repo's 98 rows hold a
+  pair that is a member of a shipped Companion board's key** (29 of hono's 141) against the **11 of
+  15** Blast Radius refuses the same relation at — 6.5× the rows and 4.7× the atoms of a class already
+  refused at the smaller number. The argument the other way is stated rather than buried: Blast
+  Radius's sentence is an *identity* where this one is an existential — except on a one-file key,
+  where it collapses to one, 8 rows here and 25 on hono. Withheld by class, never by row. *(Blast
+  Radius's own file recorded "3 of 12" from a commit it never named; re-measured and stamped here,
+  which is the measured-constant landmine caught by needing the comparison.)* The cost is stated
+  rather than hidden:
+  `distant` ships 0 rows on both repos, so an unexplained row is now uniquely a co-change pick, which
+  is paid on ADR-0019's line that a **stated** atom is refused where an **implied** relation is
+  accepted.
+
+  **The unit fixture had no co-change matrix at all**, so every assertion about the new class would
+  have passed over an empty set — the degenerate-fixture landmine, arriving on schedule. It now
+  carries four pairs, one of them to a file the commit *did* change, and every test counts the
+  population before believing it. Four mutants killed, and one assertion was found reading `picked[0]`
+  when `candidates` is sorted by id — an ordering claim asserting the id sort.
+
+  **Also**: three documents still listed "the overlapping Companion answer keys" as open backlog. It
+  closed at `01202ac`, where `companion/generate.ts` gained a generator-wide `claimed` set and a
+  `pairsClaimed` refusal; ADR-0016's *"belongs to a later session"* now carries the CLOSED note with
+  the measurement, and the sharp case was narrower than that paragraph guessed — symmetry, not
+  overlap.
+
+  **Next**: packaging **`npx ark`** (NORTH-STAR §10's stated intent, and the Definition of done has
+  been unsatisfiable on it for four milestones), then the **phenomenon catalogue**, then **M5** — whose
+  kill point still needs measuring before a parser is written.

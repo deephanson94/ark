@@ -80,7 +80,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 21 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 23 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -135,7 +135,7 @@ offered (ADR-0020).
 | ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
-| Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. |
+| Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class — Placement was the last without one (ADR-0023). |
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
@@ -168,10 +168,14 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-In rough order of size: **overlapping Companion answer keys** in the generator · a
-**co-change distractor strategy for Placement** (§8.3 calls it the best class of wrong answer, and
-Placement is the only verb without one) · packaging **`npx ark`** · the **phenomenon catalogue** ·
-**M5**.
+In rough order of size: packaging **`npx ark`** (see gaps — the Definition of done has been
+unsatisfiable on it for four milestones) · the **phenomenon catalogue** · **M5**, whose kill point
+needs measuring before a parser is written.
+
+*(Two items left this list rather than being done here. **Overlapping Companion answer keys** closed
+at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
+strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
+exposure, which it was measured against and does not move.)*
 
 ---
 
@@ -201,9 +205,10 @@ across sessions, which is the mechanic the whole product rests on.
 Ark indexes **itself** as its first level, which is deliberate: every feature added becomes a new
 level, and if the tool cannot make its own architecture legible it does not work.
 
-Measured on a clean clone of `5a66f41`: **143 files, 497 edges, 153 challenges** across four verbs,
-a **288 KiB** atlas in **~460 ms**, first paint ~300 ms. *(Ark indexes itself, so these move with
-every commit — hence the sha. Prefer the invariants above to the counts.)*
+Measured on a clean clone of `d91ba27`: **145 files, 498 edges, 154 challenges** across four verbs,
+a **291.5 KiB** atlas in **~475 ms**, first paint ~310 ms. *(Ark indexes itself, so these move with
+every commit — hence the sha, and the commit carrying a figure is always one later than the commit it
+describes. Prefer the invariants above to the counts.)*
 
 ---
 
@@ -228,7 +233,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 21 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 23 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves
