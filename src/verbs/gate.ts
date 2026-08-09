@@ -29,6 +29,49 @@
  * A question that strategy passes is an *easy* question, which the progression
  * needs — not a broken one.
  *
+ * ## The line that exclusion draws, stated because ADR-0021 had to apply it
+ *
+ * Every heuristic in this file is executable **with no knowledge of the repo's
+ * structure**: match a path against a path, a token against a message, sort a
+ * printed column of dates, churn counts or widths. `directImporters` — the one
+ * guess this file has ever considered and declined — is the only one of the ten
+ * that needs a relation to run.
+ *
+ * That is a correlation, and ADR-0021 refuses the overclaim it invites: the
+ * paragraph above excludes `directImporters` for a **different** reason (it is
+ * given away on purpose, and §8.4 already prices it), so the rule below is a new
+ * articulation that reproduces all ten decisions rather than one this file
+ * already made.
+ *
+ * ADR-0021 measured a third case and the line decided it. Archaeology's reveal
+ * states three existentials about a wrong answer — *it touched this file's
+ * corner of the tree / its import neighbours / its usual travelling companions*
+ * — and each is a weakened atom of that commit's **Placement** answer key.
+ * Scored as guesses on the Placement board (clean clones, ark `a063f01` and
+ * `honojs/hono` `cf78528`):
+ *
+ *     hint         needs        ark fires / hono fires   best
+ *     sibling      a path         0 / 0                  0.600 / 0.727
+ *     neighbour    the graph      0 / 0                  0.500 / 0.750
+ *     companion    the matrix     3 / 1                  0.923 / 0.800
+ *
+ * *fires* = Placement boards beaten at band A by that hint alone. Pooling the
+ * hints one board states about one commit takes the total to **3 of ark's 40
+ * and 3 of hono's 54**, every one of them through the co-change relation.
+ *
+ * The one that is structure-blind — a subtree is a string prefix, pillar 3's
+ * `Ctrl+F` verbatim — is the one that never reaches the bar, and `tests/atlas/`
+ * holds it there. The two that do reach it need a relation the player has to
+ * have learned, so they are not this file's business: a board answered from the
+ * co-change matrix was answered by *reasoning about structure*, which is the
+ * second half of pillar 3's sentence rather than a violation of it. Accepted
+ * with the number, not waved away — ADR-0021 has the counter-argument too.
+ *
+ * **The rule this gives a later session**: before adding a heuristic, ask
+ * whether a player could run it knowing nothing about the repo. If they need
+ * the graph, the matrix or the cone, it does not belong here — and if the
+ * product ever *prints* one of those relations as a list, it does.
+ *
  * ## Why the bar is an A, not a pass
  *
  * ADR-0007 set the select-everything bar at the *pass* threshold, which is

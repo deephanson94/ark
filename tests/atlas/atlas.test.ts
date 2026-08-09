@@ -25,7 +25,7 @@ import {
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
-import { isGameable, scoreSet } from '../../src/verbs/index.js';
+import { CTRL_F_THRESHOLD, directoryOf, isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import { commitIdFor, isCommitId, isNodeId } from '../../src/atlas/index.js';
 import { touchedFact } from '../../src/verbs/index.js';
@@ -720,6 +720,80 @@ describe('challenges', () => {
     // Both populations must exist, or the loop above proved nothing.
     expect(treeRows).toBeGreaterThan(50);
     expect(cornerRows).toBeGreaterThan(20);
+  });
+
+  it('states no structure-blind hint that decides another verb’s board', () => {
+    // **ADR-0021, and the direction ADR-0020 measured and deliberately left
+    // open.** Archaeology's `sibling` witness says *"a commit that touched this
+    // file's own corner of the tree"*, which is an existential over a subtree
+    // and therefore a weakened atom of that commit's **Placement** answer key:
+    // go to that board, tick the candidates whose paths sit under the hinted
+    // directory. Of the three existentials that reveal states, this is the only
+    // one a player can run knowing nothing about the repo — a subtree is a
+    // string prefix, which is pillar 3's `Ctrl+F` word for word — so it is the
+    // one that has to stay below the bar, and this is what holds it there.
+    //
+    // Measured through the real generator on clean clones: best **0.600** over
+    // 104 scored rows at `a063f01` here and **0.727** over 29 on `honojs/hono`
+    // @ `cf78528`. Nothing sits between that and the 0.78 bar — the second-best
+    // is 0.600 on both repos — so this is a plateau rather than the edge of a
+    // cliff. If it ever goes red the answer is in ADR-0021: gate it, or withhold
+    // the class.
+    //
+    // **The other two arms are not asserted here and they are not clean.**
+    // Pooling what one board says about one commit, `companion` and `neighbour`
+    // together beat band A on **3 of this repo's 40 Placement boards and 3 of
+    // hono's 54** — every firing through the co-change relation, none through a
+    // path. They are accepted rather than gated because running them needs the
+    // matrix or the import graph, which is the line `gate.ts` has drawn since M2
+    // and ADR-0021 states. Do not read this test as "no hint decides another
+    // board"; it says the *structure-blind* one does not.
+    const graph = buildGraph(atlas);
+    const placementFor = new Map(
+      atlas.challenges.filter((c) => c.verb === 'placement').map((c) => [c.subject, c]),
+    );
+    let scored = 0;
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
+      const subjectRef = graph.refById.get(challenge.subject);
+      if (subjectRef === undefined) continue;
+      const home = directoryOf(nodeAt(graph, subjectRef).path);
+      const truth = new Set(challenge.truth);
+      const witness = readWitness(challenge);
+      // Read what the panel actually shows: the reveal applies every guard, so a
+      // class withheld on this board never reaches the loop below.
+      const reveal = VERBS.archaeology.reveal(atlas, graph, challenge, {
+        score: 0,
+        correct: [],
+        missed: [...challenge.truth],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      for (const note of reveal.notes) {
+        if (note.witness === null || witness.get(note.id) !== 'sibling') continue;
+        const board = placementFor.get(note.id);
+        if (board === undefined) continue;
+        // The subtree, matching the strategy's bucket, the reveal's guard and
+        // the sentence — one set, not the three this class once had.
+        const picked = board.candidates.filter((id) => {
+          const ref = graph.refById.get(id);
+          if (ref === undefined || ref === subjectRef) return false;
+          const dir = directoryOf(nodeAt(graph, ref).path);
+          return dir === home || dir.startsWith(`${home}/`);
+        });
+        scored++;
+        // The real scorer against the real bar, so this moves if §8.2's bands do.
+        const { score } = scoreSet(picked, board.truth);
+        expect(
+          score,
+          `${challenge.id}'s corner hint decides ${board.id} (${score.toFixed(3)})`,
+        ).toBeLessThan(CTRL_F_THRESHOLD);
+      }
+    }
+    // Vacuity guard, and it is not decoration: this whole assertion lives inside
+    // three filters that a deck change could empty — spoken `sibling` rows, and
+    // rows whose commit happens to ship a Placement board. A zero here means the
+    // canary has stopped watching, not that the hint has stopped hinting.
+    expect(scored, 'no sibling hint reached a placement board').toBeGreaterThan(20);
   });
 
   it('names only files its own answer key holds', () => {
