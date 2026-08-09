@@ -9,8 +9,8 @@
  * `spf13/cobra` (36), both instruments return **the same 6,013 and 190 import
  * sites** — the same counts ADR-0024 got from Go's own `go/parser` — with
  * **zero** per-file disagreements and zero on seventeen adversarial fixtures.
- * tree-sitter is 5.9× slower (1,589 ms against 269 ms on hugo, against a 10 s
- * index budget) and would be this project's **first runtime dependency**.
+ * tree-sitter is **6.2× slower** (1,619 ms mean against 261 on hugo, against a
+ * 10 s index budget) and would be this project's **first runtime dependency**.
  * §7.2's argument for tree-sitter is *breadth*; for one language it buys
  * nothing that was measurable. ADR-0026 records the number that would flip it.
  *

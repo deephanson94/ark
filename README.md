@@ -133,7 +133,7 @@ offered (ADR-0020).
 | | Status | Notes |
 |---|---|---|
 | ES-module import scanner | ✅ | Build-free, no language server. TS/JS, one node per file. |
-| Go scanner + `go.mod` resolution | ✅ | Hand-rolled, ~200 lines, **zero runtime dependencies** — same 6,013/190 import sites as tree-sitter *and* as `go/parser`, 0 of 942 files disagreeing, 5.9× faster (ADR-0026 §1). One node per **package**: hugo `44da0860` is 193 packages holding 906 files, 6.61 edges each, 456 challenges, 0 unresolved sites. |
+| Go scanner + `go.mod` resolution | ✅ | Hand-rolled, ~200 lines, **zero runtime dependencies** — same 6,013/190 import sites as tree-sitter *and* as `go/parser`, 0 of 942 files disagreeing, 6.2× faster (ADR-0026 §1). One node per **package**: hugo `44da0860` is 193 packages holding 906 files, 6.61 edges each, 456 challenges, 0 unresolved sites. |
 | Python | ⬜ | Measured, not built. A *history* language when it lands — the map and the three git verbs, never Blast Radius: 7 computed `import_module(expr)` sites taint 83.7% of django's blast subjects, and no parser fixes it (ADR-0024 §4.1). |
 | Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Both sides of that ratio are counts of **files** since ADR-0026 — `mapped` counted *nodes*, which is a category error once a node is a package. Go landing flipped cobra and hugo from refused to shipping, exactly as ADR-0025 predicted. Its reach is bounded by a **list** of languages — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |

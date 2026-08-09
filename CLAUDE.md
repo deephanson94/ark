@@ -845,7 +845,7 @@ CI installs its own Chromium and needs no variable.
 and the scanner is **hand-rolled**, against NORTH-STAR §7.2's *"v2: tree-sitter"*, on a measurement
 rather than on taste: both instruments find **6,013 import sites on hugo and 190 on cobra**, the same
 counts ADR-0024 got from Go's own `go/parser`, and disagree on **no file at all** out of 942;
-tree-sitter is 5.9× slower and would be this project's **first runtime dependency**. The refusal is
+tree-sitter is 6.2× slower and would be this project's **first runtime dependency**. The refusal is
 scoped to Go and the condition that reverses it is written down — *a language where the two disagree
 on real files* — so **score the next language the same way before writing its scanner.**
 `gohugoio/hugo` `44da0860` is **193 packages holding 906 files, 6.61 edges each, 456 challenges,

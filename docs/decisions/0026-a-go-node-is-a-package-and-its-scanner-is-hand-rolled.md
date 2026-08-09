@@ -57,8 +57,11 @@ agree seventeen times.
 So the accuracy argument for tree-sitter, on the only thing ark reads out of a Go file, is worth
 **zero measured points**. What is left is cost:
 
-- **5.9× slower** on hugo (1,619 ms mean against 261), plus 17–33 ms to initialise the runtime and
-  load the grammar. hugo's whole index has to fit in 10 s (§5).
+- **6.2× slower** on hugo — 1,619 ms mean against 261, per-run ratios 5.88 / 6.43 / 6.33 — plus
+  16–33 ms to initialise the runtime and load the grammar. hugo's whole index has to fit in 10 s
+  (§5). *(This document first said 5.9×, which is the **smallest** of the three per-run ratios quoted
+  as the headline while the mean sat two lines below it: the lower-bound-as-margin landmine, in the
+  paragraph deciding the change. On cobra the ratio is 4.6×.)*
 - **The first runtime dependency this project would have.** `package.json` has no `dependencies` key
   at all today; `npm run budget` prints `player runtime deps 0`. Installed, `web-tree-sitter` +
   `tree-sitter-go` is **8.8 MB**; the artefacts actually loaded are **572 KB**. NORTH-STAR §10 sells
@@ -240,7 +243,7 @@ end-to-end check — real walk, real build, real validator, over a temp Go repo 
 |---|---|---|---|---|---|
 | cobra | 190 | **0** | 0.00% | 0.5 | **0 of 2** |
 | hugo | 6,013 | **0** | 0.00% | 128.3 | **0 of 193** |
-| prometheus | — | **0** | 0.00% | 24.1 | **0 of 123** |
+| prometheus | 6,511 | **0** | 0.00% | 24.1 | **0 of 123** |
 | *(hono `7075369e`, the TypeScript control)* | 1,202 | 18 | 1.5% | 19.1 | 25 of 425 (5.9%) |
 
 The product is **0 on all three Go repos**, so guardrail 4 costs Go nothing at all — where it costs
@@ -286,7 +289,7 @@ silent. Indexed from clean clones of ark `837970f2` and hono `7075369e`, old ind
 ## Decision
 
 1. **Go's import scanner is hand-rolled, and tree-sitter is refused for Go on a measurement** — same
-   site count as `go/parser` and as tree-sitter, zero per-file disagreements across 942 files, 5.9×
+   site count as `go/parser` and as tree-sitter, zero per-file disagreements across 942 files, 6.2×
    faster, and no runtime dependency (§1). NORTH-STAR §7.2's *"v2: tree-sitter"* stands as the
    *strategy*; what is refused is applying it to a language where it was measured to buy nothing.
    **Score the next language the same way before writing its scanner.**

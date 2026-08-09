@@ -2385,7 +2385,7 @@ One line per iteration: what changed, and what to do next.
   hand-rolled scanner were run over the same corpus with a gate proving each returned something:
   **both find 6,013 import sites on hugo and 190 on cobra — the same counts ADR-0024 got from Go's
   own `go/parser`** — and disagree on **no file at all** out of 942, and on none of seventeen
-  adversarial fixtures. tree-sitter is **5.9× slower** (1,619 ms against 261 on hugo, against a 10 s
+  adversarial fixtures. tree-sitter is **6.2× slower** (1,619 ms against 261 on hugo, against a 10 s
   index budget) and would be this project's **first runtime dependency**, 8.8 MB installed against a
   `package.json` with no `dependencies` key at all. So it is refused **for Go**, on the measurement,
   and the condition that reverses it is written down: a language where the two disagree on real
