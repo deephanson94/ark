@@ -898,7 +898,18 @@ async function main(): Promise<number> {
         const claims = (await page.locator('.field-note-claim').allInnerTexts()).map((text) =>
           text.trim(),
         );
-        const mine = claims.find((text) => text.includes(subject));
+        // **Match the subject, not the sentence.** A claim reads
+        // `You proved N files that change with SUBJECT — member, member, …`,
+        // so `text.includes(subject)` also matches a note about someone *else*
+        // that happens to list this subject as one of its members — and picks
+        // it, because `find` takes the first. That is the same
+        // select-by-position mistake the comment above describes, wearing a
+        // substring: it went red on the CI merge commit, where a note for
+        // `tests/unit/placement.test.ts` listed the subject among six members
+        // and sorted first. Everything before the first em dash is the claim
+        // about the subject; everything after it is the list of members.
+        const subjectOf = (text: string): string => text.split(' — ')[0] ?? text;
+        const mine = claims.find((text) => subjectOf(text).includes(subject));
         process.stdout.write(`e2e: note → ${mine ?? claims[0] ?? '(none)'}\n`);
         // Every note, not just one: the surveyed/understood line is broken by
         // any sentence stronger than what was earned, wherever it sits.
