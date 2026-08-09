@@ -403,6 +403,14 @@ name instead of a hypothetical, and the sentence that survives is the one alread
   assertions, not two; and hugo's post-M5 map is ~193 **package** nodes, not 930 file nodes.
 - **§6's header claimed four surfaces share one composed sentence**; the fourth writes its own, and
   the header is corrected rather than the code — the field notes are about notes, not coverage.
+- **The two sides of the ratio are admitted under different rules, and this is left as it is.** The
+  `UNREAD` tally runs *before* the size and binary checks (`walk.ts`), so a 2 MB or binary Go file
+  counts as unreadable source while a 2 MB TypeScript file counts as neither mapped nor unreadable —
+  it is `tooLarge` and nothing else. The bias runs toward refusing, which is the safe direction, and
+  it flips **no verdict on any of the thirteen**. Kept because the alternative is worse: moving the
+  tally after those checks would make a large Go file *invisible*, which is the defect this whole
+  document is about. Written down because an asymmetry nobody has stated is one the next measurement
+  will trip over.
 
 The tally is worth keeping: of ten findings, **four were prose contradicting a measurement in the
 same change**, one was a shipped behaviour with no test, and **one was the fixed defect still live in

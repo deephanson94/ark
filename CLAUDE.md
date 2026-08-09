@@ -115,11 +115,15 @@ The pyramid, fastest first. It will grow; keep it ordered by cost.
 | `npm run test:atlas` | Indexer produces a schema-valid atlas for this repo; no dangling edges; every `challenge.truth ⊆ candidates` | < 15 s | Every change touching the indexer |
 | `npm run test:determinism` | Index this repo twice → **byte-identical** output | < 30 s | Every change touching the indexer |
 | `npm run build` | TS compile + bundle | < 5 s | Every change |
-| `npm run test:e2e` | Headless playthrough: load atlas, render map, answer a challenge, see a grade | minutes | Big changes only — **ask first** |
+| `npm run test:e2e` | Headless playthrough: load atlas, render map, answer a challenge, see a grade | minutes | Big changes only — **ask first locally.** *CI runs it on every push* (the `player smoke test` job), so it is never actually unrun on a pushed commit |
 
 **Rules:**
 
-- **Ask before running the slow suite** on a small change. Offer "full / fast only / none."
+- **Ask before running the slow suite** on a small change. Offer "full / fast only / none." **This
+  governs *you*, not CI** — `ci.yml`'s `player smoke test` job is `npm run test:e2e` and runs
+  unconditionally on every push, so a pushed commit has always had it. A session read this row, did
+  not open `ci.yml`, and told the human three times that e2e was unrun and awaiting their decision.
+  A rule about your own behaviour is not a fact about the project's.
 - **Don't re-verify what a subagent already verified green.** Spot-check with the fast suite.
 - **Make a new assertion fail before you make it pass.** A test that never failed proves nothing.
 - **Beware vacuous passes.** Assert on real measured values, not on the absence of an error. If you
@@ -520,6 +524,16 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   number arrived later. This is the verb-blind-state family with no verb in it: **when you add a new
   way for a quantity to reach its extreme, grep every reader of that quantity and ask what it thinks
   the extreme means.**
+- **A rule about your own behaviour is not a fact about the project, and the testing table reads like
+  both.** The row for `test:e2e` said *"Big changes only — **ask first**"*, which is an instruction to
+  the agent; a session read it as a statement that the suite had not run, told the human three times
+  that e2e was outstanding and awaiting their decision, and was wrong every time — `ci.yml`'s `player
+  smoke test` job **is** `npm run test:e2e` and runs unconditionally on every push. The Definition of
+  done's *"no console errors in the player"* had been satisfied continuously by a job nobody looked
+  at. Both halves are this repo's own landmines arriving together: a claim about code checked against
+  a document instead of against the code, and *"list the workflows before you claim they passed"* run
+  in reverse — never having asked what they *do*. The table now says so; when a document tells you
+  what to do, it is not thereby telling you what has happened.
 - **A list has a failure mode a rule does not, and "we excluded that on purpose" is the sentence that
   hides it.** ADR-0025 refuses a deck by counting *program source ark recognises and cannot read*,
   which sounds like a rule and is a **table of 64 extensions**. Three commits after it shipped, a
