@@ -63,7 +63,16 @@ export interface RevealNote extends VerbRevealNote {
  */
 const WITNESS: Readonly<Record<string, string>> = {
   graphAdjacent: 'a structural near-miss in the import graph',
-  treeSibling: 'a directory sibling',
+  // **"a near neighbour", not "a directory sibling"** — and the distinction is a
+  // measured one, not a hedge. §8.3 words this strategy as *"files in the same
+  // directory"*, and `treeSibling` starts there and then **widens outward
+  // through shared path prefixes** when the directory runs dry. So the textbook
+  // gloss is false on **100 of this repo's 231 `treeSibling` rows and 193 of
+  // hono's 297** — and false in the one place a player can see it for nothing,
+  // because the two paths sit in the same row of the panel. Every member does
+  // share at least the subject's first path segment (the walk stops at depth 1),
+  // which is what the wording below claims and all it claims.
+  treeSibling: 'a near neighbour in the directory tree',
   nameSimilar: 'a name-alike',
 };
 

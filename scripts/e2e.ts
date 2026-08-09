@@ -24,9 +24,9 @@ import type { ConsoleMessage } from 'playwright';
 import { build, preview } from 'vite';
 
 import type { Atlas } from '../src/atlas/index.js';
-import { buildGraph, serializeAtlas } from '../src/atlas/index.js';
+import { buildGraph, commitIdFor, serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
-import { VERBS } from '../src/verbs/index.js';
+import { VERBS, commitLabel } from '../src/verbs/index.js';
 import { storageKeyFor } from '../src/player/save.js';
 import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 
@@ -76,6 +76,14 @@ async function main(): Promise<number> {
   // For asking a verb what its reveal would say, which is how the witness step
   // picks a wrong answer the panel will actually explain.
   const graph = buildGraph(atlas);
+  // Every id to the string the console prints for it — a path for a file, a date
+  // and message for a commit. `pathById` covers only half the union since
+  // ADR-0018, and a board of commits would silently match nothing.
+  const labelById = new Map(
+    [...atlas.nodes.map((node) => [node.id, node.path] as const)].concat(
+      atlas.history.commits.map((commit) => [commitIdFor(commit.sha), commitLabel(commit)] as const),
+    ),
+  );
   process.stdout.write(
     `e2e: indexed ${nodeCount} nodes, ${atlas.challenges.length} challenges\n`,
   );
@@ -719,12 +727,36 @@ async function main(): Promise<number> {
       // by this script re-deriving the withhold table. Two classes are never
       // spoken and padding is never spoken, so picking any distractor at random
       // would fail on the ones that are correctly silent.
-      const witnessBoard = atlas.challenges.find((entry) => {
-        if (pathById.get(entry.subject) !== landedOn) return false;
-        return true;
-      });
+      //
+      // **The board is identified from the open console, not predicted from the
+      // atlas.** `atlas.challenges` is sorted by **id**, so `archaeology-…`
+      // sorts before everything, while `challengeFor` serves a node's bucket in
+      // **tier** order — blast radius first. Measured on this deck, 27 subjects
+      // carry two or more boards and the two orders disagree on **20** of them,
+      // so predicting the board would hunt for a commit label among file-path
+      // buttons and time out. It passed once because today's suggestion happens
+      // to carry exactly one board; ark indexes itself and CI plays a different
+      // merge commit, which is the `.find()` landmine's exact mechanism.
+      //
+      // So: open it, read the choice set off the screen, and match the board
+      // whose candidates those are.
+      const boardsHere = atlas.challenges.filter(
+        (entry) => labelById.get(entry.subject) === landedOn,
+      );
+      await page.locator('.inspector-action').click();
+      await page.waitForSelector('.console-panel', { timeout: 5000 });
+      const shown = (await page.locator('.choice-path').allInnerTexts()).map((text) => text.trim());
+      const shownSet = new Set(shown);
+      const witnessBoard = boardsHere.find(
+        (entry) =>
+          entry.candidates.length === shown.length &&
+          entry.candidates.every((id) => shownSet.has(labelById.get(id) ?? '\u0000')),
+      );
       if (witnessBoard === undefined) {
-        failures.push({ what: 'witness', detail: `no challenge for ${landedOn}` });
+        failures.push({
+          what: 'witness',
+          detail: `${landedOn} has ${boardsHere.length} board(s), none matching the ${shown.length} choices on screen`,
+        });
       } else {
         const answers = new Set(witnessBoard.truth);
         const wrong = witnessBoard.candidates.filter((id) => !answers.has(id));
@@ -744,8 +776,6 @@ async function main(): Promise<number> {
             detail: `${landedOn}'s board offers no wrong answer the verb will explain`,
           });
         } else {
-          await page.locator('.inspector-action').click();
-          await page.waitForSelector('.console-panel', { timeout: 5000 });
           const count = await page.locator('.choice-button').count();
           let picked = false;
           for (let i = 0; i < count; i++) {

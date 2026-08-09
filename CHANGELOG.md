@@ -1750,6 +1750,37 @@ One line per iteration: what changed, and what to do next.
   it — infrastructure with the consumer present and never reached. It now picks a wrong answer the
   verb says it will explain, and `artifacts/witness.png` shows the two lines apart.
 
+  **An adversarial review of the finished code then found nine things, and five were one class this
+  entry did not have a name for: a witness *glosses* its class, and three glosses stated §8.3's
+  **definition** of the strategy rather than the strategy that ships.** Each of those strategies
+  starts at its textbook bucket and **widens** when the bucket runs dry, so *"a directory sibling"*
+  was false on **100 of this repo's 231 Blast Radius rows and 193 of hono's 297**, and Archaeology's
+  *"this file's own directory"* on 14 here and 40 on hono — falsifiable by a player reading the two
+  paths in one row, or with one `git show --stat`. Archaeology's was worst and carried two more
+  defects inside it: `byDirPrefix` is the whole **subtree** (its docstring says "the deepest bucket
+  only" and does not say that), a **root-level subject**'s bucket is the entire repo so the sentence
+  was true of every commit and worth nothing (24 rows here, 25 on hono, withheld now), and the guard
+  counted a **third** population — so strategy, guard and sentence quantified over three different
+  sets. The lesson is narrower than "check your wording": **a class label is not a class
+  description**, and the sentence explaining one has to be true of every member the fallback reached.
+  `tests/atlas/` checks the claim rather than the wording now, holding each sentence to the
+  **strongest** relation it asserts — the first version checked the weaker property and a mutant
+  restoring *"a directory sibling"* survived it; four mutants are killed now.
+
+  The review also caught the e2e predicting which board the console would open from `atlas.challenges`
+  order (id order, so `archaeology-` first) where `challengeFor` serves **tier** order — the two
+  disagree on 20 of the 27 subjects carrying more than one board, and it passed only because today's
+  guide suggestion carries exactly one. It reads the choice set off the screen and matches the board
+  now. And three prose defects, all the same shape as the four already corrected this session: a
+  clinching sentence in ADR-0020 falsified by its own table (*"states an undrawn cone edge"* is false
+  of **76 of the 86 rows it condemns** — they are undirected proximity, in nobody's key), a test
+  comment quoting a working tree that named no commit, and "32 sentences" for 40 sentences and 32
+  distinct namings. **One direction is recorded and deliberately not acted on**: Archaeology's
+  `sibling` sentence is a weakened atom of that commit's Placement key, and ticking the hinted subtree
+  on the Placement board is 100%-precise on 9 boards here and 4 on hono. The same exposure predates
+  this rung in the `neighbour` and `companion` arms; what ADR-0020 should not have implied is that the
+  set-size guard is *the* guard these classes need.
+
   **Next**: the **phenomenon catalogue** — a repo-independent vocabulary of ~30–60 structural
   phenomena, the atom that would let anything *transfer* to another repo, which is the other half of
   risk #1 — or **M5** by the roadmap (tree-sitter, 3–4 more languages), which is the larger bet since

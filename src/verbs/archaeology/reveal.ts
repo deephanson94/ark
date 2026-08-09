@@ -70,7 +70,16 @@ const WITNESS: Readonly<
   Record<string, { readonly text: string; readonly guard: 'adjacent' | 'siblings' | 'partners' | null }>
 > = {
   neighbour: { text: 'a commit that touched this file’s import neighbours', guard: 'adjacent' },
-  sibling: { text: 'a commit that touched this file’s own directory', guard: 'siblings' },
+  // **"corner of the tree", not "own directory", and the difference was a false
+  // sentence.** `sibling` reads `corpus.byDirPrefix.get(home)`, and `analyse()`
+  // registers every node under *every prefix* of its directory — so that bucket
+  // is the whole **subtree**, not the directory. Measured before this wording:
+  // 14 of this repo's 124 `sibling` rows and 40 of hono's 118 named a commit
+  // that touched nothing in the subject's actual directory, which one
+  // `git show --stat` falsifies. The guard below counts the same subtree, so
+  // the strategy, the guard and the sentence quantify over one set instead of
+  // three.
+  sibling: { text: 'a commit that touched this file’s own corner of the tree', guard: 'siblings' },
   mentions: { text: 'a commit whose message names this file', guard: null },
   companion: { text: 'a commit that touched this file’s usual travelling companions', guard: 'partners' },
 };
@@ -100,19 +109,35 @@ export function revealOf(
   }
 
   // How many files each guarded existential quantifies over. A set of one makes
-  // *"a file in this file's directory"* name that file, which is an atom of the
-  // commit's Placement key — the leak decision 9's guards exist for, measured at
-  // 7 `sibling` slots here and 5 on `honojs/hono` before this guard.
+  // *"a file in this file's corner of the tree"* name that file, which is an atom
+  // of the commit's Placement key — the leak decision 9's guards exist for.
+  //
+  // **The subtree, matching `byDirPrefix` and therefore matching the strategy.**
+  // An exact-directory count was a third population, different from both the set
+  // the strategy draws from and the set the sentence describes; a guard that
+  // counts something else is not a guard.
+  //
   // `directoryOf`, not an inline `lastIndexOf` — a path with no slash makes
   // `slice(0, -1)` return the path minus its last character, which is a
-  // directory no file is in, so a root-level subject would have counted zero
-  // siblings and silently withheld a class it was entitled to state.
-  const siblings = new Set<NodeRef>();
+  // directory no file is in.
   const home = directoryOf(node.path);
+  const inHome = (path: string): boolean => {
+    const dir = directoryOf(path);
+    return dir === home || dir.startsWith(`${home}/`);
+  };
+  const siblings = new Set<NodeRef>();
   for (const [ref, other] of graph.atlas.nodes.entries()) {
-    if (ref !== subject && directoryOf(other.path) === home) siblings.add(ref);
+    if (ref !== subject && inHome(other.path)) siblings.add(ref);
   }
-  const sizes = { adjacent: adjacent.size, siblings: siblings.size, partners: partners.size };
+  // **A root-level subject has no corner.** `home` is `''` there, so the bucket
+  // is the entire repo and *"it touched this file's own corner of the tree"* is
+  // true of every commit and worth nothing — the degenerate end of the same
+  // set-size argument, at the other extreme. 24 rows here, 25 on hono.
+  const sizes = {
+    adjacent: adjacent.size,
+    siblings: home === '' ? 0 : siblings.size,
+    partners: partners.size,
+  };
   const witnesses = readWitness(challenge);
   const witnessFor = (id: AtlasId): string | null => {
     const entry = WITNESS[witnesses.get(id) ?? ''];

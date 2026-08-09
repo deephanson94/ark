@@ -562,7 +562,10 @@ describe('the reveal', () => {
     // thing that knows.
     const witnesses = witnessesOn(ATLAS, labelled(challenge, 'sibling'));
     expect(witnesses.length).toBeGreaterThan(5);
-    for (const text of witnesses) expect(text).toContain('own directory');
+    // "corner of the tree", not "own directory": the strategy reads the whole
+    // subtree out of `byDirPrefix`, so the narrower word was false on 14 of this
+    // repo's 124 rows and 40 of hono's 118.
+    for (const text of witnesses) expect(text).toContain('own corner of the tree');
   });
 
   it('withholds a neighbourhood class when the neighbourhood holds one file', () => {

@@ -431,6 +431,31 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
   the size of the set you are quantifying over.**
 
+- **A class label is not a class description, and the gloss is where the lie gets in.** Every §8.3
+  distractor strategy starts at its textbook bucket and **widens** when that bucket runs dry —
+  `treeSibling` walks outward through shared path prefixes, Placement's `structural` is an unbounded
+  BFS, Archaeology's `sibling` reads a `byDirPrefix` bucket that is the whole *subtree* because
+  `analyse()` registers every node under every prefix of its directory. So a witness sentence
+  glossing the class with §8.3's *definition* is false of exactly the rows the fallback reached:
+  *"a directory sibling"* on **100 of this repo's 231 Blast Radius rows and 193 of hono's 297**,
+  *"this file's own directory"* on 14 and 40. The label was right every time; the sentence explaining
+  it was a **separate claim nobody checked**, and it is falsifiable by a player reading the two paths
+  in one row. Three further traps sat inside the same five lines: a **root-level subject**'s bucket is
+  the entire repo, so the existential is true of everything and worth nothing (24 rows here, 25 on
+  hono); the guard counted a *third* population, so strategy, guard and sentence quantified over three
+  different sets; and the strategy's own docstring ("the deepest bucket only") was wrong about what
+  the deepest bucket contains. **Test the claim, not the wording — and hold each sentence to the
+  strongest relation it asserts**: a first version of that test checked only the weaker shared-segment
+  property, and a mutant restoring *"a directory sibling"* survived it.
+- **The order a deck is stored in is not the order the player is served.** The e2e's witness step
+  picked its board from `atlas.challenges`, which is sorted by **id** — so `archaeology-…` sorts
+  before everything — while `challengeFor` serves a node's bucket in **tier** order, blast radius
+  first. Measured, the two disagree on **20 of the 27 subjects carrying more than one board**, and the
+  step passed only because that day's guide suggestion happened to carry exactly one. Ark indexes
+  itself and CI plays a different merge commit, so this is the `.first()` landmine's exact mechanism
+  one level up: not "which row" but "which *board*". Read what is on screen and match it; never
+  predict what the shell will serve.
+
 - **A declaration and the sentence that uses it can describe different populations, and only the
   declaration is checkable.** `placement.discloses` yields `touchedFact` for `challenge.truth`, which
   is all it *can* do — it takes a challenge and no atlas. Its reveal searched `commit.files`, the

@@ -37,8 +37,19 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
  */
 const WITNESS: Readonly<Record<string, string>> = {
   busy: 'one of the repo’s most-edited files',
-  structural: 'an import-graph neighbour of the change',
-  treeSibling: 'a file living where the change landed',
+  // **"near", not "a neighbour of"** — this strategy's breadth-first walk from
+  // the anchors is *unbounded*, so a row at two hops has no import edge to
+  // anything on the board and "neighbour" is false of it: 4 of this repo's 100
+  // rows and 24 of hono's 188. That is the same shape ADR-0020 decision 4
+  // withheld Companion's `structural` over, asked of this verb's identical
+  // class — measured, the leak direction is empty here (0 deep rows on either
+  // repo sit in a shipped Blast Radius key), so what was wrong was the sentence
+  // and not the class.
+  structural: 'a file the import graph puts near the change',
+  // Widened through shared prefixes exactly as the other two verbs' siblings
+  // are, so "living where the change landed" is false on 6 rows here and 63 of
+  // hono's 173.
+  treeSibling: 'a near neighbour, in the tree, of a file the commit changed',
   nameSimilar: 'a name-alike of a file the commit changed',
   mentioned: 'a file the message names',
 };

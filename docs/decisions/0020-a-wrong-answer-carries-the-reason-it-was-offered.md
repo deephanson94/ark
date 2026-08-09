@@ -211,12 +211,19 @@ states a connection nothing draws:
 | …**in the subject's own shipped Blast Radius answer key** | **1** | **1** |
 
 One slot per repo. Small, and this codebase guarded a four-slot leak in ADR-0019. What settles it is
-that the label **buys nothing where it is safe**: on the direct ring the note already says it. So
-withholding the class costs redundancy and buys the leak — and by decision 3 the choice is
-whole-class or nothing, since a per-row guard would make silence mean "deep structural".
+that the label **buys nothing where it is safe**: on the direct ring — 133 of 219 rows here, 96 of 264
+on hono — the note already says it. By decision 3 the choice is then whole-class or nothing, since a
+per-row guard would make silence mean "deep structural".
 
-An honest caveat, since decision 3 says absence is not an assertion: that argument also licenses
-*speaking* it and accepting one slot. The measured redundancy is what tips it, not the leak alone.
+**Two honest caveats, and a review pressed on both.** First, decision 3 says absence is not an
+assertion, which also licenses *speaking* the class and accepting one slot; the measured redundancy is
+what tips it, not the leak alone. Second, and sharper: *"the label states an undrawn cone edge where it
+is not safe"* is **false of most of the rows it condemns**. Of the 86 rows beyond the ring here, only
+10 are transitive dependents; the other **76 are undirected proximity, in nobody's answer key** — and
+they are precisely the population where the label would be neither redundant nor a leak, i.e. the one
+place it would say something no other surface says. The decision stands on decision 3's whole-class
+rule rather than on that sentence, and a later session wanting to revive `structural` should start
+from those 76 rows.
 
 ## Decision 5 — `distant` says nothing, and that is a decision
 
@@ -273,16 +280,76 @@ F the accumulator never heard of, which is an atom of F's Archaeology answer key
 ADR-0019 decision 7 exists to stop, routed around by a sentence written a milestone earlier — the
 direction that document says nobody looks in.
 
-Measured: **32 sentences across 16 of ark's 40 Placement boards named a file outside their own answer
-key, and 20 of those atoms are members of a shipped Archaeology answer key**; 12 across 5 boards on
-hono, 4 of them in a key. And `whyYes` runs on every truth member of every board played, so this was
-not conditional on a wrong pick — it shipped on every Placement reveal.
+Measured: **40 sentences — 32 distinct (board, file) namings — across 16 of ark's 40 Placement boards
+named a file outside their own answer key, and 20 of those atoms are members of a shipped Archaeology
+answer key**; 12 across 5 boards on hono, 4 of them in a key. (A review reproducing this got 22 for
+the last figure; the two counts differ in whether a repeated atom is counted once, and the point does
+not turn on it.) `whyYes` runs on every truth member of every board played, so this was not
+conditional on a wrong pick — it shipped on every Placement reveal.
 
 The fix is to search the **answer key** instead, which makes everything a sentence names a file
 already on the board. One consequence had to be followed through: the fall-through then read *"no
 import edge to anything else in the commit"*, which the narrowing makes **false** — the commit may
 well have touched an unsampled neighbour. It reads *"anything else on this board"* now. A sentence
 that survives a change to what it quantifies over was not really about the quantifier.
+
+## Found by an adversarial review of the finished code
+
+All of one class, and it is a class this document did not have a name for: **a witness glosses its
+class, and three glosses stated §8.3's *definition* of the strategy rather than the strategy that
+ships.** Every one of those strategies starts at its textbook bucket and **widens** when the bucket
+runs dry, so the gloss was false on rows the widening reached — and falsifiable by a player reading
+the two paths in one row of the panel, or with one `git show --stat`.
+
+| gloss | false on, ark | false on, hono |
+|---|---|---|
+| Blast Radius `treeSibling` — *"a directory sibling"* | **100 of 231** | **193 of 297** |
+| Companion `treeSibling` — *"a directory sibling"* | 23 of 148 | **121 of 211** |
+| Placement `treeSibling` — *"living where the change landed"* | 6 of 118 | 63 of 173 |
+| Placement `structural` — *"an import-graph **neighbour**"* | 4 of 100 | 24 of 188 |
+| Archaeology `sibling` — *"this file's own **directory**"* | 14 of 124 | 40 of 118 |
+
+The last is the worst and had a second defect inside it. `sibling` reads
+`corpus.byDirPrefix.get(home)`, and `analyse()` registers every node under **every prefix** of its
+directory — so that bucket is the whole **subtree**, which its own docstring ("the deepest bucket
+only") does not say. Worse, a **root-level subject** has `home === ''`, whose bucket is the entire
+repo: *"it touched this file's own corner of the tree"* is then true of every commit and worth
+nothing. 24 such rows here, 25 on hono; they are withheld now, by a board-level guard, per decision 3.
+
+And the guard counted a **third** population — exact-directory siblings — so the strategy, the guard
+and the sentence quantified over three different sets. That is ADR-0019's *"two individually-honest
+surfaces that disagree"* with a third surface added, and the repair is that all three now read the
+subtree.
+
+**The lesson is narrower than "check your wording", and it is the one worth keeping**: a class label
+is not a class description. `treeSibling` is a correct *name* for what the generator did on every one
+of those rows; the sentence explaining it to a player is a separate claim, and it has to be true of
+**every member of the class, including the ones the fallback reached** — not of the paragraph in
+§8.3 the strategy was named after. `tests/atlas/` now checks the claim rather than the wording, and
+holds each sentence to the **strongest** relation it asserts: the first version checked only the
+weaker property, and a mutant restoring *"a directory sibling"* survived it.
+
+Placement's `structural` is the same shape as the class decision 4 withheld from Companion, asked of
+the verb decision 4 never asked it of. Measured, its leak direction is empty — **0 deep rows on either
+repo sit in a shipped Blast Radius key** — so what was wrong there was only the sentence.
+
+## The direction this opens, measured and not acted on
+
+Archaeology's `sibling` is the one class with no pre-existing `whyNot` arm, so it is genuinely new
+content — and it tells the player *"commit C touched at least one file under `dir(F)`"*, which is a
+weakened atom of C's **Placement** key. ADR-0019 decision 7's direction, one verb further on.
+
+Measured over the spoken rows: **97 of ark's 100 name a commit that also ships a Placement board**
+(29 of hono's 91), and ticking that board's candidates *inside the hinted subtree* is 100%-precise on
+**9 boards here and 4 on hono**, and at least half-precise on 21 and 2.
+
+Not acted on, and the reasons are stated rather than assumed. It is an existential over a subtree
+rather than a name; the same exposure already exists in the `neighbour` and `companion` arms, which
+shipped in M4 and are not new here; and it has not been scored against a band, so it is a measured
+open question rather than a demonstrated gate failure. What this document should not have implied is
+that decision 6's set-size guard is *the* guard these classes need — it addresses the identity case
+and nothing else. Scoring the subtree hint as a `gate.ts` heuristic on the **Placement** board is the
+work this leaves behind.
 
 ## Consequences
 

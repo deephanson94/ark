@@ -45,7 +45,11 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
  */
 const WITNESS: Readonly<Record<string, string>> = {
   busy: 'one of the repo’s most-edited files',
-  treeSibling: 'a directory sibling',
+  // Not "a directory sibling": this strategy widens outward through shared path
+  // prefixes when the directory runs dry, so the textbook gloss is false on 23
+  // of this repo's 148 rows and **121 of hono's 211**. See the same note in
+  // `blastRadius/reveal.ts`.
+  treeSibling: 'a near neighbour in the directory tree',
   nameSimilar: 'a name-alike',
 };
 

@@ -162,7 +162,13 @@ describe('revealOf', () => {
     const { note } = noteFor(fixture(), ['src/a/sibling.ts'], 'src/a/sibling.ts', {
       'src/a/sibling.ts': 'treeSibling',
     });
-    expect(note?.witness).toBe('a directory sibling');
+    expect(note?.witness).toBe('a near neighbour in the directory tree');
+    // **Not "a directory sibling"**, which is §8.3's wording and was false on 100
+    // of this repo's 231 such rows: the strategy widens outward through shared
+    // path prefixes when the directory runs dry. The claim the sentence does
+    // make is checked rather than quoted.
+    const shared = (note?.label ?? '').split('/')[0] === 'src';
+    expect(shared).toBe(true);
     // Two different claims on one row: what is true of the file, and what the
     // board meant by offering it.
     expect(note?.note).toContain('same directory');

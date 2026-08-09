@@ -639,10 +639,87 @@ describe('challenges', () => {
         expect(note.witness, `${challenge.id} names ${barred} for ${note.id}`).toBeNull();
       }
     }
-    // Both classes are on this repo's deck — 13 co-change and 218 structural at
-    // the time of writing — so a zero here means the assertion has stopped
+    // Both classes are on this repo's deck — **12 co-change and 219 structural on
+    // a clean clone of `4bb1996`**, which is the tree ADR-0020's tables were
+    // measured on. (The first version of this comment said 13 and 218, taken
+    // from an uncommitted working tree and naming no commit: the self-indexing
+    // landmine, in a comment.) A zero here means the assertion has stopped
     // reaching the thing it is about, not that the leak is gone.
     expect(seen).toBeGreaterThan(50);
+  });
+
+  it('speaks no witness that is false of the row it is on', () => {
+    // **The defect an adversarial review found and nothing here could see.** A
+    // witness sentence glosses its class, and three of them glossed §8.3's
+    // *definition* of the class rather than the strategy that ships — which
+    // widens outward when its first bucket runs dry. So "a directory sibling"
+    // was false on 100 of this repo's 231 such rows and 193 of hono's 297, and
+    // "this file's own directory" was false on 14 archaeology rows here and 40
+    // on hono. Falsifiable by a player reading the two paths in one row, or with
+    // one `git show --stat`.
+    //
+    // A test on the wording pins whatever wording is there. This one asserts the
+    // **claim**: for the two glosses that make a checkable structural claim,
+    // check it against the atlas on every row that speaks them.
+    const graph = buildGraph(atlas);
+    const dirOf = (path: string): string =>
+      path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    let treeRows = 0;
+    let cornerRows = 0;
+    for (const challenge of atlas.challenges) {
+      const verb = VERBS[challenge.verb];
+      const truth = new Set(challenge.truth);
+      const witness = readWitness(challenge);
+      const reveal = verb.reveal(atlas, graph, challenge, {
+        score: 0,
+        correct: [],
+        missed: [...challenge.truth],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      const subjectRef = graph.refById.get(challenge.subject);
+      for (const note of reveal.notes) {
+        if (note.witness === null || subjectRef === undefined) continue;
+        const strategy = witness.get(note.id);
+
+        // **Check the strongest claim the sentence makes, not the weakest.** The
+        // first version of this asserted only the shared-segment property, so a
+        // gloss that said "a directory sibling" *and* "directory tree" passed —
+        // the mutant reintroducing the original defect survived. A sentence
+        // claiming the narrower relation is held to the narrower relation.
+        const subjectPath = nodeAt(graph, subjectRef).path;
+        if (strategy === 'treeSibling') {
+          treeRows++;
+          const sameDirectory = dirOf(note.label) === dirOf(subjectPath);
+          const sameBranch = note.label.split('/')[0] === subjectPath.split('/')[0];
+          expect(
+            note.witness.includes('sibling') ? sameDirectory : sameBranch,
+            `${challenge.id}: "${note.witness}" is false of ${note.label} against ${subjectPath}`,
+          ).toBe(true);
+        }
+
+        if (strategy === 'sibling') {
+          cornerRows++;
+          const home = dirOf(subjectPath);
+          const commit = atlas.history.commits.find((entry) => commitIdFor(entry.sha) === note.id);
+          const exact = (commit?.files ?? []).some(
+            (ref) => ref !== subjectRef && dirOf(nodeAt(graph, ref).path) === home,
+          );
+          const subtree = (commit?.files ?? []).some((ref) => {
+            if (ref === subjectRef) return false;
+            const dir = dirOf(nodeAt(graph, ref).path);
+            return dir === home || dir.startsWith(`${home}/`);
+          });
+          expect(
+            note.witness.includes('own directory') ? exact : subtree,
+            `${challenge.id}: "${note.witness}" is false of ${note.label} against ${home}`,
+          ).toBe(true);
+        }
+      }
+    }
+    // Both populations must exist, or the loop above proved nothing.
+    expect(treeRows).toBeGreaterThan(50);
+    expect(cornerRows).toBeGreaterThan(20);
   });
 
   it('names only files its own answer key holds', () => {
