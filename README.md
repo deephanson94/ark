@@ -137,7 +137,7 @@ offered (ADR-0020).
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
-| Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. |
+| Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. Its one *accepted* exposure is now closed rather than held under the bar — the structure-blind subtree hint is withheld, since a margin of 0.011 on a self-indexing repo lasted three milestones. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
 | Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |

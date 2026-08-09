@@ -555,44 +555,19 @@ describe('the reveal', () => {
     return reveal.notes.filter((note) => witness.has(note.id)).map((note) => note.witness);
   }
 
-  it('states the `sibling` class, which the graph cannot re-derive at all', () => {
-    // The class this whole feature exists for: `whyNot` has no `sibling` arm, so
-    // on the real repo the graph reconstructs those picks as `companion` 103
-    // times out of 124 and as `sibling` **zero** times. The label is the only
-    // thing that knows.
-    const witnesses = witnessesOn(ATLAS, labelled(challenge, 'sibling'));
-    expect(witnesses.length).toBeGreaterThan(5);
-    // "corner of the tree", not "own directory": the strategy reads the whole
-    // subtree out of `byDirPrefix`, so the narrower word was false on 14 of this
-    // repo's 124 rows and 40 of hono's 118.
-    for (const text of witnesses) expect(text).toContain('own corner of the tree');
-  });
-
-  it('withholds a neighbourhood class when the neighbourhood holds one file', () => {
-    // ADR-0019 decision 9's guard, inherited: a relation over a set of one *is*
-    // an identity, so "a commit that touched this file's own directory" names
-    // that file when the directory holds exactly one other. Measured at 7 slots
-    // on this repo and 5 on hono before the guard.
+  it('withholds the `sibling` class, whatever the row', () => {
+    // **The most expensive silence in the product, and the measurement is why.**
+    // This class used to say *"a commit that touched this file's own corner of
+    // the tree"* — a string prefix, which is the one hint a player can run
+    // knowing nothing about the repo. Pooled across the boards hinting about one
+    // commit it scores **0.800** against a 0.78 bar (ADR-0021's re-measure).
     //
-    // Built by **moving two files into a directory of their own**, which changes
-    // `path` and not `originPath` — so every node id, every commit's file list
-    // and the whole deck are the ones the assertion above just ran against. A
-    // second hand-built fixture would be measuring a different repo.
-    const moved = validateAtlas({
-      ...ATLAS,
-      nodes: ATLAS.nodes.map((node) =>
-        node.path === 'src/core/engine.ts'
-          ? { ...node, path: 'solo/engine.ts' }
-          : node.path === 'src/core/state.ts'
-            ? { ...node, path: 'solo/state.ts' }
-            : node,
-      ),
-    });
-    // `engineId` looks the node up by **path**, which is the field just moved;
-    // the id comes from `originPath` and has not changed, so ask the original.
-    const board = boards(moved).find((entry) => entry.subject === engineId(ATLAS));
-    if (board === undefined) throw new Error('fixture produced no board for the moved engine');
-    const witnesses = witnessesOn(moved, labelled(board, 'sibling'));
+    // Withheld by **class**, not by row and not by board: the best single board
+    // reaches 0.667 and the 0.800 is the union of three, so no guard that sees
+    // one board can bound it.
+    const witnesses = witnessesOn(ATLAS, labelled(challenge, 'sibling'));
+    // Non-vacuous: the rows are still generated and still on the board — it is
+    // the *sentence* that is gone, not the wrong answers.
     expect(witnesses.length).toBeGreaterThan(5);
     for (const text of witnesses) expect(text).toBeNull();
   });
@@ -629,6 +604,11 @@ describe('the reveal', () => {
     expect(new Set(correct.map((note) => note.note)).size).toBe(correct.length);
   });
 
+  // **The `sibling` arm of this guard is gone with the class it guarded.** There
+  // used to be a companion test that moved two files into a directory of their
+  // own so a corner held exactly one other file, proving the existential could
+  // not name it. The corner set went when `sibling` was withheld (ADR-0021's
+  // re-measure); the guard itself is still live for the two classes below.
   it('never lets a relation over one file become that file’s name', () => {
     // A subject with exactly one co-change partner or one import neighbour makes
     // "it changed a file that usually moves with this one" name that file — an

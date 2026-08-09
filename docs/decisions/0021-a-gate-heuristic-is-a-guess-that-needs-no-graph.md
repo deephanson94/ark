@@ -350,3 +350,50 @@ therefore delete questions for a strategy nobody could have used"*.
 - **Whether a 1-file Placement answer key is worth shipping.** Two of hono's three decided boards have
   `truth.length === 1`, where any guess that picks the one right file scores 1.000. That is a property
   of the board, not of the hint.
+
+
+---
+
+## Re-measured 2026-08-09 — the knife edge was crossed, and the class is withheld
+
+**Status of this ADR: amended. Decision 3's acceptance of the `sibling` arm is withdrawn.**
+
+This document held the structure-blind hint *below* the bar rather than closing it, at a measured
+per-commit union of **0.769** against 0.78. `CLAUDE.md` already carried the landmine that quoting a
+lower bound as a margin is how a knife edge gets recorded as a plateau. The margin was **0.011**, and
+ark indexes itself: one ordinary commit re-rolled the Placement deck and the union reached **0.800**
+at `1220b9b`. The canary this ADR calls "the deliverable, not the prose" is what caught it, on a
+commit whose content had nothing to do with the deck — and its closing line named the remedy in
+advance: *gate it, or withhold the class.*
+
+**Both cheaper guards were measured, and both are refuted.**
+
+| guard | result |
+|---|---|
+| **By board** — where this ADR's post-ship review left it, on the finding that "every firing is visible to a single board" | **Cannot bound it.** The best single board reaches **0.667**; the 0.800 is the union of **three** boards hinting about one commit. No guard that sees one board can see this guess. |
+| **Narrow the class to the subject's exact directory** — which would also have retired the subtree/directory mismatch the witness text was reworded for | **0.800, unchanged.** The subject sits in a leaf directory, so subtree and directory are the same set. Breadth was never the lever. |
+
+ADR-0020's escalation is *withhold by class, or by board, never by row*. By-board is measurably
+insufficient here, so it runs out at **by class**, and `WITNESS.sibling` is removed.
+
+**The price, and the half of it that is better than it sounds.** 171 of this repo's 626 spoken
+witness rows go silent, and 101 of hono's 734 — across 34 of 40 boards here and 30 of 54 there. It is
+the largest withholding in the product. But `discloses` never calls the reveal and neither does any
+generator, so **the deck is unchanged: 171 explanations are withheld and not one question is lost.**
+The wrong answers are still on the boards; only the sentence saying why is gone.
+
+**What replaced the canary.** The old test scored the union against `CTRL_F_THRESHOLD`. The new one
+asserts the **silence** — every `sibling` row's witness is `null`, over a non-vacuous population of
+more than 20 rows — which is a stronger claim than a score under a threshold, because there is no bar
+left to drift across. Both halves were mutation-checked: restoring the class reddens the atlas canary
+and the unit test, and a deck that stopped *picking* the class reddens the vacuity guard.
+
+**The set-size guard went with it.** `sizes.siblings` counted the subject's corner so that a corner of
+one could not have the existential name it, and so a root-level subject said nothing. Both are moot
+with the class unspoken, and a size nothing reads is infrastructure with no consumer. The guard
+mechanism is still live for `adjacent` and `partners`.
+
+**What this changes about the *next* threshold.** Nothing about the bar; everything about how a margin
+under one is recorded. A measured exposure held 0.011 below a threshold on a self-indexing repo is not
+a decision, it is a deferral with a timer on it — and the timer ran out three milestones later, on a
+commit that changed two test files and a comment.

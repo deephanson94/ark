@@ -2351,3 +2351,30 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: **M5 — Go first**, unblocked and with its kill point decided; then `npx ark`, then the
   phenomenon catalogue.
+
+- **ADR-0021's accepted exposure came due, and the canary it shipped is what caught it.** That ADR
+  held Archaeology's structure-blind `sibling` hint *below* the Ctrl+F bar rather than closing it —
+  a per-commit union of **0.769** against 0.78, a margin of **0.011**. Ark indexes itself, so an
+  ordinary commit (two test files and a comment, nothing near the deck) re-rolled the Placement deck
+  and the union reached **0.800** at `1220b9b`. The old canary's closing line had named the remedy
+  three milestones in advance: *gate it, or withhold the class.*
+
+  **Both cheaper guards were measured and both are refuted.** By board — where ADR-0021's own
+  post-ship review left this, on the finding that every firing was visible to a single board — cannot
+  bound it: the best single board reaches **0.667** and the 0.800 is the union of **three**.
+  Narrowing the class to the subject's exact directory scores **0.800 too**, because the subject sits
+  in a leaf directory and subtree and directory are the same set. ADR-0020's escalation therefore
+  runs out at *by class*, and `WITNESS.sibling` is removed.
+
+  **The price is 171 of this repo's 626 spoken witness rows and 101 of hono's 734 — and no deck
+  change whatever.** No generator calls a reveal, so the wrong answers are still on the boards and
+  every question still ships; what is gone is the sentence saying why. The scary-sounding 27% was
+  counting rows in the wrong ledger, and it is the reason two cheaper guards got hunted first.
+
+  The canary now asserts the **silence** — every `sibling` row unspoken, over a non-vacuous population
+  of 20+ rows — which is stronger than a score under a threshold because there is no bar left to drift
+  across. Mutation-checked both ways: restoring the class reddens the atlas canary and the unit test;
+  a deck that stopped picking the class reddens the vacuity guard. The subtree set-size guard went
+  with the class it guarded; the mechanism is still live for `adjacent` and `partners`.
+
+  **Next**: **M5 — Go first**. The two small fixes of #32 rebase on top of this.

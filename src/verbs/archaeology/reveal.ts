@@ -42,7 +42,7 @@ import type { Atlas, AtlasId, Challenge, Graph, NodeRef } from '../../atlas/inde
 import { byteCompare, commitAt, commitIdFor, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
 import { commitLabel } from '../members.js';
-import { directoryOf, nameTokens } from '../paths.js';
+import { nameTokens } from '../paths.js';
 import { messageWords } from './corpus.js';
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
@@ -60,26 +60,42 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
  * others makes the *absence* of a line say which class the row was in, which is
  * the fact being withheld — ADR-0020's by-class-or-by-board rule.
  *
- * `sibling` is the class this feature exists for: it has no arm in `whyNot` at
- * all, so the graph re-derives it as `companion` on 103 of this repo's 124
- * `sibling` slots and gets it right **zero** times.
+ * `sibling` **was** the class this feature exists for — it has no arm in
+ * `whyNot` at all, so the graph re-derives it as `companion` on 103 of this
+ * repo's 124 `sibling` slots and gets it right zero times — and it is now
+ * **withheld**, which is the most expensive silence in this file and the one
+ * with the least room for argument. See below.
  *
  * `distant` is absent because it is padding rather than a strategy.
  */
 const WITNESS: Readonly<
-  Record<string, { readonly text: string; readonly guard: 'adjacent' | 'siblings' | 'partners' | null }>
+  Record<string, { readonly text: string; readonly guard: 'adjacent' | 'partners' | null }>
 > = {
   neighbour: { text: 'a commit that touched this file’s import neighbours', guard: 'adjacent' },
-  // **"corner of the tree", not "own directory", and the difference was a false
-  // sentence.** `sibling` reads `corpus.byDirPrefix.get(home)`, and `analyse()`
-  // registers every node under *every prefix* of its directory — so that bucket
-  // is the whole **subtree**, not the directory. Measured before this wording:
-  // 14 of this repo's 124 `sibling` rows and 40 of hono's 118 named a commit
-  // that touched nothing in the subject's actual directory, which one
-  // `git show --stat` falsifies. The guard below counts the same subtree, so
-  // the strategy, the guard and the sentence quantify over one set instead of
-  // three.
-  sibling: { text: 'a commit that touched this file’s own corner of the tree', guard: 'siblings' },
+  // **`sibling` is withheld, and it is the third class to be — ADR-0021's
+  // re-measure.** It used to read *"a commit that touched this file's own corner
+  // of the tree"*. That sentence is a **string prefix**, which is the one kind of
+  // hint a player can run with no knowledge of the repository at all, and
+  // pooling it across the boards that hint about one commit decides that
+  // commit's Placement board: **0.800 against a 0.78 bar**, measured at
+  // `1220b9b`.
+  //
+  // The cheaper guards were measured and both are refuted, which is why this
+  // costs what it costs:
+  //
+  //  - **By board.** ADR-0020's rule escalates class → board → nothing, and a
+  //    by-board guard is where a previous review left this. It cannot bound it:
+  //    the best *single* board reaches **0.667**, and the 0.800 is the union of
+  //    **three**. No guard that sees one board can see this guess.
+  //  - **Narrowing the class to the subject's exact directory** — which would
+  //    also have fixed the subtree/directory mismatch this comment used to be
+  //    about. It scores **0.800 too**: the subject sits in a leaf directory, so
+  //    subtree and directory are the same set. The breadth was never the lever.
+  //
+  // The price is stated rather than buried: **171 of this repo's 626 spoken
+  // rows and 101 of hono's 734** lose their sentence, across 34 of 40 boards
+  // here and 30 of 54 there. That is the largest withholding in the product and
+  // it buys a leak that is closed rather than held 0.011 under a bar.
   mentions: { text: 'a commit whose message names this file', guard: null },
   companion: { text: 'a commit that touched this file’s usual travelling companions', guard: 'partners' },
 };
@@ -117,27 +133,13 @@ export function revealOf(
   // the strategy draws from and the set the sentence describes; a guard that
   // counts something else is not a guard.
   //
-  // `directoryOf`, not an inline `lastIndexOf` — a path with no slash makes
-  // `slice(0, -1)` return the path minus its last character, which is a
-  // directory no file is in.
-  const home = directoryOf(node.path);
-  const inHome = (path: string): boolean => {
-    const dir = directoryOf(path);
-    return dir === home || dir.startsWith(`${home}/`);
-  };
-  const siblings = new Set<NodeRef>();
-  for (const [ref, other] of graph.atlas.nodes.entries()) {
-    if (ref !== subject && inHome(other.path)) siblings.add(ref);
-  }
-  // **A root-level subject has no corner.** `home` is `''` there, so the bucket
-  // is the entire repo and *"it touched this file's own corner of the tree"* is
-  // true of every commit and worth nothing — the degenerate end of the same
-  // set-size argument, at the other extreme. 24 rows here, 25 on hono.
-  const sizes = {
-    adjacent: adjacent.size,
-    siblings: home === '' ? 0 : siblings.size,
-    partners: partners.size,
-  };
+  // **The subtree set went with the `sibling` sentence it guarded.** It counted
+  // the subject's corner of the tree so that a corner holding one file could not
+  // have the existential name it, and so that a root-level subject — whose
+  // corner is the whole repo — said nothing. Both guards are moot now that the
+  // class is never spoken, and a size nothing reads is the infrastructure-with-
+  // no-consumer smell this repo has a landmine about.
+  const sizes = { adjacent: adjacent.size, partners: partners.size };
   const witnesses = readWitness(challenge);
   const witnessFor = (id: AtlasId): string | null => {
     const entry = WITNESS[witnesses.get(id) ?? ''];
