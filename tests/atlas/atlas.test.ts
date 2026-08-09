@@ -28,7 +28,7 @@ import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { CTRL_F_THRESHOLD, directoryOf, isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import { commitIdFor, isCommitId, isNodeId } from '../../src/atlas/index.js';
-import { touchedFact } from '../../src/verbs/index.js';
+import { decidedFact, touchedFact } from '../../src/verbs/index.js';
 import { VERBS } from '../../src/verbs/index.js';
 import { placement } from '../../src/verbs/placement/index.js';
 import { TARGET_MIX as BLAST_MIX } from '../../src/verbs/blastRadius/index.js';
@@ -532,6 +532,43 @@ describe('challenges', () => {
         ).toBe(false);
       }
     }
+  });
+
+  it('never offers a commit whose own board its hint would decide', () => {
+    // **ADR-0022**, and the second cross-verb property no single verb can see.
+    // Archaeology's reveal says *"it touched a file that usually moves with this
+    // one"*; ADR-0016's wire gate knows nothing about an open Placement board,
+    // so the map draws that seed's partners beside the commit's own board and
+    // the sentence becomes a lookup — measured at band A on 3 of this repo's 40
+    // Placement boards, through the visible wires alone.
+    //
+    // The fix is decision 7's shape, not a withheld sentence: Placement scores
+    // the guess against its own key and declares a verdict, and the commit is
+    // never offered. This asserts the result on the shipped deck.
+    const graph = buildGraph(atlas);
+    const verdicts = new Set<string>();
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'placement')) {
+      for (const fact of placement.decidedBy(graph, challenge)) verdicts.add(fact);
+    }
+    // Vacuity guard, and it is the whole reason this test can be trusted: a
+    // declaration that fires nowhere would satisfy every assertion below while
+    // asserting a behaviour the product does not have. Measured at 36 verdicts
+    // over 16 boards here and 22 over 15 on hono @ `cf78528`.
+    expect(verdicts.size, 'placement declared no verdicts at all').toBeGreaterThan(5);
+
+    let checked = 0;
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
+      const truth = new Set(challenge.truth);
+      for (const candidate of challenge.candidates) {
+        if (truth.has(candidate)) continue;
+        checked++;
+        expect(
+          verdicts.has(decidedFact(candidate, challenge.subject, 'coChange')),
+          `${challenge.id} offers ${candidate}, whose placement board its co-change hint decides`,
+        ).toBe(false);
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
   });
 
   it('labels every wrong answer with a strategy its own verb declares', () => {

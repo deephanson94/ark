@@ -32,7 +32,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
-import { disclosesNothing } from '../disclosure.js';
+import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -151,6 +151,9 @@ export const companion: Verb = {
    * disclosure, and therefore not declared here.)
    */
   discloses: disclosesNothing,
+  /** Its candidates are files, and a hint about a relation between files is
+   * this verb's own question rather than a shortcut past it. ADR-0022. */
+  decidedBy: decidedByNothing,
 };
 
 export type { CoChangeIndex, CoChangeRow } from './cochange.js';

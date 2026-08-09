@@ -21,7 +21,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
-import { disclosesNothing } from '../disclosure.js';
+import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -129,6 +129,9 @@ export const blastRadius: Verb = {
    * Archaeology's keys, which are commits: an import edge states no commit.
    */
   discloses: disclosesNothing,
+  /** Its candidates are files, and a hint about a relation between files is
+   * this verb's own question rather than a shortcut past it. ADR-0022. */
+  decidedBy: decidedByNothing,
 };
 
 export type { Corpus, DistractorChoice, DistractorContext, StrategyId } from './distractors.js';
