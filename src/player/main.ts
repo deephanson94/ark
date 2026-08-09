@@ -452,16 +452,6 @@ function start(scene: Scene, root: HTMLElement): void {
     });
   };
 
-  // Notes are re-derived on every open, never cached: a claim can decay between
-  // sessions and a cached sentence would go on asserting something the graph has
-  // stopped supporting (ADR-0011 decision 3).
-  const notebook = createNotebook();
-  const refreshNotes = (): void => {
-    notebook.update(fieldNotes(scene.graph, progress, liveness));
-  };
-  notebook.toggle.addEventListener('click', refreshNotes);
-
-  const hud = createHud(scene.atlas, () => turnTo(facingNorth(camera), null), [notebook.toggle]);
   /**
    * Why this atlas has no deck, or `null` when the deck is simply finished.
    *
@@ -472,6 +462,17 @@ function start(scene: Scene, root: HTMLElement): void {
    */
   const mapCoverage = sourceCoverage(scene.atlas);
   const deckRefusal = mapCoverage.deckRefused ? coverageSentence(mapCoverage) : null;
+
+  // Notes are re-derived on every open, never cached: a claim can decay between
+  // sessions and a cached sentence would go on asserting something the graph has
+  // stopped supporting (ADR-0011 decision 3).
+  const notebook = createNotebook(mapCoverage.deckRefused);
+  const refreshNotes = (): void => {
+    notebook.update(fieldNotes(scene.graph, progress, liveness));
+  };
+  notebook.toggle.addEventListener('click', refreshNotes);
+
+  const hud = createHud(scene.atlas, () => turnTo(facingNorth(camera), null), [notebook.toggle]);
 
   /**
    * Set by a grade, spent when the panel closes: **the map turns between

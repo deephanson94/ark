@@ -2258,7 +2258,9 @@ One line per iteration: what changed, and what to do next.
   **The refusal creates a second cause for a number, and two panels had already merged them.** The
   guide said *"every question answered"* over a repo that was never asked one, and the HUD said it
   again 141 lines down the same file, in different words off a different variable. Both repaired from
-  one value.
+  one value — and grepping the rest of the player for readers of an empty deck found a third, the
+  field notes' *"answer a question and what you establish is written down here"*, which invites an
+  action a refused repo does not have.
   What is missing is now said **on the map with no threshold at all** (`1 source file not on this map`
   here, `920` on hugo): labelling and refusing are separate mechanisms with separate triggers, and one
   sentence in `src/atlas/coverage.ts` serves the terminal and the player so they cannot drift.

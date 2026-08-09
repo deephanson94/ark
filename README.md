@@ -168,7 +168,7 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `sveltejs/svelte` maps 3,467 TypeScript files and misses 4,462 `.svelte` ones, and ships. The HUD
   says so on every frame; the deck is not refused. ADR-0025 §4.2.
 - **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
-  2 of 586 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
+  2 of 606 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
   built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
   runs `build` (as "typecheck") before `test:unit`. Pre-existing at `b9f4d33` and reproduced on a
   clean clone of it. The testing table in `CLAUDE.md` lists the two as independent rows, which is

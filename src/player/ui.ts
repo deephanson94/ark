@@ -436,12 +436,27 @@ export interface Notebook {
  * because a claim can decay between sessions and a cached sentence would go on
  * asserting something the graph stopped supporting (ADR-0011 decision 3).
  */
-export function createNotebook(): Notebook {
+export function createNotebook(deckRefused: boolean): Notebook {
   const list = el('ul', 'notes-list');
-  const empty = el('div', 'notes-empty', [
-    'Nothing proved yet. Answer a question and what you establish is written down here — ',
-    'only what you proved, never what you were shown.',
-  ]);
+  // **Two empty states here too, and the second is not "nothing yet".** With the
+  // deck refused (ADR-0025) there is no question to answer, so *"answer a
+  // question and what you establish is written down here"* invites something the
+  // product does not have. It is a weaker defect than the guide's — an
+  // impossible instruction rather than a false claim — but it is the same one a
+  // panel over.
+  const empty = el(
+    'div',
+    'notes-empty',
+    deckRefused
+      ? [
+          'Nothing to prove here. Ark could not read enough of this repository ',
+          'to ask a question about it, so there is nothing to write down.',
+        ]
+      : [
+          'Nothing proved yet. Answer a question and what you establish is written down here — ',
+          'only what you proved, never what you were shown.',
+        ],
+  );
   const heading = el('div', 'notes-title', ['FIELD NOTES']);
   const close = el('button', 'console-close', ['✕']);
   close.type = 'button';

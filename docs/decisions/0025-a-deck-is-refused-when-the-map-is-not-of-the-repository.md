@@ -10,7 +10,7 @@
   information lives on a filesystem the player is forbidden to touch, so `npm run index` is the whole
   of it (`docs/atlas-format.md` §4).
 - **Code shipped by this ADR**: `src/atlas/coverage.ts` (the rule), `walk.ts`'s `UNREAD` table, the
-  `report.unreadable` field, the CLI guard, and two player surfaces.
+  `report.unreadable` field, the CLI guard, and three player surfaces.
 
 ---
 
@@ -209,7 +209,7 @@ repo is a judgement about intent, and pillar 1 is that ark does not make those.
 
 ## 6. Where the refusal is said
 
-Three surfaces, one sentence, composed in `src/atlas/coverage.ts` so the terminal and the player
+Four surfaces, one sentence, composed in `src/atlas/coverage.ts` so the terminal and the player
 cannot drift — `CLAUDE.md` has a landmine about two individually-honest panels stating contradictory
 facts about one population.
 
@@ -232,6 +232,13 @@ facts about one population.
    spelled with different words off a different variable — *the bug you already fixed is still there,
    one line down*, so both were repaired from one value rather than one of them being repaired
    twice.
+4. **The field notes' empty state**, found by grepping the rest of the player for readers of an empty
+   deck after fixing the first two. *"Nothing proved yet. Answer a question and what you establish is
+   written down here"* invites an action a refused repo does not have. Weaker than the other two — an
+   impossible instruction rather than a false claim — and included because "I fixed the two I knew
+   about" is how the third one survives. The inspector's *"the rest of the radius is earned"* is the
+   same shape and is **left**: on a refused repo it sits over a map whose import radius is empty
+   anyway, and rewording it would be guessing at a case with no measurement behind it.
 
 ---
 
