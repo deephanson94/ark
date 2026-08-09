@@ -62,19 +62,22 @@ re-weighting **alone**.
 And the totals cannot be compared, which is the point of having a third row of arithmetic. The deck
 reshuffles — one more board refused by the gate here, one fewer capped — so a total mixes *how
 exposed a board is* with *which boards shipped*. The counterfactual that holds the board fixed is the
-per-commit one. Same commit, same answer key (`truth` is sampled from the commit's file list and
-never from the distractor pool, so it is byte-identical across rows), different wrong answers:
+per-commit one. Same commit, same answer key, different wrong answers — and *"same answer key"* is
+checked rather than read off the code: `truth` is sampled from the commit's own file list and `size`
+depends on the pool's *size* rather than its contents, so nothing a strategy does can move it, and
+diffing the two atlases confirms it on the **30 boards that ship in both — 0 answer keys differ**.
 
 | same-board comparison | boards in both | verdicts | fell on | rose on | boards with a verdict | mean best score |
 |---|---|---|---|---|---|---|
 | ark, 1 → 3 | 30 | 26 → **27** | **0** | 1 | 12 → 12 | 0.697 → **0.697** |
 | ark, 1 → 2 (re-weight only) | 40 | 33 → 33 | 0 | 0 | 16 → 16 | 0.703 → 0.699 |
 | hono, 1 → 3 | 40 | 24 → **19** | 4 | 1 | 10 → 8 | 0.596 → 0.586 |
+| hono, 1 → 2 (re-weight only) | 38 | 14 → 14 | 0 | 0 | 9 → 9 | 0.599 → 0.603 |
 | hono, 2 → 3 (strategy only) | 28 | 13 → **8** | 3 | 0 | 7 → 6 | 0.587 → 0.568 |
 
 **On the bootstrap repo the strategy removes not one verdict.** On hono it removes 5 of 24 over 2 of
-10 boards, and that drop is the strategy rather than the mix (row 2 → 3 isolates it; row 1 → 2 moves
-nothing on shared boards).
+10 boards, and that drop is the strategy rather than the mix: the two re-weight-only rows move
+**nothing** on shared boards, on either repo, while row 2 → 3 accounts for the whole fall.
 
 ## Decision 1 — this ships as a §8.3 board improvement, and closes nothing
 
@@ -82,7 +85,8 @@ It is not a gate and it must not be described as one. ADR-0022's `decidedBy` sta
 nothing in this change licenses relaxing it, and the residual it bounds is unchanged.
 
 What ships is the thing §8.3 asked for: **98 wrong answers on this repo and 141 on hono** drawn from
-the class it calls best, over 40 and 54 boards, where there were none. Getting one wrong is the
+the class it calls best — over **39 of this repo's 40 boards and 48 of hono's 54** — where there were
+none. Getting one wrong is the
 lesson that a file which always travels with `parse.ts` did not have to travel *this* time — which is
 the distinction between coupling and causation, and the one this verb is otherwise silent about.
 
@@ -166,7 +170,8 @@ Three things outweigh it, all measured at `d91ba27` and `7075369e`:
 
 Withholding is by **class**, never by row, so the silence says nothing about which row it is on.
 
-**What it costs, stated rather than hidden.** `distant` ships **0** rows on both repos, so an
+**What it costs, stated rather than hidden.** Counted rather than assumed: of the two silent classes,
+`coChange` ships **98 rows here and 141 on hono** and `distant` ships **0 on both**, so an
 unexplained row on a Placement board is now *uniquely* a co-change pick, and a player who works the
 class partition out across boards recovers the disjunction anyway. That is real, and it is paid on
 ADR-0019's own line: a **stated** atom is refused, an **implied** relation is accepted. The panel is
@@ -214,9 +219,10 @@ a pair the repo recorded, so presence needs no floor.
 **Speak the class behind a `truth.length >= 2` guard.** Legal, and it buys the 90 rows the identity
 case does not cover — at the price of stating a Companion pair on 52 of 98 rows here. Decision 4.
 
-**Invert the matrix inside this file.** It is already inverted ad hoc in four places in this tree; a
-fifth copy is how two of them come to disagree. `companion/cochange.ts`'s index is memoised per
-atlas, and `placement/generate.ts` already reaches into `companion/` for the path corpus.
+**Invert the matrix inside this file.** It is already inverted ad hoc in four places in this tree
+beside the canonical one; a fifth ad-hoc copy is how two of them come to disagree.
+`companion/cochange.ts`'s index is memoised per atlas, and `placement/generate.ts` already reaches
+into `companion/` for the path corpus.
 
 ## Consequences
 
@@ -231,8 +237,12 @@ atlas, and `placement/generate.ts` already reaches into `companion/` for the pat
   `duplicateKey` instead. Row 2 leaves the deck at 34, so this is the strategy's doing — and it is
   still incidental, the same shape as ADR-0022's deck growing on a `duplicateKey` reshuffle. Nothing
   was designed for it and nothing should be read into it. hono's is unchanged at 54.
-- **Budgets unmoved**: index 461 ms on this repo, 1,426 ms on hono, both an order under the ceiling.
-  One matrix row per key member per commit, off an index built once.
+- **Budgets unmoved.** One matrix-row walk per key member per commit, off an index built once per
+  atlas — so there is nothing per-node to pay for. `npm run budget` reports every ceiling clear;
+  index time stays in the same 0.4–0.5 s band this repo was already in (475 ms on a clean clone of
+  `d91ba27`, 402–461 ms with the change on a working tree the change itself has grown) and hono's
+  425 files index in **1,426 ms** against a 10,000 ms ceiling. Run-to-run variance is wider than the
+  effect, which is the honest way to say it did not cost anything.
 - **`report.distractorMix` gains a row** and the CLI prints it, so the class announces its own supply
   on every index.
 
@@ -247,5 +257,6 @@ atlas, and `placement/generate.ts` already reaches into `companion/` for the pat
   scores 1.000 on them. Two documents have now tripped over the same board shape.
 - **Whether the four ad-hoc inversions of `history.coChange` should become one.**
   `blastRadius/generate.ts`, `archaeology/corpus.ts`, `archaeology/reveal.ts` and
-  `placement/index.ts` each build their own; this change imports the fifth rather than writing it,
-  which is the smallest step in the right direction and not the step.
+  `placement/index.ts` each build their own beside `companion/cochange.ts`'s; this change **imports
+  the canonical one rather than writing a fifth**, which is the smallest step in the right direction
+  and not the step.
