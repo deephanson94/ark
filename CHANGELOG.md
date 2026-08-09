@@ -2412,7 +2412,7 @@ One line per iteration: what changed, and what to do next.
   hugo **2.5% → 98.5%** and cobra **0.0% → 100.0%** flip from refused to shipping, **456 and 59
   challenges** where ADR-0025 withdrew 144 and 48; `prometheus/prometheus` — the repo ADR-0025 §9.2
   named as sitting inside the band it had called empty, shipping *"48 Blast Radius boards about the
-  React web UI of a Go time-series database"* — now ships **34 of 63 about Go packages**. The other
+  React web UI of a Go time-series database"* — now ships **35 of 63 about Go packages**. The other
   rows cannot move, and that is a proof rather than a re-measure: adding a language to `SCANNED`
   strictly increases the mapped share, so **no repo can go from shipping to refused**.
 

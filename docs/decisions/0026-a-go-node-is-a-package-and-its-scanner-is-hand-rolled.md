@@ -236,7 +236,7 @@ refusal.
 
 **`prometheus/prometheus` is the row worth reading.** ADR-0025 §9.2 recorded it as the mainstream
 repo sitting inside the band that document had called empty: 25.0% mapped, shipping *"48 Blast Radius
-boards about the React web UI of a Go time-series database."* It now ships **34 of 63** Blast Radius
+boards about the React web UI of a Go time-series database."* It now ships **35 of 63** Blast Radius
 boards about Go packages, and the Known-gaps row it earned is retired by measurement rather than by
 argument.
 
@@ -254,7 +254,7 @@ Checked rather than assumed, on the shipped indexer:
 
 | | hugo | prometheus | cobra |
 |---|---|---|---|
-| Blast Radius boards (of which Go) | 156 (153) | 63 (34) | 0 (0) |
+| Blast Radius boards (of which Go) | 156 (153) | 63 (35) | 0 (0) |
 | **distractor slots that are the same Go package as the subject** | **0** | **0** | **0** |
 | two nodes standing for one package | none | none | none |
 | same-*directory* slots (sibling **packages**) | 384 on 104 boards | 293 on 54 boards | 0 |
@@ -378,18 +378,24 @@ hugo, cobra and prometheus — 3, 1 and 5 `go.mod` files, so the nested-module w
 
 | branch | hugo | cobra | prometheus |
 |---|---|---|---|
-| `internal` / `external` | 2,184 / 3,829 | 12 / 178 | 1,718 / 4,793 |
+| `internal` / `external` | 2,184 / 3,829 | 12 / 178 | 1,726 / 4,785 |
 | **root package** (`''` normalised to `.`) | 0 | **11** | 0 |
+| **a module of ours other than the nearest** (§4.1) | 0 | 0 | **8** |
 | `replace` into the repo | 0 | 0 | 0 |
 | no `go.mod` in scope | 0 | 0 | 0 |
 | relative or absolute specifier | 0 | 0 | 0 |
 | `import "C"` | 0 | 0 | 0 |
 
-Two things follow and both are acted on rather than noted.
+Three things follow and all are acted on rather than noted.
 
 **The root-package normalisation is cobra's whole story** — 11 of its 12 internal sites — and fires
 nowhere else, which is why the bug it fixes (§2, `asPackage`) was findable only on the smallest repo
 in the set.
+
+**The cross-module row is prometheus's, and it is 8 sites** — none of them a `replace`, since no
+`go.mod` in either repo has a local one. Eight sites out of 6,511, on one repo of three, and they
+carried the wrong answer key in §4.1. The rate says nothing; **position does**, which is ADR-0024
+§4.1's own finding arriving from the other direction.
 
 **`import "C"` was deleted, and the other three dead branches were kept.** The cgo case returned
 *exactly* what the line below it already returns — `C` has no dot, so Go's own standard-library rule
