@@ -137,7 +137,10 @@ interface PendingEdge {
  * Everything downstream reads a key and a kind and never asks which language
  * produced them.
  */
-function nodeKeyOf(file: WalkedFile): { readonly key: string; readonly kind: NodeKind } {
+function nodeKeyOf(file: {
+  readonly path: string;
+  readonly lang: Lang;
+}): { readonly key: string; readonly kind: NodeKind } {
   if (file.lang === 'go') return { key: goPackageDir(file.path), kind: 'dir' };
   return { key: file.path, kind: 'file' };
 }
@@ -177,6 +180,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   const goContext = {
     packages: goPackages,
     moduleFor: (path: string) => goModules.moduleFor(path),
+    modules: goModules.modules,
   };
   const context = {
     // `indexed` is "paths that became nodes", and a `.go` file does not — its
@@ -275,6 +279,26 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     }
   }
 
+  // **A member the walk could not read leaves its node incomplete.** A file we
+  // meant to parse and dropped for size or for a NUL byte contributes no
+  // imports, so the node that owns it has outgoing edges we know are missing.
+  // At file granularity that was harmless — the file never became a node, so
+  // nothing could depend on it, and an import *pointing at* it already resolves
+  // `unresolved` through `onDisk`. A node standing for a **directory** keeps
+  // existing, which is how a 600 KiB generated `.pb.go` would turn its package
+  // into a certified non-dependent of whatever it imports. Guardrail 4 refuses
+  // instead, and the marker says which file did it.
+  for (const file of walked.dropped) {
+    // `keyByPath` cannot answer this — a dropped file is not in `walked.files`.
+    // Only a *grouped* node is at risk: a file node the walk dropped never
+    // became a node at all, and an import pointing at it already resolves
+    // `unresolved` through `onDisk`.
+    const { key } = nodeKeyOf(file);
+    if (key !== file.path && membersByKey.has(key)) {
+      push(unresolvedByKey, key, `${file.path} (not read)`);
+    }
+  }
+
   // ---- history ----------------------------------------------------------
   const git = await readGitHistory(options.root, options.maxCommitsWalked);
   const history = buildHistory(git, paths, (path) => keyByPath.get(path) ?? path, options.history);
@@ -363,9 +387,11 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       path: key,
       originPath: originByKey.get(key) ?? key,
       kind: kindByKey.get(key) ?? 'file',
-      // Every member of a node shares its language by construction: grouping
-      // keys off the language, so a directory node holds only Go and a file
-      // node holds one file.
+      // Every member of a node shares its language by construction. The key is
+      // a *path* — a directory for Go, the file itself otherwise — and the
+      // reason one key never mixes languages is that only Go groups: a `dir`
+      // key can be reached by `.go` files alone, and every other key is one
+      // file. A second grouped language would have to keep that true.
       lang: members[0]?.lang ?? 'other',
       fileCount: members.length,
       loc: members.reduce((total, file) => total + file.loc, 0),
@@ -581,24 +607,39 @@ export function claimOrigins(
   const live = new Set(ordered);
   const taken = new Set<string>();
   const origins = new Map<string, string>();
-  // A node proposing its own key settles first, so a rename cannot take a live
-  // node's identity away from it.
+  // A node's own key is never available to anybody else — `live` blocks it —
+  // so a rename cannot take a live node's identity away from it. There used to
+  // be a first pass settling self-claims before this loop; it was a **no-op on
+  // every input**, because the `!live.has` test below already produces the same
+  // answer for them, and the comment on it claimed to enforce an invariant this
+  // line enforces. A guard that cannot change an outcome is worse than none.
   for (const key of ordered) {
-    if (proposals.get(key) !== key) continue;
-    origins.set(key, key);
-    taken.add(key);
-  }
-  for (const key of ordered) {
-    if (origins.has(key)) continue;
     const proposed = proposals.get(key) ?? key;
-    const free = !live.has(proposed) && !taken.has(proposed);
+    const free = proposed !== key && !live.has(proposed) && !taken.has(proposed);
     origins.set(key, free ? proposed : key);
     taken.add(free ? proposed : key);
   }
   return origins;
 }
 
-/** The directory most of these files came from. Ties break by byte order. */
+/**
+ * The directory a **strict majority** of these files came from, or the node's
+ * own key when there is no majority.
+ *
+ * **A plurality with a byte-order tie-break was the first rule, and it decided
+ * real identities by coin flip.** Measured across hugo and prometheus: 316
+ * packages, 28 of which trace somewhere other than their own directory — and
+ * **15 of the votes are ties**, including `hugolib/versions` splitting 1–1
+ * between `hugolib/doctree` and itself, and `langs` splitting 2–2 with
+ * `helpers`. A tie-break picks one, and *the other one wins as soon as either
+ * side gains a file* — which changes the node's id and silently drops every
+ * pass the player has saved against it, the exact asset ADR-0002 exists to
+ * protect.
+ *
+ * A majority cannot tie. It still moves if membership changes enough to shift
+ * it, and that residual is stated in ADR-0026 rather than argued away: a `dir`
+ * node's identity is inferred where a file node's is recorded.
+ */
 function votedDirectory(
   members: readonly string[],
   originByFile: ReadonlyMap<string, string>,
@@ -609,16 +650,10 @@ function votedDirectory(
     const directory = goPackageDir(originByFile.get(path) ?? path);
     votes.set(directory, (votes.get(directory) ?? 0) + 1);
   }
-  let best = fallback;
-  let bestVotes = 0;
   for (const directory of [...votes.keys()].sort(byteCompare)) {
-    const count = votes.get(directory) ?? 0;
-    if (count > bestVotes) {
-      best = directory;
-      bestVotes = count;
-    }
+    if ((votes.get(directory) ?? 0) * 2 > members.length) return directory;
   }
-  return best;
+  return fallback;
 }
 
 function dedupeSorted(values: readonly string[]): string[] {

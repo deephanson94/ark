@@ -2434,3 +2434,43 @@ One line per iteration: what changed, and what to do next.
   **Next**: M5's Python half — ADR-0024 decision 2 makes it a *history* language, the map and the
   three git verbs and never Blast Radius, which is a smaller product than the roadmap implies and
   needs its own measurement. Then `npx ark` packaging, then the phenomenon catalogue.
+
+- **A post-ship adversarial review of the above, and it found a wrong answer key.** Two of the three
+  checks ADR-0026 shipped with read `atlas.json` — and the defect ADR-0024 §6.1 is *about* is a
+  **missing edge**, which no atlas-derived check can see. The instrument that is not vacuous reads
+  the repo's **source**: does a candidate marked wrong contain an import naming the subject's
+  package? Answer: **2 of prometheus's 34 Go boards**, including one where the candidate's
+  `server.go:23` reads `writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"` and
+  the subject *is* that package. Cause: `documentation/examples/remote_storage/go.mod` `require`s its
+  own repo's root module with no `replace`, so matching only the **nearest** module fell through to
+  that require list and called the import external. *Whose repo is this path in* and *which `go.mod`
+  carries the requires* are different questions; a specifier under any module declared in this repo
+  now resolves against it, longest path first. **2 → 0**, and prometheus gains an edge and a board.
+
+  **The sentence excusing a mechanism from inspection was the one to check.** §2.1 closed with *"no
+  Go repo in this set moved a package inside the retained commit window, so this is argued from the
+  mechanism rather than from a repo where it fired."* Measured: **69 split origin votes across 316
+  packages, 15 of them ties** — `hugolib/versions` splitting 1–1, `langs` 2–2 — plus the collision
+  fallback firing. A byte-order tie-break had been deciding real node identities, and the loser wins
+  the moment either side gains a file, which changes the id and drops the player's saved passes. It
+  is a **strict majority** now, which cannot tie; 7 of hugo's and 28 of prometheus's packages keep an
+  inferred origin and they are plainly real moves (`resource` → `resources`, `pkg/rulefmt` →
+  `model/rulefmt`). Two guards had mutants that **survived** the first suite and now have tests; a
+  third turned out to be a no-op on every input and is deleted.
+
+  **Adding `.go` to `SCANNED` moved its oversized files out of every tally there is** — no longer
+  `unreadable` (right) and never `unsupported` (they are `tooLarge`), so invisible on both sides of
+  ADR-0025's ratio *and* unparsed. Harmless while a node was a file; a silent missing edge once a
+  node is a directory, because the package survives without its member. ADR-0025 §9.3 had named this
+  as the dangerous direction. `WalkResult.dropped` now carries them and the owning node is marked
+  `unresolved`, so guardrail 4 refuses instead of guessing. It fires zero times on the three repos
+  and is fixed anyway.
+
+  **Deliberately not fixed, and recorded instead: the player calls every Go package a "file"** — on
+  all 153 hugo and 34 prometheus Go boards, and cobra renders its root package as `.` in a prompt.
+  `Verb.prompt` has no atlas, so the fix is a contract change across four verbs and the console, and
+  wording belongs to the verb rather than the console that would be the cheap place for it. The
+  boards are correct; the noun is not. `README.md` Known gaps, with the counts.
+
+  **Next**: the noun, then M5's Python half — a *history* language, the map and the three git verbs
+  and never Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was.

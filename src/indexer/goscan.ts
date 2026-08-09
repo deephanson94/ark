@@ -56,8 +56,6 @@ export interface GoFacts {
    * and `Write` matched across unrelated types.
    */
   readonly exports: readonly string[];
-  /** The `package` clause, or null if the file has none. */
-  readonly packageName: string | null;
 }
 
 /**
@@ -66,7 +64,10 @@ export interface GoFacts {
  *
  * Newlines survive so offsets and line structure are preserved — the
  * declaration scan below reads column 0, which only means anything if the
- * masked text has the same shape as the source.
+ * masked text has the same shape as the source. The one exception is an
+ * **unterminated** interpreted string, where the closing quote is written over
+ * the newline that ended it; that is malformed Go, it reached none of the 942
+ * files measured, and the cost is a lost export rather than a phantom import.
  */
 function maskGo(source: string): { masked: string; literals: Map<number, string> } {
   const out = new Array<string>(source.length);
@@ -143,7 +144,6 @@ function unescape(body: string): string {
 }
 
 const IMPORT = /\bimport\b/g;
-const PACKAGE = /^package[ \t]+([A-Za-z_][\w]*)/m;
 /**
  * `func Name(`, `type Name`, `var Name`, `const Name` — at column 0.
  *
@@ -220,11 +220,13 @@ export function scanGoModule(source: string): GoFacts {
   }
 
   imports.sort((a, b) => a.at - b.at);
-  return {
-    imports,
-    exports: sortedUnique(exportedDeclarations(masked)),
-    packageName: PACKAGE.exec(masked)?.[1] ?? null,
-  };
+  // No `packageName` here, deliberately. It was computed, tested, and read by
+  // nothing in production — the `RevealNote.route` pattern the commit before
+  // this one deleted a field for. The one thing it was wanted for, checking
+  // that a directory holds a single package clause (§2), is a measurement taken
+  // once by a scratch probe, not a guard the indexer needs: a repo that broke
+  // the rule would get a coarser node, never a wrong answer key.
+  return { imports, exports: sortedUnique(exportedDeclarations(masked)) };
 }
 
 /**
@@ -234,6 +236,11 @@ export function scanGoModule(source: string): GoFacts {
  * it to start with one of four keywords — so "column 0 plus a keyword" is a
  * cheap and exact test for *top level*. A name inside a function body is
  * indented and is never reached.
+ *
+ * **It reads one name per declaration**, so `var A, B = 1, 2` yields `A` alone.
+ * That is an undercount in the same direction as the one-tab rule below, and it
+ * is stated for the same reason: an export ark does not name costs a thinner
+ * panel, and one it names wrongly is a false claim about the reader's own repo.
  */
 function exportedDeclarations(masked: string): string[] {
   const names: string[] = [];

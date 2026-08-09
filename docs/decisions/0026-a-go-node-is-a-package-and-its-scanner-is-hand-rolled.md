@@ -147,6 +147,16 @@ So a `dir` node's origin is the **plurality** of its members' origin directories
 case that matters (a package moved wholesale) and survives the one that breaks a unanimity rule (a
 package moved, then given a new file whose origin is its current path).
 
+**It is a strict majority, and the first draft's plurality decided real identities by coin flip.**
+Measured across hugo and prometheus: **316 packages, 69 with a split vote, of which 15 are ties** —
+`hugolib/versions` splitting 1–1 between itself and `hugolib/doctree`, `langs` splitting 2–2 with
+`helpers`, `promql/promqltest` 2–2 with `promql`. A byte-order tie-break picks one, and **the other
+wins the moment either side gains a file**, which changes the node's id and silently drops every pass
+the player saved against it — the exact asset ADR-0002 exists to protect. A majority cannot tie. The
+cost is 4 packages on hugo losing an inferred origin they should never have had; the survivors are
+plainly real moves (`resource` → `resources`, `hugofs/glob` → `hugofs/hglob`, `pkg/rulefmt` →
+`model/rulefmt`).
+
 **And the collision must be resolved rather than thrown.** The old loop threw on two nodes proposing
 one origin, which was safe while every node was a file — `applyRenames` guarantees two live *files*
 never claim one historical path. A package **split** breaks that: carve `pkg/b` out of `pkg/a` and
@@ -156,8 +166,23 @@ ADR-0002's own — first claimant in a fixed order keeps it, the loser keeps its
 one clause a file node never needed: **a node's own key can never be taken from it**, so a rename can
 never steal a live node's identity.
 
-Four cases, unit-tested: moved wholesale, moved-then-grown, split, and two nodes tracing to a dead
-directory.
+Seven cases, unit-tested: moved wholesale, moved-then-grown, a tie, no-majority, a split, two nodes
+tracing to a dead directory, and one node trying to inherit an identity a live node is still using.
+The last two exist because their guards' mutants **survived** the first draft of the suite — and a
+third guard, a first pass settling self-claims, turned out to be a no-op on every input and is gone.
+
+**How often this fires, since §2.1's first draft claimed it did not.** hugo: 193 packages, 149
+unanimous on their own directory, 8 unanimous elsewhere, 36 split. prometheus: 123 packages, 70 / 20
+/ 33. After the majority rule, **7 of hugo's and 28 of prometheus's dir nodes ship with an inferred
+origin** — so the vote, the tie-break *and* the collision fallback all fired on real repos, dozens of
+times. This document first closed §2.1 with *"no Go repo in this set moved a package inside the
+retained commit window, so §2.1 is argued from the mechanism rather than from a repo where it
+fired."* **That was false, and it was the sentence excusing the machinery from inspection.**
+
+**The residual is stated rather than argued away**: a `dir` node's identity is *inferred* where a
+file node's is *recorded*, so it can still move if membership changes enough to shift the majority.
+That is a real cost of package granularity, it has no fix short of git recording directory renames,
+and it is in `README.md`'s Known gaps.
 
 ### 2.2 A Placement answer key names packages, because a commit's file list is projected once
 
@@ -244,6 +269,57 @@ supposed to exist.
 `tests/atlas/` cannot see any of this, because it indexes ark and ark has no Go in it. The
 end-to-end check — real walk, real build, real validator, over a temp Go repo — is
 `tests/unit/gopackages.test.ts`, which is in `tests/unit/` only because it runs in 120 ms.
+
+### 4.1 The row above is a tautology, and the instrument that is not found two wrong answer keys
+
+**The same-package row cannot read non-zero.** A package is one node, node paths are unique, and a
+board never holds its own subject — so that measurement confirms the construction and nothing more.
+It is worth taking (the construction could have failed) and it is worth saying it is not evidence
+about anything else. The invariant row above it has the same shape one level up: it compares
+candidates against **the atlas's own edges**, so it is structurally blind to a *missing* edge —
+which is precisely the class ADR-0024 §6.1 is about.
+
+So the check that is not vacuous reads the repo's **source**: for every Go board, does a candidate
+marked *wrong* contain an import naming the subject's package, through any module declared in this
+repo? Direct dependence, read off the import block, which is what a player can do.
+
+| | before | after |
+|---|---|---|
+| hugo, 153 Go boards | 0 | 0 |
+| **prometheus, 34 → 35 Go boards** | **2** | **0** |
+
+Both were real. `documentation/examples/remote_storage/go.mod` requires
+`github.com/prometheus/prometheus v0.308.1` with **no `replace`**, so an import of
+`github.com/prometheus/prometheus/prompb/…` matched the *nearest* module's require list, was called
+external, drew no edge — and the package whose `server.go:23` reads
+`writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"` was certified a
+**non-dependent of that very package** and offered as a wrong answer, with a `coChange` witness
+whose §8.3 gloss (*co-changes but does not import*) was false of it too.
+
+The fix is that **whose repo a path is in** and **which `go.mod` carries the requires** are different
+questions: a specifier under *any* module declared in this repo now resolves against that module,
+longest path first, before any require list is consulted. Go's own toolchain is entitled to answer
+differently — it would fetch the published v0.308.1 — but pillar 2 is *the repo is the level*, and
+ADR-0008's prompt promises dependence *"directly, or through a chain of imports"*.
+
+**None of the three checks ADR-0026 shipped with could have found this**, and that is the lesson
+worth keeping: two of them read the atlas, and the defect was a hole in the atlas.
+
+### 4.2 A member the walk could not read leaves its node incomplete
+
+Adding `.go` to `SCANNED` takes it out of the `UNREAD` tally — correct — and means a `.go` file
+dropped for **size or a NUL byte** is counted on neither side of ADR-0025's ratio *and* never
+scanned. At file granularity that is harmless: it never becomes a node, so nothing can depend on it,
+and an import pointing at it already resolves `unresolved` through `onDisk`. A **package** node keeps
+existing without it, so its outgoing edges are silently incomplete — a 600 KiB generated `.pb.go`
+would make its package a certified non-dependent of everything that file imports.
+
+ADR-0025 §9.3 named this exact direction (*"moving the tally after those checks would make a large Go
+file invisible"*) and adding Go to `SCANNED` did it. `WalkResult.dropped` now carries those files
+with their language, and `build.ts` marks the owning node `unresolved` so guardrail 4 refuses rather
+than guesses. **It fires zero times on the three repos** — their only dropped scannable files are two
+hugo testdata fakes and a 10 MB prometheus testdata JSON — and it is fixed anyway, because a
+wrong answer key that waits for the first repo with a big generated file is not a hypothetical.
 
 ---
 
@@ -417,6 +493,18 @@ on these three repos is zero sites.
   correctly disabled. It is fixed to read the verb it was served and to match a board by
   `labelById` — the both-arms map that already existed 300 lines above, and that this step alone did
   not use. Same landmine as the `.first()` one, one map along.
+- **The player calls every Go package a "file", on every board, and nothing can currently say
+  otherwise.** `blastRadius`'s *"Which of these **files** depend on it"*, Companion's *"Which of
+  these **files** have changed alongside"*, and every *"You proved N **files**"* are false of all 153
+  hugo and 34 prometheus Go boards; cobra additionally renders its root package as `.` in a prompt.
+  `Verb.prompt(challenge, labelOf)` is pure over a challenge and a label lookup and has **no atlas**,
+  so it cannot tell a package from a file — fixing it is a contract change across four verbs and the
+  console, and wording belongs to the verb (ADR-0020), not to the console that would be the cheap
+  place to put it. **Deliberately not done here**: it is a labelling defect on correct boards, it is
+  measured, and rushing a contract change at the end of the session that shipped the language is how
+  the next defect gets in. `README.md` Known gaps carries it. By ADR-0025 decision 5's own standard —
+  *"the cost of a wrong name is ark printing a false claim about the reader's own repo"* — it should
+  be the next thing fixed after Python.
 - The probe scripts, the tree-sitter comparison harness and the measurement scripts are scratch and
   are **not** committed. What is committed is this document, the code, and the tests.
 
@@ -431,6 +519,7 @@ on these three repos is zero sites.
   decision's only revisit condition; cobra is nearly that repo and ships **2** Go nodes, 1 edge and
   **0** Blast Radius boards, which is the honest reading of a library that is one package rather than
   a failure of the granularity.
-- **A directory rename that the plurality rule gets wrong.** The rule is measured on four synthetic
-  cases, not on a real repo's history — no Go repo in this set moved a package inside the retained
-  commit window, so §2.1 is argued from the mechanism rather than from a repo where it fired.
+- **A `dir` node whose majority moves.** The rule is now measured on real history (§2.1) and the
+  residual is structural: 35 packages across two repos carry an *inferred* origin, and a package
+  whose membership changes enough to shift the majority changes id and drops its saved passes. A fix
+  would need something git does not record.

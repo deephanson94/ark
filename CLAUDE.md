@@ -568,6 +568,36 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   did not move and did not need to; the sentence that needed to move was *"there is none in this
   set"*, which is a fact about the set being quoted as a fact about the world. **A gap in eleven
   samples is a gap in eleven samples.**
+- **Two checks that read the atlas cannot see a hole in the atlas, and the third one found two wrong
+  answer keys.** M5's Go work shipped with three verifications: no two nodes for one package (0 — and
+  *unreadable* as anything but 0, since node paths are unique and a board never holds its subject);
+  no same-package distractor slot (0, same tautology); and `candidates ∩ dependents = truth` with 0
+  violations. All three read `atlas.json`, and the defect ADR-0024 §6.1 is *about* is a **missing
+  edge**, which no atlas-derived check can see. The instrument that was not vacuous read the repo's
+  **source** — does a candidate marked wrong contain an import naming the subject's package? — and
+  found **2 of prometheus's 34 Go boards** marking as wrong a package whose `server.go` imports the
+  subject outright. Cause: a nested `go.mod` that `require`s its own repo's root module, so *whose
+  repo is this path in* was answered with the *nearest* module's require list. **When a rule is about
+  something the atlas might be missing, the check has to come from outside the atlas** — and note
+  which repo caught it: not the big one, not the bootstrap, but the one added late because another
+  ADR had named it.
+- **The sentence excusing a mechanism from inspection is the one to check first.** ADR-0026 §2.1
+  closed with *"no Go repo in this set moved a package inside the retained commit window, so this is
+  argued from the mechanism rather than from a repo where it fired."* Measured: **69 split votes
+  across 316 packages, 15 of them ties**, and the collision fallback firing too. So the plurality
+  rule, its byte-order tie-break and the fallback had all decided real node identities, dozens of
+  times, entirely unexamined — and a 1–1 tie flips the moment either side gains a file, which changes
+  the id and drops the player's saved passes. A strict majority cannot tie. The shape is the
+  proudest-paragraph landmine inverted: not the claim the document defends hardest, but the one it
+  uses to stop looking.
+- **Adding a language to `SCANNED` moves its unreadable files out of every tally there is.** A `.go`
+  file over the size cap is no longer `unreadable` (right — the extension is scanned) and is not
+  `unsupported` either (it is `tooLarge`), so it vanishes from both sides of ADR-0025's ratio *and*
+  is never parsed. Harmless at file granularity, where it simply never becomes a node; a **silent
+  missing edge** once a node stands for a directory, because the package survives without it.
+  ADR-0025 §9.3 had written down that this was the dangerous direction, and the change that took it
+  made no connection to that paragraph. **When you move an extension between the walk's tables, walk
+  every path a file of that extension can take afterwards** — not just the one the change is about.
 - **A test that predicts which board the shell will serve is a `.first()` in disguise, and this repo
   has now paid for it three times in the same file.** The e2e's board-playing step asserted Blast
   Radius's wording over *any* verb that was not Companion — a two-armed conditional standing in for a
@@ -1065,7 +1095,9 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **M5's Python half** — a *history* language, the map and the three git verbs and never
+Next action: **the noun** — the player calls every Go package a *"file"* on every board it ships
+(153 on hugo, 34 on prometheus), which `Verb.prompt`'s atlas-free signature cannot currently fix;
+then **M5's Python half** — a *history* language, the map and the three git verbs and never
 Blast Radius (ADR-0024 decision 2), which is a smaller product than the roadmap implies and needs its
 own measurement; score it against tree-sitter the way Go was scored before writing a scanner. Then, in
 rough order of size, packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the

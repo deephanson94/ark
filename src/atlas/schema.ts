@@ -165,7 +165,10 @@ export interface AtlasNode {
   readonly lang: Lang;
   /**
    * How many files on disk this node stands for. `1` for a `file` node,
-   * always; the count of source files in the directory for a `dir` one.
+   * always; for a `dir` one, the files **this node was built from** — which is
+   * not the same as the source files in that directory: `web/` holding
+   * `server.go` and `client.ts` has one `dir` node with `fileCount: 1` beside a
+   * separate `file` node for the TypeScript.
    *
    * **It exists because a ratio needs both sides in the same unit.**
    * `sourceCoverage` weighs what the map holds against what the walk

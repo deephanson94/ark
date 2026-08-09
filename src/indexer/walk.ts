@@ -206,6 +206,12 @@ export interface WalkedFile {
   readonly source: string | null;
 }
 
+/** A file we meant to parse and did not. See `WalkResult.dropped`. */
+export interface DroppedFile {
+  readonly path: string;
+  readonly lang: Lang;
+}
+
 export interface WalkResult {
   /** Sorted by path. */
   readonly files: readonly WalkedFile[];
@@ -223,6 +229,25 @@ export interface WalkResult {
    * `unsupported` — this is a refinement of that number, not a second bucket.
    */
   readonly unreadable: readonly UnreadableCount[];
+  /**
+   * Paths of files we **meant** to parse and could not — a `SCANNED` extension
+   * dropped for size or for a NUL byte. Sorted.
+   *
+   * These are counted in `skipped` like anything else, and they are *not* in
+   * `unreadable`, because `unreadable` is a refinement of `unsupported` and
+   * these are `tooLarge` or `binary`. So without this list they are invisible
+   * on both sides of ADR-0025's ratio — which was harmless while every node was
+   * a file (nothing can depend on a node that does not exist) and became a
+   * **missing edge** the moment a node stood for a directory: a Go package
+   * whose 600 KiB generated `.pb.go` was dropped keeps its node, loses that
+   * file's imports, and is then certified a non-dependent of whatever they
+   * named. `build.ts` marks the owning node `unresolved` so guardrail 4 can
+   * refuse rather than guess. ADR-0025 §9.3 predicted this exact direction.
+   *
+   * Carries the language because the grouping rule is per language and a
+   * dropped file is, by definition, not in `files` for anyone to look it up in.
+   */
+  readonly dropped: readonly DroppedFile[];
 }
 
 function extensionOf(name: string): string {
@@ -249,6 +274,7 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
   const onDisk = new Set<string>();
   const skips = new Map<SkipCount['reason'], number>();
   const unread = new Map<string, number>();
+  const dropped: DroppedFile[] = [];
   const note = (reason: SkipCount['reason']): void => {
     skips.set(reason, (skips.get(reason) ?? 0) + 1);
   };
@@ -263,7 +289,8 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
   const unreadable = [...unread.entries()]
     .map(([lang, count]) => ({ lang, count }))
     .sort((a, b) => byteCompare(a.lang, b.lang));
-  return { files, onDisk, skipped, unreadable };
+  dropped.sort((a, b) => byteCompare(a.path, b.path));
+  return { files, onDisk, skipped, unreadable, dropped };
 
   async function descend(relativeDir: string, inherited: readonly IgnoreLayer[]): Promise<void> {
     const absoluteDir = relativeDir === '' ? options.root : join(options.root, relativeDir);
@@ -322,12 +349,15 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
       const info = await stat(absolute);
       if (info.size > options.maxFileBytes) {
         note('tooLarge');
+        // A file we would have parsed. Recorded so whoever owns it can say so.
+        if (scanned !== undefined) dropped.push({ path, lang: scanned });
         continue;
       }
 
       const source = await readFile(absolute, 'utf8');
       if (looksBinary(source)) {
         note('binary');
+        if (scanned !== undefined) dropped.push({ path, lang: scanned });
         continue;
       }
 

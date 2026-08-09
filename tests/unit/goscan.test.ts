@@ -30,8 +30,10 @@ describe('the Go scanner reads what a file says', () => {
     expect(specifiers('package a\nimport "github.com/x/y/z"\n')).toEqual(['github.com/x/y/z']);
   });
 
-  it('reads the package clause', () => {
-    expect(scanGoModule('//go:build linux\n\npackage hugolib\n').packageName).toBe('hugolib');
+  it('reads one name per declaration, and says so', () => {
+    // `var A, B = 1, 2` yields `A` alone — an undercount in the same direction
+    // as the one-tab rule, and asserted rather than left to be discovered.
+    expect(scanGoModule('package a\nvar A, B = 1, 2\n').exports).toEqual(['A']);
   });
 });
 

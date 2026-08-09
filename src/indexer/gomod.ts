@@ -78,6 +78,27 @@ export interface GoContext {
   readonly packages: ReadonlySet<string>;
   /** The `go.mod` in scope for a file — the nearest ancestor, or null. */
   moduleFor(path: string): GoModule | null;
+  /**
+   * **Every** module declared anywhere in this repo, longest path first.
+   *
+   * Not the same question as `moduleFor`, and the difference is a wrong answer
+   * key. A repo with a nested module may have it `require` the root module as
+   * an ordinary versioned dependency — `prometheus/prometheus`'s
+   * `documentation/examples/remote_storage/go.mod` requires
+   * `github.com/prometheus/prometheus v0.308.1` with no `replace`. Matched
+   * against the *nearest* module only, an import of
+   * `github.com/prometheus/prometheus/prompb/…` falls through to that require
+   * list and is called **external**, so no edge is drawn and the importing
+   * package is certified a *non-dependent* of the very package its source
+   * imports. Measured: 2 of prometheus's 34 Go Blast Radius boards offered such
+   * a package as a wrong answer.
+   *
+   * Go's own toolchain is entitled to resolve that to the published v0.308.1.
+   * Ark is not asking that question — pillar 2 is *the repo is the level*, and
+   * ADR-0008's prompt promises dependence *"directly, or through a chain of
+   * imports"*, which a player reading the import block can see.
+   */
+  readonly modules: readonly GoModule[];
 }
 
 /** POSIX-join `base` with `rest`, normalising `.`/`..`. Null if it escapes. */
@@ -150,6 +171,20 @@ export function resolveGoImport(
   // `C` has no dot, so Go's own stdlib rule already returns exactly it.
   if (specifier.startsWith('.') || specifier.startsWith('/')) return { kind: 'unresolved' };
 
+  // **Any module in this repo, longest path first — not only the nearest.**
+  // The nearest one is what carries the require and replace lists; *whose repo
+  // is this path in* is a different question, and answering it with the wrong
+  // module is what turned a real import into a certified non-dependent. Longest
+  // first so a nested module beats its parent on a shared prefix.
+  for (const declared of context.modules) {
+    const own = underModule(declared, specifier);
+    if (own === null) continue;
+    // A path inside a module of ours that holds no indexed Go file is not an
+    // external package — it is a directory we did not index (generated,
+    // ignored, or simply absent). ADR-0003: we do not know.
+    return context.packages.has(own) ? { kind: 'internal', dir: own } : { kind: 'unresolved' };
+  }
+
   const module = context.moduleFor(fromPath);
   if (module === null) {
     // No `go.mod` in scope: the standard library is still knowable by Go's own
@@ -157,14 +192,6 @@ export function resolveGoImport(
     return isStandardLibrary(specifier)
       ? { kind: 'external', name: specifier }
       : { kind: 'unresolved' };
-  }
-
-  const own = underModule(module, specifier);
-  if (own !== null) {
-    // A path inside this module that holds no indexed Go file is not an
-    // external package — it is a directory we did not index (generated,
-    // ignored, or simply absent). ADR-0003: we do not know.
-    return context.packages.has(own) ? { kind: 'internal', dir: own } : { kind: 'unresolved' };
   }
 
   for (const [from, to] of module.replacements) {

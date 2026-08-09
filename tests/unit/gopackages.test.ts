@@ -86,6 +86,29 @@ describe('a Go package is one node', () => {
     expect(at(atlas, 'web/README.md')?.kind).toBe('file');
   });
 
+  it('marks a package whose member the walk could not read', async () => {
+    // Adding `.go` to `SCANNED` took it out of the `UNREAD` tally, which is
+    // right — and it means a `.go` file dropped for size is counted on **neither**
+    // side of ADR-0025's ratio and its imports are never scanned. At file
+    // granularity that is harmless: the file never becomes a node. A package
+    // node keeps existing without it, so its edges are silently incomplete and
+    // it would be certified a non-dependent of whatever the dropped file
+    // imports. ADR-0025 §9.3 named this exact direction as the danger.
+    const atlas = await tree({
+      'go.mod': MODULE,
+      'big/small.go': 'package big\n',
+      // Over `maxFileBytes` (512 KiB), so the walk drops it.
+      'big/huge.go': `package big\n\nimport "example.com/app/other"\n\nvar pad = "${'x'.repeat(600 * 1024)}"\n`,
+      'other/other.go': 'package other\n',
+    });
+    const big = at(atlas, 'big');
+    expect(big?.fileCount).toBe(1);
+    expect(big?.unresolved).toEqual(['big/huge.go (not read)']);
+    // And the edge that file would have drawn is absent, which is the point:
+    // guardrail 4 now refuses rather than certifying `other` a non-dependent.
+    expect(edgesOf(atlas)).toEqual([]);
+  });
+
   it('records an undeclared module as unresolved, not as an external', async () => {
     const atlas = await tree({
       'go.mod': MODULE,
@@ -143,7 +166,44 @@ describe('a node standing for many files still has one lineage', () => {
     expect(origins.get('pkg/a')).toBe('old/a');
   });
 
-  it('takes the plurality when a moved package has since gained a file', () => {
+  it('keeps its own path when the vote ties, rather than flipping a coin', () => {
+    // **A tie-break decided real identities**: measured across hugo and
+    // prometheus, 15 of the 69 split votes are ties — `hugolib/versions`
+    // splits 1–1 between itself and `hugolib/doctree`, `langs` splits 2–2 with
+    // `helpers`. Byte order picks one, and the *other* wins the moment either
+    // side gains a file, which changes the node id and drops every saved pass
+    // against it. A majority cannot tie.
+    const origins = claimOrigins(
+      ['pkg/a'],
+      new Map([['pkg/a', ['pkg/a/one.go', 'pkg/a/two.go']]]),
+      new Set(['pkg/a']),
+      new Map([
+        ['pkg/a/one.go', 'old/a/one.go'],
+        ['pkg/a/two.go', 'other/a/two.go'],
+      ]),
+    );
+    expect(origins.get('pkg/a')).toBe('pkg/a');
+  });
+
+  it('keeps its own path when the largest group is not a majority', () => {
+    // 2 of 5 is the largest bloc and is still a minority. Byte order would have
+    // shipped `old/a` as this package's identity on the strength of 40%.
+    const origins = claimOrigins(
+      ['pkg/a'],
+      new Map([['pkg/a', ['a.go', 'b.go', 'c.go', 'd.go', 'e.go']]]),
+      new Set(['pkg/a']),
+      new Map([
+        ['a.go', 'old/a/one.go'],
+        ['b.go', 'old/a/two.go'],
+        ['c.go', 'x/three.go'],
+        ['d.go', 'y/four.go'],
+        ['e.go', 'z/five.go'],
+      ]),
+    );
+    expect(origins.get('pkg/a')).toBe('pkg/a');
+  });
+
+  it('takes the majority when a moved package has since gained a file', () => {
     const origins = claimOrigins(
       ['pkg/a'],
       new Map([['pkg/a', ['pkg/a/one.go', 'pkg/a/two.go', 'pkg/a/three.go']]]),
@@ -175,6 +235,29 @@ describe('a node standing for many files still has one lineage', () => {
       ]),
     );
     expect(origins.get('pkg/a')).toBe('pkg/a');
+    expect(origins.get('pkg/b')).toBe('pkg/b');
+  });
+
+  it('will not let one node inherit the identity another node is still using', () => {
+    // The case the `live` guard exists for, and the split test above does not
+    // reach it: `pkg/a` has itself moved (so it does not claim `pkg/a` early
+    // and put it in `taken`), while `pkg/b` was carved out of what is *now*
+    // `pkg/a`. Without the guard, `pkg/b` takes `pkg/a` as its origin and
+    // inherits the id a live node is using — so a player's saved passes for
+    // `pkg/a` would silently transfer to `pkg/b`.
+    const origins = claimOrigins(
+      ['pkg/a', 'pkg/b'],
+      new Map([
+        ['pkg/a', ['pkg/a/one.go']],
+        ['pkg/b', ['pkg/b/two.go']],
+      ]),
+      grouped,
+      new Map([
+        ['pkg/a/one.go', 'gone/one.go'],
+        ['pkg/b/two.go', 'pkg/a/two.go'],
+      ]),
+    );
+    expect(origins.get('pkg/a')).toBe('gone');
     expect(origins.get('pkg/b')).toBe('pkg/b');
   });
 

@@ -22,7 +22,7 @@ const MOD = [
 const module = parseGoMod('', MOD) as GoModule;
 
 function context(packages: readonly string[], mod: GoModule | null = module) {
-  return { packages: new Set(packages), moduleFor: () => mod };
+  return { packages: new Set(packages), moduleFor: () => mod, modules: mod === null ? [] : [mod] };
 }
 
 describe('parseGoMod', () => {
@@ -95,6 +95,50 @@ describe('resolveGoImport tells external from unknown', () => {
     expect(resolveGoImport('main.go', 'gocloud.dev/blob', context(['.']))).toEqual({
       kind: 'external',
       name: 'gocloud.dev',
+    });
+  });
+
+  it('resolves into a sibling module of this repo even when the nearest go.mod requires it', () => {
+    // **This was a wrong answer key**, measured on 2 of prometheus's 34 Go
+    // Blast Radius boards. `documentation/examples/remote_storage/go.mod`
+    // requires `github.com/prometheus/prometheus v0.308.1` with no `replace`,
+    // so matching the *nearest* module only fell through to that require list
+    // and called the import **external** — no edge — and the package whose
+    // source reads `import ".../prompb/io/prometheus/write/v2"` was then
+    // certified a non-dependent of that very package and offered as a wrong
+    // answer. Whose repo a path is in is a different question from which
+    // go.mod carries the requires.
+    const root = parseGoMod('', 'module github.com/prometheus/prometheus\n') as GoModule;
+    const nested = parseGoMod(
+      'documentation/examples/remote_storage',
+      'module github.com/prometheus/prometheus/documentation/examples/remote_storage\n' +
+        'require github.com/prometheus/prometheus v0.308.1\n',
+    ) as GoModule;
+    const ctx = {
+      packages: new Set(['prompb/io/prometheus/write/v2', 'documentation/examples/remote_storage/example_write_adapter']),
+      moduleFor: () => nested,
+      // Longest path first, as `loadGoModules` sorts them.
+      modules: [nested, root],
+    };
+    expect(
+      resolveGoImport(
+        'documentation/examples/remote_storage/example_write_adapter/server.go',
+        'github.com/prometheus/prometheus/prompb/io/prometheus/write/v2',
+        ctx,
+      ),
+    ).toEqual({ kind: 'internal', dir: 'prompb/io/prometheus/write/v2' });
+  });
+
+  it('lets a nested module win a shared prefix over its parent', () => {
+    const root = parseGoMod('', 'module example.com/app\n') as GoModule;
+    const nested = parseGoMod('tools', 'module example.com/app/tools\n') as GoModule;
+    const ctx = { packages: new Set(['tools/gen']), moduleFor: () => root, modules: [nested, root] };
+    // Under the root module alone this would be the directory `tools/gen`
+    // *relative to the root*, which is the same string here — so the test that
+    // matters is that the nested module is consulted first and produces it.
+    expect(resolveGoImport('main.go', 'example.com/app/tools/gen', ctx)).toEqual({
+      kind: 'internal',
+      dir: 'tools/gen',
     });
   });
 

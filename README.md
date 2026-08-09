@@ -189,6 +189,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   fact the player already had. The three tests that asserted its shape now assert the sentence
   instead — including the two whose real claim was *a history-graded verb shows no import evidence*,
   which the empty array could never have caught.
+- **The player calls every Go package a "file".** *"Which of these **files** depend on it"*,
+  *"Which of these **files** have changed alongside"*, *"You proved N **files**"* — false of all 153
+  of `gohugoio/hugo`'s and 34 of `prometheus/prometheus`'s Go boards, and `spf13/cobra` renders its
+  root package as `.` in a prompt. `Verb.prompt(challenge, labelOf)` has no atlas, so it cannot tell
+  a package from a file; the fix is a contract change across four verbs and the console, and wording
+  belongs to the verb rather than to the console that would be the cheap place for it. The boards are
+  correct — this is the *noun*. ADR-0026 Consequences.
+- **A Go package's identity is inferred where a file's is recorded.** git records renames of files,
+  never of directories, so a `dir` node's `originPath` is the directory a **strict majority** of its
+  members came from — measured, 7 of hugo's 193 packages and 28 of prometheus's 123 ship with one.
+  A package whose membership changes enough to shift that majority changes its node id and drops the
+  passes saved against it. There is no fix short of something git does not record. ADR-0026 §2.1.
 - **Map interaction is below its fps budget on headless software rasterisation** (45/33/43 fps at p95
   against a ≥ 50 target). That is a floor, not a desktop GPU number; it needs re-measuring on real
   hardware before anyone acts on it.
@@ -199,6 +211,8 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
+**The noun** — the player calls every Go package a *"file"* (see gaps); it is a contract change across
+four verbs and the console, and it is the first thing a Go repo's player sees · then
 **M5's Python half** — the map and the three git verbs, never Blast Radius (ADR-0024 decision 2). The
 kill point is already measured and the verdict is unconditional; what is unbuilt is the scanner, the
 `sys.path`-free resolution, and the decision about what a Python node *is* (a file, almost certainly —
