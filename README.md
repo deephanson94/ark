@@ -157,9 +157,11 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `b9f4d33`: `spf13/cobra` indexes to **17 nodes, all Markdown, and 48 challenges**; `gohugoio/hugo`
   to **1,049 nodes of which 1,016 are Markdown, and 144 challenges**. Not one line of Go or Python is
   on either map. The three history verbs are graded on git rather than imports, so they generate a
-  confident, playable game about a shadow of the repo, and `cli.ts`'s zero-challenge warning never
-  fires. **This is a labelling defect that exists now, not M5 work** — ADR-0024 decision 3 blocks any
-  new language behind fixing it.
+  confident, playable game about a shadow of the repo. `cli.ts`'s zero-challenge warning did not fire
+  on any of the four and could not have: it guards `challenges.length === 0` (hugo's count is 144),
+  and it sits on the `play` path only, which `ark index` never reaches. A live guard aimed at the
+  wrong thing, not a dead branch. **This is a labelling defect that exists now, not M5 work** —
+  ADR-0024 decision 3 blocks any new language behind fixing it.
 - **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
   2 of 586 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
   built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
