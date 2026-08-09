@@ -32,7 +32,7 @@ import {
 import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 import { VERBS } from '../../src/verbs/index.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, witnessFor } from '../fixtures/atlas.js';
 
 function ids(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `n:${i.toString(16).padStart(12, '0')}`);
@@ -49,6 +49,7 @@ const challenge: Challenge = {
   subject,
   candidates: candidates.slice(0, 20),
   truth,
+  witness: witnessFor(candidates.slice(0, 20), truth),
   evidence: { kind: 'importGraph', depth: 2 },
 };
 
@@ -358,6 +359,7 @@ describe('a commit subject moves through the record without ever reaching the ma
     subject: commit,
     candidates: [...nodeIds].sort(),
     truth: [nodeIds[0] ?? ''].sort(),
+    witness: witnessFor([...nodeIds].sort(), [nodeIds[0] ?? '']),
     evidence: { kind: 'commit', subject: 'a commit', date: '2026-01-01', touched: 2 },
   };
 

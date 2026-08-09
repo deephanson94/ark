@@ -24,8 +24,9 @@ import type { ConsoleMessage } from 'playwright';
 import { build, preview } from 'vite';
 
 import type { Atlas } from '../src/atlas/index.js';
-import { serializeAtlas } from '../src/atlas/index.js';
+import { buildGraph, serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
+import { VERBS } from '../src/verbs/index.js';
 import { storageKeyFor } from '../src/player/save.js';
 import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 
@@ -72,6 +73,9 @@ async function main(): Promise<number> {
   const atlas = await indexForPlayer();
   const nodeCount = atlas.nodes.length;
   const pathById = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+  // For asking a verb what its reveal would say, which is how the witness step
+  // picks a wrong answer the panel will actually explain.
+  const graph = buildGraph(atlas);
   process.stdout.write(
     `e2e: indexed ${nodeCount} nodes, ${atlas.challenges.length} challenges\n`,
   );
@@ -703,6 +707,82 @@ async function main(): Promise<number> {
         failures.push({ what: 'guide', detail: `after arriving the caption still reads "${actual}"` });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'suggested.png') });
+
+      // ---- the negative witness (ADR-0020) ------------------------------
+      // **Every board this script plays, it plays perfectly**, which is why the
+      // witness had to be checked here explicitly: it renders only under a
+      // *wrong* pick, so a run that never gets one wrong exercises none of it.
+      // That is the "infrastructure with no consumer" trap with the consumer
+      // present and never reached — and the screenshots would have looked fine.
+      //
+      // The pick is chosen by asking the **verb** what it would say, rather than
+      // by this script re-deriving the withhold table. Two classes are never
+      // spoken and padding is never spoken, so picking any distractor at random
+      // would fail on the ones that are correctly silent.
+      const witnessBoard = atlas.challenges.find((entry) => {
+        if (pathById.get(entry.subject) !== landedOn) return false;
+        return true;
+      });
+      if (witnessBoard === undefined) {
+        failures.push({ what: 'witness', detail: `no challenge for ${landedOn}` });
+      } else {
+        const answers = new Set(witnessBoard.truth);
+        const wrong = witnessBoard.candidates.filter((id) => !answers.has(id));
+        const preview = VERBS[witnessBoard.verb].reveal(atlas, graph, witnessBoard, {
+          score: 0,
+          correct: [],
+          missed: [...witnessBoard.truth],
+          spurious: wrong,
+          evidence: '',
+        });
+        const spoken = preview.notes.find(
+          (note) => note.witness !== null && !answers.has(note.id),
+        );
+        if (spoken === undefined) {
+          failures.push({
+            what: 'witness',
+            detail: `${landedOn}'s board offers no wrong answer the verb will explain`,
+          });
+        } else {
+          await page.locator('.inspector-action').click();
+          await page.waitForSelector('.console-panel', { timeout: 5000 });
+          const count = await page.locator('.choice-button').count();
+          let picked = false;
+          for (let i = 0; i < count; i++) {
+            const button = page.locator('.choice-button').nth(i);
+            if ((await button.innerText()).trim() !== spoken.label) continue;
+            await button.click();
+            picked = true;
+          }
+          if (!picked) {
+            failures.push({ what: 'witness', detail: `${spoken.label} was not on the board` });
+          }
+          await page.locator('.console-submit').click();
+          await page.waitForSelector('.console-score', { timeout: 5000 });
+          const witnesses = (await page.locator('.note-witness').allInnerTexts()).map((text) =>
+            text.trim(),
+          );
+          process.stdout.write(`e2e: witness → ${witnesses[0] ?? '(none)'}\n`);
+          // The exact sentence the verb wrote, so a panel that rendered *a*
+          // witness for the wrong row would not pass.
+          if (!witnesses.includes(`Offered as ${spoken.witness ?? ''}.`)) {
+            failures.push({
+              what: 'witness',
+              detail: `panel showed ${JSON.stringify(witnesses)}, verb wrote "${spoken.witness ?? ''}"`,
+            });
+          }
+          // And an answer must never carry one — nothing chose it.
+          const rows = await page.locator('.console-notes .note').count();
+          if (witnesses.length >= rows) {
+            failures.push({
+              what: 'witness',
+              detail: `${witnesses.length} witnesses over ${rows} rows — answers are being explained too`,
+            });
+          }
+          await page.screenshot({ path: join(SHOT_DIR, 'witness.png') });
+          await page.locator('.console-submit').click();
+        }
+      }
 
       // ---- field notes --------------------------------------------------
       // §9's codex, and the one place the surveyed/understood distinction can

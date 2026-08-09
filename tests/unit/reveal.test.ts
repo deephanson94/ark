@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Atlas, NodeId } from '../../src/atlas/index.js';
-import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
+import { buildGraph, encodeWitness, validateAtlas } from '../../src/atlas/index.js';
 import { revealOf } from '../../src/verbs/blastRadius/index.js';
 import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
@@ -63,12 +63,24 @@ function withCoChange(atlas: Atlas, a: string, b: string, count: number): Atlas 
   });
 }
 
-function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
+/**
+ * `strategies` is by **path**, and defaults to `distant` — the one label the
+ * reveal never speaks. A test that wants a witness sentence therefore has to
+ * name the class it is asking about, rather than inheriting one and asserting
+ * against whatever it inherited.
+ */
+function noteFor(
+  atlas: Atlas,
+  picked: readonly string[],
+  path: string,
+  strategies: Readonly<Record<string, string>> = {},
+) {
   const subject = idFor(atlas, 'src/a/subject.ts');
   const candidates = PATHS.filter((p) => p !== 'src/a/subject.ts')
     .map((p) => idFor(atlas, p))
     .sort();
   const truth = [idFor(atlas, 'src/a/direct.ts'), idFor(atlas, 'src/b/distant.ts')].sort();
+  const answers = new Set(truth);
   const challenge = {
     id: 'blast-fixture',
     verb: 'blastRadius' as const,
@@ -77,6 +89,17 @@ function noteFor(atlas: Atlas, picked: readonly string[], path: string) {
     subject,
     candidates,
     truth,
+    witness: encodeWitness(
+      candidates,
+      new Map(
+        candidates
+          .filter((id) => !answers.has(id))
+          .map((id) => {
+            const named = PATHS.find((p) => idFor(atlas, p) === id) ?? '';
+            return [id, strategies[named] ?? 'distant'];
+          }),
+      ),
+    ),
     evidence: { kind: 'importGraph' as const, depth: 2 },
   };
   const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
@@ -120,6 +143,41 @@ describe('revealOf', () => {
     expect(note?.note).not.toContain('commit');
     // It still says something true, from the import graph alone.
     expect(note?.note).toBe('no chain of imports reaches the subject.');
+  });
+
+  it('never *labels* a co-change distractor either — the same leak, as provenance', () => {
+    // ADR-0020. The generator records `coChange` in the atlas, honestly; this
+    // asserts the panel declines to say it. A witness reading "offered because
+    // it changes with the subject" is the deleted sentence above wearing a
+    // label, and it lands on the strongest member of Companion's key for this
+    // very subject, because `coChangeStrategy` ranks count-descending.
+    const atlas = withCoChange(fixture(), 'src/a/subject.ts', 'src/z/companion.ts', 11);
+    const { note } = noteFor(atlas, ['src/z/companion.ts'], 'src/z/companion.ts', {
+      'src/z/companion.ts': 'coChange',
+    });
+    expect(note?.witness).toBeNull();
+  });
+
+  it('states the class that chose a wrong pick, where saying so leaks nothing', () => {
+    const { note } = noteFor(fixture(), ['src/a/sibling.ts'], 'src/a/sibling.ts', {
+      'src/a/sibling.ts': 'treeSibling',
+    });
+    expect(note?.witness).toBe('a directory sibling');
+    // Two different claims on one row: what is true of the file, and what the
+    // board meant by offering it.
+    expect(note?.note).toContain('same directory');
+  });
+
+  it('says nothing for padding, and nothing at all for an answer', () => {
+    // `distant` is not a strategy — "offered because nothing sharper was left"
+    // is a confession about the board rather than a lesson about the repo.
+    const padded = noteFor(fixture(), ['src/z/stranger.ts'], 'src/z/stranger.ts');
+    expect(padded.note?.witness).toBeNull();
+    const answer = noteFor(fixture(), ['src/a/direct.ts'], 'src/a/direct.ts', {
+      'src/a/sibling.ts': 'treeSibling',
+    });
+    expect(answer.note?.kind).toBe('correct');
+    expect(answer.note?.witness).toBeNull();
   });
 
   it('calls out the same-directory guess for what it is', () => {

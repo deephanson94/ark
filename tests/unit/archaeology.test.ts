@@ -14,7 +14,9 @@ import {
   buildGraph,
   challengeOrder,
   commitIdFor,
+  encodeWitness,
   isCommitId,
+  readWitness,
   validateAtlas,
 } from '../../src/atlas/index.js';
 import {
@@ -516,6 +518,89 @@ describe('the reveal', () => {
       if (path === 'src/core/engine.ts') continue;
       expect(text, path).not.toContain(path);
     }
+  });
+
+  /**
+   * The engine board relabelled so every wrong answer is `sibling`.
+   *
+   * **The generator's own boards here carry only `neighbour` and `distant`** —
+   * the fixture's `src/core/` holds nothing that is not also an import
+   * neighbour, so `neighbour` claims those commits first and `sibling` never
+   * gets supply. Chasing that with a wider fixture would test the *allocator*;
+   * what these two cases are about is what the **reveal** does with a label it
+   * is handed, so the label is handed to it. `tests/atlas/` covers the
+   * generator's real production of the class, at 117 spoken and 7 guarded.
+   */
+  function labelled(board: Challenge, strategy: string): Challenge {
+    const answers = new Set(board.truth);
+    return {
+      ...board,
+      witness: encodeWitness(
+        board.candidates,
+        new Map(board.candidates.filter((id) => !answers.has(id)).map((id) => [id, strategy])),
+      ),
+    };
+  }
+
+  function witnessesOn(atlas: Atlas, board: Challenge): readonly (string | null)[] {
+    const answers = new Set(board.truth);
+    const wrong = board.candidates.filter((id) => !answers.has(id));
+    const reveal = archaeology.reveal(
+      atlas,
+      buildGraph(atlas),
+      board,
+      archaeology.grade(board, { picked: wrong }),
+    );
+    const witness = readWitness(board);
+    return reveal.notes.filter((note) => witness.has(note.id)).map((note) => note.witness);
+  }
+
+  it('states the `sibling` class, which the graph cannot re-derive at all', () => {
+    // The class this whole feature exists for: `whyNot` has no `sibling` arm, so
+    // on the real repo the graph reconstructs those picks as `companion` 103
+    // times out of 124 and as `sibling` **zero** times. The label is the only
+    // thing that knows.
+    const witnesses = witnessesOn(ATLAS, labelled(challenge, 'sibling'));
+    expect(witnesses.length).toBeGreaterThan(5);
+    for (const text of witnesses) expect(text).toContain('own directory');
+  });
+
+  it('withholds a neighbourhood class when the neighbourhood holds one file', () => {
+    // ADR-0019 decision 9's guard, inherited: a relation over a set of one *is*
+    // an identity, so "a commit that touched this file's own directory" names
+    // that file when the directory holds exactly one other. Measured at 7 slots
+    // on this repo and 5 on hono before the guard.
+    //
+    // Built by **moving two files into a directory of their own**, which changes
+    // `path` and not `originPath` — so every node id, every commit's file list
+    // and the whole deck are the ones the assertion above just ran against. A
+    // second hand-built fixture would be measuring a different repo.
+    const moved = validateAtlas({
+      ...ATLAS,
+      nodes: ATLAS.nodes.map((node) =>
+        node.path === 'src/core/engine.ts'
+          ? { ...node, path: 'solo/engine.ts' }
+          : node.path === 'src/core/state.ts'
+            ? { ...node, path: 'solo/state.ts' }
+            : node,
+      ),
+    });
+    // `engineId` looks the node up by **path**, which is the field just moved;
+    // the id comes from `originPath` and has not changed, so ask the original.
+    const board = boards(moved).find((entry) => entry.subject === engineId(ATLAS));
+    if (board === undefined) throw new Error('fixture produced no board for the moved engine');
+    const witnesses = witnessesOn(moved, labelled(board, 'sibling'));
+    expect(witnesses.length).toBeGreaterThan(5);
+    for (const text of witnesses) expect(text).toBeNull();
+  });
+
+  it('speaks the same class on every row of a board, or on none', () => {
+    // ADR-0020's central rule at unit scale. Every guard is a property of the
+    // *subject*, so a board either says "a commit that touched this file's own
+    // directory" for all of them or for none — a per-row guard would make the
+    // absence of a line say which class the row was in.
+    const spoken = witnessesOn(ATLAS, labelled(challenge, 'companion'));
+    expect(new Set(spoken).size).toBe(1);
   });
 
   it('never prints a commit’s width, which is `broadKnown`’s input', () => {

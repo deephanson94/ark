@@ -15,6 +15,7 @@ import { blastRadius } from '../../src/verbs/blastRadius/index.js';
 import { companion } from '../../src/verbs/companion/index.js';
 import { placement } from '../../src/verbs/placement/index.js';
 import type { Challenge } from '../../src/atlas/index.js';
+import { witnessFor } from '../fixtures/atlas.js';
 
 const COMMIT = 'c:0123456789ab';
 const OTHER = 'c:ba9876543210';
@@ -30,6 +31,7 @@ function placementChallenge(overrides: Partial<Challenge> = {}): Challenge {
     subject: COMMIT,
     candidates: [FILE_A, FILE_B, 'n:cccccccccccc'],
     truth: [FILE_A, FILE_B],
+    witness: witnessFor([FILE_A, FILE_B, 'n:cccccccccccc'], [FILE_A, FILE_B]),
     evidence: { kind: 'commit', subject: 'a change', date: '2026-08-08', touched: 5 },
     ...overrides,
   };

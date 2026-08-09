@@ -69,6 +69,7 @@ import { buildGraph, byteCompare, commitIdFor, nodeAt } from '../../atlas/index.
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import { retain, spread, truthCap } from '../sample.js';
+import { encodeWitness } from '../../atlas/witness.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_TRACE_HEURISTICS, gradeCommitHeuristics } from '../gate.js';
 import type { CommitHeuristicId } from '../gate.js';
@@ -333,6 +334,13 @@ export function generateWithReport(
     const idOf = (index: CommitIndex): string => commitIdFor(shaAt(trace, index));
     const truth = truthIndices.map(idOf).sort(byteCompare);
     const candidates = candidateIndices.map(idOf).sort(byteCompare);
+    // Encoded here, beside the sort that fixes the alignment it depends on. A
+    // second place that built a witness would be a second place it could be
+    // built against an unsorted candidate list, which validates and lies.
+    const witness = encodeWitness(
+      candidates,
+      new Map(distractors.map((choice) => [idOf(choice.index), choice.strategy])),
+    );
 
     // §8.4's naive guess is `oldestK` — the strongest thing the board alone
     // hands over, since every row shows a date and the list is served in date
@@ -375,6 +383,7 @@ export function generateWithReport(
         subject: node.id,
         candidates,
         truth,
+        witness,
         // The **retained** count, not the eligible one — see the comment on
         // `retainedTouchers`. This is what the reveal and the field note both
         // describe, and it is the number a player can check against `git log`.

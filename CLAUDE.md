@@ -431,6 +431,35 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
   the size of the set you are quantifying over.**
 
+- **A declaration and the sentence that uses it can describe different populations, and only the
+  declaration is checkable.** `placement.discloses` yields `touchedFact` for `challenge.truth`, which
+  is all it *can* do — it takes a challenge and no atlas. Its reveal searched `commit.files`, the
+  whole membership, for a neighbour to name. So the panel stated *"commit C touched F"* for an F the
+  ADR-0019 accumulator had never heard of, and 20 of those atoms on this repo are members of a
+  shipped Archaeology answer key (4 on hono). No suite could see it: each side is internally correct,
+  and the *gap between what a function may declare and what its prose says* is not a state any test
+  asserts. **When a verb declares what it gives away, check the declaration against every sentence
+  the verb can print, not against the field the declaration reads.** Note the second half too:
+  narrowing the search made the fall-through's *"no import edge to anything else in the commit"*
+  **false**, because the commit may still have touched an unsampled neighbour. A sentence that
+  survives a change to what it quantifies over was not really about the quantifier.
+- **A per-row guard on a leak converts it into a leak by omission with the same content.** Companion's
+  `structural` is safe on the direct ring and states an undrawn cone edge beyond it, so the obvious
+  repair is to withhold the deep rows. Do that and the *absence* of a witness line means "this row is
+  a deep structural pick" — precisely the fact being withheld, now on 219 rows instead of 10. The
+  rule ADR-0020 settles on is **withhold by class or by board, never by row**, which forces every
+  guard to be a property of the *subject* (how many neighbours, how many siblings, how many
+  partners), never of the candidate. The corollary is worth keeping: **you cannot hide one member of
+  a labelled set by removing its label**, only by removing the labelling.
+- **`git checkout <file>` is not how you undo a mutation.** Mutation-testing three reveals, each
+  mutant was reverted with `git checkout` — which restored the file to **HEAD**, throwing away that
+  session's uncommitted work on all three. The next two mutants then ran against a tree with the
+  feature half-deleted and produced *more* failures than expected, which reads like over-detection
+  rather than like damage; the real signal was an assertion failing with `undefined` where the code
+  could only produce `null`. Copy the file aside and copy it back. And when a mutant kills more tests
+  than it was aimed at, **check the tree before believing the result** — a mutation harness that has
+  silently changed something else is measuring a different program.
+
 - **Four of seven review findings were a sentence contradicting a number in the same document.** Not
   a wrong measurement — a right one, written up backwards: a paragraph that measured a leak on 5 of
   27 boards and closed by calling it a leak "the product does not have"; a justification resting on
@@ -515,8 +544,9 @@ CI installs its own Chromium and needs no variable.
 merely accepted. This line said "M4 delivered" for two sessions while one verb existed, which is
 exactly how a milestone gets skipped: the roadmap lives in `NORTH-STAR.md` §13 and a session reads it
 first, but it reads *this* line for what is already done. **A decision is not a delivery** — the next
-edit of this paragraph must not turn an ADR into a shipped verb. M5 is next by the roadmap
-(tree-sitter, 3–4 more languages); the Next action below argues for one smaller thing first.
+edit of this paragraph must not turn an ADR into a shipped verb. **M5 is next by the roadmap**
+(tree-sitter, 3–4 more languages), and the negative witness — the last rung, which improved every
+existing board rather than adding a fifth verb — is done.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node —
 Ark itself is 2.66 — and the only outside repo where the generator had more supply than the deck cap
@@ -564,6 +594,23 @@ own **positive** file list rather than from absence — which is why neither nee
 truncated-walk refusal, and why both do need its shallow-clone one for a different mechanism.
 Archaeology adds the one rule no other verb has: **a commit an earlier verb's reveal has already
 placed here is not an answer**, off the board entirely rather than merely out of the key.
+
+**Every wrong answer now carries the reason it was offered**
+(**[ADR-0020](./docs/decisions/0020-a-wrong-answer-carries-the-reason-it-was-offered.md)**).
+`Challenge.witness` is one space-separated token per candidate, aligned with `candidates`, `-` on an
+answer; the format is `src/atlas/witness.ts` (beside the schema, because the validator cannot import
+from the verbs) and the *names* stay in each verb's `distractors.ts`. It is **recorded rather than
+re-derived** because the two disagree: the reason a reveal reconstructs from the graph names the
+strategy that actually chose the candidate on 53.9% of this repo's distractor slots and 47.9% of
+hono's, and five strategies are re-derived correctly **zero** times on either repo. A candidate
+satisfies several predicates at once and which one *chose* it was settled by a quota.
+
+**Two classes are recorded and never spoken**, and one of them is the trap this rung walks into:
+naming Blast Radius's `coChange` is the sentence `blastRadius/reveal.ts` deleted, in the file that
+documents why. Companion's `structural` is withheld on a weaker, stated argument. The rule the rest
+falls out of is **withhold by class or by board, never by row** — a per-row guard makes the *absence*
+of a line say which class the row was in, which is the fact being withheld. `distant` says nothing
+because it is padding, not a strategy.
 
 §8.3's distractor strategies pick the wrong answers for each verb — Placement adds `mentioned`, a
 file the message names and the diff does not; Archaeology adds its mirror, a commit whose message
@@ -623,25 +670,22 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the negative witness.** Every wrong pick on every board already has a *known reason
-class* — the generator chose it as a sibling, a name-alike, a structurally-near non-dependent, a
-co-change ghost, or a commit whose message names the file it never touched — and no reveal says
-which. The reveals explain a wrong pick by re-deriving a reason from the graph, which is honest and
-is not the same thing: the generator knows why it offered that answer, and throwing that away means
-the sharpest lesson on the board is reconstructed rather than stated.
+Next action: **the phenomenon catalogue**, or **M5**. The catalogue is a repo-independent vocabulary
+of ~30–60 structural phenomena — the atom that would let anything *transfer* to another repo, which is
+the other half of risk #1. M5 is what the roadmap says (tree-sitter, 3–4 more languages) and is the
+larger bet: the scanner is ES-modules-only, so a Python or Go repo still produces a map with no edges
+and no questions. The **overlapping Companion answer keys** in the generator are still open and
+smaller than either.
 
-**Decide the one design fork before writing anything**, because it decides whether this is a schema
-change: strategy provenance either ships in the atlas — `Challenge` gains a per-candidate strategy
-label, so `ATLAS_VERSION` 7 → 8 and `docs/atlas-format.md` in the same commit (guardrail 5) — or is
-re-derived player-side from the graph, which needs no bump and no migration but can disagree with
-what the generator actually did. The second is cheaper and is the one that can go quietly wrong; the
-first is the honest record and costs schema surface on every challenge. Measure the byte cost against
-the 5 MB ceiling before choosing, and note that `report.distractorMix` already carries the aggregate,
-so this is about *which* wrong answer rather than *how many*.
-
-Then the **overlapping Companion answer keys** in the generator, and after those the **phenomenon
-catalogue** — a repo-independent vocabulary of ~30–60 structural phenomena, the atom that would let
-anything *transfer* to another repo, which is the other half of risk #1.
+Two things are on the record now and neither is a nit. **`RevealNote.route` is rendered nowhere**:
+Blast Radius has computed the import route since M2, three unit tests assert its shape, and the
+console has never drawn it — infrastructure with no consumer, which this file has a landmine about,
+found while adding a field beside it and deliberately not fixed in passing. And **the unit fixtures
+produce two of Archaeology's four distractor classes** — its boards carry only `neighbour` and
+`distant`, because the fixture's `src/core/` holds nothing that is not also an import neighbour, so
+`neighbour` claims those commits first and `sibling` never gets supply. Its reveal tests hand the
+class in deliberately and say so; widening the fixture would test the allocator rather than the
+reveal.
 
 **Four things about Archaeology a later session will want.** `oldestK` fires **zero times on both repos** where ADR-0019 predicted 24 on hono, and it is
 kept as a canary rather than a live gate — the reasoning and the counterfactuals that revive it are

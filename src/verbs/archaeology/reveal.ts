@@ -39,13 +39,41 @@
  */
 
 import type { Atlas, AtlasId, Challenge, Graph, NodeRef } from '../../atlas/index.js';
-import { byteCompare, commitAt, commitIdFor, nodeAt } from '../../atlas/index.js';
+import { byteCompare, commitAt, commitIdFor, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
 import { commitLabel } from '../members.js';
-import { nameTokens } from '../paths.js';
+import { directoryOf, nameTokens } from '../paths.js';
 import { messageWords } from './corpus.js';
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
+
+/**
+ * The negative witness: why the generator put this wrong answer here.
+ *
+ * Three of the four say *"it touched something in this file's neighbourhood"*,
+ * which is the header's **relations, never identities** rule again — and so they
+ * inherit its guard: a relation over a set of one *is* an identity. `guarded`
+ * below carries the three set sizes, and each is a property of the **subject**,
+ * so on any given board a class is spoken for every row or for none.
+ *
+ * That is not tidiness. Withholding a class from some rows of a board and not
+ * others makes the *absence* of a line say which class the row was in, which is
+ * the fact being withheld — ADR-0020's by-class-or-by-board rule.
+ *
+ * `sibling` is the class this feature exists for: it has no arm in `whyNot` at
+ * all, so the graph re-derives it as `companion` on 103 of this repo's 124
+ * `sibling` slots and gets it right **zero** times.
+ *
+ * `distant` is absent because it is padding rather than a strategy.
+ */
+const WITNESS: Readonly<
+  Record<string, { readonly text: string; readonly guard: 'adjacent' | 'siblings' | 'partners' | null }>
+> = {
+  neighbour: { text: 'a commit that touched this file’s import neighbours', guard: 'adjacent' },
+  sibling: { text: 'a commit that touched this file’s own directory', guard: 'siblings' },
+  mentions: { text: 'a commit whose message names this file', guard: null },
+  companion: { text: 'a commit that touched this file’s usual travelling companions', guard: 'partners' },
+};
 
 export function revealOf(
   _atlas: Atlas,
@@ -70,6 +98,27 @@ export function revealOf(
     if (a === subject) partners.add(b);
     else if (b === subject) partners.add(a);
   }
+
+  // How many files each guarded existential quantifies over. A set of one makes
+  // *"a file in this file's directory"* name that file, which is an atom of the
+  // commit's Placement key — the leak decision 9's guards exist for, measured at
+  // 7 `sibling` slots here and 5 on `honojs/hono` before this guard.
+  // `directoryOf`, not an inline `lastIndexOf` — a path with no slash makes
+  // `slice(0, -1)` return the path minus its last character, which is a
+  // directory no file is in, so a root-level subject would have counted zero
+  // siblings and silently withheld a class it was entitled to state.
+  const siblings = new Set<NodeRef>();
+  const home = directoryOf(node.path);
+  for (const [ref, other] of graph.atlas.nodes.entries()) {
+    if (ref !== subject && directoryOf(other.path) === home) siblings.add(ref);
+  }
+  const sizes = { adjacent: adjacent.size, siblings: siblings.size, partners: partners.size };
+  const witnesses = readWitness(challenge);
+  const witnessFor = (id: AtlasId): string | null => {
+    const entry = WITNESS[witnesses.get(id) ?? ''];
+    if (entry === undefined) return null;
+    return entry.guard === null || sizes[entry.guard] > 1 ? entry.text : null;
+  };
 
   const truth = new Set(challenge.truth);
   // The key in date order, so each member can be placed in the arc of the
@@ -116,6 +165,7 @@ export function revealOf(
       // walk. Leaving this empty is the honest answer; inventing a route from
       // the import graph would show evidence that did not produce the grade.
       route: [],
+      witness: witnessFor(id),
       note: truth.has(id)
         ? whyYes(names, id === earliest, id === latest, gapAfter.get(id) ?? null)
         : whyNot(commit.files, names, adjacent, partners, node.path),

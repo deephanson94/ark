@@ -35,6 +35,7 @@ import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
+import { encodeWitness } from '../../atlas/witness.js';
 import { retain, truthCap } from '../sample.js';
 import { difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
 import { PATH_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
@@ -532,6 +533,14 @@ export function generateWithReport(
     const truth = truthRefs.map(idOfRef).sort(byteCompare);
     const candidates = candidateRefs.map(idOfRef).sort(byteCompare);
     const candidateSet = new Set(candidates);
+    // Encoded here rather than at the end of generation, so `dedupe`'s re-asked
+    // boards get theirs from the same line as everybody else's. A second place
+    // that built a witness is a second place it could be built against an
+    // unsorted candidate list, which validates and lies.
+    const witness = encodeWitness(
+      candidates,
+      new Map(distractors.map((choice) => [idOfRef(choice.ref), choice.strategy])),
+    );
 
     // `evidence.depth` is measured, not prescribed (ADR-0008 §5): the furthest
     // the answer key actually travels, so `explain()` can state it as fact.
@@ -567,6 +576,7 @@ export function generateWithReport(
         subject: idOfRef(subject),
         candidates,
         truth,
+        witness,
         evidence: { kind: 'importGraph', depth },
       },
       mix: distractors,

@@ -57,6 +57,7 @@ import { buildGraph, byteCompare, commitIdFor, nodeAt } from '../../atlas/index.
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import { retain, spread, truthCap } from '../sample.js';
+import { encodeWitness } from '../../atlas/witness.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_HEURISTICS, gradeHeuristics, textSubject } from '../gate.js';
 import { analyse } from '../companion/distractors.js';
@@ -232,6 +233,13 @@ export function generateWithReport(
 
     const truth = truthRefs.map(idOf).sort(byteCompare);
     const candidates = candidateRefs.map(idOf).sort(byteCompare);
+    // Encoded here, beside the sort that fixes the alignment it depends on. A
+    // second place that built a witness would be a second place it could be
+    // built against an unsorted candidate list, which validates and lies.
+    const witness = encodeWitness(
+      candidates,
+      new Map(distractors.map((choice) => [idOf(choice.ref), choice.strategy])),
+    );
 
     // §8.4's naive guess, and it is the one the map hands over for free: the
     // inspector prints every node's commit count, so "the files that change a
@@ -273,6 +281,7 @@ export function generateWithReport(
         subject: commitIdFor(commit.sha),
         candidates,
         truth,
+        witness,
         evidence: {
           kind: 'commit',
           subject: commit.subject,

@@ -22,6 +22,7 @@ import {
   recordSurvey,
 } from '../../src/player/progress.js';
 import type { SaveStore } from '../../src/player/save.js';
+import { witnessFor } from '../fixtures/atlas.js';
 import {
   loadProgress,
   parseProgress,
@@ -172,6 +173,10 @@ describe('the storage edge', () => {
       subject: id(20),
       candidates: Array.from({ length: 20 }, (_, i) => id(i)),
       truth: [id(0), id(1), id(2), id(3)],
+      witness: witnessFor(
+        Array.from({ length: 20 }, (_, i) => id(i)),
+        [id(0), id(1), id(2), id(3)],
+      ),
       evidence: { kind: 'importGraph', depth: 2 },
     } as const;
     const { progress } = applyGrade(EMPTY_PROGRESS, challenge, {
