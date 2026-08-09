@@ -39,10 +39,10 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
  * this board's answer key — and every pair it quantifies over is Companion's
  * subject matter, stated by the product rather than inferred by the player.
  * Measured on the shipped decks (clean clones, ark `d91ba27` and `honojs/hono`
- * `7075369e`): of this repo's **98** co-change rows, **52 hold a pair that is a
- * member of a shipped Companion board's answer key**; 29 of hono's 141. Blast
- * Radius refuses the same relation at 11 of 15 rows here and 8 of 53 there — so
- * this is 6.5× the rows and 4.7× the atoms of a class already refused at the
+ * `7075369e`): of this repo's **97** co-change rows, **49 hold a pair that is a
+ * member of a shipped Companion board's answer key**; 26 of hono's 139. Blast
+ * Radius refuses the same relation at **7 rows of 15 here and 4 of 53 there** —
+ * so this is 6.5× the rows and 7× the atoms of a class already refused at the
  * smaller number.
  *
  * The argument the other way is real and is why ADR-0023 states it: Blast
@@ -52,18 +52,22 @@ const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, corr
  * And the existential is not always one. On a **one-file answer key** the set it
  * quantifies over has size 1, so *"one this commit changed"* names that file and
  * the sentence becomes the pair — ADR-0019's set-size rule, met here as a
- * property of the board rather than of the row. 8 rows here, **25 of hono's
- * 141**. A `truth.length >= 2` guard would be legal under ADR-0020 decision 3
- * (a board property, not a row property) and would still leave the other 90
+ * property of the board rather than of the row. 8 rows here, **32 of hono's
+ * 139**. A `truth.length >= 2` guard would be legal under ADR-0020 decision 3
+ * (a board property, not a row property) and would still leave the other 89
  * rows stating the disjunction, which is what is actually being withheld.
  *
- * **What withholding costs, stated rather than hidden.** `distant` ships **0**
- * rows on both repos, so an unexplained row on a Placement board is now
+ * **What withholding costs, stated rather than hidden — twice.** `distant` ships
+ * **0** rows on both repos, so an unexplained row on a Placement board is now
  * *uniquely* a co-change pick, and a player who works the class partition out
- * across boards recovers the disjunction anyway. That is the price, and it is
- * paid on ADR-0019's own line: a **stated** atom is refused, an **implied**
- * relation is accepted. It is also why this is a class-wide silence and never a
- * per-row one (ADR-0020 decision 3).
+ * across boards recovers the disjunction anyway. And the map says part of it out
+ * loud regardless: those 49 pairs are exactly the ones ADR-0016 draws as wires
+ * once the naming Companion board is answered, on **31 of this repo's 40 boards
+ * and 21 of hono's 54**. So this silence is narrower than *"the player cannot
+ * learn it"* — it is the product not **stating** it, which is ADR-0019's line
+ * (a stated atom is refused, an implied relation accepted) and the distinction
+ * ADR-0021's premise got wrong by never opening `src/player/`. It is also why
+ * this is a class-wide silence and never a per-row one (ADR-0020 decision 3).
  *
  * `distant` is absent because it is padding rather than a strategy (ADR-0020).
  */
@@ -71,16 +75,21 @@ const WITNESS: Readonly<Record<string, string>> = {
   busy: 'one of the repo’s most-edited files',
   // **"near", not "a neighbour of"** — this strategy's breadth-first walk from
   // the anchors is *unbounded*, so a row at two hops has no import edge to
-  // anything on the board and "neighbour" is false of it: 4 of this repo's 100
-  // rows and 24 of hono's 188. That is the same shape ADR-0020 decision 4
+  // anything on the board and "neighbour" is false of it: **2 of this repo's 69
+  // rows and 21 of hono's 133**, re-measured at `d91ba27` / `7075369e` because
+  // ADR-0023's re-weighting moved the population these are fractions *of* (it
+  // was 4 of 100 and 24 of 188). A figure about a class is invalidated by a
+  // change to the mix, and this map's own Blast Radius sibling has a landmine
+  // about exactly that. That is the same shape ADR-0020 decision 4
   // withheld Companion's `structural` over, asked of this verb's identical
   // class — measured, the leak direction is empty here (0 deep rows on either
   // repo sit in a shipped Blast Radius key), so what was wrong was the sentence
   // and not the class.
   structural: 'a file the import graph puts near the change',
   // Widened through shared prefixes exactly as the other two verbs' siblings
-  // are, so "living where the change landed" is false on 6 rows here and 63 of
-  // hono's 173.
+  // are, so "living where the change landed" is false on **4 of this repo's 77
+  // rows and 46 of hono's 128** — re-measured at the same two commits, and for
+  // the same reason as the line above (it was 6 and 63 of 173).
   treeSibling: 'a near neighbour, in the tree, of a file the commit changed',
   nameSimilar: 'a name-alike of a file the commit changed',
   mentioned: 'a file the message names',

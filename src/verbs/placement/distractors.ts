@@ -12,11 +12,13 @@
  *   busy         high churn, and this commit did not touch it. The flagship,
  *                and the ordering is measured rather than argued — see below.
  *   coChange     the matrix records it moving with a file the commit changed,
- *                and this commit did not move it. §8.3's
- *                *historically-coupled-but-not-structurally* — the class it
- *                calls the **best** wrong answers, "because getting them wrong
- *                is itself a lesson" — and the one this verb went a milestone
- *                without. Its witness is **withheld**; `reveal.ts` says why.
+ *                it does **not** import one, and this commit did not move it.
+ *                §8.3's *historically-coupled-but-not-structurally* — the class
+ *                it calls the **best** wrong answers, "because getting them
+ *                wrong is itself a lesson" — and the one this verb went a
+ *                milestone without. Both halves of that name are enforced; the
+ *                strategy's own comment records what happened when only the
+ *                first was. Its witness is **withheld**; `reveal.ts` says why.
  *   structural   imports, or is imported by, a file the commit changed — and
  *                did not change with it. §8.3's graph-adjacent strategy, and
  *                the lesson is the sharpest this verb has: the compile-time
@@ -121,10 +123,11 @@ export type StrategyId =
  *
  * Measured through the real generator on clean clones of ark at `d91ba27` and
  * `honojs/hono` at `7075369e`, the shipped mix moves as declared — `busy`
- * 244 → 242 and 357 → 354, i.e. inside the noise of a deck that reshuffles;
- * `structural` 107 → 68 and 179 → 123; `treeSibling` 117 → 77 and 171 → 124;
- * `nameSimilar` 78 → 69 and 148 → 108; `mentioned` 58 → 59 and 79 → 83. The
- * gate is unmoved: `ctrlF` refusals 4 → 5 here and 182 → 181 there.
+ * 244 → 242 and 357 → 358, i.e. inside the noise of a deck that reshuffles;
+ * `structural` 107 → 69 and 179 → 133; `treeSibling` 117 → 77 and 171 → 128;
+ * `nameSimilar` 78 → 69 and 148 → 110; `mentioned` 58 → 59 and 79 → 79. The
+ * gate moves by one board in each direction — `ctrlF` refusals 4 → 5 here and
+ * 182 → 183 there — which is a reshuffled deck, not a weakened gate.
  *
  * The two deep-supply strategies give up more than their quota cut because the
  * unspent-quota pass hands leftovers back in declared order, and before this
@@ -235,16 +238,37 @@ const busy: Strategy = (context, limit) => {
  * be handed that bill.
  */
 const coChange: Strategy = (context, limit) => {
+  const { graph, anchors, pool } = context;
   const compare = compareIds(context);
+
+  // **The "not structurally" half of the class name**, built once per commit
+  // rather than asked per partner. §8.3 words this strategy *"files that
+  // co-change but **don't import**"*, and a first version of it enforced only
+  // the first clause — which put a file that both imports a changed file and
+  // moves with it under a purely-historical label on 9 of this repo's 98 rows
+  // and **67 of hono's 141**. That is the class-label-is-not-a-class-description
+  // landmine, and it matters beyond the wording: a row with two reasons to be
+  // picked is `structural`'s lesson, not this one's, and the historical signal
+  // is only a trap while it stands alone.
+  //
+  // The **direct ring** and no further, because that is what "imports" means.
+  // `structural` reaches beyond it and calls itself *near*, so the two classes
+  // are disjoint exactly where they both make a claim about an edge.
+  const imports = new Set<NodeRef>();
+  for (const anchor of anchors) {
+    for (const edge of graph.out[anchor] ?? []) imports.add(edge.to);
+    for (const edge of graph.in[anchor] ?? []) imports.add(edge.from);
+  }
+
   const scored = new Map<NodeRef, number>();
-  for (const anchor of context.anchors) {
+  for (const anchor of anchors) {
     const row = context.coChange.rows.get(anchor);
     if (row === undefined) continue;
     for (const [partner, count] of row) {
       // `pool` has already removed every file the commit touched, sampled or
       // not — so a partner that *is* a member cannot reach here. That is the
       // invariant, and re-checking it here would be a second copy of it.
-      if (!context.pool.has(partner)) continue;
+      if (!pool.has(partner) || imports.has(partner)) continue;
       // Nearest anchor wins, on the same argument `treeSibling` uses: a file
       // coupled 9 times to one member and twice to another is a 9-coupling.
       if (count > (scored.get(partner) ?? 0)) scored.set(partner, count);

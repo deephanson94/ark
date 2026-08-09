@@ -939,12 +939,26 @@ describe('challenges', () => {
         evidence: '',
       });
       const spoken = new Map(reveal.notes.map((note) => [note.id, note.witness]));
+      // The other half of §8.3's class name — "co-change **but don't import**".
+      // Enforcing only the first clause put 67 of hono's 141 rows under a
+      // purely historical label while they were also graph-adjacent.
+      const ring = new Set<string>();
+      for (const member of challenge.truth) {
+        const ref = graph.refById.get(member);
+        if (ref === undefined) continue;
+        for (const edge of graph.out[ref] ?? []) ring.add(nodeAt(graph, edge.to).id);
+        for (const edge of graph.in[ref] ?? []) ring.add(nodeAt(graph, edge.from).id);
+      }
       for (const id of picked) {
         rows++;
         expect(
           challenge.truth.some((member) => partners.get(id)?.has(member) === true),
           `${challenge.id} calls ${id} a co-change pick with no pair to a key member`,
         ).toBe(true);
+        expect(
+          ring.has(id),
+          `${challenge.id} offers ${id} as historically-coupled-but-not-structurally, and it imports the change`,
+        ).toBe(false);
         expect(spoken.get(id), `${challenge.id} speaks the withheld class for ${id}`).toBeNull();
       }
     }

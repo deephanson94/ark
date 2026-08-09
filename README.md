@@ -135,7 +135,7 @@ offered (ADR-0020).
 | ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
-| Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class — Placement was the last without one (ADR-0023). |
+| Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |

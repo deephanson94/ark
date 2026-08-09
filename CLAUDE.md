@@ -428,19 +428,29 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   was red, nothing was wrong, and nothing was being tested. Real repos land several commits a day.
   **Check the size of the population your fixture actually produces before trusting a suite over it**
   — the count is one line and it is the difference between a suite and a decoration.
-- **An upstream fix has to be able to reach the thing the leak is seeded at, and "upstream" is not
-  evidence that it does.** ADR-0022 closed a co-change guess by gating downstream and recorded that
-  the honest fix was probably upstream — put the partners on the board as wrong answers and the guess
-  stops being precise at the source. It reads as obviously right and it is **false here**: the guess
-  is seeded at a file wired to a *candidate*, and **58% of this repo's deciding seeds and 68% of
-  hono's are files the board never shows**, which a distractor anchored on the answer key cannot
-  touch. Held board-fixed, the strategy removes **zero** verdicts on ark. The version that would work
-  has to score the guess against the key to choose its wrong answers — i.e. `decidedBy` with a
-  different return type — so *the upstream fix, executed, is the downstream gate wearing a hat*. Two
-  lessons and the second is the transferable one: a sentence of the form *"and the real fix is
-  further up"* is a claim with a measurement attached, exactly like the fix itself; and **before
-  building a fix, check that the population it acts on is the population the failure runs on** — here
-  two co-change neighbourhoods that look like one until you count them.
+- **An upstream fix is a claim with a measurement attached, exactly like the fix itself — and the
+  reason it fails is a second claim, which is where the error will be.** ADR-0022 gated a co-change
+  guess downstream and recorded that the honest fix was probably upstream: put the partners on the
+  board as wrong answers and the guess stops being precise at the source. Measured board-fixed, the
+  strategy removes **zero** verdicts on ark and 6 of 14 on hono — so the lever is real on one repo,
+  dead on the other, and *"not a gate"* is the right conclusion. **The explanation shipped in the
+  first draft was wrong, in the paragraph the document spent the most effort on**: it argued a
+  distractor anchored on the answer key *cannot reach* a seed that is not adjacent to the key, which
+  is false set logic — `partners(key) ∩ partners(S) ≠ ∅` does not need `S ∈ key` — and false in fact,
+  since **4 of the 6 hono removals are seeded off the board**, the class it called unreachable. A
+  post-ship review found it by diffing the verdict facts the document's own control row isolates. Two
+  lessons: an impossibility argument is worth less than the measurement it decorates, and **when a
+  measurement and an explanation ship together, the explanation is the one nothing tested**.
+- **A strategy named after a conjunction will enforce the first clause and skip the second, and the
+  label will still look right.** §8.3's best class is *"files that co-change **but don't import**"*.
+  Placement's implementation consulted the matrix and never the graph, so a file that both imported a
+  changed file and moved with it shipped under a purely-historical label: 9 of this repo's 98 rows and
+  **67 of hono's 141 — 48% of the second repo's**. Nothing was red; the class *exists*, its rows are
+  genuine co-change pairs, and the one repo a session looks at hardest was the one where it barely
+  fired. Enforcing the second clause cost **1 row here and 2 there**, because supply was never the
+  constraint. So: **when a class name contains an "and" or a "but", write one assertion per clause**,
+  and measure each on the second repo — the label-versus-description landmine has now bitten a witness
+  sentence, a docstring, a guard, and a strategy's own selection rule.
 - **Withholding a class hides it only while another class is also silent.** ADR-0020's rule is
   withhold by class, never by row, because a per-row guard makes the absence say which row it was on.
   It is quieter about what happens when the silent *set* has one member with supply: Placement's
@@ -798,11 +808,14 @@ names the subject and whose diff does not — and since
 **[ADR-0023](./docs/decisions/0023-the-best-wrong-answer-is-a-board-improvement-not-a-gate.md)**
 **every verb carries §8.3's *historically-coupled-but-not-structurally* class**, which that section
 calls the best wrong answers and which Placement was the last without: a file the matrix records
-moving with a file the commit changed, that the commit did not change. It is a **board improvement
-and nothing more** — the claim it was built to test, that it would lower ADR-0022's exposure at the
-source, was measured first and holding the board fixed it removes **not one verdict on this repo**
-(26 → 27 over 30 shared boards) and 5 of 24 on hono. Its class is **withheld**, on the refusal
-`blastRadius/reveal.ts` makes about the same relation. Difficulty is computed per §8.4, and the player has a
+moving with a file the commit changed, that does **not** import one, and that the commit did not
+change — both halves of that class name enforced, because the version review caught enforced one and
+put 48% of hono's rows under a label false of them. It is a **board improvement and nothing more** —
+the claim it was built to test, that it would lower ADR-0022's exposure at the source, was measured
+first and holding the board fixed it removes **not one verdict on this repo** (26 → 27 over 30 shared
+boards) and 6 of 14 on hono, over 4 of its 38 shared boards. Its class is **withheld**, on the refusal
+`blastRadius/reveal.ts` makes about the same relation — a silence narrower than it looks, since the
+map draws 49 of those 97 pairs as wires once the naming Companion board is answered. Difficulty is computed per §8.4, and the player has a
 challenge console over the map with partial credit, a derived per-member reveal, and fog that lifts
 on what you prove. **The map has a history channel**: co-change pairs draw as ember arcs
 over the straight import lines, gated by

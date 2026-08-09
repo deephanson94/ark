@@ -491,6 +491,33 @@ describe('§8.3’s best wrong answer, pointed at a commit', () => {
     for (const id of picked) expect(challenge.truth).not.toContain(id);
   });
 
+  it('never offers a partner that imports a file the commit changed', () => {
+    // §8.3 words this class "files that co-change **but don't import**", and the
+    // first version enforced only the first clause: 9 of this repo's 98 rows and
+    // **67 of hono's 141** were import-adjacent to a key member, i.e. half of the
+    // second repo's rows were graph-adjacent distractors under a purely
+    // historical label. Test the claim the label makes, not the label.
+    const atlas = fixture([PLAIN], {
+      coChange: COUPLED,
+      churn: COUPLED_CHURN,
+      // part05 is the strongest partner in the matrix (9) *and* now imports a
+      // key member — so it is the pick this clause has to refuse, and a
+      // ranking-only implementation would offer it first.
+      links: [['src/edge/part05.ts', 'src/core/engine.ts']],
+    });
+    const challenge = only(atlas);
+    const witness = readWitness(challenge);
+    const byId = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+    const picked = challenge.candidates
+      .filter((id) => witness.get(id) === 'coChange')
+      .map((id) => byId.get(id) ?? '');
+    expect(picked.length, 'the strategy produced nothing').toBeGreaterThan(0);
+    expect(picked).not.toContain('src/edge/part05.ts');
+    // Non-vacuity: it is refused, not merely absent for want of supply — the
+    // two weaker partners still reach the board.
+    expect(picked).toContain('src/edge/part06.ts');
+  });
+
   it('never offers a partner the commit itself changed, which would be an answer', () => {
     const { atlas, challenge, picked, pathOf } = board();
     // `lib/alpha.ts` is coupled to a key member at count 7 — the second-strongest

@@ -2056,3 +2056,34 @@ One line per iteration: what changed, and what to do next.
   **Next**: packaging **`npx ark`** (NORTH-STAR §10's stated intent, and the Definition of done has
   been unsatisfiable on it for four milestones), then the **phenomenon catalogue**, then **M5** — whose
   kill point still needs measuring before a parser is written.
+
+- **Post-ship adversarial review of the above, and it found the argument rather than the code.** Six
+  findings, every one in a category `CLAUDE.md` already names — which is the case for consulting on
+  the categories rather than on the change. **Decision 2's impossibility argument was false**: it said
+  a distractor anchored on the answer key *cannot reach* a deciding seed that is not adjacent to the
+  key, and `partners(key) ∩ partners(S) ≠ ∅` does not need `S ∈ key`. Diffing the verdict facts the
+  document's own control row isolates: **4 of the 6 verdicts the strategy removes on hono are seeded
+  off the board**, the class the paragraph called unreachable. The measurement was right and the
+  explanation nothing tested was wrong — in the paragraph the document spent the most effort on, which
+  is the shape this repo has a landmine about and now has a sharper one.
+
+  **The strategy was enforcing half of §8.3's class name.** *"Files that co-change **but don't
+  import**"* — it consulted the matrix and never the graph, so **9 of this repo's 98 rows and 67 of
+  hono's 141, 48% of the second repo's**, were graph-adjacent distractors wearing a purely historical
+  label. Fixed: a partner with a direct import edge to a key member is refused. It cost **1 row here
+  and 2 there** because supply was never the constraint, and it *strengthened* hono — verdicts 23 →
+  **13**. Both new assertions were mutation-checked.
+
+  Four more, all prose against tables: the **oracle-seed exposure the probe measured and the document
+  did not print** (9 boards / best 0.909 → 0.923 here, the shape ADR-0021 rejected as "a strategy
+  nobody can execute" — recorded because it bears on the central question and does not flatter the
+  answer); the **map cost the withhold accounting omitted** (49 of the 97 withheld pairs are drawn as
+  wires on 31 of 40 boards once the naming Companion board is answered, so the silence is narrower
+  than "nothing is lost"); a **re-measurement that changed the instrument** — Blast Radius's
+  co-change figures re-read pair-level as 11 of 15 where that file's own sentence says *"a member of
+  **that** board's key"*, which is 7 of 15, the ADR-0019 landmine committed inside the fix for the
+  one beside it; and *"5 of 24 over 2 of 10 boards"* fusing three different populations. The two
+  unstamped figures one screen below in the same `WITNESS` map, whose denominators this change's
+  re-weighting moved, are re-measured and stamped.
+
+  **Next** is unchanged: packaging **`npx ark`**, then the **phenomenon catalogue**, then **M5**.
