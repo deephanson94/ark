@@ -66,7 +66,15 @@ export const UNREADABLE_FLOOR = 5;
 export const MAPPED_SHARE = 10;
 
 export interface SourceCoverage {
-  /** Nodes on the map in a language the scanner parses. */
+  /**
+   * **Files** on the map in a language the scanner parses — `Σ fileCount` over
+   * those nodes, not a count of them.
+   *
+   * The distinction was invisible while every node was one file, and it is a
+   * category error the moment one is not: a Go repo's map is *packages*, so
+   * counting nodes would weigh 193 of hugo's against its unreadable Python and
+   * decide the deck on a unit mismatch. Both sides of this ratio are files.
+   */
   readonly mapped: number;
   /** Files the walk recognised as program source and did not read. */
   readonly unreadable: number;
@@ -85,7 +93,10 @@ export interface SourceCoverage {
 }
 
 export function sourceCoverage(atlas: Atlas): SourceCoverage {
-  const mapped = atlas.nodes.reduce((total, node) => total + (canImport(node.lang) ? 1 : 0), 0);
+  const mapped = atlas.nodes.reduce(
+    (total, node) => total + (canImport(node.lang) ? node.fileCount : 0),
+    0,
+  );
   const unreadable = atlas.report.unreadable.reduce((total, entry) => total + entry.count, 0);
   const languages = [...atlas.report.unreadable].sort(
     (a, b) => b.count - a.count || byteCompare(a.lang, b.lang),

@@ -90,10 +90,20 @@ function summarise(
 ): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
+  const nodeLine = (a: Atlas): string => {
+    const files = a.nodes.reduce((total, node) => total + node.fileCount, 0);
+    const packages = a.nodes.filter((node) => node.kind === 'dir').length;
+    return packages === 0
+      ? `${a.nodes.length} files`
+      : `${a.nodes.length} nodes (${packages} packages holding ${files - (a.nodes.length - packages)} files)`;
+  };
   const coverage = sourceCoverage(atlas);
   const lines = [
     `repo        ${atlas.repo.name} @ ${atlas.repo.head?.slice(0, 12) ?? 'no commits'}`,
-    `nodes       ${atlas.nodes.length} files across ${atlas.regions.length} regions`,
+    // A node is a file everywhere except Go, where it is a package (ADR-0026),
+    // so this line says both numbers when they differ and neither reader has to
+    // guess which one it is looking at.
+    `nodes       ${nodeLine(atlas)} across ${atlas.regions.length} regions`,
     `edges       ${atlas.edges.length} imports (${probable} needed a guess)`,
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,

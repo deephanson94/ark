@@ -226,6 +226,25 @@ describe('what this map is missing (ADR-0025)', () => {
     expect(coverage.mapped).toBeGreaterThan(coverage.unreadable * MAPPED_SHARE);
   });
 
+  it('counts files on both sides of its ratio, not nodes on one and files on the other', () => {
+    // `unreadable` has always been a count of **files**. `mapped` counted
+    // *nodes*, which was exactly right while every node was a file and is a
+    // category error the moment one is not — a Go repo's map is packages
+    // (ADR-0026). Both sides are files now, and the check that keeps them in
+    // the same unit is per node rather than per atlas.
+    const coverage = sourceCoverage(atlas);
+    const mappedFiles = atlas.nodes
+      .filter((node) => canImport(node.lang))
+      .reduce((total, node) => total + node.fileCount, 0);
+    expect(coverage.mapped).toBe(mappedFiles);
+    // And this repo is still file-granular in every node, so the numerator is
+    // also the old node count. If TypeScript were ever grouped, this goes red
+    // rather than the deck moving quietly.
+    expect(atlas.nodes.every((node) => node.kind === 'file' && node.fileCount === 1)).toBe(true);
+    expect(coverage.mapped).toBe(atlas.nodes.filter((node) => canImport(node.lang)).length);
+    expect(atlas.repo.nodeCount).toBe(atlas.nodes.length);
+  });
+
   it('names a language ark could not have indexed anyway', () => {
     // The tables are disjoint (`tests/unit/coverage.test.ts`), so nothing on the
     // map can also be counted as missing from it. Checked here against the real

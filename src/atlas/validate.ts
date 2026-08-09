@@ -139,8 +139,8 @@ function describe(value: unknown): string {
 // sections
 // ---------------------------------------------------------------------------
 
-const LANGS: readonly Lang[] = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'md', 'other'];
-const NODE_KINDS: readonly NodeKind[] = ['file'];
+const LANGS: readonly Lang[] = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'go', 'json', 'md', 'other'];
+const NODE_KINDS: readonly NodeKind[] = ['file', 'dir'];
 const EDGE_KINDS: readonly EdgeKind[] = ['import', 'reexport', 'dynamic', 'type', 'require'];
 const CONFIDENCES: readonly Confidence[] = ['certain', 'probable'];
 const LINEAGES: readonly Lineage[] = ['certain', 'contested'];
@@ -190,7 +190,7 @@ function validateRepo(value: unknown, at: string): RepoMeta {
     headDate,
     root,
     languages,
-    fileCount: asIntAtLeast(r['fileCount'], `${at}.fileCount`, 0),
+    nodeCount: asIntAtLeast(r['nodeCount'], `${at}.nodeCount`, 0),
     tool: asString(r['tool'], `${at}.tool`),
   };
 }
@@ -209,12 +209,23 @@ function validateNode(value: unknown, at: string): AtlasNode {
   if (path.startsWith('/') || path.includes('\\')) {
     fail(`${at}.path`, 'must be a relative POSIX path');
   }
+  const kind = asMember(r['kind'], `${at}.kind`, NODE_KINDS);
+  // A node stands for at least one file, and a `file` node stands for exactly
+  // one. The second half is the invariant worth asserting: it is what keeps
+  // `Σ fileCount` equal to the old node count on every repo whose nodes are all
+  // files, so `sourceCoverage`'s numerator cannot drift on a JS repo while
+  // nobody is looking.
+  const fileCount = asIntAtLeast(r['fileCount'], `${at}.fileCount`, 1);
+  if (kind === 'file' && fileCount !== 1) {
+    fail(`${at}.fileCount`, `a file node stands for exactly one file, got ${fileCount}`);
+  }
   return {
     id,
     path,
     originPath,
-    kind: asMember(r['kind'], `${at}.kind`, NODE_KINDS),
+    kind,
     lang: asMember(r['lang'], `${at}.lang`, LANGS),
+    fileCount,
     loc: asIntAtLeast(r['loc'], `${at}.loc`, 0),
     bytes: asIntAtLeast(r['bytes'], `${at}.bytes`, 0),
     layout: asPoint(r['layout'], `${at}.layout`),
@@ -630,8 +641,8 @@ export function validateAtlas(value: unknown): Atlas {
   }
   const paths = nodes.map((node) => node.path);
   if (new Set(paths).size !== paths.length) fail('atlas.nodes', 'contains duplicate paths');
-  if (repo.fileCount !== nodes.length) {
-    fail('atlas.repo.fileCount', `says ${repo.fileCount} but there are ${nodes.length} nodes`);
+  if (repo.nodeCount !== nodes.length) {
+    fail('atlas.repo.nodeCount', `says ${repo.nodeCount} but there are ${nodes.length} nodes`);
   }
 
   const regions = asArray(root['regions'], 'atlas.regions').map((region, i) =>

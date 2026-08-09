@@ -130,6 +130,9 @@ const idOf = (atlas: Atlas, path: string): NodeId => {
   return node.id;
 };
 
+/** Every language but Go is file-granular: the node key is the path. */
+const samePath = (path: string): string => path;
+
 describe('the certification bound (ADR-0014)', () => {
   it('sits one above the noise floor when the pair cap did not bite', () => {
     const atlas = withHistory(fixtureAtlas(), [[SUBJECT, 'lib/alpha.ts', 4]]);
@@ -455,7 +458,7 @@ describe('the two constants that cross the indexer/player wall', () => {
         { sha: 'd'.repeat(40), date: '2026-01-02', author: 'a', subject: 'two', files: ['x.ts', 'y.ts', 'z.ts'], renames: [] },
       ],
     };
-    const result = buildHistory(git, ['x.ts', 'y.ts', 'z.ts'], limits);
+    const result = buildHistory(git, ['x.ts', 'y.ts', 'z.ts'], samePath, limits);
     const tags = result.truncations.map((entry) => entry.what);
     expect(tags).toContain(COCHANGE_TAG);
   });

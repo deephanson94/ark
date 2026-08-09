@@ -50,6 +50,36 @@ interface Failure {
   readonly detail: string;
 }
 
+/**
+ * Text as the browser *renders* it, which is the only form worth comparing.
+ *
+ * `innerText` collapses runs of whitespace under `white-space: normal`, so a
+ * label the code built with two spaces — `commitLabel`, whose fields are
+ * separated that way — never equals the string on screen. A file path survives
+ * the round trip unchanged, which is exactly why this went unnoticed until a
+ * board of commits was played: the bug is invisible on three verbs out of four.
+ */
+function rendered(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The part of a field note that is a claim **about its subject**.
+ *
+ * A claim reads `You proved N <noun> that <relation> SUBJECT — member, member,
+ * …`, so searching the whole sentence for a path also matches a note about
+ * somebody *else* that happens to list this subject among its members — and
+ * `find` takes the first. Three separate steps did that; two of them went red
+ * on the CI merge commit, which is a different tree with a different deck, and
+ * the second trap was subtler still: `claim.includes('commit')` matched a Blast
+ * Radius note because the *subject path* was `src/verbs/commits.ts`.
+ *
+ * One rule in one place, because a rule that lives three times diverges twice.
+ */
+function claimAbout(claim: string): string {
+  return claim.split(' — ')[0] ?? claim;
+}
+
 async function indexForPlayer(): Promise<Atlas> {
   const atlas = await buildAtlas(indexOptions(ROOT));
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
@@ -79,9 +109,15 @@ async function main(): Promise<number> {
   // Every id to the string the console prints for it — a path for a file, a date
   // and message for a commit. `pathById` covers only half the union since
   // ADR-0018, and a board of commits would silently match nothing.
+  // Values are **rendered** text: `innerText` collapses whitespace under
+  // `white-space: normal`, and `commitLabel` separates its fields with two
+  // spaces — so an unnormalised label matches a file path and never a commit,
+  // which is a board of twenty rows silently matching none of them.
   const labelById = new Map(
-    [...atlas.nodes.map((node) => [node.id, node.path] as const)].concat(
-      atlas.history.commits.map((commit) => [commitIdFor(commit.sha), commitLabel(commit)] as const),
+    [...atlas.nodes.map((node) => [node.id, rendered(node.path)] as const)].concat(
+      atlas.history.commits.map(
+        (commit) => [commitIdFor(commit.sha), rendered(commitLabel(commit))] as const,
+      ),
     ),
   );
   process.stdout.write(
@@ -325,7 +361,23 @@ async function main(): Promise<number> {
       // is `text-transform: uppercase` — it reads `COMPANION`, not `companion`.
       const title = (await page.locator('.console-verb').innerText()).trim().toLowerCase();
       process.stdout.write(`e2e: verb → ${title}\n`);
-      const expected = title === 'companion' ? 'changed alongside' : 'depend on it';
+      // **One entry per verb, not a binary.** This read
+      // `title === 'companion' ? … : 'depend on it'`, which asserts Blast
+      // Radius's wording over *any* verb that is not Companion — so the day the
+      // grid scan landed on an Archaeology board it reported the wrong prompt
+      // and then hung for 30 s on a Submit that was correctly disabled. ark
+      // indexes itself, so which board this step plays moves with every commit;
+      // a default arm here is a prediction about a deck nobody controls.
+      const WORDING: Record<string, string> = {
+        'blast radius': 'depend on it',
+        companion: 'changed alongside',
+        archaeology: 'commits changed',
+        placement: 'did it change',
+      };
+      const expected = WORDING[title] ?? '';
+      if (expected === '') {
+        failures.push({ what: 'prompt', detail: `no expected wording for verb "${title}"` });
+      }
       if (!question.includes(expected)) {
         failures.push({ what: 'prompt', detail: `unexpected wording: "${question}"` });
       }
@@ -353,13 +405,19 @@ async function main(): Promise<number> {
       // The witness step below already reads the choice set off the screen and
       // matches the board whose candidates those are — CLAUDE.md's `.first()`
       // landmine, fixed there and left standing here, four hundred lines apart.
-      const shownHere = (await page.locator('.choice-path').allInnerTexts()).map((t) => t.trim());
+      const shownHere = (await page.locator('.choice-path').allInnerTexts()).map(rendered);
       const shownHereSet = new Set(shownHere);
       const challenge = atlas.challenges.find(
         (entry) =>
           pathById.get(entry.subject) === subject &&
           entry.candidates.length === shownHere.length &&
-          entry.candidates.every((id) => shownHereSet.has(pathById.get(id) ?? ' ')),
+          // `labelById`, not `pathById`: a member is a place **or an event**
+          // (ADR-0018), and `pathById` covers only the first arm — so an
+          // Archaeology board, whose rows are commits, matched nothing at all,
+          // `clicked` stayed 0 and the step hung 30 s on a Submit that was
+          // correctly disabled. The same half-of-the-union mistake the comment
+          // above describes, one map along.
+          entry.candidates.every((id) => shownHereSet.has(labelById.get(id) ?? ' ')),
       );
       if (!question.includes(subject)) {
         failures.push({ what: 'prompt', detail: `asked about ${subject} but says "${question}"` });
@@ -367,11 +425,11 @@ async function main(): Promise<number> {
       if (challenge === undefined) {
         failures.push({ what: 'challenge', detail: `no challenge in the atlas for ${subject}` });
       } else {
-        const wanted = new Set(challenge.truth.map((id) => pathById.get(id) ?? ''));
+        const wanted = new Set(challenge.truth.map((id) => labelById.get(id) ?? ''));
         let clicked = 0;
         for (let i = 0; i < choices; i++) {
           const button = page.locator('.choice-button').nth(i);
-          if (!wanted.has((await button.innerText()).trim())) continue;
+          if (!wanted.has(rendered(await button.innerText()))) continue;
           await button.click();
           clicked++;
         }
@@ -697,7 +755,7 @@ async function main(): Promise<number> {
       if (await page.locator('.console-scrim:not([hidden])').count()) {
         failures.push({ what: 'guide', detail: 'the suggestion opened a modal instead of moving the map' });
       }
-      const landedOn = (await page.locator('.inspector-path').innerText()).trim();
+      const landedOn = rendered(await page.locator('.inspector-path').innerText());
       process.stdout.write(`e2e: guide sent us to ${landedOn}\n`);
       if (landedOn === '') {
         failures.push({ what: 'guide', detail: 'the suggestion selected nothing' });
@@ -763,7 +821,7 @@ async function main(): Promise<number> {
       );
       await page.locator('.inspector-action').click();
       await page.waitForSelector('.console-panel', { timeout: 5000 });
-      const shown = (await page.locator('.choice-path').allInnerTexts()).map((text) => text.trim());
+      const shown = (await page.locator('.choice-path').allInnerTexts()).map(rendered);
       const shownSet = new Set(shown);
       const witnessBoard = boardsHere.find(
         (entry) =>
@@ -857,7 +915,17 @@ async function main(): Promise<number> {
         const claims = (await page.locator('.field-note-claim').allInnerTexts()).map((text) =>
           text.trim(),
         );
-        const mine = claims.find((text) => text.includes(subject));
+        // **Match the subject, not the sentence.** A claim reads
+        // `You proved N files that change with SUBJECT — member, member, …`,
+        // so `text.includes(subject)` also matches a note about someone *else*
+        // that happens to list this subject as one of its members — and picks
+        // it, because `find` takes the first. That is the same
+        // select-by-position mistake the comment above describes, wearing a
+        // substring: it went red on the CI merge commit, where a note for
+        // `tests/unit/placement.test.ts` listed the subject among six members
+        // and sorted first. Everything before the first em dash is the claim
+        // about the subject; everything after it is the list of members.
+        const mine = claims.find((text) => claimAbout(text).includes(subject));
         process.stdout.write(`e2e: note → ${mine ?? claims[0] ?? '(none)'}\n`);
         // Every note, not just one: the surveyed/understood line is broken by
         // any sentence stronger than what was earned, wherever it sits.
@@ -1096,7 +1164,7 @@ async function main(): Promise<number> {
           let clicked = 0;
           for (let i = 0; i < options; i++) {
             const button = seededPage.locator('.choice-button').nth(i);
-            if (!wanted.has((await button.innerText()).trim())) continue;
+            if (!wanted.has(rendered(await button.innerText()))) continue;
             await button.click();
             clicked++;
           }
@@ -1135,7 +1203,7 @@ async function main(): Promise<number> {
           await seededPage.locator('.hud-notes').click();
           await seededPage.waitForSelector('.notes-panel', { timeout: 5000 });
           const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
-          const mine = claims.find((claim) => claim.includes(sha));
+          const mine = claims.find((claim) => claimAbout(claim).includes(sha));
           if (mine === undefined) {
             failures.push({
               what: 'placement',
@@ -1304,7 +1372,14 @@ async function main(): Promise<number> {
         // notes resolved a member through `refById` until this change, so this
         // note would have been absent with nothing to say it had gone.
         const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
-        const mine = claims.find((claim) => claim.includes(subjectPath) && claim.includes('commit'));
+        // `claim.includes('commit')` was meant to pick Archaeology's note out of
+        // the several a subject can have. It matches any note whose **subject
+        // path** contains the word — `src/verbs/commits.ts` — so the noun is
+        // read as a noun.
+        const mine = claims.find(
+          (claim) =>
+            claimAbout(claim).includes(subjectPath) && /^You proved \d+ commits? that/.test(claim),
+        );
         if (mine === undefined) {
           failures.push({
             what: 'archaeology',

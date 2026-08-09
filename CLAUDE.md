@@ -568,6 +568,81 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   did not move and did not need to; the sentence that needed to move was *"there is none in this
   set"*, which is a fact about the set being quoted as a fact about the world. **A gap in eleven
   samples is a gap in eleven samples.**
+- **Two checks that read the atlas cannot see a hole in the atlas, and the third one found two wrong
+  answer keys.** M5's Go work shipped with three verifications: no two nodes for one package (0 — and
+  *unreadable* as anything but 0, since node paths are unique and a board never holds its subject);
+  no same-package distractor slot (0, same tautology); and `candidates ∩ dependents = truth` with 0
+  violations. All three read `atlas.json`, and the defect ADR-0024 §6.1 is *about* is a **missing
+  edge**, which no atlas-derived check can see. The instrument that was not vacuous read the repo's
+  **source** — does a candidate marked wrong contain an import naming the subject's package? — and
+  found **2 of prometheus's 34 Go boards** marking as wrong a package whose `server.go` imports the
+  subject outright. Cause: a nested `go.mod` that `require`s its own repo's root module, so *whose
+  repo is this path in* was answered with the *nearest* module's require list. **When a rule is about
+  something the atlas might be missing, the check has to come from outside the atlas** — and note
+  which repo caught it: not the big one, not the bootstrap, but the one added late because another
+  ADR had named it.
+- **The sentence excusing a mechanism from inspection is the one to check first.** ADR-0026 §2.1
+  closed with *"no Go repo in this set moved a package inside the retained commit window, so this is
+  argued from the mechanism rather than from a repo where it fired."* Measured: **69 split votes
+  across 316 packages, 15 of them ties**, and the collision fallback firing too. So the plurality
+  rule, its byte-order tie-break and the fallback had all decided real node identities, dozens of
+  times, entirely unexamined — and a 1–1 tie flips the moment either side gains a file, which changes
+  the id and drops the player's saved passes. A strict majority cannot tie. The shape is the
+  proudest-paragraph landmine inverted: not the claim the document defends hardest, but the one it
+  uses to stop looking.
+- **Adding a language to `SCANNED` moves its unreadable files out of every tally there is.** A `.go`
+  file over the size cap is no longer `unreadable` (right — the extension is scanned) and is not
+  `unsupported` either (it is `tooLarge`), so it vanishes from both sides of ADR-0025's ratio *and*
+  is never parsed. Harmless at file granularity, where it simply never becomes a node; a **silent
+  missing edge** once a node stands for a directory, because the package survives without it.
+  ADR-0025 §9.3 had written down that this was the dangerous direction, and the change that took it
+  made no connection to that paragraph. **When you move an extension between the walk's tables, walk
+  every path a file of that extension can take afterwards** — not just the one the change is about.
+- **A test that predicts which board the shell will serve is a `.first()` in disguise, and this repo
+  has now paid for it three times in the same file.** The e2e's board-playing step asserted Blast
+  Radius's wording over *any* verb that was not Companion — a two-armed conditional standing in for a
+  four-verb enum — and matched the board through `pathById`, which covers only half of `AtlasId`.
+  Adding two source files re-rolled ark's own deck onto an **Archaeology** board, and the step
+  reported the wrong prompt and then hung **30 s on a Submit that was correctly disabled**, because
+  nothing had been clicked. Both fixes were already in the file: `labelById` — the both-arms map — is
+  built 300 lines above, and the comment directly over the broken line describes this exact landmine
+  being *"fixed there and left standing here, four hundred lines apart."* Underneath sat a third bug
+  neither fix reaches: **`innerText` returns rendered text**, so `commitLabel`'s two-space separators
+  arrive collapsed to one and a commit row can never equal the string the code built. That one is
+  invisible on three verbs out of four, which is why it survived a milestone. **Compare rendered text
+  to rendered text, enumerate every verb rather than defaulting, and never predict the board.**
+  A **third** instance in the same file surfaced only from reproducing the CI merge commit: the field
+  notes step selects its note with `claims.find(t => t.includes(subject))`, and a claim reads
+  *"You proved N files that change with SUBJECT — member, member, …"* — so a note about somebody
+  **else** that merely lists this subject as a member matches, and `find` takes the first. The comment
+  two lines above it already said *"find the note by its subject, never by its position"*. **A
+  substring is a position.** Match against the part of the sentence that is a claim about the
+  subject, not against the sentence. **A fourth followed immediately**, in the Archaeology step, and
+  its predicate had *two* substring traps at once: `claim.includes(subjectPath) &&
+  claim.includes('commit')` matched a **Blast Radius** note because the subject was listed among its
+  members *and* because that note's own subject path was `src/verbs/commits.ts`. Both halves of an
+  `and` were substrings, and both were wrong. There is one `claimAbout` helper now, because a rule
+  that lived three times had already diverged twice. **The instrument that found #3 and #4 is the
+  merge-commit reproduction** — neither was reachable on the branch's own tree, and both would have
+  been a red CI.
+- **A path in a language you have just added can be dead in a way the language's own shape hides.**
+  Go's masker skipped recording rune-literal bodies as string literals, with a comment explaining that
+  a rune can never be an import path. True, and the branch is unreachable: the import scan only ever
+  looks up an offset after a `"` or a backtick. The masking of runes *is* load-bearing — an unmasked
+  `'"'` opens a string that swallows real code — but the test written for it asserted on `imports`,
+  where Go's grammar makes the damage impossible because imports come first, and the mutant survived.
+  The cost lands on `exports`, which is scanned over the whole file. **Two mutants of three survived
+  the first draft of that suite**, and the fix in both cases was to move the assertion to the surface
+  the defect actually reaches.
+- **A path prefix and a node key are not the same string, and the difference is one repo's entire
+  edge list.** Go's module path resolves `github.com/x/y` to the module's directory, which at the
+  repo root is `''` — while the root package's node key is `.`, because the validator refuses an empty
+  path. `spf13/cobra`'s `doc/` package imports the module path itself, so cobra's **only** internal
+  edge matched no node, and the file that should have carried it was tainted for guardrail 4 instead.
+  It surfaced as *"edges 0, unresolved 1"* on a repo with two packages — small enough to read, which
+  is the only reason it was caught before hugo's 1,275 edges buried it. **When two subsystems name the
+  same thing, normalise at the boundary and test the degenerate case first.**
+
 - **A relation over a set of one is an identity.** A reveal that deliberately says *"it changed a file
   that usually moves with this one"* rather than naming the file — because the name is another verb's
   answer key — names it anyway whenever the subject has exactly one co-change partner. Measured at 4
@@ -809,6 +884,27 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
+**M5's Go half ships.** A Go node is a **package** — the directory, not the file
+(**[ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)**) —
+and the scanner is **hand-rolled**, against NORTH-STAR §7.2's *"v2: tree-sitter"*, on a measurement
+rather than on taste: both instruments find **6,013 import sites on hugo and 190 on cobra**, the same
+counts ADR-0024 got from Go's own `go/parser`, and disagree on **no file at all** out of 942;
+tree-sitter is 6.2× slower and would be this project's **first runtime dependency**. The refusal is
+scoped to Go and the condition that reverses it is written down — *a language where the two disagree
+on real files* — so **score the next language the same way before writing its scanner.**
+`gohugoio/hugo` `44da0860` is **193 packages holding 906 files, 6.61 edges each, 456 challenges,
+6,733 ms** (ADR-0024 §7 predicted 193 / 1,275 / 6.61, and this reproduces it to the digit from the
+shipped code); `spf13/cobra` is 2 packages, 1 edge and **no Blast Radius deck**, which is the honest
+reading of a library that is one package. Python is decided and unbuilt: a **history** language, the
+map and the three git verbs and never Blast Radius (ADR-0024 decision 2).
+
+The class package granularity was bought for is **gone and checked rather than assumed**: 0
+same-package distractor slots on hugo's 156 boards, prometheus's 63 and cobra's, against ADR-0024
+§6.1's ≤71 wrong answer keys on ≤46 of 244 file-granular boards — plus 0 violations of ADR-0008's
+`candidates ∩ dependents(subject, ∞) = truth` across 187 Go boards. **The bootstrap deck did not
+move**: old indexer against new on clean clones of ark `837970f2` and hono `7075369e`, `challenges`
+is **byte-identical** and so is everything else bar the new `fileCount` field.
+
 **M2, M3 and M4 are delivered; the first three rungs toward the third-person world are shipped.**
 §13's M4 is *Companion, Placement, Archaeology* and **all three ship**, with
 [ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md) built rather than
@@ -825,9 +921,10 @@ allowed). Ark itself is **3.40** at `e6fe5e4`, measured on a clean clone. *This 
 five milestones and that figure reproduces nowhere* — 2.57 at `0fac922`, the commit whose CHANGELOG
 recorded it, and 2.54–2.59 across the window around it, under the only denominator that reproduces
 hono's 2.51 (edges ÷ **all** nodes; code-only reads 3.25 there). The hono half of the same sentence
-was exact, which is what made the ark half diagnosable. The scanner is **ES modules only**, so until
-M5 a Python or Go repo produces a map with no edges — and, since ADR-0025, **no deck either**, said
-out loud with the count of what is missing rather than filled in with questions about the Markdown.
+was exact, which is what made the ark half diagnosable. The scanner reads **ES modules and Go**; a Python or Rust
+repo still produces a map with no edges of its own — and, since ADR-0025, **no deck either** when
+that map is a sliver, said out loud with the count of what is missing rather than filled in with
+questions about the Markdown.
 
 Press **`o`** for the orbit view: every file a column standing on its 2D footing, height =
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
@@ -1012,7 +1109,11 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **M5 — Go first**, now that its kill point is decided and its precondition met; then, in
+Next action: **the noun** — the player calls every Go package a *"file"* on every board it ships
+(153 on hugo, 34 on prometheus), which `Verb.prompt`'s atlas-free signature cannot currently fix;
+then **M5's Python half** — a *history* language, the map and the three git verbs and never
+Blast Radius (ADR-0024 decision 2), which is a smaller product than the roadmap implies and needs its
+own measurement; score it against tree-sitter the way Go was scored before writing a scanner. Then, in
 rough order of size, packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the
 Definition of done) and the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60
 structural phenomena, which is the atom that would let anything *transfer* to another repo and the

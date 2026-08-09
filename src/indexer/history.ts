@@ -40,16 +40,19 @@ export const DEFAULT_HISTORY_LIMITS: HistoryLimits = {
   minCoChangeCount: 2,
 };
 
-export interface FileHistory {
-  readonly originPath: string;
+export interface NodeHistory {
   readonly churn: number;
   readonly authors: number;
   readonly firstSeen: IsoDate | null;
   readonly lastSeen: IsoDate | null;
   /**
-   * True when this file's lineage was decided by `applyRenames`' arbitrary
+   * True when this node's lineage was decided by `applyRenames`' arbitrary
    * tie-break, so its churn, dates and co-change counts may include another
    * file's activity. See `Lineage` in the schema, and `applyRenames` below.
+   *
+   * For a node standing for several files, **any** contested member contests
+   * the node: the doubt is about whether these counts are this node's, and one
+   * uncertain member is enough to make the sum uncertain.
    */
   readonly contested: boolean;
 }
@@ -58,31 +61,54 @@ export interface RetainedCommit {
   readonly sha: string;
   readonly date: IsoDate;
   readonly subject: string;
-  /** Current paths, sorted. */
+  /** Node keys, sorted. A commit touching three files of one Go package touches one node. */
   readonly files: readonly string[];
   readonly wide: boolean;
   readonly issue: number | null;
 }
 
 export interface HistoryResult {
-  /** Keyed by current path. Every indexed path has an entry. */
-  readonly perFile: ReadonlyMap<string, FileHistory>;
+  /** Keyed by node key. Every node key has an entry. */
+  readonly perNode: ReadonlyMap<string, NodeHistory>;
+  /**
+   * Live **file** path → the earliest path git knows that file by.
+   *
+   * Kept per file rather than per node because renames are a fact about files:
+   * git records `pkg/a/x.go → internal/a/x.go`, never a directory move. A
+   * node standing for several files derives its own origin from these
+   * (`build.ts`), which is why this is returned instead of being folded into
+   * `perNode`.
+   */
+  readonly originByFile: ReadonlyMap<string, string>;
   /** Newest first. */
   readonly commits: readonly RetainedCommit[];
-  /** `[pathA, pathB, count]`, pathA < pathB. Sorted by count desc, then paths. */
+  /** `[keyA, keyB, count]`, keyA < keyB. Sorted by count desc, then keys. */
   readonly coChange: readonly (readonly [string, string, number])[];
   readonly window: { readonly from: IsoDate; readonly to: IsoDate } | null;
   readonly commitsWalked: number;
   readonly truncations: readonly Truncation[];
 }
 
+/**
+ * Which node a file belongs to.
+ *
+ * The identity for every language ark reads per file; a directory for Go,
+ * whose unit of import is the package (ADR-0026). `buildHistory` takes it as a
+ * parameter rather than knowing about it, because churn, co-change and a
+ * commit's file list are all counted *per node* — a commit touching three
+ * files of one package touched that package once, not three times — while
+ * rename lineage is still followed per file.
+ */
+export type NodeKeyOf = (path: string) => string;
+
 const SUBJECT_LIMIT = 120;
 
-export function emptyHistory(paths: readonly string[]): HistoryResult {
-  const perFile = new Map<string, FileHistory>();
+export function emptyHistory(paths: readonly string[], nodeKeyOf: NodeKeyOf): HistoryResult {
+  const perNode = new Map<string, NodeHistory>();
+  const originByFile = new Map<string, string>();
   for (const path of paths) {
-    perFile.set(path, {
-      originPath: path,
+    originByFile.set(path, path);
+    perNode.set(nodeKeyOf(path), {
       churn: 0,
       authors: 0,
       firstSeen: null,
@@ -92,7 +118,8 @@ export function emptyHistory(paths: readonly string[]): HistoryResult {
     });
   }
   return {
-    perFile,
+    perNode,
+    originByFile,
     commits: [],
     coChange: [],
     window: null,
@@ -111,9 +138,10 @@ interface Accumulator {
 export function buildHistory(
   git: GitHistory,
   paths: readonly string[],
+  nodeKeyOf: NodeKeyOf,
   limits: HistoryLimits,
 ): HistoryResult {
-  if (!git.present || git.commits.length === 0) return emptyHistory(paths);
+  if (!git.present || git.commits.length === 0) return emptyHistory(paths, nodeKeyOf);
 
   const live = new Set(paths);
   /** Historical path → the live path it eventually became. */
@@ -138,10 +166,14 @@ export function buildHistory(
     if (newest === null || byteCompare(commit.date, newest) > 0) newest = commit.date;
     if (oldest === null || byteCompare(commit.date, oldest) < 0) oldest = commit.date;
 
+    // Node keys, not paths: a commit touching three files of one Go package
+    // touched that package **once**. Everything below — churn, the co-change
+    // pairs, the wide-commit test and the retained file list — is counted in
+    // that unit, so a package's numbers say what a file's have always said.
     const touched = new Set<string>();
     for (const path of commit.files) {
       const current = alias.get(path);
-      if (current !== undefined && live.has(current)) touched.add(current);
+      if (current !== undefined && live.has(current)) touched.add(nodeKeyOf(current));
     }
 
     for (const path of touched) {
@@ -193,16 +225,28 @@ export function buildHistory(
     applyRenames(commit, alias, origin, contested);
   }
 
-  const perFile = new Map<string, FileHistory>();
+  const originByFile = new Map<string, string>();
+  // A node is contested when any of its files is. `contested` is a set of live
+  // *file* paths, so the fold happens here rather than at the lookup — the
+  // alternative is every reader remembering to check the members, which is the
+  // shape of half this repo's landmines.
+  const contestedNodes = new Set<string>();
   for (const path of paths) {
-    const accumulator = accumulators.get(path);
-    perFile.set(path, {
-      originPath: origin.get(path) ?? path,
+    originByFile.set(path, origin.get(path) ?? path);
+    if (contested.has(path)) contestedNodes.add(nodeKeyOf(path));
+  }
+
+  const perNode = new Map<string, NodeHistory>();
+  for (const path of paths) {
+    const key = nodeKeyOf(path);
+    if (perNode.has(key)) continue;
+    const accumulator = accumulators.get(key);
+    perNode.set(key, {
       churn: accumulator?.churn ?? 0,
       authors: accumulator?.authors.size ?? 0,
       firstSeen: accumulator?.firstSeen ?? null,
       lastSeen: accumulator?.lastSeen ?? null,
-      contested: contested.has(path),
+      contested: contestedNodes.has(key),
     });
   }
 
@@ -238,7 +282,8 @@ export function buildHistory(
   truncations.sort((a, b) => byteCompare(a.what, b.what));
 
   return {
-    perFile,
+    perNode,
+    originByFile,
     commits: retained,
     coChange,
     window: oldest !== null && newest !== null ? { from: oldest, to: newest } : null,

@@ -168,10 +168,27 @@ describe('nodes', () => {
     }, 'atlas.nodes[0].lang', /missing from atlas.repo.languages/);
   });
 
-  it('rejects a fileCount that disagrees with the node list', () => {
+  it('rejects a nodeCount that disagrees with the node list', () => {
     rejects(VALID, (raw) => {
-      (raw['repo'] as Raw)['fileCount'] = 99;
-    }, 'atlas.repo.fileCount', /but there are/);
+      (raw['repo'] as Raw)['nodeCount'] = 99;
+    }, 'atlas.repo.nodeCount', /but there are/);
+  });
+
+  it('rejects a file node standing for more than one file', () => {
+    // `fileCount` is the numerator of `sourceCoverage`'s ratio (ADR-0026), and
+    // it is only in the same unit as the denominator if a `file` node is
+    // exactly one file. Nothing else in the atlas would notice if it were not.
+    rejects(VALID, (raw) => {
+      const node = nodesOf(raw)[0];
+      if (node !== undefined) node['fileCount'] = 4;
+    }, 'atlas.nodes[0].fileCount', /stands for exactly one file/);
+  });
+
+  it('rejects a node standing for no files at all', () => {
+    rejects(VALID, (raw) => {
+      const node = nodesOf(raw)[0];
+      if (node !== undefined) node['fileCount'] = 0;
+    }, 'atlas.nodes[0].fileCount', /expected >= 1/);
   });
 
   it('rejects a malformed date', () => {
