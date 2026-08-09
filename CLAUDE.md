@@ -431,6 +431,25 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   which nothing asserted. **When you replace an identity with an existential to avoid a leak, bound
   the size of the set you are quantifying over.**
 
+- **Precision is not a grade, and a leak reported in the wrong units is not comparable to any bar.**
+  ADR-0020 measured Archaeology's subtree hint against the Placement board it weakens and reported it
+  **100%-precise on 9 of this repo's boards**, which reads as decisive and was carried forward for a
+  whole session as the next thing to fix. Scored with `scoreSet` — the metric the player is actually
+  graded by — the same hint **fires zero times on both repos**: it picks one or two of a four-to-six
+  file key, so recall caps the F1 near 0.5 however clean the picks are, and the best score on either
+  repo is 0.727 against a 0.78 bar. Nothing was wrong with the measurement; it was in units the
+  product does not grade in. **Report an exposure in the units of §8.2, or you have measured
+  something no threshold can be applied to** — and note which direction the error ran, because a
+  precision figure always flatters the leak and therefore always gets believed.
+- **"The alternative cannot be built" is a claim needing evidence, exactly like the alternative
+  working.** ADR-0021's first draft rested on a second leg beside its real argument: that no
+  by-board guard could ever see a guess assembled from hints on two different boards, so the leak was
+  structurally unclosable. It reads well and it is **false** — measured, every firing on both repos is
+  visible to a *single* board, a by-board guard would close all six, and it would cost one class going
+  silent on 3 of 32 boards here. The decision was right and one of its two legs was invented. The
+  shape is the repo's own landmine about the proudest paragraph, one step earlier: when a document
+  argues *"and anyway we could not have fixed it"*, that sentence is doing the work of an excuse and
+  is the first thing to measure. Measure the fix you are declining before you decline it.
 - **A class label is not a class description, and the gloss is where the lie gets in.** Every §8.3
   distractor strategy starts at its textbook bucket and **widens** when that bucket runs dry —
   `treeSibling` walks outward through shared path prefixes, Placement's `structural` is an unbounded
@@ -631,6 +650,21 @@ hono's, and **seven of the seventeen (verb, strategy) pairs are re-derived corre
 on either repo**. A candidate
 satisfies several predicates at once and which one *chose* it was settled by a quota.
 
+**The direction ADR-0020 left open is closed, by measurement rather than by machinery**
+(**[ADR-0021](./docs/decisions/0021-a-gate-heuristic-is-a-guess-that-needs-no-graph.md)**). Scoring
+Archaeology's subtree hint as a guess on the **Placement** board — the work that ADR left behind —
+was blocked as written, because `build.ts` runs Placement first (ADR-0019 decision 7 needs it to), so
+neither verb can see the other at the moment it would have to. Scored anyway, off `atlas.json`: the
+subtree hint **fires zero times on both repos** (best 0.600 here, 0.727 on hono, against a 0.78 bar
+with nothing in the gap). ADR-0020's "100%-precise on 9 boards" was true and was **not a grade** —
+recall is what F1 weighs and a subtree picks one or two of a six-file key. All three arms were
+scored, not only the new one: `neighbour` fires zero too, and **`companion` beats band A on 3 of this
+repo's 40 Placement boards and 3 of hono's 54**. It is accepted rather than gated on the rule
+`gate.ts` had been applying since M2 without writing down — **a gate heuristic is a guess a player
+could run knowing nothing about the repo**, which is why `directImporters` was always excluded and
+why the co-change hint is too. The guard that *would* close it is designed in full in that ADR and
+deliberately not built; a canary in `tests/atlas/` holds the structure-blind arm under the bar.
+
 **Two classes are recorded and never spoken**, and one of them is the trap this rung walks into:
 naming Blast Radius's `coChange` is the sentence `blastRadius/reveal.ts` deleted, in the file that
 documents why. Companion's `structural` is withheld on a weaker, stated argument. The rule the rest
@@ -696,20 +730,11 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **score the subtree hint on the Placement board**, which is the one open item with a
-measurement already attached and a pillar-3 exposure behind it. ADR-0020 left it deliberately:
-Archaeology's `sibling` witness says *"a commit that touched this file's own corner of the tree"*,
-which is a weakened atom of that commit's **Placement** key, and ticking that board's candidates
-inside the hinted subtree is **100%-precise on 9 of this repo's boards and 4 of hono's** (at least
-half-precise on 21 and 2). The numbers and the reasoning are in that ADR's *"The direction this opens,
-measured and not acted on"*; the work is to score the guess in `gate.ts` against the **Placement**
-board, the way `broadKnown` is scored, and refuse what it beats. **The same exposure predates this
-rung in the `neighbour` and `companion` arms**, so measure all three rather than only the new one —
-and what ADR-0020 should not have implied is that decision 6's set-size guard is *the* guard these
-classes need. It addresses the identity case and nothing else.
-
-Then, in rough order of size: the **overlapping Companion answer keys** in the generator; packaging
-**`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
+Next action: in rough order of size — the **overlapping Companion answer keys** in the generator; a
+**co-change distractor strategy for Placement**, which §8.3 calls the *best* class of wrong answer
+and which Placement is the only verb without, and which would lower ADR-0021 decision 3's exposure at
+the source rather than gating it (it changes a shipped deck, so it wants its own measurement);
+packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
 catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
 would let anything *transfer* to another repo and the other half of risk #1; and **M5**, which is what
 the roadmap says (tree-sitter, 3–4 more languages) and is the largest bet — the scanner is

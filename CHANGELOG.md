@@ -1811,3 +1811,76 @@ One line per iteration: what changed, and what to do next.
   `CHANGELOG.md` are indexed nodes and this commit joins the history — which is worth saying rather
   than waving at, for the reason the M4 close-out entry gives. **Next** is unchanged from what this
   entry installs: score the subtree hint on the Placement board.
+
+- **ADR-0021: the subtree hint is scored, and it does not reach the bar — but something beside it
+  does.** ADR-0020 measured Archaeology's `sibling` witness — *"a commit that touched this file's own
+  corner of the tree"* — as a weakened atom of that commit's **Placement** key, found it 100%-precise
+  on 9 boards, and left scoring it as the open work. **The obvious implementation does not exist**,
+  and finding out why was the first task: `build.ts` runs Placement *before* Archaeology because
+  ADR-0019 decision 7 needs it to, so when a Placement board is gated the hint has not been written
+  yet, and when the hint is written, scoring it means reading another verb's deck. The question is
+  therefore not "score it or don't" but *how does a later verb learn that a sentence would decide an
+  earlier board without reading that deck* — and the measurement decides between the four answers
+  rather than an argument.
+
+  **Scored through the real generator on clean clones of ark `a063f01` and `honojs/hono` `cf78528`,
+  the subtree hint fires zero times on both repos** — best **0.600** over 104 rows here and **0.727**
+  over 29 there, against a 0.78 bar with nothing in the gap (the next scores are 0.500 and 0.600), so
+  it sits on a plateau rather than at a cliff edge. **Precision was the wrong instrument and that is
+  the finding**: a subtree hint picks one or two of a four-to-six file key, so recall caps the F1 far
+  below any band however clean the picks are. The nine 100%-precise boards are real and they are not
+  a grade.
+
+  **All three arms were scored, not only the new one, and the asymmetry is the result.** `neighbour`
+  fires zero times too. `companion` — which shipped in M4 and had never been scored either — beats
+  band A on **3 of this repo's 40 Placement boards and 3 of hono's 54** once the hints one board
+  states about one commit are pooled. Every firing runs through the co-change relation and none
+  through a path. The counterfactual holds the board, the relation and the scorer fixed and varies
+  only the seed: seeded from the board, or from whichever file in the repo covers most of it, **the
+  same guess fires nowhere**, so the hint is genuinely load-bearing rather than a Placement-native
+  exposure wearing a costume.
+
+  **Decision: accepted, and the rule that decides it was already in `gate.ts` unwritten.** All nine
+  heuristics there are runnable with no knowledge of the repo — match a path, match a token, sort a
+  printed column — and the file's one documented exclusion, `directImporters`, is excluded precisely
+  because you cannot run it without the import graph. So: *a guess belongs in `gate.ts` when a player
+  could execute it knowing nothing about the repo*. The arm that is structure-blind is the one that
+  never reaches the bar; the arms that reach it need the matrix or the graph, and a board answered
+  from the co-change matrix was answered by **reasoning about structure**, which is pillar 3's second
+  half rather than a violation of its first. That is a judgement and ADR-0021 carries the
+  counter-argument with it — this repo gated `broadKnown` at a *smaller* number, and the only thing
+  separating the two is the rule above.
+
+  **What the ADR does not claim, because a first draft claimed it and was wrong.** It argued that no
+  by-board guard could see a guess assembled from two boards. Measured: **every firing on both repos
+  is visible to a single Archaeology board**, a by-board guard would close all six, and it would cost
+  a class going silent on 3 of ark's 32 boards and 4 of hono's 54 — cheap. So the decision rests on
+  the line alone, and the guard that would close it is written down in full (a verdict-shaped
+  `decidedFact(commit, seed, relation)` declared by the earlier verb) rather than left to be
+  redesigned. Its real cost is that the earlier verb would have to **anticipate the relations a later
+  verb might name**, and a fifth verb naming a fourth relation would get no verdict and leak silently.
+
+  Shipped: a canary in `tests/atlas/` asserting the structure-blind hint stays under
+  `CTRL_F_THRESHOLD` on every board it is spoken on, using the real scorer and the real bar so it
+  moves if §8.2's bands move — **made to fail three ways before it was believed** (drop the bar to
+  pass → red on 9 boards; point it at `companion` → red; empty its population → the vacuity guard
+  fires). Plus `sibling`'s docstring, which still said *"the deepest bucket only"* — the population
+  ADR-0020 had just corrected in the sentence and the guard one file over, left uncorrected in the
+  strategy that reads it.
+
+  **And ADR-0020's own hono precision pair does not reproduce, one half of it cannot be right, and
+  the instrument is not in doubt.** It recorded *"100%-precise on 9 boards here and 4 on hono, and at
+  least half-precise on 21 and 2"* — a fully-precise board is at-least-half-precise by definition, so
+  4 and 2 contradict each other in one sentence. Re-measured at the same unchanged commit: 4 rows / 3
+  boards, and 7 rows / 6 boards. The same probe reproduces that document's structural counts on hono
+  **exactly** (91 spoken rows, 29 with a Placement board, against a recorded 91 and 29), which is what
+  isolates it as transcription rather than method. Fourth instance of a sentence disagreeing with the
+  table above it.
+
+  Comments, one test and one ADR; no code path, no schema. **The atlas moves anyway** — a comment is
+  bytes and `loc`, and this commit joins the history. **Next**: the backlog in size order —
+  **overlapping Companion answer keys** in the generator; a **co-change distractor strategy for
+  Placement**, which §8.3 calls the best class of wrong answer and which is the one verb without it
+  (it would lower decision 3's table at the source rather than gating it); packaging **`npx ark`**;
+  the **phenomenon catalogue**; and **M5**, which still needs its kill-point measured before a parser
+  is written.

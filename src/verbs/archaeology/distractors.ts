@@ -149,12 +149,25 @@ const neighbour: Strategy = (context, limit) => {
 };
 
 /**
- * Changed a file in the subject's own directory.
+ * Changed a file in the subject's own **corner of the tree**.
  *
- * The deepest bucket only, not the widening walk Companion and Placement make:
- * one directory up on a repo with a flat `src/` is most of the codebase, which
- * makes "sibling" mean nothing. Where the deepest bucket is thin, the quota is
- * handed back and another strategy uses it.
+ * It reads one bucket and never widens, unlike the walk Companion and Placement
+ * make — one directory *up* on a repo with a flat `src/` is most of the
+ * codebase, which would make "sibling" mean nothing. But the bucket it reads is
+ * not the directory either: `analyse()` registers every node under **every
+ * prefix** of its directory, so `byDirPrefix.get(home)` is the whole subtree
+ * beneath `home`, this file's own directory included.
+ *
+ * **That sentence used to say "the deepest bucket only" and stop**, which reads
+ * as the exact directory and is what an adversarial review found a player-facing
+ * gloss claiming — false on 14 of this repo's rows and 40 of hono's (ADR-0020).
+ * The sentence was repaired in `reveal.ts` and the guard beside it was widened
+ * to the subtree; this docstring, one file over, was left saying the thing that
+ * had just been measured wrong. Strategy, guard, sentence and — since ADR-0021
+ * scored it — the gate all quantify over this one set.
+ *
+ * Where the bucket is thin, the quota is handed back and another strategy uses
+ * it.
  */
 const sibling: Strategy = (context, limit) => {
   const segments = context.corpus.facts[context.subject]?.segments ?? [];
