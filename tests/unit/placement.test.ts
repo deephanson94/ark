@@ -15,6 +15,7 @@ import {
   buildGraph,
   commitIdFor,
   isNodeId,
+  readWitness,
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet } from '../../src/verbs/index.js';
@@ -54,9 +55,14 @@ function fixture(
     readonly churn?: Readonly<Record<string, number>>;
     readonly contested?: readonly string[];
     readonly fileCap?: number;
+    /** Extra import edges, for a test that needs one to cross a sampling boundary. */
+    readonly links?: readonly (readonly [string, string])[];
   } = {},
 ): Atlas {
-  const bare = atlasWith([...CHANGED, ...FILLER], [['src/edge/part00.ts', 'src/core/engine.ts']]);
+  const bare = atlasWith(
+    [...CHANGED, ...FILLER],
+    [['src/edge/part00.ts', 'src/core/engine.ts'], ...(options.links ?? [])],
+  );
   const refOf = (path: string): number => {
     const ref = bare.nodes.findIndex((node) => node.path === path);
     if (ref === -1) throw new Error(`fixture has no ${path}`);
@@ -478,6 +484,87 @@ describe('a commit subject is a place the map does not have', () => {
     expect(reveal.unlocks).toBe('nothing');
     expect(reveal.notes).toHaveLength(challenge.truth.length);
     for (const note of reveal.notes) expect(note.route).toEqual([]);
+  });
+
+  it('names only files its own answer key holds', () => {
+    // ADR-0020's found-in-flight defect. `whyYes` used to search the commit's
+    // **whole** membership for a neighbour to name, while `placement.discloses`
+    // can only declare the sampled key — it has no atlas — so a sentence could
+    // state "commit C touched F" for an F the accumulator never heard of, which
+    // is an atom of F's Archaeology key. Measured before the fix: 32 sentences
+    // across 16 of this repo's 40 boards, 20 of the atoms in a shipped key.
+    //
+    // `whyYes` runs on every truth member of every board, so this was not
+    // conditional on a wrong pick.
+    // Ten files against a cap of six, so four members are sampled out, and an
+    // import edge from each *changed* file into the tail — because the defect
+    // needs a truth member with a neighbour the commit touched and the board
+    // does not show. A fixture where no such pair exists cannot exhibit it, and
+    // the mutant that restored the old behaviour survived the first version of
+    // this test for exactly that reason.
+    const tail = FILLER.slice(0, 6);
+    const atlas = fixture([{ ...PLAIN, paths: [...CHANGED, ...tail] }], {
+      links: CHANGED.filter((path) => path.endsWith('.ts')).flatMap((from, i) =>
+        tail.slice(i * 2, i * 2 + 2).map((to) => [from, to] as const),
+      ),
+    });
+    const challenge = only(atlas);
+    const graph = buildGraph(atlas);
+    const key = new Set(challenge.truth);
+    const refOf = (path: string): number =>
+      atlas.nodes.findIndex((node) => node.path === path);
+    const unsampled = [...CHANGED, ...tail].filter(
+      (path) => !key.has(atlas.nodes[refOf(path)]?.id ?? ''),
+    );
+    // Non-vacuity, twice over: something must have been sampled out, **and** it
+    // must be adjacent to something on the board, or the sentence that used to
+    // name it never runs.
+    expect(unsampled.length).toBeGreaterThan(0);
+    const reachable = unsampled.filter((path) => {
+      const ref = refOf(path);
+      return [...key].some((id) => {
+        const member = graph.refById.get(id);
+        if (member === undefined) return false;
+        return (
+          (graph.out[member] ?? []).some((edge) => edge.to === ref) ||
+          (graph.in[member] ?? []).some((edge) => edge.from === ref)
+        );
+      });
+    });
+    expect(reachable.length, 'no unsampled member neighbours the board').toBeGreaterThan(0);
+
+    const reveal = placement.reveal(
+      atlas,
+      graph,
+      challenge,
+      placement.grade(challenge, { picked: challenge.candidates }),
+    );
+    const text = reveal.notes.map((note) => `${note.note} ${note.witness ?? ''}`).join(' ');
+    for (const path of unsampled) expect(text, path).not.toContain(path);
+  });
+
+  it('states the class that chose each wrong answer', () => {
+    // Placement withholds nothing: every class is anchored on the answer key,
+    // whose members the board has already named.
+    const atlas = fixture([PLAIN]);
+    const challenge = only(atlas);
+    const answers = new Set(challenge.truth);
+    const wrong = challenge.candidates.filter((id) => !answers.has(id));
+    const reveal = placement.reveal(
+      atlas,
+      buildGraph(atlas),
+      challenge,
+      placement.grade(challenge, { picked: wrong }),
+    );
+    const witness = readWitness(challenge);
+    const rows = reveal.notes.filter((note) => witness.has(note.id));
+    expect(rows.length).toBeGreaterThan(5);
+    for (const note of rows) {
+      const strategy = witness.get(note.id) ?? '';
+      // `distant` is padding, and padding has nothing to teach.
+      if (strategy === 'distant') expect(note.witness).toBeNull();
+      else expect(note.witness, strategy).not.toBeNull();
+    }
   });
 
   it('asks its question in the commit’s own words', () => {

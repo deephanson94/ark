@@ -27,6 +27,7 @@ import {
   dependentRoutes,
   dependents,
   nodeAt,
+  readWitness,
   routeTo,
 } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal as VerbReveal, RevealNote as VerbRevealNote } from '../types.js';
@@ -43,6 +44,37 @@ export interface RevealNote extends VerbRevealNote {
   /** Hops from this file to the subject, or `null` when it does not reach it. */
   readonly distance: number | null;
 }
+
+/**
+ * The negative witness: why the generator put this wrong answer here.
+ *
+ * **`coChange` is deliberately absent, and this is the trap of the whole
+ * feature.** `coChangeStrategy` seeds those distractors from the matrix ranked
+ * count-descending, which is exactly Companion's answer key for the same
+ * subject — so *"offered because it changes with the subject"* is the sentence
+ * `whyNot` deleted below, reintroduced as a label. Measured on the shipped
+ * decks: of this repo's 12 co-change distractors, 6 sit on a subject that also
+ * carries a Companion board and **3 are members of that board's answer key**; on
+ * `honojs/hono`, 6 and 3 of 53. The atlas still *records* `coChange` — that is
+ * the honest provenance, and §7.1 puts `truth` in plaintext for the same reason
+ * — and this table is the gate on what the panel says out loud.
+ *
+ * `distant` is absent because it is padding rather than a strategy (ADR-0020).
+ */
+const WITNESS: Readonly<Record<string, string>> = {
+  graphAdjacent: 'a structural near-miss in the import graph',
+  // **"a near neighbour", not "a directory sibling"** — and the distinction is a
+  // measured one, not a hedge. §8.3 words this strategy as *"files in the same
+  // directory"*, and `treeSibling` starts there and then **widens outward
+  // through shared path prefixes** when the directory runs dry. So the textbook
+  // gloss is false on **100 of this repo's 231 `treeSibling` rows and 193 of
+  // hono's 297** — and false in the one place a player can see it for nothing,
+  // because the two paths sit in the same row of the panel. Every member does
+  // share at least the subject's first path segment (the walk stops at depth 1),
+  // which is what the wording below claims and all it claims.
+  treeSibling: 'a near neighbour in the directory tree',
+  nameSimilar: 'a name-alike',
+};
 
 export interface Reveal extends VerbReveal {
   /** Every dependent of the subject, whether or not it was on the board. */
@@ -66,6 +98,7 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
   const reached = dependents(graph, subjectRef, Number.POSITIVE_INFINITY);
   const routes = dependentRoutes(graph, subjectRef);
   const imported = dependencies(graph, subjectRef, Number.POSITIVE_INFINITY);
+  const witnesses = readWitness(challenge);
 
   const notes: RevealNote[] = [];
   const add = (id: NodeId, kind: NoteKind): void => {
@@ -81,6 +114,7 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
       kind,
       distance,
       route,
+      witness: WITNESS[witnesses.get(id) ?? ''] ?? null,
       note:
         distance === null
           ? whyNot(ref, path, subjectPath, imported)

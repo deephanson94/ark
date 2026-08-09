@@ -1691,3 +1691,101 @@ One line per iteration: what changed, and what to do next.
   same species of imprecision this entry is about. **Next** is unchanged — the negative witness,
   with its one design fork (strategy provenance in the atlas and a version bump, or re-derived
   player-side with neither), or M5 by the roadmap.
+
+- **The negative witness — a wrong answer now carries the reason it was offered.** Every distractor is
+  chosen by a named §8.3 strategy and the label died at the generator's return statement:
+  `report.distractorMix` kept the aggregate, nothing kept *which*. **The fork was decided by the
+  measurement nobody had taken** — comparing the strategy that really chose each candidate against
+  the reason today's reveal re-derives from the graph, read off the emitted *sentence* rather than by
+  re-running the branch predicates. The reveal names the right class on **53.9% of this repo's 2,291
+  distractor slots and 47.9% of hono's 3,524** (measured on clean clones of `4bb1996` and
+  `cf78528`); 38% name a *different* class, and **seven of the seventeen (verb, strategy) pairs are
+  re-derived correctly zero times on either repo** — Companion's and Placement's `treeSibling` and
+  `nameSimilar`, swallowed by the churn arm that runs before them; Blast Radius's `nameSimilar` and
+  `coChange`, which have no arm and fall to the generic sentence; and Archaeology's `sibling`, which
+  has no arm either. Not a
+  weakness of the re-derivation: a candidate satisfies several predicates at once and which one
+  *chose* it was settled by a quota. So provenance ships in the atlas — `ATLAS_VERSION` 7 → 8,
+  `Challenge.witness`, `docs/atlas-format.md` in the same commit
+  ([ADR-0020](./docs/decisions/0020-a-wrong-answer-carries-the-reason-it-was-offered.md)). It costs
+  **+27.0 KiB here (10.8%) and +40.5 KiB on hono (7.3%)**, measured through the real serialiser
+  because `serialize.ts` line-expands long arrays and the obvious encodings cost 51–68 KiB for that
+  reason; 1851 → 2050 bytes per file against a 2621 ceiling. **89.5% of wrong-answer rows carry a
+  witness here, 87.6% on hono.**
+
+  **The trap was written down in the file it would have broken**, and it holds:
+  `blastRadius/reveal.ts` deleted its co-change sentence because `coChangeStrategy` ranks the matrix
+  count-descending, which *is* Companion's key for the same subject — so a label saying so is that
+  sentence wearing provenance. It is recorded in the atlas and never spoken; measured, 3 of ark's 12
+  co-change distractors and 3 of hono's 53 are members of that subject's shipped Companion key. A way
+  to keep it was designed and measured — Blast Radius declares the pair through ADR-0019's
+  accumulator, Companion may not ask it back, costing 7 boards one key member here and 5 on hono,
+  none falling below a two-member key — and **rejected**, because ADR-0014 faced that exact trade and
+  kept the question rather than the sentence. Companion's `structural` is withheld too, on a weaker
+  argument stated as the judgement it is: it walks the import graph unbounded, and where it is safe
+  (the direct ring, 133 of 219 slots here) the note already says it.
+
+  The rule the rest falls out of is **withhold by class or by board, never by row**, and it came from
+  watching a per-row guard defeat itself: withholding only the unsafe `structural` rows makes silence
+  mean *"deep structural"*, which is the fact being withheld. Every guard is therefore a property of
+  the subject — Archaeology's three set-size guards fire 7/0/0 here and 5/2/3 on hono. `distant` says
+  nothing, deliberately: it is padding, "offered because nothing sharper was left" is a confession
+  rather than a lesson, and it is 2 of 2,291 slots here anyway.
+
+  **A live defect fell out of building it.** Placement's reveal searched the commit's *whole*
+  membership for a neighbour to name, while `placement.discloses` can only declare the sampled key —
+  it takes a challenge and no atlas. So a sentence stated *"commit C touched F"* for an F the
+  accumulator never heard of, which is an atom of F's Archaeology key: ADR-0019 decision 7 routed
+  around by a sentence written a milestone earlier. **32 sentences across 16 of this repo's 40
+  Placement boards, 20 of the atoms in a shipped Archaeology key**; 12 across 5 boards on hono, 4 in a
+  key — and `whyYes` runs on every truth member of every board, so it was not conditional on a wrong
+  pick. Narrowed to the answer key, which also made the fall-through's *"anything else in the
+  commit"* false, so it reads *"anything else on this board"* now.
+
+  Seven mutants on the atlas suite and seven on the unit suite, each killed by exactly the assertion
+  it was aimed at — **after one survived**: the first Placement test built a commit whose sampled-out
+  members had no import edge to anything on the board, so the sentence that used to name them never
+  ran. And the e2e needed a new step for the same reason in a louder form: **every board it plays, it
+  plays perfectly**, so the witness renders only under a wrong pick and the feature was invisible to
+  it — infrastructure with the consumer present and never reached. It now picks a wrong answer the
+  verb says it will explain, and `artifacts/witness.png` shows the two lines apart.
+
+  **An adversarial review of the finished code then found nine things, and five were one class this
+  entry did not have a name for: a witness *glosses* its class, and three glosses stated §8.3's
+  **definition** of the strategy rather than the strategy that ships.** Each of those strategies
+  starts at its textbook bucket and **widens** when the bucket runs dry, so *"a directory sibling"*
+  was false on **100 of this repo's 231 Blast Radius rows and 193 of hono's 297**, and Archaeology's
+  *"this file's own directory"* on 14 here and 40 on hono — falsifiable by a player reading the two
+  paths in one row, or with one `git show --stat`. Archaeology's was worst and carried two more
+  defects inside it: `byDirPrefix` is the whole **subtree** (its docstring says "the deepest bucket
+  only" and does not say that), a **root-level subject**'s bucket is the entire repo so the sentence
+  was true of every commit and worth nothing (24 rows here, 25 on hono, withheld now), and the guard
+  counted a **third** population — so strategy, guard and sentence quantified over three different
+  sets. The lesson is narrower than "check your wording": **a class label is not a class
+  description**, and the sentence explaining one has to be true of every member the fallback reached.
+  `tests/atlas/` checks the claim rather than the wording now, holding each sentence to the
+  **strongest** relation it asserts — the first version checked the weaker property and a mutant
+  restoring *"a directory sibling"* survived it; four mutants are killed now.
+
+  The review also caught the e2e predicting which board the console would open from `atlas.challenges`
+  order (id order, so `archaeology-` first) where `challengeFor` serves **tier** order — the two
+  disagree on 20 of the 27 subjects carrying more than one board, and it passed only because today's
+  guide suggestion carries exactly one. It reads the choice set off the screen and matches the board
+  now. And three prose defects, all the same shape as the four already corrected this session: a
+  clinching sentence in ADR-0020 falsified by its own table (*"states an undrawn cone edge"* is false
+  of **76 of the 86 rows it condemns** — they are undirected proximity, in nobody's key), a test
+  comment quoting a working tree that named no commit, and "32 sentences" for 40 sentences and 32
+  distinct namings. **One direction is recorded and deliberately not acted on**: Archaeology's
+  `sibling` sentence is a weakened atom of that commit's Placement key, and ticking the hinted subtree
+  on the Placement board is 100%-precise on 9 boards here and 4 on hono. The same exposure predates
+  this rung in the `neighbour` and `companion` arms; what ADR-0020 should not have implied is that the
+  set-size guard is *the* guard these classes need.
+
+  **Next**: the **phenomenon catalogue** — a repo-independent vocabulary of ~30–60 structural
+  phenomena, the atom that would let anything *transfer* to another repo, which is the other half of
+  risk #1 — or **M5** by the roadmap (tree-sitter, 3–4 more languages), which is the larger bet since
+  the scanner is ES-modules-only and a Python or Go repo still produces a map with no edges. Two
+  smaller things are now on the record and neither is a nit: **`RevealNote.route` is rendered
+  nowhere** — Blast Radius has computed the import route since M2, three unit tests assert its shape,
+  and the console has never drawn it — and **the unit fixtures produce two of Archaeology's four
+  distractor classes**, so its reveal tests hand the class in deliberately and say so.

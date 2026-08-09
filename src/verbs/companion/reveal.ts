@@ -15,12 +15,43 @@
  */
 
 import type { Atlas, Challenge, Graph, NodeId, NodeRef } from '../../atlas/index.js';
-import { byteCompare, nodeAt } from '../../atlas/index.js';
+import { byteCompare, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
 import { directoryOf } from '../paths.js';
 import { indexCoChange } from './cochange.js';
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
+
+/**
+ * The negative witness: why the generator put this wrong answer here.
+ *
+ * **`structural` is deliberately absent, and it is the one exclusion that is a
+ * judgement rather than an arithmetic.** That strategy walks the import graph
+ * outward from the subject **unbounded**, so a label saying *"an import edge
+ * connects these two"* is free on the direct ring — the map draws those edges
+ * (ADR-0008 decision 1) and `whyNot` already names the relation in words — and
+ * is a new statement for everything beyond it. Measured: of 219 `structural`
+ * slots here 133 are on the direct ring, and of the 86 deeper ones **1 is a
+ * member of the subject's own shipped Blast Radius answer key**; on
+ * `honojs/hono` 96 of 264, and again 1. So the label buys nothing where it is
+ * safe and states an undrawn cone edge where it is not.
+ *
+ * A per-row guard was the obvious repair and is worse: withholding only the deep
+ * rows makes silence mean *"deep structural"*, which is the fact being withheld.
+ * ADR-0020's rule — withhold by class or by board, never by row — comes from
+ * exactly this case.
+ *
+ * `distant` is absent because it is padding rather than a strategy.
+ */
+const WITNESS: Readonly<Record<string, string>> = {
+  busy: 'one of the repo’s most-edited files',
+  // Not "a directory sibling": this strategy widens outward through shared path
+  // prefixes when the directory runs dry, so the textbook gloss is false on 23
+  // of this repo's 148 rows and **121 of hono's 211**. See the same note in
+  // `blastRadius/reveal.ts`.
+  treeSibling: 'a near neighbour in the directory tree',
+  nameSimilar: 'a name-alike',
+};
 
 export function revealOf(
   atlas: Atlas,
@@ -35,6 +66,7 @@ export function revealOf(
   }
   const subjectPath = nodeAt(graph, subjectRef).path;
   const row = indexCoChange(atlas).rows.get(subjectRef) ?? new Map<NodeRef, number>();
+  const witnesses = readWitness(challenge);
 
   // Direct import neighbours, either direction — the relation a player most
   // often mistakes for this one.
@@ -58,6 +90,7 @@ export function revealOf(
       // route from the import graph would show the player evidence that did not
       // produce the grade.
       route: [],
+      witness: WITNESS[witnesses.get(id) ?? ''] ?? null,
       note:
         together === undefined
           ? whyNot(ref, path, subjectPath, imports, importedBy, nodeAt(graph, ref).churn)

@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 6**
+**Schema version: 8**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 7,
+  "version": 8,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -334,6 +334,7 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | `subject` | `AtlasId` | What the question is about: an `n:` node for every verb but `placement`, which asks about a `c:` retained commit. Never appears in `candidates`. |
 | `candidates` | `AtlasId[]` | Sorted. The choice set. Non-empty. **All one kind**, derived from `evidence.kind` — see below. |
 | `truth` | `AtlasId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
+| `witness` | `string` | **Why each wrong answer is here.** One space-separated token per candidate, positionally aligned with `candidates`; `-` where the candidate is in `truth`. See below. |
 | `evidence` | `Evidence` | `{kind: "importGraph", depth}`, `{kind: "coChange", minCount, wideLimit, atMost}`, `{kind: "commit", subject, date, touched}`, or `{kind: "history", touchedBy}`. |
 
 **`evidence.kind` decides what kind of id each role holds, and the validator enforces it.** It is not
@@ -379,6 +380,56 @@ a bound that raises correctly while the sentence describing it does not is half 
 
 `truth` sits here in plaintext, deliberately. This is a learning tool, not an exam; anyone who opens
 devtools to read the answer has opted out of the product. Do not obfuscate it.
+
+#### `witness` — the strategy that chose each wrong answer
+
+Every distractor is picked by a named §8.3 strategy, and `witness` is the record of which. It is a
+single string, one token per candidate, aligned by position with `candidates`:
+
+```jsonc
+"candidates": ["n:0a…", "n:1b…", "n:2c…", "n:3d…"],
+"truth":      ["n:1b…"],
+"witness":    "treeSibling - nameSimilar distant"
+```
+
+Three rules, all enforced by the validator:
+
+1. the token count equals the candidate count;
+2. a token is `-` **exactly** where the candidate is in `truth` — nothing chose an answer;
+3. every other token matches `[a-zA-Z]+`.
+
+Rule 2 is the load-bearing one. Alignment is the whole contract, so a witness that has drifted by one
+position describes every candidate after it wrongly **and parses cleanly**; nothing downstream
+re-derives the mapping, so if it is not checked here it is not checked anywhere.
+
+The token is a strategy id belonging to the challenge's **own verb**. Those sets live in each verb's
+`distractors.ts` and are deliberately not restated here — the validator cannot import from
+`src/verbs/` (verbs are built on the atlas), so it checks the shape and `tests/atlas/` checks
+membership. As shipped:
+
+| verb | strategies |
+|---|---|
+| `blastRadius` | `graphAdjacent`, `treeSibling`, `nameSimilar`, `coChange`, `distant` |
+| `companion` | `structural`, `busy`, `treeSibling`, `nameSimilar`, `distant` |
+| `placement` | `busy`, `structural`, `treeSibling`, `nameSimilar`, `mentioned`, `distant` |
+| `archaeology` | `neighbour`, `sibling`, `mentions`, `companion`, `distant` |
+
+`distant` is in every set and is **not a strategy** — it is what fills a board when the others run
+dry, labelled rather than hidden so `report.distractorMix` can say how much of a choice set was
+padding.
+
+It is recorded rather than re-derived because the two disagree. Measured across every shipped board,
+the reason a reveal reconstructs from the graph names the strategy that actually chose the candidate
+on **53.9%** of this repo's distractor slots and **47.9%** of `honojs/hono`'s: a candidate satisfies
+several predicates at once, and which one *chose* it was settled by a quota rather than by a
+predicate. Seven of the seventeen (verb, strategy) pairs are re-derived correctly zero times on
+either repo
+([ADR-0020](decisions/0020-a-wrong-answer-carries-the-reason-it-was-offered.md)).
+
+**Plaintext here, gated in the panel.** Like `truth`, this is not obfuscated. What a *reveal* may say
+out loud is a separate and stricter question — two classes are recorded and never spoken, because
+naming them would hand another verb its answer key — and that gate lives in each verb's reveal, not
+in the data.
 
 **`id` is stable within an atlas and nowhere else.** It is a convenience for ordering and lookup, not
 an identity that survives a reindex — the generator may renumber freely when the deck changes. So
@@ -484,15 +535,28 @@ script can act on them.
 
 ## 4. Compatibility
 
-`version` is `7`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `8`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v7, got v6 — reindex required
+atlas.version: this build reads atlas v8, got v7 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v7 → v8 has no migration either, and it is the cheapest bump so far.** `challenges[].witness`
+is a new required field carrying a fact only the generator knows — which strategy chose each wrong
+answer. Nothing can synthesise it from a v7 atlas, because the information was thrown away at the
+return statement; a default of all-`distant` would validate and would be a lie about every board. So
+this is a reindex, and `npm run index` is the whole of it.
+
+Cost, measured through the real serialiser on a clean clone of `4bb1996`: **+27.0 KiB on this repo
+(10.8% of the atlas) and +40.5 KiB on `honojs/hono` (7.3%)**, taking this repo from 1851 to
+2050 bytes per file against a 2621 ceiling, and hono from 1343 to 1441. The per-file figure is the tight one and it is tight
+because `maxChallengesFor` has a **floor** of 40 boards per verb, which a 140-file repo pays in full;
+at the 2,000 files the ceiling is quoted for, the deck scales with the repo and the witness is a
+few per cent of the atlas.
 
 **v6 → v7 has no migration, and reindexing is the whole of it** — the same shape as v5 → v6 before
 it. `challenges[].candidates` and `.truth` widened from `NodeId[]` to `AtlasId[]`, `Evidence` gained

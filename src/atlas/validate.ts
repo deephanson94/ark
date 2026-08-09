@@ -13,6 +13,7 @@
 import { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
 import { byteCompare, isStrictlySorted } from './order.js';
 import { ATLAS_VERSION, VERB_IDS } from './schema.js';
+import { NO_STRATEGY, isStrategyToken, splitWitness } from './witness.js';
 import type {
   Atlas,
   AtlasEdge,
@@ -493,6 +494,34 @@ function validateChallenge(
     fail(`${at}.truth`, 'must be a proper subset of candidates');
   }
 
+  // The negative witness (ADR-0020). Three checks, and the second is the one
+  // that matters: alignment is the whole contract, so a witness that has drifted
+  // by one position describes every candidate after it wrongly *and parses
+  // cleanly*. Nothing downstream re-derives the mapping, so if it is not checked
+  // here it is not checked anywhere.
+  const witness = asString(r['witness'], `${at}.witness`);
+  const tokens = splitWitness(witness);
+  if (tokens.length !== candidates.length) {
+    fail(
+      `${at}.witness`,
+      `has ${tokens.length} token(s) for ${candidates.length} candidate(s) — the two are positionally aligned`,
+    );
+  }
+  for (const [index, token] of tokens.entries()) {
+    const candidate = candidates[index];
+    if (candidate === undefined) continue;
+    const isAnswer = candidateSet.has(candidate) && truth.includes(candidate);
+    if (isAnswer !== (token === NO_STRATEGY)) {
+      fail(
+        `${at}.witness`,
+        `${candidate} is ${isAnswer ? 'in' : 'not in'} the answer key but its token is ${JSON.stringify(token)}`,
+      );
+    }
+    if (token !== NO_STRATEGY && !isStrategyToken(token)) {
+      fail(`${at}.witness`, `${JSON.stringify(token)} is not a strategy id`);
+    }
+  }
+
   const difficulty = asFinite(r['difficulty'], `${at}.difficulty`);
   if (difficulty < 0 || difficulty > 1) {
     fail(`${at}.difficulty`, `expected 0..1, got ${difficulty}`);
@@ -526,6 +555,7 @@ function validateChallenge(
     subject,
     candidates,
     truth,
+    witness,
     evidence,
   };
 }

@@ -18,7 +18,7 @@ import type { Atlas, Challenge, NodeId, VerbId } from '../../src/atlas/index.js'
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import { NO_TIES, tieWidth, tiesAt, tiesNamedBy } from '../../src/player/ties.js';
 import { channelOf } from '../../src/verbs/index.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, witnessFor } from '../fixtures/atlas.js';
 
 const FILES = [
   'src/a.ts',
@@ -87,6 +87,10 @@ function companionChallenge(
     subject: idOf(atlas, subject),
     candidates: FILES.filter((path) => path !== subject).map((path) => idOf(atlas, path)),
     truth: truth.map((path) => idOf(atlas, path)),
+    witness: witnessFor(
+      FILES.filter((path) => path !== subject).map((path) => idOf(atlas, path)),
+      truth.map((path) => idOf(atlas, path)),
+    ),
     evidence: { kind: 'coChange', minCount: 2, wideLimit: 25, atMost: 1 },
   } as Challenge;
 }

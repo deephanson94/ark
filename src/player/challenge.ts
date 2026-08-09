@@ -173,15 +173,23 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
   function notes(items: readonly RevealNote[]): HTMLElement {
     const list = el('ul', 'console-notes');
     for (const note of items) {
+      const text = el('span', 'note-text', [
+        el('span', 'note-path', [note.label]),
+        el('span', 'note-why', [note.note]),
+      ]);
+      // The negative witness, when the verb is willing to state it: why the
+      // *board* offered this, as against what is true of it. A different claim
+      // from `note` and so a separate line — and the console still learns
+      // nothing about verbs, because the sentence arrived written.
+      if (note.witness !== null) {
+        text.append(el('span', 'note-witness', [`Offered as ${note.witness}.`]));
+      }
       list.append(
         el('li', `note note-${note.kind}`, [
           el('span', 'note-mark', [
             note.kind === 'correct' ? '✓' : note.kind === 'missed' ? '↯' : '✗',
           ]),
-          el('span', 'note-text', [
-            el('span', 'note-path', [note.label]),
-            el('span', 'note-why', [note.note]),
-          ]),
+          text,
         ]),
       );
     }

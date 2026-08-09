@@ -7,7 +7,14 @@
  */
 
 import type { Atlas, AtlasEdge, AtlasNode, Challenge, Lang } from '../../src/atlas/index.js';
-import { ATLAS_VERSION, byteCompare, edgeOrder, nodeIdFor, validateAtlas } from '../../src/atlas/index.js';
+import {
+  ATLAS_VERSION,
+  byteCompare,
+  edgeOrder,
+  encodeWitness,
+  nodeIdFor,
+  validateAtlas,
+} from '../../src/atlas/index.js';
 import { computeElevations } from '../../src/indexer/elevation.js';
 
 const LANG_BY_EXTENSION: Readonly<Record<string, Lang>> = {
@@ -122,7 +129,7 @@ export function challengeFor(atlas: Atlas, overrides: Partial<Challenge> = {}): 
   const candidates = [...rest].sort(byteCompare);
   const answer = candidates[0];
   if (answer === undefined) throw new Error('unreachable');
-  return {
+  const base: Challenge = {
     id: 'fixture-01',
     verb: 'blastRadius',
     tier: 3,
@@ -130,9 +137,36 @@ export function challengeFor(atlas: Atlas, overrides: Partial<Challenge> = {}): 
     subject,
     candidates,
     truth: [answer],
+    witness: '',
     evidence: { kind: 'importGraph', depth: 2 },
     ...overrides,
   };
+  if (overrides.witness !== undefined) return base;
+  // Derived **after** the overrides, because the witness is positionally aligned
+  // with `candidates` and a caller that changes the choice set would otherwise
+  // get a fixture the validator rejects for a reason that has nothing to do with
+  // the test.
+  return { ...base, witness: witnessFor(base.candidates, base.truth) };
+}
+
+/**
+ * A witness labelling every non-answer with one strategy, aligned by
+ * construction.
+ *
+ * The default is `distant`, which is the one label ADR-0020 never speaks aloud —
+ * so a test that wants a witness *sentence* has to name the class it wants,
+ * rather than inheriting one and then asserting against what it inherited.
+ */
+export function witnessFor(
+  candidates: readonly string[],
+  truth: readonly string[],
+  strategy = 'distant',
+): string {
+  const answers = new Set(truth);
+  return encodeWitness(
+    candidates,
+    new Map(candidates.filter((id) => !answers.has(id)).map((id) => [id, strategy])),
+  );
 }
 
 /** The same atlas with one challenge attached. */

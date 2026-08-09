@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
+import { witnessFor } from '../fixtures/atlas.js';
 
 const id = (n: number): NodeId => `n:${n.toString(16).padStart(12, '0')}`;
 
@@ -39,6 +40,10 @@ function challenge(spec: Spec): Challenge {
     // Candidates are irrelevant to selection; the truth set is what is compared.
     candidates: [...spec.truth, 90, 91, 92, 93, 94, 95, 96, 97, 98].map(id).sort(),
     truth: [...spec.truth].sort((a, b) => a - b).map(id),
+    witness: witnessFor(
+      [...spec.truth, 90, 91, 92, 93, 94, 95, 96, 97, 98].map(id).sort(),
+      [...spec.truth].map(id),
+    ),
     evidence: { kind: 'importGraph', depth: 1 },
   };
 }

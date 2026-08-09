@@ -36,6 +36,7 @@ export type {
 } from './schema.js';
 
 export { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
+export { NO_STRATEGY, encodeWitness, isStrategyToken, readWitness, splitWitness } from './witness.js';
 export { byKey, byteCompare, challengeOrder, isStrictlySorted, round2, sortedUnique } from './order.js';
 export {
   AtlasValidationError,

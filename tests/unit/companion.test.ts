@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Atlas, Challenge, NodeId } from '../../src/atlas/index.js';
-import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
+import { buildGraph, readWitness, validateAtlas } from '../../src/atlas/index.js';
 import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, scoreSet } from '../../src/verbs/index.js';
 import { VERBS, channelOf } from '../../src/verbs/index.js';
 import { companion, generateWithReport, indexCoChange } from '../../src/verbs/companion/index.js';
@@ -47,10 +47,11 @@ const COMPANIONS = [
 /** Filler that is busy but coupled to nothing — the churn heuristic's supply. */
 const FILLER = Array.from({ length: 16 }, (_, i) => `src/core/part${String(i).padStart(2, '0')}.ts`);
 
-function fixtureAtlas(): Atlas {
-  const bare = atlasWith([SUBJECT, ...COMPANIONS, ...FILLER, 'src/core/orphan.ts'], [
-    ['src/core/part00.ts', SUBJECT],
-  ]);
+function fixtureAtlas(extraLinks: readonly (readonly [string, string])[] = []): Atlas {
+  const bare = atlasWith(
+    [SUBJECT, ...COMPANIONS, ...FILLER, 'src/core/orphan.ts'],
+    [['src/core/part00.ts', SUBJECT], ...extraLinks],
+  );
   // Churn that points *away* from the answer: the busiest files are the ones
   // that co-change with nothing. A fixture where the answer is also the busiest
   // set would be refused by the gate, and every test here would be measuring
@@ -282,6 +283,61 @@ describe('grading and wording', () => {
     expect(grade.evidence).toContain('change history');
     // The sentence Blast Radius uses would be a false claim here.
     expect(grade.evidence).not.toContain('hop');
+  });
+
+  it('withholds the `structural` witness and states the other three', () => {
+    // ADR-0020. `structural` walks the import graph outward from the subject
+    // unbounded, so labelling it states a cone edge the map does not draw — and
+    // on both measured repos one such slot is a member of the subject's own
+    // shipped Blast Radius key. The other three describe the candidate (its
+    // churn, its directory, its name), which the inspector and the path already
+    // show.
+    //
+    // The shared fixture carries **one** import edge, so the board built from it
+    // has one `structural` distractor and every assertion below would rest on a
+    // single row. Three more edges here, and the count is checked before the
+    // classes are — a fixture too regular to produce the population is how
+    // twelve assertions passed against one board last milestone.
+    const linked = withHistory(
+      fixtureAtlas([
+        ['src/core/part01.ts', SUBJECT],
+        [SUBJECT, 'src/core/part02.ts'],
+        ['src/core/part03.ts', 'src/core/part01.ts'],
+      ]),
+      COMPANIONS.map((path, i) => [SUBJECT, path, 9 - i] as const),
+      { wideLimit: 30 },
+    );
+    // By subject, never by position: the deck holds a board for every companion
+    // too, and `challenges[0]` is whichever id sorts first.
+    const board = generateWithReport(linked).challenges.find(
+      (entry) => entry.subject === linked.nodes.find((node) => node.path === SUBJECT)?.id,
+    );
+    if (board === undefined) throw new Error('fixture generated no board for the subject');
+
+    const answers = new Set(board.truth);
+    const wrong = board.candidates.filter((id) => !answers.has(id));
+    const reveal = companion.reveal(
+      linked,
+      buildGraph(linked),
+      board,
+      companion.grade(board, { picked: wrong }),
+    );
+    const witness = readWitness(board);
+
+    const spoken = new Map<string, number>();
+    const silent = new Map<string, number>();
+    for (const note of reveal.notes) {
+      const strategy = witness.get(note.id);
+      if (strategy === undefined) continue;
+      const bucket = note.witness === null ? silent : spoken;
+      bucket.set(strategy, (bucket.get(strategy) ?? 0) + 1);
+    }
+    expect(silent.get('structural') ?? 0).toBeGreaterThan(2);
+    expect(spoken.get('structural') ?? 0).toBe(0);
+    // And the classes that *are* spoken are spoken, so this is not simply a
+    // reveal that has stopped witnessing anything.
+    expect(spoken.get('treeSibling') ?? 0).toBeGreaterThan(0);
+    expect([...spoken.values()].reduce((a, b) => a + b, 0)).toBeGreaterThan(5);
   });
 
   it('names a coupling the import graph cannot see, when there is one', () => {

@@ -187,6 +187,32 @@ export interface RevealNote {
   readonly route: readonly string[];
   /** Why. Derived from the graph or the history, never canned. */
   readonly note: string;
+  /**
+   * **Why this wrong answer was put on the board** — the generator's own reason,
+   * read off `challenge.witness` rather than reconstructed (ADR-0020).
+   *
+   * `note` and this are different claims and both are wanted: `note` states what
+   * is *true* of the candidate today, measured off the graph; this states what
+   * the board *intended* by offering it. They agree about half the time, which
+   * is the whole reason the label had to be recorded — see `atlas/witness.ts`.
+   *
+   * `null` on three kinds of row, and the distinction between them is a design
+   * decision rather than an omission:
+   *
+   *  - an **answer**, which no strategy chose;
+   *  - a class the verb declines to name because saying it aloud would state a
+   *    relation another verb grades — Blast Radius's `coChange` and Companion's
+   *    `structural`;
+   *  - `distant`, which is padding rather than a strategy, so *"offered because
+   *    nothing sharper was left"* is a confession about the board and not a
+   *    lesson about the repo.
+   *
+   * A witness is withheld **by class or by board, never by row**. That rule is
+   * what stops the absence of a line from carrying information: on any given
+   * board a class is either always spoken or never, so silence separates
+   * classes and never candidates within one.
+   */
+  readonly witness: string | null;
 }
 
 /**

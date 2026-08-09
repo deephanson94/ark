@@ -19,6 +19,7 @@ import {
   isChallengeable,
   nodeAt,
   parseAtlas,
+  readWitness,
   refOf,
   serializeAtlas,
   validateAtlas,
@@ -28,7 +29,12 @@ import { isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import { commitIdFor, isCommitId, isNodeId } from '../../src/atlas/index.js';
 import { touchedFact } from '../../src/verbs/index.js';
+import { VERBS } from '../../src/verbs/index.js';
 import { placement } from '../../src/verbs/placement/index.js';
+import { TARGET_MIX as BLAST_MIX } from '../../src/verbs/blastRadius/index.js';
+import { TARGET_MIX as COMPANION_MIX } from '../../src/verbs/companion/index.js';
+import { TARGET_MIX as PLACEMENT_MIX } from '../../src/verbs/placement/index.js';
+import { TARGET_MIX as ARCHAEOLOGY_MIX } from '../../src/verbs/archaeology/index.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -526,6 +532,230 @@ describe('challenges', () => {
         ).toBe(false);
       }
     }
+  });
+
+  it('labels every wrong answer with a strategy its own verb declares', () => {
+    // ADR-0020. `validateAtlas` already checks the shape — one token per
+    // candidate, `-` exactly on the answers — so what is left to check here is
+    // the thing the format cannot express: that the token names a strategy the
+    // **challenge's own verb** has, rather than some other verb's.
+    //
+    // Without this, a witness could carry `coChange` on a Companion board and
+    // every existing assertion would pass while the panel said something no
+    // generator ever meant.
+    const declared: Readonly<Record<string, readonly string[]>> = {
+      blastRadius: [...BLAST_MIX.map(([id]) => id), 'distant'],
+      companion: [...COMPANION_MIX.map(([id]) => id), 'distant'],
+      placement: [...PLACEMENT_MIX.map(([id]) => id), 'distant'],
+      archaeology: [...ARCHAEOLOGY_MIX.map(([id]) => id), 'distant'],
+    };
+    let labelled = 0;
+    for (const challenge of atlas.challenges) {
+      const witness = readWitness(challenge);
+      const truth = new Set(challenge.truth);
+      for (const candidate of challenge.candidates) {
+        if (truth.has(candidate)) continue;
+        const strategy = witness.get(candidate);
+        labelled++;
+        expect(
+          declared[challenge.verb]?.includes(strategy ?? ''),
+          `${challenge.id} labels ${candidate} ${JSON.stringify(strategy)}`,
+        ).toBe(true);
+      }
+    }
+    // Vacuity guard. Every assertion above is inside a loop over distractors,
+    // so a deck of boards with no wrong answers — impossible, but so was a
+    // fixture that shipped one board — would pass this without executing once.
+    expect(labelled).toBeGreaterThan(100);
+  });
+
+  it('speaks a witness class for every row of a board or for none of them', () => {
+    // ADR-0020's central rule, and the reason it exists: a witness withheld from
+    // *some* rows of a board makes the absence of a line say which class the row
+    // was in, which is the fact being withheld. Every guard is therefore a
+    // property of the subject, and this is what checks that none of them has
+    // quietly become a property of the candidate.
+    let checked = 0;
+    for (const challenge of atlas.challenges) {
+      const verb = VERBS[challenge.verb];
+      const witness = readWitness(challenge);
+      const truth = new Set(challenge.truth);
+      const distractors = challenge.candidates.filter((id) => !truth.has(id));
+      const reveal = verb.reveal(atlas, buildGraph(atlas), challenge, {
+        score: 0,
+        correct: [],
+        missed: [...challenge.truth],
+        spurious: distractors,
+        evidence: '',
+      });
+      const spoken = new Map<string, boolean>();
+      for (const note of reveal.notes) {
+        const strategy = witness.get(note.id);
+        if (strategy === undefined) {
+          // An answer: nothing chose it, so nothing may claim to have.
+          expect(note.witness, `${challenge.id} witnesses an answer`).toBeNull();
+          continue;
+        }
+        checked++;
+        const seen = spoken.get(strategy);
+        if (seen === undefined) spoken.set(strategy, note.witness !== null);
+        else {
+          expect(
+            seen,
+            `${challenge.id} speaks ${strategy} on some rows and not others`,
+          ).toBe(note.witness !== null);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it('never states the two classes that would hand another verb its key', () => {
+    // The trap this rung walks into, pinned. `blastRadius/reveal.ts` deleted a
+    // co-change sentence for the measured reason ADR-0014 finding 3 records, and
+    // a witness naming that class is the same sentence wearing a label. Same for
+    // Companion's `structural`, which walks the import graph unbounded and so
+    // states an undrawn cone edge on the rows beyond the direct ring.
+    //
+    // Asserted over the shipped deck rather than over the tables, because a
+    // table is exactly what a future edit changes.
+    let seen = 0;
+    for (const challenge of atlas.challenges) {
+      if (challenge.verb !== 'blastRadius' && challenge.verb !== 'companion') continue;
+      const verb = VERBS[challenge.verb];
+      const witness = readWitness(challenge);
+      const truth = new Set(challenge.truth);
+      const reveal = verb.reveal(atlas, buildGraph(atlas), challenge, {
+        score: 0,
+        correct: [],
+        missed: [...challenge.truth],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      const barred = challenge.verb === 'blastRadius' ? 'coChange' : 'structural';
+      for (const note of reveal.notes) {
+        if (witness.get(note.id) !== barred) continue;
+        seen++;
+        expect(note.witness, `${challenge.id} names ${barred} for ${note.id}`).toBeNull();
+      }
+    }
+    // Both classes are on this repo's deck — **12 co-change and 219 structural on
+    // a clean clone of `4bb1996`**, which is the tree ADR-0020's tables were
+    // measured on. (The first version of this comment said 13 and 218, taken
+    // from an uncommitted working tree and naming no commit: the self-indexing
+    // landmine, in a comment.) A zero here means the assertion has stopped
+    // reaching the thing it is about, not that the leak is gone.
+    expect(seen).toBeGreaterThan(50);
+  });
+
+  it('speaks no witness that is false of the row it is on', () => {
+    // **The defect an adversarial review found and nothing here could see.** A
+    // witness sentence glosses its class, and three of them glossed §8.3's
+    // *definition* of the class rather than the strategy that ships — which
+    // widens outward when its first bucket runs dry. So "a directory sibling"
+    // was false on 100 of this repo's 231 such rows and 193 of hono's 297, and
+    // "this file's own directory" was false on 14 archaeology rows here and 40
+    // on hono. Falsifiable by a player reading the two paths in one row, or with
+    // one `git show --stat`.
+    //
+    // A test on the wording pins whatever wording is there. This one asserts the
+    // **claim**: for the two glosses that make a checkable structural claim,
+    // check it against the atlas on every row that speaks them.
+    const graph = buildGraph(atlas);
+    const dirOf = (path: string): string =>
+      path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    let treeRows = 0;
+    let cornerRows = 0;
+    for (const challenge of atlas.challenges) {
+      const verb = VERBS[challenge.verb];
+      const truth = new Set(challenge.truth);
+      const witness = readWitness(challenge);
+      const reveal = verb.reveal(atlas, graph, challenge, {
+        score: 0,
+        correct: [],
+        missed: [...challenge.truth],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      const subjectRef = graph.refById.get(challenge.subject);
+      for (const note of reveal.notes) {
+        if (note.witness === null || subjectRef === undefined) continue;
+        const strategy = witness.get(note.id);
+
+        // **Check the strongest claim the sentence makes, not the weakest.** The
+        // first version of this asserted only the shared-segment property, so a
+        // gloss that said "a directory sibling" *and* "directory tree" passed —
+        // the mutant reintroducing the original defect survived. A sentence
+        // claiming the narrower relation is held to the narrower relation.
+        const subjectPath = nodeAt(graph, subjectRef).path;
+        if (strategy === 'treeSibling') {
+          treeRows++;
+          const sameDirectory = dirOf(note.label) === dirOf(subjectPath);
+          const sameBranch = note.label.split('/')[0] === subjectPath.split('/')[0];
+          expect(
+            note.witness.includes('sibling') ? sameDirectory : sameBranch,
+            `${challenge.id}: "${note.witness}" is false of ${note.label} against ${subjectPath}`,
+          ).toBe(true);
+        }
+
+        if (strategy === 'sibling') {
+          cornerRows++;
+          const home = dirOf(subjectPath);
+          const commit = atlas.history.commits.find((entry) => commitIdFor(entry.sha) === note.id);
+          const exact = (commit?.files ?? []).some(
+            (ref) => ref !== subjectRef && dirOf(nodeAt(graph, ref).path) === home,
+          );
+          const subtree = (commit?.files ?? []).some((ref) => {
+            if (ref === subjectRef) return false;
+            const dir = dirOf(nodeAt(graph, ref).path);
+            return dir === home || dir.startsWith(`${home}/`);
+          });
+          expect(
+            note.witness.includes('own directory') ? exact : subtree,
+            `${challenge.id}: "${note.witness}" is false of ${note.label} against ${home}`,
+          ).toBe(true);
+        }
+      }
+    }
+    // Both populations must exist, or the loop above proved nothing.
+    expect(treeRows).toBeGreaterThan(50);
+    expect(cornerRows).toBeGreaterThan(20);
+  });
+
+  it('names only files its own answer key holds', () => {
+    // Placement's reveal used to search the commit's **whole** membership for a
+    // neighbour to name, while `placement.discloses` can only declare the
+    // sampled key — so 32 sentences across 16 of this repo's boards named a file
+    // the accumulator was never told about, 20 of them members of a shipped
+    // Archaeology key. ADR-0019 decision 7 routed around by a sentence written a
+    // milestone earlier.
+    const graph = buildGraph(atlas);
+    const pathOf = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+    const everyPath = new Set(pathOf.values());
+    let checked = 0;
+    for (const challenge of atlas.challenges.filter((c) => c.verb === 'placement')) {
+      const truth = new Set(challenge.truth);
+      const reveal = placement.reveal(atlas, graph, challenge, {
+        score: 0,
+        correct: [...challenge.truth],
+        missed: [],
+        spurious: challenge.candidates.filter((id) => !truth.has(id)),
+        evidence: '',
+      });
+      const allowed = new Set(challenge.truth.map((id) => pathOf.get(id) ?? ''));
+      for (const note of reveal.notes) {
+        // Any indexed path the sentence mentions, other than the row's own.
+        for (const [named] of note.note.matchAll(/[\w./-]+\.[a-z]+/g)) {
+          if (!everyPath.has(named) || named === note.label) continue;
+          checked++;
+          expect(
+            allowed.has(named),
+            `${challenge.id} names ${named}, which is not on its board`,
+          ).toBe(true);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
   });
 
   it('computes a difficulty that spans the range rather than clustering', () => {

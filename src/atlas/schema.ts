@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 7;
+export const ATLAS_VERSION = 8;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -436,6 +436,31 @@ export interface Challenge {
   readonly candidates: readonly AtlasId[];
   /** The correct subset. Non-empty, sorted, always a subset of `candidates`. */
   readonly truth: readonly AtlasId[];
+  /**
+   * **Why each wrong answer is here** — one space-separated token per candidate,
+   * positionally aligned with `candidates`, `-` where the candidate is in
+   * `truth` and so was never *chosen* as anything (ADR-0020).
+   *
+   * Each other token is the id of the §8.3 strategy that put that candidate on
+   * the board: a directory sibling, a name-alike, a structurally-near
+   * non-dependent, a co-change ghost, a commit whose message names a file it
+   * never touched. The strategy sets are per verb and live in each verb's
+   * `distractors.ts`; the *format* lives in `witness.ts` beside this file,
+   * because the validator has to refuse a malformed one and cannot import from
+   * `src/verbs/`.
+   *
+   * It is recorded rather than re-derived because the two disagree: measured
+   * across every shipped board, the reason a reveal reconstructs from the graph
+   * names the strategy that actually chose the candidate on 53.9% of this
+   * repo's distractor slots and 47.9% of `honojs/hono`'s. A candidate satisfies
+   * several predicates at once, and which one *chose* it was decided by a quota.
+   *
+   * **Plaintext here, gated in the panel.** Like `truth` (§7.1), this is not
+   * obfuscated — a reader with the file has opted out. What a *reveal* may state
+   * is a separate and stricter question, and two classes are deliberately never
+   * spoken aloud; see ADR-0020.
+   */
+  readonly witness: string;
   readonly evidence: Evidence;
 }
 

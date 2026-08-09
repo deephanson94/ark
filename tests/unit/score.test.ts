@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Challenge } from '../../src/atlas/index.js';
 import { PASS_THRESHOLD, bandFor, gradeSet, isGameable, scoreSet, selectAllScore } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
+import { witnessFor } from '../fixtures/atlas.js';
 
 function ids(count: number, prefix = 'n:'): string[] {
   return Array.from({ length: count }, (_, i) => `${prefix}${i.toString(16).padStart(12, '0')}`);
@@ -138,6 +139,7 @@ function challengeWith(candidates: readonly string[], truth: readonly string[]):
     subject: 'n:ffffffffffff',
     candidates,
     truth,
+    witness: witnessFor(candidates, truth),
     evidence: { kind: 'importGraph', depth: 2 },
   };
 }
