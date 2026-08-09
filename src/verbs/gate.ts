@@ -33,9 +33,15 @@
  *
  * Every heuristic in this file is executable **with no knowledge of the repo's
  * structure**: match a path against a path, a token against a message, sort a
- * printed column of dates, churn counts or widths. `directImporters` is the one
- * documented exclusion and it is on the other side of exactly that line — you
- * cannot run it without the import graph.
+ * printed column of dates, churn counts or widths. `directImporters` — the one
+ * guess this file has ever considered and declined — is the only one of the ten
+ * that needs a relation to run.
+ *
+ * That is a correlation, and ADR-0021 refuses the overclaim it invites: the
+ * paragraph above excludes `directImporters` for a **different** reason (it is
+ * given away on purpose, and §8.4 already prices it), so the rule below is a new
+ * articulation that reproduces all ten decisions rather than one this file
+ * already made.
  *
  * ADR-0021 measured a third case and the line decided it. Archaeology's reveal
  * states three existentials about a wrong answer — *it touched this file's

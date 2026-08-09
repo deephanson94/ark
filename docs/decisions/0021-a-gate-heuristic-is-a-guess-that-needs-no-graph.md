@@ -134,12 +134,22 @@ must pass on a third.
 Every heuristic in `gate.ts` is executable with **no knowledge of the repo's structure**: match a
 path against a path (`directory`, `name`), a token against a message (`mentions`), or sort a printed
 column — dates (`recency`, `endpoints`, `oldestK`, `recentK`), churn counts (`churn`), widths
-(`broadKnown`). Nine for nine. The file's own header says it out loud — *"two more strategies that
-need no understanding of the graph at all"* — and its single documented exclusion is on the other
-side of exactly that line: **`directImporters` is left out because you cannot run it without the
-import graph.**
+(`broadKnown`). Nine for nine. And the one guess the file has ever considered and **declined**,
+`directImporters`, is the only one of the ten that needs a relation to run.
 
-So the rule was already there, applied consistently, and never written down as a rule. It is now:
+**That correlation is the argument, and the overclaim it invites has to be refused before it is
+made.** A first draft of this section said the rule *"was already there, applied consistently, and
+never written down"*, and that is not true. `gate.ts` describes two of its heuristics as needing
+*"no understanding of the graph at all"* — a description of what they are, not a bar on what may
+enter — and it excludes `directImporters` for a **different stated reason**: ADR-0008 gives depth 1
+away on the map on purpose, §8.4 measures `surprise` against exactly that guess, and so *"a question
+that strategy passes is an easy question, which the progression needs — not a broken one."* The two
+reasons agree on the verdict for that guess and they are not the same reason.
+
+So what follows is a **new articulation** that reproduces all ten prior decisions, not a restatement
+of one already written. A rule fitted to ten points and then applied to an eleventh is a fair use of
+a rule; claiming the file already contained it would have been the post-hoc rationalisation this
+decision most needed to avoid, since the eleventh point is the one it was written to decide:
 
 > A guess belongs in `gate.ts` when a player could execute it knowing nothing about the repo. If
 > running it requires the import graph, the co-change matrix or a cone, it is not a `Ctrl+F` and this

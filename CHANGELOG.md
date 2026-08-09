@@ -1840,11 +1840,14 @@ One line per iteration: what changed, and what to do next.
   same guess fires nowhere**, so the hint is genuinely load-bearing rather than a Placement-native
   exposure wearing a costume.
 
-  **Decision: accepted, and the rule that decides it was already in `gate.ts` unwritten.** All nine
+  **Decision: accepted, on a rule fitted to every prior call `gate.ts` has made.** All nine
   heuristics there are runnable with no knowledge of the repo — match a path, match a token, sort a
-  printed column — and the file's one documented exclusion, `directImporters`, is excluded precisely
-  because you cannot run it without the import graph. So: *a guess belongs in `gate.ts` when a player
-  could execute it knowing nothing about the repo*. The arm that is structure-blind is the one that
+  printed column — and the one guess that file has ever declined, `directImporters`, is the only one
+  of the ten that needs a relation to run. So: *a guess belongs in `gate.ts` when a player could
+  execute it knowing nothing about the repo*. **That the rule was "already there unwritten" is the
+  overclaim this entry refuses**, and a draft of the ADR made it: the file excludes `directImporters`
+  for a *different* stated reason — it is given away on purpose and §8.4 already prices it — so this
+  is a new articulation reproducing ten decisions, not a restatement of one. The arm that is structure-blind is the one that
   never reaches the bar; the arms that reach it need the matrix or the graph, and a board answered
   from the co-change matrix was answered by **reasoning about structure**, which is pillar 3's second
   half rather than a violation of its first. That is a judgement and ADR-0021 carries the
