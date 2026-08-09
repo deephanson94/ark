@@ -1960,3 +1960,45 @@ One line per iteration: what changed, and what to do next.
 
   Documentation only. **The atlas moves anyway** — both files are indexed nodes and this commit joins
   the history. **Next** is unchanged: widen the wire gate past one verb, counting what survives.
+
+- **The wire-gate exposure is closed, and not by fixing the wire gate.** The Next action was to widen
+  ADR-0016's gate past one verb. Built both shapes and measured them first, which is what that action
+  asked for — and the answer was to not ship either. Putting Placement's candidates into `openBoards`
+  **closes the leak completely (3 boards decided → 0, best 0.000) and takes this repo's history layer
+  from 175 drawn wires to 1** until the tier-6 deck is cleared, because Placement's candidates cover
+  **74% of the nodes** (57% on hono). That is ADR-0016's entire payoff withheld from the verb it
+  exists to serve, and the selector serves Companion *first*, so the reward would never arrive. The
+  narrow variant — suppress only pairs with both ends on one board — keeps the layer and **does not
+  close the leak**: best 0.750 against a 0.78 bar, under it by coincidence, because the decisive wire
+  runs from an *off-board* seed. A gate whose correctness is a coincidence is not a gate.
+
+  So the lever is the **disclosure record**, which ADR-0021 had already designed and declined to
+  build. `Verb.decidedBy(graph, challenge)` is the mirror of `discloses`: that one says *what my
+  reveal states*, this says *what would beat me*. Placement scores the co-change guess against its own
+  answer key with the real scorer and the derived bar, declares `decidedFact(commit, seed,
+  'coChange')` for each seed that reaches band A, and Archaeology — which generates later — **never
+  offers that commit**. Off the board rather than a withheld sentence, in ADR-0019 decision 7's shape,
+  because a candidate never offered cannot signal anything by its absence where a withheld class can.
+  **3 boards decided → 0**, and the residual best of 0.750 is **bounded by the threshold by
+  construction**, which is exactly what the coincidental 0.750 was not.
+
+  It fires: **36 verdicts over 16 of this repo's 40 Placement boards, 22 over 15 of hono's 54** —
+  counted before any test was written around it. It costs nothing: both Placement decks unchanged,
+  and the Archaeology deck *grew* 33 → 36, because removing decidable commits from distractor pools
+  changed which boards collide on `duplicateKey`.
+
+  **ADR-0021's claim that ADR-0016 diverged from its own rule is withdrawn.** ADR-0016 scoped the gate
+  to Companion boards deliberately, measured the Blast Radius case, and closed with *"re-measure if a
+  repo's two decks overlap much more than this one's"*. Placement did not exist then. A decision
+  correctly scoped to the verbs of its day is not a rule the code failed to implement, and calling it
+  one was the heavier charge of the two.
+
+  **And the e2e was predicting which board the shell would serve, four hundred lines from where that
+  was already fixed.** `atlas.challenges.find(subject matches)` is *id* order — `archaeology-` sorts
+  first — while the console serves a node's bucket in **tier** order; it passed while the two
+  coincided and went red the moment a subject gained an Archaeology board, returning a board whose
+  truth is commits so nothing matched and submit never enabled. The witness step below it has read the
+  choice set off the screen since the last rung. Same file, same landmine, one step over.
+
+  **Next**: the overlapping Companion answer keys, then a co-change distractor strategy for Placement
+  — which would lower this exposure at the source rather than gating it.

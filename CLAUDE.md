@@ -476,6 +476,24 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   shape is the repo's own landmine about the proudest paragraph, one step earlier: when a document
   argues *"and anyway we could not have fixed it"*, that sentence is doing the work of an excuse and
   is the first thing to measure. Measure the fix you are declining before you decline it.
+- **When a decision invites a re-measure, the invitation expires against verbs that do not exist yet.**
+  ADR-0016 scoped the wire gate to Companion boards, *measured* the Blast Radius case, and closed with
+  *"re-measure if a repo's two decks overlap much more than this one's"*. Two verbs later a third with
+  node candidates shipped and nobody re-ran it — and the gate that was right for its day was leaking on
+  3 of 40 boards. ADR-0021 then compounded it by reading the gap as a **rule-versus-code divergence**,
+  which is the landmine one row down and was flatly wrong: the code implemented what the ADR decided.
+  Two lessons. A conditional instruction in an ADR has no trigger unless something re-reads it, so
+  **when you add a verb, grep the decision records for the conditions it might satisfy** — not just
+  the code. And **before calling a gap a divergence, read what the ADR actually decided**; "the code
+  diverged" is a heavier charge than "the decision was scoped to what existed", and only one of them
+  was true here.
+- **The lever that names the leak is not always the lever that fixes it.** The obvious fix for a
+  leak *rendered* on the map is to change the rendering, and here that closes it completely and takes
+  the history layer from **175 wires to 1**, because one verb's candidates cover 74% of the repo. The
+  fix that worked is upstream, in the disclosure record, and costs 36 verdicts and no deck. **Measure
+  the obvious fix's cost before building it**, and when a rendering gate looks like the answer, check
+  what fraction of the thing it gates is still drawn afterwards — the vanishing-wires failure, met
+  from the other side.
 - **A claim about what the *player* can do is not checkable in the verb — go and read the player.**
   ADR-0021 accepted a measured exposure on the argument that running the guess needs a relation the
   player must have **learned**, so it was reasoning rather than lookup. Nobody opened `src/player/`.
@@ -719,6 +737,16 @@ were scored, not only the new one — `neighbour` fires zero too, and **pooled h
 repo's 40 Placement boards and 3 of hono's 54** (`companion` alone: 3 and **1**). A canary in
 `tests/atlas/` holds the structure-blind arm under the bar, scoring the single row *and* the union.
 
+**That exposure is closed** (**[ADR-0022](./docs/decisions/0022-a-verb-declares-what-would-beat-it.md)**),
+and not where it looked. Widening ADR-0016's wire gate to Placement was built and measured: it closes
+the leak completely and takes this repo's history layer from **175 drawn wires to 1** until the tier-6
+deck is cleared, because Placement's candidates cover 74% of the nodes. So the lever is the
+*disclosure* record, not the rendering — `Verb.decidedBy` lets Placement score the guess against its
+own key and declare a verdict, and Archaeology never offers that commit. **3 boards decided → 0**,
+36 verdicts over 16 of 40 boards here and 22 over 15 of 54 on hono, and the Archaeology deck *grew*
+33 → 36. The residual best is 0.750 and is **bounded by the threshold by construction**, which is the
+difference between it and the variant whose identical number was a coincidence.
+
 **Accepting the co-change arm rested on a premise the player's own code refutes, and a post-ship
 review found it.** The argument was that running the guess needs a relation the player must have
 *learned*. It does not: `main.ts` builds `openBoards` only from `coChangeTies` challenges, so an open
@@ -726,9 +754,11 @@ review found it.** The argument was that running the guess needs a relation the 
 named — over a map §9 keeps visible behind the scrim, in the file whose own comment calls that *"the
 map's `Ctrl+F`"*. Measured with **only the wires a player can see**, the guess still beats band A on
 **3 of this repo's 40 boards** (0 of hono's, whose subjects carry no Companion board). So on the
-bootstrap repo it is a lookup. **The exposure is in ADR-0016's wire gate, not in `gate.ts`** — that
-gate asks whether a node carries an open board *of one verb* while the rule it states is about open
-boards — and it is the Next action.
+bootstrap repo it is a lookup. **The exposure was in ADR-0016's wire gate, not in `gate.ts`.** ADR-0021 called
+that a rule-versus-code divergence; **that claim is withdrawn** — ADR-0016 scoped the gate to
+Companion boards deliberately, measured the Blast Radius case, and asked for a re-measure if a repo's
+decks ever overlapped more. Placement arrived later and nobody re-ran it. A decision correctly scoped
+to the verbs of its day is not the same defect as a rule the code never implemented.
 
 **Two classes are recorded and never spoken**, and one of them is the trap this rung walks into:
 naming Blast Radius's `coChange` is the sentence `blastRadius/reveal.ts` deleted, in the file that
@@ -795,22 +825,12 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **widen the wire gate past one verb.** ADR-0016 says a co-change wire is drawn only
-where neither of its files still carries an open board; `main.ts` implements that as *an open
-**Companion** board*, so a Placement board suppresses nothing, and ADR-0021 measured the consequence
-— **3 of this repo's 40 Placement boards are decided at band A by wires visible beside them**, 0 on
-hono. This is the rule-stated-in-words landmine again: the ADR said "open board" and the code asks
-about one channel. The work is to include every open board's candidates in `openBoards`, and the
-thing to measure before shipping it is **how much of the history layer survives** — a gate that
-suppresses every wire whenever any board is open would delete the layer rather than gate it, which
-is ADR-0016's own vanishing-wires failure from the other side. Count what survives, not what the gate
-emits.
+Next action: in rough order of size — **the overlapping Companion answer keys** in the generator; a
+**co-change distractor strategy for Placement**, which §8.3 calls the best class of wrong answer and
+which Placement is the only verb without (it would lower ADR-0022's exposure at the *source* rather
+than gating it); packaging **`npx ark`**; the **phenomenon catalogue**; and **M5**.
 
-Then, in rough order of size — the **overlapping Companion answer keys** in the generator; a
-**co-change distractor strategy for Placement**, which §8.3 calls the *best* class of wrong answer
-and which Placement is the only verb without, and which would lower ADR-0021 decision 3's exposure at
-the source rather than gating it (it changes a shipped deck, so it wants its own measurement);
-packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
+Detail on the rest: packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
 catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
 would let anything *transfer* to another repo and the other half of risk #1; and **M5**, which is what
 the roadmap says (tree-sitter, 3–4 more languages) and is the largest bet — the scanner is

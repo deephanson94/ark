@@ -342,7 +342,25 @@ async function main(): Promise<number> {
       // it is checking that the panel grades what the indexer wrote, not that
       // the player can play.
       const subject = opened.path;
-      const challenge = atlas.challenges.find((entry) => pathById.get(entry.subject) === subject);
+      // **Match the board on screen; never predict which one the shell serves.**
+      // This read `atlas.challenges.find(subject matches)`, which is *id* order —
+      // `archaeology-` sorts before `blast-` and `companion-` — while the console
+      // serves a node's bucket in **tier** order. It passed for as long as the
+      // first-by-id board happened to be the one served, and went red the moment
+      // a subject gained an Archaeology board: `find` returned a board whose
+      // truth is *commits*, nothing matched, and the submit button never enabled.
+      //
+      // The witness step below already reads the choice set off the screen and
+      // matches the board whose candidates those are — CLAUDE.md's `.first()`
+      // landmine, fixed there and left standing here, four hundred lines apart.
+      const shownHere = (await page.locator('.choice-path').allInnerTexts()).map((t) => t.trim());
+      const shownHereSet = new Set(shownHere);
+      const challenge = atlas.challenges.find(
+        (entry) =>
+          pathById.get(entry.subject) === subject &&
+          entry.candidates.length === shownHere.length &&
+          entry.candidates.every((id) => shownHereSet.has(pathById.get(id) ?? ' ')),
+      );
       if (!question.includes(subject)) {
         failures.push({ what: 'prompt', detail: `asked about ${subject} but says "${question}"` });
       }

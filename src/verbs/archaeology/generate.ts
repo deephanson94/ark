@@ -74,7 +74,7 @@ import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_TRACE_HEURISTICS, gradeCommitHeuristics } from '../gate.js';
 import type { CommitHeuristicId } from '../gate.js';
 import { nameTokens } from '../paths.js';
-import { touchedFact, widthFact } from '../disclosure.js';
+import { decidedFact, touchedFact, widthFact } from '../disclosure.js';
 import { commitSupply } from '../commits.js';
 import { analyseCommits, messageWords } from './corpus.js';
 import type { CommitIndex, TraceCorpus } from './corpus.js';
@@ -279,6 +279,16 @@ export function generateWithReport(
       // exactly first-seen that did *not* touch this file is a perfectly good
       // wrong answer, and excluding it would narrow the pool for nothing.
       if (byteCompare(date, from) < 0 || byteCompare(date, to) > 0) continue;
+      // **ADR-0022.** Offering this commit lets the reveal say *"it touched a
+      // file that usually moves with this one"*, and the map draws that seed's
+      // partners beside the commit's own Placement board — which its generator
+      // has already scored and declared decidable. Off the board entirely, in
+      // decision 7's shape rather than as a withheld sentence: a candidate that
+      // is never offered cannot signal anything by its silence, where a class
+      // withheld from one row would (ADR-0020 decision 3).
+      if (options.disclosed.has(decidedFact(commitIdFor(shaAt(trace, index)), node.id, 'coChange'))) {
+        continue;
+      }
       pool.add(index);
     }
 

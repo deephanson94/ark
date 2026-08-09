@@ -85,6 +85,41 @@ export function widthFact(commit: CommitId): DisclosedFact {
 }
 
 /**
+ * A relation of the atlas that a later verb's sentence might quantify over.
+ *
+ * One member today, and the token is in the key rather than implied because the
+ * **consumer** has to name which of its own classes to withhold: Archaeology
+ * states three existentials and silencing the wrong one would be a leak with a
+ * cost and no benefit. ADR-0021 measured the other two — the subtree hint and
+ * the import-neighbour hint — at **zero** boards decided on either repo, so
+ * nothing declares them yet; when one fires, it is a token, not a format change.
+ */
+export type RelationId = 'coChange';
+
+/**
+ * **A guess seeded at `seed` over `relation` would decide this commit's board.**
+ *
+ * A verdict, not a fact — and the distinction is the whole reason this is
+ * affordable. `touchedFact` says *what my reveal said*; this says *what would
+ * beat me*, which is a single bit per (board, seed) and never the board itself.
+ * ADR-0021 designed it and declined to build it on an argument its own post-ship
+ * review refuted; ADR-0022 builds it, because the alternative — widening
+ * ADR-0016's wire gate to Placement — was measured at **175 drawn wires down to
+ * 1** on this repo and deletes the layer instead of gating it.
+ *
+ * Declared by the verb that would be beaten, consumed by the verb that would do
+ * the beating, and neither names the other: `build.ts` decides who runs first,
+ * exactly as it does for `touchedFact`.
+ */
+export function decidedFact(
+  commit: CommitId,
+  seed: NodeId,
+  relation: RelationId,
+): DisclosedFact {
+  return `decided${SEP}${commit}${SEP}${seed}${SEP}${relation}`;
+}
+
+/**
  * The facts a set of challenges' reveals give away, in generation order.
  *
  * Order does not affect the contents — a set is a set — but it does decide
@@ -106,5 +141,19 @@ export function accumulate(
 
 /** Nothing. The two import-and-co-change verbs name no commit in any reveal. */
 export function disclosesNothing(): readonly DisclosedFact[] {
+  return [];
+}
+
+/**
+ * Nothing would decide this board that another verb could say.
+ *
+ * Required rather than optional for `discloses`'s reason exactly: an optional
+ * member is one a verb author never notices. Three of the four verbs answer this
+ * — Blast Radius and Companion because their candidates are files and the
+ * relation a later verb might name *is* their own subject matter, so a hint
+ * about it is the question rather than a shortcut past it; Archaeology because
+ * its candidates are commits and no verb states a relation over those.
+ */
+export function decidedByNothing(): readonly DisclosedFact[] {
   return [];
 }

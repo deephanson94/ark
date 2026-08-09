@@ -26,6 +26,7 @@ import type {
 } from '../atlas/index.js';
 import {
   ATLAS_VERSION,
+  buildGraph,
   byteCompare,
   coChangeOrder,
   edgeOrder,
@@ -387,12 +388,18 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   // generator reads a set of opaque strings rather than another verb's deck.
   // Nothing here interprets a fact, and nothing downstream names a verb.
   const disclosed = new Set<DisclosedFact>();
+  // One graph for every declaration below. `decidedBy` scores a guess against
+  // the repo's own relations, which a `Challenge` alone does not carry.
+  const declaring = buildGraph(validated);
   const run = <R extends { readonly challenges: readonly Challenge[] }>(
     verb: Verb,
     generate: (atlas: Atlas, options: GenerateOptions) => R,
   ): R => {
     const result = generate(validated, { ...options.generate, disclosed });
     accumulate(disclosed, result.challenges, (c) => verb.discloses(c));
+    // The second channel, and it runs in the same order for the same reason:
+    // a verdict is only useful to a verb that has not generated yet (ADR-0022).
+    accumulate(disclosed, result.challenges, (c) => verb.decidedBy(declaring, c));
     return result;
   };
 

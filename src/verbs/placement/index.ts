@@ -38,7 +38,8 @@
 
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { commitAt, idOf, isCommitId, nodeAt } from '../../atlas/index.js';
-import { gradeSet } from '../score.js';
+import { CTRL_F_THRESHOLD } from '../gate.js';
+import { gradeSet, scoreSet } from '../score.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -50,7 +51,7 @@ import type {
   Verb,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
-import { touchedFact, widthFact } from '../disclosure.js';
+import { decidedFact, touchedFact, widthFact } from '../disclosure.js';
 import { commitLabel } from '../members.js';
 import { generatePlacement } from './generate.js';
 import { revealOf } from './reveal.js';
@@ -187,6 +188,55 @@ export const placement: Verb = {
     if (!isCommitId(challenge.subject)) return;
     for (const member of challenge.truth) yield touchedFact(challenge.subject, member);
     if (challenge.evidence.kind === 'commit') yield widthFact(challenge.subject);
+  },
+  /**
+   * **Which co-change seeds decide this board** — ADR-0022, and the only verb
+   * that answers this at all.
+   *
+   * A later verb's sentence *"it touched a file that usually moves with this
+   * one"* hands the player a seed, and the map draws that seed's partners
+   * (ADR-0016, whose gate knows nothing about an open Placement board). Ticking
+   * the candidates wired to the seed then beat band A on **3 of this repo's 40
+   * boards** — measured through the visible wires alone, not the whole matrix.
+   * This is that guess, scored here where the answer key lives, so the verb that
+   * would say it can decline without ever seeing this deck.
+   *
+   * **One pass over the matrix, and the seeds come out of it.** A seed only
+   * matters if it is wired to a candidate, so the pass that finds the seeds is
+   * the pass that builds their picked sets — no per-node work inside a
+   * per-candidate loop, which is the cost landmine two files in this repo carry.
+   * The relation is symmetric, so each pair is inspected from both ends.
+   */
+  *decidedBy(graph: Graph, challenge: Challenge) {
+    if (!isCommitId(challenge.subject)) return;
+    const candidates = new Set<number>();
+    for (const id of challenge.candidates) {
+      const ref = graph.refById.get(id);
+      if (ref !== undefined) candidates.add(ref);
+    }
+    // seed → the candidates on this board that co-change with it.
+    const wired = new Map<number, number[]>();
+    const link = (seed: number, candidate: number): void => {
+      if (seed === candidate) return;
+      const bucket = wired.get(seed);
+      if (bucket === undefined) wired.set(seed, [candidate]);
+      else bucket.push(candidate);
+    };
+    for (const [a, b] of graph.atlas.history.coChange) {
+      if (candidates.has(a)) link(b, a);
+      if (candidates.has(b)) link(a, b);
+    }
+    for (const [seed, picked] of wired) {
+      // The real scorer against the real bar, so a change to §8.2's bands moves
+      // this with them rather than leaving a second copy of the threshold.
+      const { score } = scoreSet(
+        picked.map((ref) => nodeAt(graph, ref).id),
+        challenge.truth,
+      );
+      if (score >= CTRL_F_THRESHOLD) {
+        yield decidedFact(challenge.subject, nodeAt(graph, seed).id, 'coChange');
+      }
+    }
   },
 };
 

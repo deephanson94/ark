@@ -67,8 +67,15 @@ export { retain, spread, truthCap } from './sample.js';
 export type { CommitSkip, CommitSupply, EligibleCommit } from './commits.js';
 export { commitSupply } from './commits.js';
 export { commitLabel, memberLabel } from './members.js';
-export type { DisclosedFact } from './disclosure.js';
-export { accumulate, disclosesNothing, touchedFact, widthFact } from './disclosure.js';
+export type { DisclosedFact, RelationId } from './disclosure.js';
+export {
+  accumulate,
+  decidedByNothing,
+  decidedFact,
+  disclosesNothing,
+  touchedFact,
+  widthFact,
+} from './disclosure.js';
 import type { RevealChannel } from './types.js';
 import type { VerbId } from '../atlas/index.js';
 import { archaeology } from './archaeology/index.js';

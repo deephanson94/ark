@@ -139,8 +139,8 @@ offered (ADR-0020).
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
-| Map: co-change history wires | 🟡 | Drawn and gated, but the gate asks about open **Companion** boards where its rule says *open boards* — see gaps. |
-| Cross-verb disclosure accounting | 🟡 | Works for the Placement→Archaeology direction; the verdict-shaped guard is designed, measured, and deliberately not built (ADR-0021). |
+| Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |
+| Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `npx ark` packaging | ⬜ | **Stated intent, unbuilt** — see gaps. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | The atom that would let anything transfer; risk #1's other half. |
 | Third-person walkable world | ⬜ | Intended destination, gated and unscheduled (ADR-0009). |
@@ -163,19 +163,12 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hardware before anyone acts on it.
 - **No Pages deploy.** Deleted rather than disabled, so a red X on this repo means something
   (ADR-0015).
-- **The co-change wire gate only knows about one verb.** ADR-0016 draws a wire only where neither of
-  its files carries an open board; the player implements that as an open *Companion* board, so a
-  Placement board suppresses nothing. Measured: **3 of this repo's 40 Placement boards can be answered
-  at band A from wires visible beside them** (0 on hono). A pillar-3 exposure with a known fix, and
-  the current Next action.
 - **Duplicate-answer-key twins are never mentioned to the player.** `cone(A) = cone(B)` is a true
   derived fact with nowhere to be shown yet.
 
 ### Next
 
-**Widen the wire gate past one verb** (above), measuring how much of the history layer survives —
-a gate that suppresses every wire whenever any board is open would delete the layer rather than gate
-it. Then, in rough order of size: **overlapping Companion answer keys** in the generator · a
+In rough order of size: **overlapping Companion answer keys** in the generator · a
 **co-change distractor strategy for Placement** (§8.3 calls it the best class of wrong answer, and
 Placement is the only verb without one) · packaging **`npx ark`** · the **phenomenon catalogue** ·
 **M5**.

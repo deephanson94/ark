@@ -59,7 +59,7 @@ import type {
   Verb,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
-import { touchedFact } from '../disclosure.js';
+import { decidedByNothing, touchedFact } from '../disclosure.js';
 import { generateArchaeology } from './generate.js';
 import { revealOf } from './reveal.js';
 
@@ -211,6 +211,11 @@ export const archaeology: Verb = {
       if (isCommitId(member)) yield touchedFact(member, subject);
     }
   },
+  /**
+   * Nothing. Its candidates are commits, and no verb states a relation over
+   * those — the mirror of why `directory` is not in its gate set. ADR-0022.
+   */
+  decidedBy: decidedByNothing,
 };
 
 export type { GenerationReport, GenerationResult, SkipReason } from './generate.js';

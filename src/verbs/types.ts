@@ -394,6 +394,21 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * inside the verb that suffers it.
    */
   discloses(challenge: C): Iterable<DisclosedFact>;
+  /**
+   * The guesses that would **decide** this board, for a later verb to know it
+   * must not hand one over (ADR-0022).
+   *
+   * The mirror of `discloses` and a different kind of claim. That one says
+   * *what my reveal states*; this says *what would beat me* — a verdict a later
+   * verb checks before speaking, never a fact about my answer key. It takes the
+   * graph because a verdict is scored against the repo's own relations, which a
+   * `Challenge` alone does not carry — the limit ADR-0020 recorded for
+   * `discloses` and worked around, met head-on here.
+   *
+   * Required for `discloses`'s reason: three verbs answer `decidedByNothing()`
+   * and that is a measured answer rather than a default.
+   */
+  decidedBy(graph: Graph, challenge: C): Iterable<DisclosedFact>;
 }
 
 /**
