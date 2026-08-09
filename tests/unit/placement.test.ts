@@ -644,7 +644,12 @@ describe('a commit subject is a place the map does not have', () => {
     expect(reveal.subject).toContain(PLAIN.subject);
     expect(reveal.unlocks).toBe('nothing');
     expect(reveal.notes).toHaveLength(challenge.truth.length);
-    for (const note of reveal.notes) expect(note.route).toEqual([]);
+    // No import evidence for a commit-graded answer — see companion.test.ts for
+    // why this is asserted on the prose rather than on a field nothing drew.
+    for (const note of reveal.notes) {
+      expect(note.note).not.toContain(' hops');
+      expect(note.note).not.toContain(' → ');
+    }
   });
 
   it('names only files its own answer key holds', () => {

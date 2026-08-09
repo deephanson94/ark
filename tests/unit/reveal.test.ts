@@ -112,11 +112,11 @@ describe('revealOf', () => {
     const { note } = noteFor(fixture(), ['src/a/direct.ts'], 'src/b/distant.ts');
     expect(note?.kind).toBe('missed');
     expect(note?.distance).toBe(2);
-    expect(note?.route).toEqual(['src/b/distant.ts', 'src/a/direct.ts', 'src/a/subject.ts']);
     // The intermediate hop is the lesson: "you missed the two reached through
-    // the re-export" (NORTH-STAR appendix A), stated as a measured path.
-    expect(note?.note).toContain('src/a/direct.ts');
-    expect(note?.note).toContain('2 hops');
+    // the re-export" (NORTH-STAR appendix A), stated as a measured path — and
+    // asserted **on the sentence the console draws**, not on a structured
+    // `route` array beside it, which nothing ever rendered.
+    expect(note?.note).toBe('reaches the subject in 2 hops through src/a/direct.ts.');
   });
 
   it('tells a player who picked a dependency that the arrow points the other way', () => {

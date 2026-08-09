@@ -2331,3 +2331,23 @@ One line per iteration: what changed, and what to do next.
   question about the current one, caught only because its `package.json` still said `vitest run`.
 
   **Next** is unchanged: **M5 — Go first**, then `npx ark`, then the phenomenon catalogue.
+
+- **Two small gaps closed before M5, and neither turned out to be the fix it looked like.**
+  `npm run test:unit`'s undeclared dependency on `npm run build` is gone: `serve.test.ts` served
+  `dist/player`, so three of its cases needed a build that the testing table never mentions. It now
+  writes its own temp directory. Measured both ways — a clone of `fb68c7f2` fails **2 of 617** with
+  no `dist/`, the fixed tree passes **617 of 617** with `dist/` moved aside — because "it should work
+  now" is the claim this repo keeps catching itself making.
+
+  **`RevealNote.route` is deleted, not rendered**, and the reason is the interesting half. The gap
+  read *"infrastructure with no consumer"*, which invited wiring it up; the console never drew it
+  because **`whyYes` already spells the chain into the note the console does draw** — *"reaches the
+  subject in 2 hops through src/a/direct.ts"*. Rendering it would have put one fact on screen twice.
+  Three tests asserted the field, and two of them — Companion's and Placement's `route: []` — were
+  really claiming *a history-graded verb shows no import evidence*. **An empty array could never have
+  caught that**: a verb could put a chain in the prose and leave the array empty, and the assertion
+  would pass. Both now assert the sentence, and a mutation adding *"reaches it in 2 hops through
+  src/x.ts"* to Companion's prose is caught where the old test slept through it.
+
+  **Next**: **M5 — Go first**, unblocked and with its kill point decided; then `npx ark`, then the
+  phenomenon catalogue.

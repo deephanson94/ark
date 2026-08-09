@@ -1012,11 +1012,14 @@ empty — **`prometheus/prometheus` at 25.0%** ships 48 Blast Radius boards abou
 time-series database. The third gap is unchanged: a Go or Python repo still gets no *source* on its
 map, which is M5.
 
-Still open, still unfixed, and still in **Known gaps** with its measurement:
-**`npm run test:unit` has an undeclared dependency on `npm run build`**. On a fresh clone it fails 2
-of 617 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
-always been green because `ci.yml` runs `build` before `test:unit`; the testing table above lists
-them as independent rows, which is exactly what makes a cold session read the red as its own doing.
+**Two long-standing gaps are closed, both of them small and both overdue.** `npm run test:unit` no
+longer depends on `npm run build` — `serve.test.ts` served `dist/player` and now writes its own temp
+directory, so a fresh clone goes green instead of failing 2 of 617 for a reason unrelated to the
+change in front of you. And **`RevealNote.route` is gone rather than wired up**: the console never
+drew it because `whyYes` already spells the chain into the sentence the console *does* draw, so the
+field was a second encoding of a fact the player already had, and the two tests whose real claim was
+*a history-graded verb shows no import evidence* now assert that against the prose — which the empty
+array could never have caught.
 
 **M5's kill point is measured and decided** —
 **[ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**, on flask

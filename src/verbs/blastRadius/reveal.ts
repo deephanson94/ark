@@ -116,7 +116,6 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
       label: path,
       kind,
       distance,
-      route,
       witness: WITNESS[witnesses.get(id) ?? ''] ?? null,
       note:
         distance === null

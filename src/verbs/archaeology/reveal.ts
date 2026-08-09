@@ -186,11 +186,11 @@ export function revealOf(
       id,
       label: commitLabel(commit),
       kind,
-      // A commit is not a path through anything — there is no chain of files to
-      // walk. Leaving this empty is the honest answer; inventing a route from
-      // the import graph would show evidence that did not produce the grade.
-      route: [],
       witness: witnessFor(id),
+      // **No import evidence in a history-graded note.** A chain of files did not
+      // produce this answer, so naming one would show the player evidence that did
+      // not. The rule used to live on a `route: []` beside this field; it moved here
+      // when that field went, because prose is where it can actually be broken.
       note: truth.has(id)
         ? whyYes(names, id === earliest, id === latest, gapAfter.get(id) ?? null)
         : whyNot(commit.files, names, adjacent, partners, node.path),

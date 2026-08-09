@@ -174,14 +174,17 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   Radius boards about the React UI of a Go time-series database. The HUD says how much is missing on
   every frame; the deck is not refused. ADR-0025 §4.2 and §9.2 — the bar is measured to be safe, not
   measured to be tight.
-- **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
-  2 of 617 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
-  built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
-  runs `build` (as "typecheck") before `test:unit`. Pre-existing at `b9f4d33` and reproduced on a
-  clean clone of it. The testing table in `CLAUDE.md` lists the two as independent rows, which is
-  what makes a cold session read the red as its own doing.
-- **`RevealNote.route` is rendered nowhere.** Blast Radius has computed the import route since M2 and
-  the console has never drawn it. Infrastructure with no consumer.
+- ~~**`npm run test:unit` has an undeclared dependency on `npm run build`.**~~ **Fixed.**
+  `serve.test.ts` served `dist/player`, so on a fresh clone it failed 2 of 617 — measured on a clone
+  of `fb68c7f2` before the fix, green with `dist/` absent after it. It now serves a temp directory it
+  writes itself, which tests the same property (the url it prints answers; a rebound Host is refused)
+  and depends on nothing.
+- ~~**`RevealNote.route` is rendered nowhere.**~~ **Removed.** The field is gone, not wired up: the
+  console never drew it because `whyYes` already spells the chain into the note the console *does*
+  draw (*"reaches the subject in 2 hops through src/a/direct.ts"*), so it was a second encoding of a
+  fact the player already had. The three tests that asserted its shape now assert the sentence
+  instead — including the two whose real claim was *a history-graded verb shows no import evidence*,
+  which the empty array could never have caught.
 - **Map interaction is below its fps budget on headless software rasterisation** (45/33/43 fps at p95
   against a ≥ 50 target). That is a floor, not a desktop GPU number; it needs re-measuring on real
   hardware before anyone acts on it.
