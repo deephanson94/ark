@@ -733,12 +733,15 @@ describe('challenges', () => {
     // string prefix, which is pillar 3's `Ctrl+F` word for word — so it is the
     // one that has to stay below the bar, and this is what holds it there.
     //
-    // Measured through the real generator on clean clones: best **0.600** over
-    // 104 scored rows at `a063f01` here and **0.727** over 29 on `honojs/hono`
-    // @ `cf78528`. Nothing sits between that and the 0.78 bar — the second-best
-    // is 0.600 on both repos — so this is a plateau rather than the edge of a
-    // cliff. If it ever goes red the answer is in ADR-0021: gate it, or withhold
-    // the class.
+    // **Two guesses, because one row is not the only thing a player holds.** A
+    // single hint names one subtree; several boards hinting about the *same*
+    // commit name several, and the union of them is still pure string prefixes.
+    // Measured on clean clones at `a063f01` / `cf78528`: the single-row guess
+    // tops out at 0.600 and 0.727, the per-commit union at **0.769** and 0.526.
+    // So the real margin under the 0.78 bar is **0.011**, not the 0.18 the
+    // single-row figure suggests — this is not the plateau `gate.ts` asks for,
+    // and the union is why this test scores both. If it goes red the answer is
+    // in ADR-0021: gate it, or withhold the class.
     //
     // **The other two arms are not asserted here and they are not clean.**
     // Pooling what one board says about one commit, `companion` and `neighbour`
@@ -753,6 +756,9 @@ describe('challenges', () => {
       atlas.challenges.filter((c) => c.verb === 'placement').map((c) => [c.subject, c]),
     );
     let scored = 0;
+    // Every subtree hinted about a given commit, across the whole deck — the
+    // union below is the same guess with more than one board in hand.
+    const seedsFor = new Map<string, Set<number>>();
     for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
       const subjectRef = graph.refById.get(challenge.subject);
       if (subjectRef === undefined) continue;
@@ -772,6 +778,9 @@ describe('challenges', () => {
         if (note.witness === null || witness.get(note.id) !== 'sibling') continue;
         const board = placementFor.get(note.id);
         if (board === undefined) continue;
+        const seeds = seedsFor.get(note.id) ?? new Set<number>();
+        seeds.add(subjectRef);
+        seedsFor.set(note.id, seeds);
         // The subtree, matching the strategy's bucket, the reveal's guard and
         // the sentence — one set, not the three this class once had.
         const picked = board.candidates.filter((id) => {
@@ -789,11 +798,36 @@ describe('challenges', () => {
         ).toBeLessThan(CTRL_F_THRESHOLD);
       }
     }
-    // Vacuity guard, and it is not decoration: this whole assertion lives inside
+    // **The same guess with more than one board in hand**, which the per-row
+    // loop above structurally cannot see: several Archaeology boards hint about
+    // one commit, and a player ticks the candidates in *any* of the named
+    // subtrees. Still nothing but string prefixes, and it is the variant that
+    // comes closest to the bar — 0.769 on this repo at `a063f01`, where the
+    // sharpest single row reads 0.600.
+    let unions = 0;
+    for (const [commit, seeds] of seedsFor) {
+      const board = placementFor.get(commit);
+      if (board === undefined) continue;
+      const homes = [...seeds].map((ref) => directoryOf(nodeAt(graph, ref).path));
+      const picked = board.candidates.filter((id) => {
+        const ref = graph.refById.get(id);
+        if (ref === undefined || seeds.has(ref)) return false;
+        const dir = directoryOf(nodeAt(graph, ref).path);
+        return homes.some((home) => dir === home || dir.startsWith(`${home}/`));
+      });
+      unions++;
+      const { score } = scoreSet(picked, board.truth);
+      expect(
+        score,
+        `the corner hints about ${commit} together decide ${board.id} (${score.toFixed(3)})`,
+      ).toBeLessThan(CTRL_F_THRESHOLD);
+    }
+    // Vacuity guards, and they are not decoration: these assertions live inside
     // three filters that a deck change could empty — spoken `sibling` rows, and
     // rows whose commit happens to ship a Placement board. A zero here means the
     // canary has stopped watching, not that the hint has stopped hinting.
     expect(scored, 'no sibling hint reached a placement board').toBeGreaterThan(20);
+    expect(unions, 'no commit carried a sibling hint').toBeGreaterThan(10);
   });
 
   it('names only files its own answer key holds', () => {

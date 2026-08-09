@@ -27,10 +27,12 @@ heuristic on the Placement board is the work this leaves behind."*
 
 This is that scoring. It changes the answer, and not in the direction the sentence above expects.
 
-## Why the work it left behind cannot be done as written
+## Why the work it left behind needs machinery that does not exist
 
-*"Score the guess in `gate.ts` and refuse what it beats"* is not implementable, and finding out why
-is the first half of this decision.
+*"Score the guess in `gate.ts` and refuse what it beats"* is not implementable **as written** — not
+because cross-verb gating is forbidden, since `broadKnown` already scores a board against what
+another verb's reveals printed, but because the direction is wrong. Finding that out is the first
+half of this decision.
 
 `build.ts` generates **blastRadius → companion → placement → archaeology**, and ADR-0019 decision 7
 depends on that order: whichever verb asks a fact first keeps it, so Placement runs first and keeps
@@ -87,13 +89,26 @@ relation, and none involves `sibling`.**
 **The direction this ADR was opened to close fires zero times on both repos.** Precision was the
 wrong instrument and that is the whole finding: a subtree hint picks one or two of a four-to-six file
 key, so its recall caps the F1 far below the bar no matter how clean the picks are. ADR-0020's nine
-100%-precise boards are real and they are not a grade.
+100%-precise ark boards are **unverified at `4bb1996`** — the reproduction below is hono-only, and
+ark had moved by four commits — but precision on that scale is real on both repos, and it is not a
+grade.
 
-**And the bar is not a knife edge here.** The `sibling` scores immediately below the best are 0.500
-on ark and 0.600 on hono — nothing sits in the gap between the best score and 0.78, which is the
-plateau `gate.ts` asks for when it sets the bar at A rather than at pass. It is bar-dependent and
-that is said rather than hidden: at the **pass** threshold the same hint beats 9 of ark's boards and
-6 of hono's. Moving the bar is a different decision, with ADR-0010's measurement behind it.
+**The margin is 0.011, and a first version of this paragraph got that wrong twice over.** It said
+*"nothing sits in the gap between the best score and 0.78, which is the plateau `gate.ts` asks for"*
+— a sentence that is **vacuously true of any distribution**, since nothing ever sits above a maximum,
+and which names the wrong test: the plateau `gate.ts` asks for is *count-invariance* from 0.70 to
+0.78 (measured on vite: 135 boards at both), and hono's 0.727 board fails exactly that.
+
+It was also measuring the wrong guess. Scoring one row at a time is what a player does holding **one
+board**; several Archaeology boards hint about the *same* commit, and the union of the subtrees they
+name is still nothing but string prefixes. Measured: **21 of this repo's commits carry `sibling`
+hints from two or more boards and ship a Placement board, and the union guess reaches 0.769** (5 and
+0.526 on hono). Still no firing, and **0.011 under the bar rather than 0.18**. `tests/atlas/` scores
+both guesses now.
+
+It is bar-dependent and that is said rather than hidden: at the **pass** threshold the single-row
+hint alone beats 9 of ark's boards and 6 of hono's. Moving the bar is a different decision, with
+ADR-0010's measurement behind it.
 
 ### The counterfactual, and what it holds fixed
 
@@ -134,8 +149,9 @@ must pass on a third.
 Every heuristic in `gate.ts` is executable with **no knowledge of the repo's structure**: match a
 path against a path (`directory`, `name`), a token against a message (`mentions`), or sort a printed
 column — dates (`recency`, `endpoints`, `oldestK`, `recentK`), churn counts (`churn`), widths
-(`broadKnown`). Nine for nine. And the one guess the file has ever considered and **declined**,
-`directImporters`, is the only one of the ten that needs a relation to run.
+(`broadKnown`). Nine for nine. And `directImporters` — the guess the file
+considers and declines *on structural grounds* — is the only one anywhere in its record that needs a
+relation to run.
 
 **That correlation is the argument, and the overclaim it invites has to be refused before it is
 made.** A first draft of this section said the rule *"was already there, applied consistently, and
@@ -146,10 +162,25 @@ away on the map on purpose, §8.4 measures `surprise` against exactly that guess
 that strategy passes is an easy question, which the progression needs — not a broken one."* The two
 reasons agree on the verdict for that guess and they are not the same reason.
 
-So what follows is a **new articulation** that reproduces all ten prior decisions, not a restatement
-of one already written. A rule fitted to ten points and then applied to an eleventh is a fair use of
-a rule; claiming the file already contained it would have been the post-hoc rationalisation this
-decision most needed to avoid, since the eleventh point is the one it was written to decide:
+So what follows is a **new articulation** fitted to the file's record, not a restatement of one
+already written. Two further corrections a review forced, and both narrow it:
+
+- **The file has declined more guesses than one, and the others are structure-blind.** `window` is
+  absent because the sizing rule holds it under the pass threshold by arithmetic, and `directory` is
+  absent from both commit-side sets because a commit has no home a player could read off the prompt.
+  Neither needs a relation. So structure-blindness is **necessary and never sufficient** — the rule
+  below is a bar on entry, not a licence, and read as a licence it would admit two guesses this file
+  deliberately excludes.
+- **The file states a second rule that pulls the other way**, and this document should engage it
+  rather than quote past it: *"every heuristic here has to be a guess the verb's own board actually
+  invites."* By that rule the co-change guess is invited in the strongest available sense, because a
+  reveal hands the player both the seed and the relation. The two rules disagree on this case, and
+  decision 3's caveat is where that disagreement is settled — against this document's own first
+  premise.
+
+A rule fitted to a file's record and then applied to a new case is fair use of a rule; claiming the
+file already contained it would have been the post-hoc rationalisation this decision most needed to
+avoid, since the new case is the one it was written to decide:
 
 > A guess belongs in `gate.ts` when a player could execute it knowing nothing about the repo. If
 > running it requires the import graph, the co-change matrix or a cone, it is not a `Ctrl+F` and this
@@ -162,11 +193,40 @@ above stops being a bound and starts being a guess.
 
 ## Decision 3 — the `companion` arm is accepted, and here is the number
 
-`companion` beats band A on **3 of ark's 40 Placement boards and 3 of hono's 54**. It is not gated,
-and the reason is decision 2: executing it requires knowing which files move with the subject. That
-is the co-change relation — the thing Companion exists to teach and ADR-0016 draws on the map as
-ember arcs. A player who answers a Placement board that way has done what pillar 3's sentence asks
-for in its second half: *reasoned about structure* rather than looked something up.
+Pooled hints decide **3 of ark's 40 Placement boards and 3 of hono's 54**; `companion` **alone** does
+it on 3 and **1**, the other two hono boards needing that board's `neighbour` hint intersected with
+it. (A first version of this line quoted the pooled 3 and 3 as the `companion` arm's own score, which
+its own table two pages up contradicts — the fourth instance in this repo's record of a sentence
+disagreeing with the number above it, and the one category the review was told to look in.)
+
+It is not gated, and the reason is decision 2: executing it requires the co-change relation — the
+thing Companion exists to teach.
+
+> **The sentence that used to follow was refuted by the player's own code, and the refutation is the
+> most important thing in this document.** It read: *"A player who answers a Placement board that way
+> has reasoned about structure rather than looked something up."* Nobody checked it against the
+> player. `main.ts`'s `openBoards` is assembled **only** from challenges whose channel is
+> `coChangeTies`, so an open **Placement** board suppresses no wire; `ties.ts` draws every pair an
+> *answered* Companion reveal named, and §9 keeps the map visible behind the challenge scrim. That
+> file's own comment says what that configuration is: *"ink on the map … is a lookup, concurrent with
+> the board … a wired answer is the map's `Ctrl+F`."* All three ark subjects carry a shipped
+> Companion board.
+>
+> **Measured with only the wires a player can see** — the union of every answered Companion board's
+> key, rather than the whole matrix — the guess still beats band A on **3 of ark's 40 Placement
+> boards** (best 0.857). On hono it drops to **0** (best 0.667), because none of those four subjects
+> carries a Companion board and so no wire is ever drawn.
+>
+> So on the bootstrap repo this is a lookup, and decision 3's acceptance rests on a premise that is
+> false there. The `neighbour` arm is worse on its face: ADR-0008 draws the direct import ring for
+> every node, always, which this file's own `directImporters` paragraph states.
+>
+> **What that changes.** The exposure is not in `gate.ts` and no gate heuristic would price it — it is
+> in **ADR-0016's wire gate**, which asks whether a node carries an open board *of one verb* when the
+> rule it states is about open boards. The fix it points to is to widen `openBoards` past
+> `coChangeTies`, and it is a change to a shipped rendering whose cost — how much of the history layer
+> survives — nobody has measured. It is `CLAUDE.md`'s Next action with this number attached, and it is
+> not a fix to make in the tail of the session that found it.
 
 **This is a judgement and the counter-argument is real.** Four things, stated rather than left for a
 reviewer:
