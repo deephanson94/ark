@@ -602,7 +602,8 @@ answer; the format is `src/atlas/witness.ts` (beside the schema, because the val
 from the verbs) and the *names* stay in each verb's `distractors.ts`. It is **recorded rather than
 re-derived** because the two disagree: the reason a reveal reconstructs from the graph names the
 strategy that actually chose the candidate on 53.9% of this repo's distractor slots and 47.9% of
-hono's, and five strategies are re-derived correctly **zero** times on either repo. A candidate
+hono's, and **seven of the seventeen (verb, strategy) pairs are re-derived correctly zero times
+on either repo**. A candidate
 satisfies several predicates at once and which one *chose* it was settled by a quota.
 
 **Two classes are recorded and never spoken**, and one of them is the trap this rung walks into:

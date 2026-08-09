@@ -422,7 +422,8 @@ It is recorded rather than re-derived because the two disagree. Measured across 
 the reason a reveal reconstructs from the graph names the strategy that actually chose the candidate
 on **53.9%** of this repo's distractor slots and **47.9%** of `honojs/hono`'s: a candidate satisfies
 several predicates at once, and which one *chose* it was settled by a quota rather than by a
-predicate. Two strategies are re-derived correctly zero times on either repo
+predicate. Seven of the seventeen (verb, strategy) pairs are re-derived correctly zero times on
+either repo
 ([ADR-0020](decisions/0020-a-wrong-answer-carries-the-reason-it-was-offered.md)).
 
 **Plaintext here, gated in the panel.** Like `truth`, this is not obfuscated. What a *reveal* may say

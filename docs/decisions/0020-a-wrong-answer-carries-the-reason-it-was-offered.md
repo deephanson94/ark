@@ -70,9 +70,11 @@ The cause is structural rather than incidental, and it is the reason no amount o
 re-derivation would fix it. **A candidate satisfies several predicates at once**, and which one
 *chose* it was decided by a quota and a cursor, not by a predicate. A file can be a directory sibling
 *and* a name-alike *and* high-churn; the reveal's `whyNot` picks an arm by priority order, so
-whichever test runs first wins — and in three of the four verbs the churn arm runs before the path
-arms and swallows them whole. `archaeology`'s `sibling` has no arm at all: the reveal cannot name that
-class because no branch exists for it.
+whichever test runs first wins. In **Companion and Placement** that is a churn arm running before the
+path arms and swallowing them whole; in **Blast Radius and Archaeology** there is no arm for the
+class at all — `nameSimilar`, `coChange` and `sibling` have no branch to be named by, so they fall to
+the generic sentence or to somebody else's. Seven of the seventeen (verb, strategy) pairs are
+re-derived correctly **zero** times on both repos.
 
 **Decision: (a).** The label ships in the atlas.
 
@@ -196,7 +198,9 @@ pillar-3 problem in whichever order they arrive.
 **`companion`'s `structural` is the judgement call, and it is the weaker of the two.** That strategy
 walks the import graph outward from the subject **unbounded**. On the direct ring the label is free —
 the map draws those edges by design (ADR-0008 decision 1) and `whyNot` already names the relation in
-words, which is why it is one of only two classes the graph re-derives *correctly*. Beyond the ring it
+words. The correspondence is exact and worth stating: the graph re-derives this class correctly
+**133 times of 219 here and 96 of 264 on hono — the direct-ring counts, to the row**. It is right
+where the map already gave it away and nowhere else. Beyond the ring it
 states a connection nothing draws:
 
 | | ark | hono |

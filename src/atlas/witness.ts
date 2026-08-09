@@ -17,10 +17,11 @@
  * quota, not by a predicate. Measured over every shipped board on two repos
  * (ADR-0020), the sentence today's reveal writes names the strategy that
  * actually chose the candidate on **53.9%** of this repo's distractor slots and
- * **47.9%** of `honojs/hono`'s. Two whole strategies are re-derived correctly
- * **zero** times on either repo — Companion's `treeSibling` and `nameSimilar`,
- * both swallowed by the churn arm that runs before them — and Archaeology's
- * `sibling` has no arm to be swallowed by at all.
+ * **47.9%** of `honojs/hono`'s. **Seven of the seventeen (verb, strategy) pairs
+ * are re-derived correctly zero times on either repo**: Companion's and
+ * Placement's `treeSibling` and `nameSimilar`, swallowed by the churn arm that
+ * runs before them, and Blast Radius's `nameSimilar` and `coChange` and
+ * Archaeology's `sibling`, which have no arm to be swallowed by at all.
  *
  * ## Why this file is in `src/atlas/` and not in `src/verbs/`
  *

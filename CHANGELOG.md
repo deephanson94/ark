@@ -1699,9 +1699,11 @@ One line per iteration: what changed, and what to do next.
   the reason today's reveal re-derives from the graph, read off the emitted *sentence* rather than by
   re-running the branch predicates. The reveal names the right class on **53.9% of this repo's 2,291
   distractor slots and 47.9% of hono's 3,524** (measured on clean clones of `4bb1996` and
-  `cf78528`); 38% name a *different* class, and five strategies are re-derived correctly **zero**
-  times on either repo — Companion's and Placement's `treeSibling` and `nameSimilar`, all swallowed
-  by the churn arm that runs before them, and Archaeology's `sibling`, which has no arm at all. Not a
+  `cf78528`); 38% name a *different* class, and **seven of the seventeen (verb, strategy) pairs are
+  re-derived correctly zero times on either repo** — Companion's and Placement's `treeSibling` and
+  `nameSimilar`, swallowed by the churn arm that runs before them; Blast Radius's `nameSimilar` and
+  `coChange`, which have no arm and fall to the generic sentence; and Archaeology's `sibling`, which
+  has no arm either. Not a
   weakness of the re-derivation: a candidate satisfies several predicates at once and which one
   *chose* it was settled by a quota. So provenance ships in the atlas — `ATLAS_VERSION` 7 → 8,
   `Challenge.witness`, `docs/atlas-format.md` in the same commit
