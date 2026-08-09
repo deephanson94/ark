@@ -696,12 +696,32 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the phenomenon catalogue**, or **M5**. The catalogue is a repo-independent vocabulary
-of ~30–60 structural phenomena — the atom that would let anything *transfer* to another repo, which is
-the other half of risk #1. M5 is what the roadmap says (tree-sitter, 3–4 more languages) and is the
-larger bet: the scanner is ES-modules-only, so a Python or Go repo still produces a map with no edges
-and no questions. The **overlapping Companion answer keys** in the generator are still open and
-smaller than either.
+Next action: **score the subtree hint on the Placement board**, which is the one open item with a
+measurement already attached and a pillar-3 exposure behind it. ADR-0020 left it deliberately:
+Archaeology's `sibling` witness says *"a commit that touched this file's own corner of the tree"*,
+which is a weakened atom of that commit's **Placement** key, and ticking that board's candidates
+inside the hinted subtree is **100%-precise on 9 of this repo's boards and 4 of hono's** (at least
+half-precise on 21 and 2). The numbers and the reasoning are in that ADR's *"The direction this opens,
+measured and not acted on"*; the work is to score the guess in `gate.ts` against the **Placement**
+board, the way `broadKnown` is scored, and refuse what it beats. **The same exposure predates this
+rung in the `neighbour` and `companion` arms**, so measure all three rather than only the new one —
+and what ADR-0020 should not have implied is that decision 6's set-size guard is *the* guard these
+classes need. It addresses the identity case and nothing else.
+
+Then, in rough order of size: the **overlapping Companion answer keys** in the generator; packaging
+**`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done); the **phenomenon
+catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
+would let anything *transfer* to another repo and the other half of risk #1; and **M5**, which is what
+the roadmap says (tree-sitter, 3–4 more languages) and is the largest bet — the scanner is
+ES-modules-only, so a Python or Go repo still produces a map with no edges and no questions.
+
+**M5 needs a kill-point stated before a parser is written**, and it is the reason it is last here
+rather than next: ADR-0003 turns an unresolved import into no edge and guardrail 4 turns an uncertain
+cone into no challenge, so a language whose imports resolve poorly yields a sparse map and an empty
+deck **while every suite passes**. That is the instrument-that-measures-nothing landmine one level up:
+it will not look like a failure, it will look like a small repo. Measure resolution rate, edges/node
+against ark's 2.66 and hono's 2.51, and `report.unprovableNodes` on a real repo *first*, and be
+willing to write the ADR that says the language does not ship.
 
 Two things are on the record now and neither is a nit. **`RevealNote.route` is rendered nowhere**:
 Blast Radius has computed the import route since M2, three unit tests assert its shape, and the
