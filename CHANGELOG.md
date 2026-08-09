@@ -2477,7 +2477,12 @@ One line per iteration: what changed, and what to do next.
   also matches a note about somebody *else* that lists this subject among its members. On the merge
   tree — a different commit, a different deck — it picked a note for `tests/unit/placement.test.ts`
   and compared its count against this challenge's key. The comment two lines above it already said
-  *"find the note by its subject, never by its position"*; **a substring is a position.**
+  *"find the note by its subject, never by its position"*; **a substring is a position.** A fourth
+  followed it, in the Archaeology step, whose predicate had two substring traps in one `and`:
+  `claim.includes(subjectPath) && claim.includes('commit')` matched a *Blast Radius* note because the
+  subject was among its members **and** because that note's own subject was `src/verbs/commits.ts`.
+  One `claimAbout` helper now serves all three steps. Both defects were reachable only on the merge
+  commit, and both would have been a red CI.
 
   **Next**: the noun, then M5's Python half — a *history* language, the map and the three git verbs
   and never Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was.

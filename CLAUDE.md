@@ -617,7 +617,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   **else** that merely lists this subject as a member matches, and `find` takes the first. The comment
   two lines above it already said *"find the note by its subject, never by its position"*. **A
   substring is a position.** Match against the part of the sentence that is a claim about the
-  subject, not against the sentence.
+  subject, not against the sentence. **A fourth followed immediately**, in the Archaeology step, and
+  its predicate had *two* substring traps at once: `claim.includes(subjectPath) &&
+  claim.includes('commit')` matched a **Blast Radius** note because the subject was listed among its
+  members *and* because that note's own subject path was `src/verbs/commits.ts`. Both halves of an
+  `and` were substrings, and both were wrong. There is one `claimAbout` helper now, because a rule
+  that lived three times had already diverged twice. **The instrument that found #3 and #4 is the
+  merge-commit reproduction** — neither was reachable on the branch's own tree, and both would have
+  been a red CI.
 - **A path in a language you have just added can be dead in a way the language's own shape hides.**
   Go's masker skipped recording rune-literal bodies as string literals, with a comment explaining that
   a rune can never be an import path. True, and the branch is unreachable: the import scan only ever

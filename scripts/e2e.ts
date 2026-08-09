@@ -63,6 +63,23 @@ function rendered(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * The part of a field note that is a claim **about its subject**.
+ *
+ * A claim reads `You proved N <noun> that <relation> SUBJECT — member, member,
+ * …`, so searching the whole sentence for a path also matches a note about
+ * somebody *else* that happens to list this subject among its members — and
+ * `find` takes the first. Three separate steps did that; two of them went red
+ * on the CI merge commit, which is a different tree with a different deck, and
+ * the second trap was subtler still: `claim.includes('commit')` matched a Blast
+ * Radius note because the *subject path* was `src/verbs/commits.ts`.
+ *
+ * One rule in one place, because a rule that lives three times diverges twice.
+ */
+function claimAbout(claim: string): string {
+  return claim.split(' — ')[0] ?? claim;
+}
+
 async function indexForPlayer(): Promise<Atlas> {
   const atlas = await buildAtlas(indexOptions(ROOT));
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
@@ -908,8 +925,7 @@ async function main(): Promise<number> {
         // `tests/unit/placement.test.ts` listed the subject among six members
         // and sorted first. Everything before the first em dash is the claim
         // about the subject; everything after it is the list of members.
-        const subjectOf = (text: string): string => text.split(' — ')[0] ?? text;
-        const mine = claims.find((text) => subjectOf(text).includes(subject));
+        const mine = claims.find((text) => claimAbout(text).includes(subject));
         process.stdout.write(`e2e: note → ${mine ?? claims[0] ?? '(none)'}\n`);
         // Every note, not just one: the surveyed/understood line is broken by
         // any sentence stronger than what was earned, wherever it sits.
@@ -1187,7 +1203,7 @@ async function main(): Promise<number> {
           await seededPage.locator('.hud-notes').click();
           await seededPage.waitForSelector('.notes-panel', { timeout: 5000 });
           const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
-          const mine = claims.find((claim) => claim.includes(sha));
+          const mine = claims.find((claim) => claimAbout(claim).includes(sha));
           if (mine === undefined) {
             failures.push({
               what: 'placement',
@@ -1356,7 +1372,14 @@ async function main(): Promise<number> {
         // notes resolved a member through `refById` until this change, so this
         // note would have been absent with nothing to say it had gone.
         const claims = await seededPage.locator('.field-note-claim').allInnerTexts();
-        const mine = claims.find((claim) => claim.includes(subjectPath) && claim.includes('commit'));
+        // `claim.includes('commit')` was meant to pick Archaeology's note out of
+        // the several a subject can have. It matches any note whose **subject
+        // path** contains the word — `src/verbs/commits.ts` — so the noun is
+        // read as a noun.
+        const mine = claims.find(
+          (claim) =>
+            claimAbout(claim).includes(subjectPath) && /^You proved \d+ commits? that/.test(claim),
+        );
         if (mine === undefined) {
           failures.push({
             what: 'archaeology',
