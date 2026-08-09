@@ -238,7 +238,10 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | [`docs/decisions/`](./docs/decisions/) | **Why**: 21 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
-> **How this file stays true.** The status tables above are updated at every session close-out,
-> alongside `CHANGELOG.md` — it is a line in `CLAUDE.md`'s Definition of done. Numbers here name the
-> commit they were measured at, because ark indexes itself and any figure that does not name a commit
-> is false by the next one.
+> **How this file stays true.** The status above is a **live claim**, not a release note, so it moves
+> in the commit that changes the thing rather than being batched at the end of a milestone: ⬜ → 🟡
+> when work starts, 🟡 → ✅ only on the same evidence as any other *done* claim, and anything found
+> broken goes into **Known gaps** with its measurement whether or not it gets fixed. `CLAUDE.md`'s
+> session rhythm and Definition of done both carry it, and it stands while the project is under
+> development. Numbers here name the commit they were measured at, because ark indexes itself and any
+> figure that does not is false by the next one — prefer the invariants to the counts.
