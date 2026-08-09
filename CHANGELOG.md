@@ -1932,3 +1932,31 @@ One line per iteration: what changed, and what to do next.
   own board actually invites"* — which points the **other way** on this case.
 
   **Next**: widen the wire gate past one verb, counting what survives rather than what the gate emits.
+
+- **The README is wired into the rhythm, so it stays true progressively rather than once.** The
+  previous entry shipped `README.md` and put it in the Definition of done — which makes it a
+  close-out chore and nothing more. Three places that decide whether a document survives were still
+  missing it: the **read list** (a session arriving had no instruction to look at the one document
+  that says where we are), the **close-out step** itself, and the **orchestrator-owned list** — so a
+  parallel agent was free to edit it, which for a file whose tables are a claim about the *whole
+  tree* is a collision waiting to happen, and one no single agent is placed to make correctly.
+
+  The rule is now stated as what it is: **`CHANGELOG.md` is append-only history and `README.md` is
+  current state, and they rot in opposite directions.** A changelog entry is wrong only if it was
+  wrong when written; a status table is wrong the moment the code moves past it, and it goes on
+  *reading* as current — which is the instrument-that-measures-nothing shape, one document over. So a
+  row moves **in the commit that changes the thing**: ⬜ → 🟡 with the first code, 🟡 → ✅ only on the
+  same evidence as any other "done" claim in this file (*a decision is not a delivery* — this repo
+  has a milestone that read "delivered" for two sessions while one of its three verbs existed), and
+  anything found broken goes to **Known gaps** with its measurement whether or not it gets fixed.
+  Close-out is the backstop, not the mechanism.
+
+  Two consistency fixes came with it, both of the kind this repo keeps finding: the README's own
+  *"how this file stays true"* footer said **close-out** while the new rule says **progressively**,
+  so the two documents would have described different obligations from day one — the
+  two-honest-surfaces-that-disagree shape, caught before it shipped rather than after; and the
+  README's **Next** and `CLAUDE.md`'s **Next action** are now explicitly one fact in two places, with
+  the instruction to check them against each other.
+
+  Documentation only. **The atlas moves anyway** — both files are indexed nodes and this commit joins
+  the history. **Next** is unchanged: widen the wire gate past one verb, counting what survives.

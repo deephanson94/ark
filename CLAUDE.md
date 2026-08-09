@@ -69,14 +69,39 @@ These are the pillars from `NORTH-STAR.md` expressed as things an agent must nev
 
 ## Session rhythm
 
-1. **Read** `NORTH-STAR.md`, this file, and the last few lines of `CHANGELOG.md`.
+1. **Read** `NORTH-STAR.md`, this file, `README.md`'s **Status** section, and the last few lines of
+   `CHANGELOG.md`. The first two say what and how, the last says when — `README.md` is the only one
+   that says *where we are*.
 2. **Pick one thing.** One clear objective per session. Not three.
 3. **Implement it end to end** until it is actually usable — not scaffolded, not stubbed.
 4. **Verify** (see testing strategy below).
-5. **Close out**: append one line to `CHANGELOG.md` — what you did, and what you'd do next — then
-   commit and push.
+5. **Close out**: bring `README.md`'s **Status** into line with what is now true, append one line to
+   `CHANGELOG.md` — what you did, and what you'd do next — then commit and push.
 
 If you discover a second thing worth doing, write it in the CHANGELOG "next" note. Don't do it.
+
+### The README's status is a live claim, not a release note
+
+`CHANGELOG.md` is append-only history and `README.md` is the **current** state, so they rot in
+opposite ways: a changelog entry is wrong only if it was wrong when written, while a status table is
+wrong the moment the code moves past it — and it goes on *reading* as current, which is worse than
+having none. So it is maintained **progressively**, in the commit that changes the thing, not batched
+at the end of a milestone:
+
+- A subsystem or verb starts work → **⬜ → 🟡** in the same commit as the first code.
+- It becomes usable → **🟡 → ✅**, and that transition needs the **same evidence as any other "done"
+  claim in this file** — end to end, verified, not scaffolded. *A decision is not a delivery*: this
+  repo has a milestone that read "delivered" for two sessions while one of its three verbs existed.
+- A gap is found → it goes in **Known gaps** with its measurement, whether or not anyone fixes it.
+  That section is the honest half of the document and the reason a reader can trust the rest.
+- The **Next** line moves with `CLAUDE.md`'s Next action. Two places, one fact — check them against
+  each other, because this file has a landmine about a rule that lives twice.
+
+**Any figure in it names the commit it was measured at.** Ark indexes itself, so an unstamped number
+is false by the next commit. Prefer the invariant to the count wherever one exists.
+
+This obligation stands while the project is under development. If a session ever finds the tables
+already correct, that is a one-line check, not an exemption.
 
 ---
 
@@ -545,8 +570,10 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - **Code writing serially.** Parallel writers collide on files. One implementation agent at a time.
 - **Give every implementation agent a full brief**: current state, objective, how to verify, and what
   it must not touch.
-- **Parallel agents must never edit `CLAUDE.md`, `NORTH-STAR.md`, or `CHANGELOG.md`.** The orchestrator
-  owns those.
+- **Parallel agents must never edit `CLAUDE.md`, `NORTH-STAR.md`, `README.md` or `CHANGELOG.md`.** The
+  orchestrator owns those. `README.md` is on the list for the same reason as the others *and* one of
+  its own: its status tables are a claim about the whole tree, which no single agent is in a position
+  to make.
 
 ---
 
@@ -572,9 +599,11 @@ Seeded with the ones we can predict. **Append every time one bites you.**
       packaging the CLI is real work nobody has done. A checklist item nobody can literally satisfy
       gets ticked from memory, which is the failure mode this whole list exists to prevent.)
 - [ ] No console errors in the player.
-- [ ] `README.md`'s **Status** tables updated — milestone, verb, subsystem, known gaps and Next.
-      It is the only document that says *where we are*, and a status table nobody updates is worse
-      than none: it reads as current. Any figure in it names the commit it was measured at.
+- [ ] `README.md`'s **Status** reflects what is now true — milestone, verb, subsystem, Known gaps and
+      Next — and ideally moved in the commit that changed it rather than here. It is the only
+      document that says *where we are*, and a status table nobody updates is worse than none: it
+      goes on reading as current. See the session rhythm for how a row moves; any figure in it names
+      the commit it was measured at.
 - [ ] One line appended to `CHANGELOG.md`: what changed, what's next.
 
 ---
