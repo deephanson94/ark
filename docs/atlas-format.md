@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 8**
+**Schema version: 9**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 8,
+  "version": 9,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -531,19 +531,54 @@ What the indexer dropped, and why. `truncations` is `{what, kept, dropped}` sort
 `skipped` is `{reason, count}` sorted by `reason`. Both are enums, not prose, so a future budget
 script can act on them.
 
+#### `unreadable` — what this map is missing
+
+`{lang, count}` sorted by `lang`, one entry per language, counts ≥ 1. Empty when the walk saw no
+program source it could not read.
+
+It is a **refinement of `skipped`'s `unsupported`, not a bucket beside it**: every file counted here
+is also counted there, so that number stays comparable across atlas versions. The refinement is the
+whole point — `unsupported` cannot tell a PNG from a Go file, and that difference is the difference
+between *this repo is its Markdown* and *this repo has 906 Go files we cannot see*
+([ADR-0025](./decisions/0025-a-deck-is-refused-when-the-map-is-not-of-the-repository.md)).
+
+`lang` is a **display name** (`Go`, `Python`, `C++`) rather than a code, because it is printed to a
+human on both sides of the wall and a second table mapping codes to names is a second place to be
+wrong. The vocabulary is deliberately **open**: the validator checks the shape and not the set,
+because the extension table lives in `src/indexer/walk.ts` and adding a language to it must not be a
+schema change. The reading rule is `src/atlas/coverage.ts`, shared by the indexer and the player so
+that the terminal and the panel cannot drift.
+
+**A deck may be legitimately empty.** When `sourceCoverage` refuses it, `challenges` is `[]` and this
+field says why; the map, regions, history and layout are all present and valid as usual.
+
 ---
 
 ## 4. Compatibility
 
-`version` is `8`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `9`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v8, got v7 — reindex required
+atlas.version: this build reads atlas v9, got v8 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v8 → v9 has no migration, and it is the cheapest bump yet — but the *reason* is new.**
+`report.unreadable` is a new required field, and unlike every earlier bump the missing information is
+not merely unrecoverable, it is unrecoverable **by design**: the fact lives on the filesystem the
+player is forbidden to touch (pillar 5). A default of `[]` would validate and would assert that
+nothing is missing from the map, which is precisely the false claim this version exists to stop. So
+the "reindex required" error is the correct outcome and `npm run index` is the whole of it.
+
+Cost, measured byte-for-byte through the real serialiser against the same repos indexed by a clean
+clone of `e6fe5e4`: **+60 bytes** on this repo, on `honojs/hono` and on `sindresorhus/awesome` — one
+entry each (`1 Shell`), and the same 60 bytes because the field is bounded by the number of
+*languages*, not the number of files. The atlases that move are the ones whose deck is now refused,
+and they move the other way: `gohugoio/hugo` 635,373 → 485,408 bytes, `django/django` 181,635 →
+102,736.
 
 **v7 → v8 has no migration either, and it is the cheapest bump so far.** `challenges[].witness`
 is a new required field carrying a fact only the generator knows — which strategy chose each wrong

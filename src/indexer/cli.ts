@@ -12,7 +12,13 @@ import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-import { isNodeId, serializeAtlas } from '../atlas/index.js';
+import {
+  coverageSentence,
+  isNodeId,
+  serializeAtlas,
+  sourceCoverage,
+  unreadableList,
+} from '../atlas/index.js';
 import type { Atlas } from '../atlas/index.js';
 import type { IndexResult } from './build.js';
 import { buildIndex, indexOptions } from './build.js';
@@ -84,22 +90,50 @@ function summarise(
 ): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
-  const blast = generation.blastRadius.report;
-  const companion = generation.companion.report;
-  const placement = generation.placement.report;
-  const archaeology = generation.archaeology.report;
+  const coverage = sourceCoverage(atlas);
   const lines = [
     `repo        ${atlas.repo.name} @ ${atlas.repo.head?.slice(0, 12) ?? 'no commits'}`,
     `nodes       ${atlas.nodes.length} files across ${atlas.regions.length} regions`,
     `edges       ${atlas.edges.length} imports (${probable} needed a guess)`,
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
+  ];
+  // A measurement, printed whenever it is non-zero, in a file whose whole
+  // discipline is that it prints measurements rather than estimates. It is not
+  // the alarm — that is the refusal below, and it fires on a threshold. This
+  // line fires on a fact, which is why one shell script in this repo shows up
+  // here and warns about nothing.
+  if (coverage.unreadable > 0) {
+    lines.push(
+      `unreadable  ${unreadableList(coverage)} — recognised source the scanner cannot read`,
+    );
+  }
+  if (generation === null) {
+    // The deck was refused before a generator ran, so there are no per-verb
+    // numbers to print and inventing four zeroed reports would say something
+    // about the verbs that is not true (ADR-0025).
+    lines.push(`deck        REFUSED: ${coverageSentence(coverage) ?? ''}`);
+    lines.push(`atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`);
+    for (const truncation of atlas.report.truncations) {
+      lines.push(`truncated   ${truncation.what}: kept ${truncation.kept}, dropped ${truncation.dropped}`);
+    }
+    for (const skip of atlas.report.skipped) {
+      lines.push(`skipped     ${skip.count} ${skip.reason}`);
+    }
+    return lines.join('\n');
+  }
+
+  const blast = generation.blastRadius.report;
+  const companion = generation.companion.report;
+  const placement = generation.placement.report;
+  const archaeology = generation.archaeology.report;
+  lines.push(
     `blast       ${generation.blastRadius.challenges.length} of ${blast.subjectsConsidered} subjects with a radius`,
     `companion   ${generation.companion.challenges.length} of ${companion.subjectsConsidered} subjects with a change history`,
     `placement   ${generation.placement.challenges.length} of ${placement.commitsConsidered} commits Ark may ask about`,
     `archaeology ${generation.archaeology.challenges.length} of ${archaeology.subjectsConsidered} files with a history worth asking about`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
-  ];
+  );
 
   // Which questions each verb refused to ship, and how much of each choice set
   // came from a principled distractor strategy rather than padding. Both are
@@ -266,6 +300,30 @@ export async function main(argv: readonly string[]): Promise<number> {
     );
     process.stdout.write(`written     ${args.out}\n`);
   }
+
+  // **The guard, above the command split on purpose.**
+  //
+  // It used to sit sixty lines below, after `serveDirectory`, so `ark index` —
+  // which is what `npm run index`, `scripts/budget.ts` and every measurement in
+  // ADR-0024 run — could not reach it however loudly it fired. Two independent
+  // reasons it never fired are recorded in that document's §8; this is the
+  // second of them, and moving the branch is half the fix. The other half is the
+  // predicate: `challenges.length === 0` cannot see a deck of 144 questions
+  // about a Go repository's documentation, which is the failure that actually
+  // happens (ADR-0025).
+  //
+  // Both cases are kept. A refused deck and an empty one are different facts
+  // with different remedies, and the second is still live: a repo ark reads
+  // perfectly can produce no questions if it has one file and no history.
+  const coverage = sourceCoverage(atlas);
+  if (coverage.deckRefused) {
+    process.stderr.write(`note: ${coverageSentence(coverage) ?? ''}\n`);
+  } else if (atlas.challenges.length === 0) {
+    process.stderr.write(
+      `note: this repo produced no challenges — ark can read its source, and no\n` +
+        `generator found anything to ask about. ${args.command === 'play' ? 'The map is still playable' : 'The atlas is still valid'}.\n`,
+    );
+  }
   if (args.command === 'index') return 0;
 
   // `play`: serve the built player next to the atlas we just wrote.
@@ -288,15 +346,6 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const served = await serveDirectory(distributionRoot);
   process.stdout.write(`\nplaying ${atlas.repo.name} — ${served.url}\n`);
-  if (atlas.challenges.length === 0) {
-    // Better to say it than to hand someone a map with no game on it. On a
-    // Python or Go repo this is the expected outcome until M5: the scanner is
-    // ES-modules only (§7.2), so there are no edges and therefore no radius.
-    process.stderr.write(
-      `note: this repo produced no challenges. If it is not JavaScript or\n` +
-        `TypeScript, that is expected — the v1 scanner reads ES modules only.\n`,
-    );
-  }
   process.stdout.write(`press ctrl-c to stop\n`);
   // Resolve only when the process is interrupted, so the server stays up.
   await new Promise<void>((stop) => {

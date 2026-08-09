@@ -12,6 +12,7 @@
  */
 
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
+import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS } from '../verbs/index.js';
@@ -55,8 +56,19 @@ export interface Hud {
 }
 
 export interface GuideView {
-  /** `null` when every question has been passed. */
+  /** `null` when every question has been passed — or when none was ever asked. */
   readonly next: Challenge | null;
+  /**
+   * Why this atlas carries no deck at all, when that is why `next` is null.
+   *
+   * **The two empty states are different claims and the panel must not merge
+   * them.** "Every question answered" over a repo that was never asked one is
+   * false in the direction this whole rung exists to stop: it reads as a
+   * finished game. ADR-0025 refuses a deck when the map is not a map of the
+   * repository, and the sentence comes from `src/atlas/coverage.ts` — the same
+   * one the indexer printed — so the terminal and the panel cannot drift.
+   */
+  readonly refusal: string | null;
   /** The suggestion's display name, from the verb that asks about it. */
   readonly path: string | null;
   /**
@@ -102,9 +114,14 @@ export function createGuide(onSuggest: () => void): Guide {
   const root = el('div', 'guide', [button, caption]);
   return {
     root,
-    update({ next, path, placed, arrived, questionsLeft }) {
+    update({ next, refusal, path, placed, arrived, questionsLeft }) {
       if (next === null) {
         button.disabled = true;
+        if (refusal !== null) {
+          button.textContent = 'no questions for this repo';
+          caption.textContent = refusal;
+          return;
+        }
         button.textContent = 'every question answered';
         // Derived, never canned: the count is the deck's, and the pointer is
         // the only true thing left to say — a newer HEAD generates a new deck.
@@ -181,6 +198,22 @@ export function createHud(
       ? 'no commits — history tiers unavailable'
       : `${atlas.repo.head.slice(0, 12)} · ${atlas.repo.headDate ?? ''}`,
   ]);
+  /**
+   * **What this map is missing, said on the map itself.**
+   *
+   * A count of files, permanently on screen whenever the walk recognised source
+   * it could not read — one shell script on this repo, 906 Go files on
+   * `gohugoio/hugo`. It is a fact about the atlas and never changes during a
+   * session, so unlike everything else in this panel it is computed once.
+   *
+   * ADR-0025 refuses the *deck* on a threshold; this line has no threshold,
+   * because "how much of your repository is on this map" is a measurement and
+   * the player is entitled to it whether or not it crossed a bar.
+   */
+  const source = sourceCoverage(atlas);
+  const badgeText = coverageBadge(source);
+  const badge = badgeText === null ? null : el('div', 'hud-partial', [badgeText]);
+  if (badge !== null) badge.title = coverageSentence(source) ?? '';
   const progress = el('div', 'hud-progress');
   const bar = el('div', 'hud-bar');
   progress.append(bar);
@@ -195,6 +228,7 @@ export function createHud(
   const root = el('div', 'hud', [
     title,
     head,
+    ...(badge === null ? [] : [badge]),
     progress,
     counts,
     quests,
@@ -221,8 +255,14 @@ export function createHud(
       // left would have read "36 questions ringed on the map" over a map with
       // none — a sentence about the map, counted off the deck. The short form
       // survives for the case where they agree, which is most of a session.
-      quests.textContent =
-        questionsLeft === 0
+      // **Three states, not two.** A refused deck (ADR-0025) and an exhausted
+      // one both leave `questionsLeft` at zero, and only one of them means the
+      // player finished anything. Latched from the atlas rather than recomputed
+      // because — unlike a pass, which can decay — this cannot change without a
+      // reindex.
+      quests.textContent = source.deckRefused
+        ? 'no questions for this repo'
+        : questionsLeft === 0
           ? 'every question answered'
           : ringed === questionsLeft
             ? `${questionsLeft} question${questionsLeft === 1 ? '' : 's'} ringed on the map`

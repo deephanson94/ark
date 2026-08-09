@@ -32,8 +32,20 @@ export type {
   RepoMeta,
   SkipCount,
   Truncation,
+  UnreadableCount,
   VerbId,
 } from './schema.js';
+
+export {
+  MAPPED_SHARE,
+  UNREADABLE_FLOOR,
+  coverageBadge,
+  coverageSentence,
+  sourceCoverage,
+  unreadableLanguages,
+  unreadableList,
+} from './coverage.js';
+export type { SourceCoverage } from './coverage.js';
 
 export { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
 export { NO_STRATEGY, encodeWitness, isStrategyToken, readWitness, splitWitness } from './witness.js';

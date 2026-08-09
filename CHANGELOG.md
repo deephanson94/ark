@@ -2215,3 +2215,61 @@ One line per iteration: what changed, and what to do next.
   command split. `cli.ts:292–294`'s comment still asserts the "no edges and therefore no radius" claim
   §8 refutes; left in place deliberately, because it is production source and this session shipped
   none. **Next** is unchanged.
+
+- **The Markdown-map defect, fixed: a deck is refused when the map is not a map of the repository**
+  (**ADR-0025**, `ATLAS_VERSION` 8 → 9). `spf13/cobra` shipped **48 confident, correctly-graded
+  questions about its README files** and `gohugoio/hugo` **144** about its docs tree; both now ship
+  **0**, with the map, a count of what is missing and the reason. **315 questions withdrawn across 5
+  of 11 repos**, every one of them correct and every one about the wrong repository. ADR-0024
+  decision 3's precondition is met, so **M5 is unblocked**.
+
+  **The signal is what the walk skipped, refined by language** — a third table beside `SCANNED` and
+  `CARRIED`, and `report.unreadable` is a *refinement* of `skipped`'s `unsupported`, never a bucket
+  beside it. **Both obvious alternatives were measured and both fail.** *No scanned-language nodes ⇒
+  refuse* is wrong in **both** directions on one table: 24 and 45 stray JavaScript files ship hugo and
+  django, the two worst offenders, while `sindresorhus/awesome` is refused for honestly being its
+  Markdown. And `unsupported / onDisk` is refuted outright rather than merely beaten — refusing hugo
+  needs a bar ≤ 58.7%, `awesome` sits at 69.6%, the sets overlap, **no threshold exists**.
+
+  **The threshold came from the data only after the data refuted the version that came from the
+  English.** Clause 2 was first *the map holds a **majority** of the source*, chosen because majority
+  is the one value on `[0,1]` with a name instead of a number — and it **refuses `sveltejs/svelte`**,
+  whose 4,462 `.svelte` files outnumber the 3,467 TypeScript files its compiler is written in. Mapped
+  share of the ten repos clause 2 decides, sorted: 99.7, 99.1, 97.0, 95.7, 43.7 │ 2.5, 1.5, 0.0, 0.0,
+  0.0 — `awesome` is the eleventh and is *also* 0.0%, which is why no bar on this axis alone can work.
+  The bar is **one tenth**, in the middle of the only gap, ~4× clear on each side; a majority bar sits
+  outside it, 1.14× from the nearest ship. The floor (**5**) is derived the same way over all eleven,
+  from 1, 1, 1 │ 27, 36, 84, 136, 920, 1,042, 2,930, 4,462.
+
+  **Both clauses were justified by the row each one alone gets wrong**, which is a stronger test than
+  asserting both halves: clause 1 alone is wrong on react, next.js and svelte; clause 2 alone is wrong
+  on `awesome`; together, zero errors on eleven. On the eight repos first in hand clause 2 flipped
+  **no** verdict at all and would have read as decoration — react and next.js are why it exists.
+  Mutation-tested: zeroing the floor reddens the two clause-1 assertions and no clause-2 assertion,
+  and restoring the majority rule reddens the two clause-2 assertions and no clause-1 assertion.
+
+  **The guard is fixed rather than deleted, both halves of it.** It moved above the `command ===
+  'index'` return, so `npm run index` and `scripts/budget.ts` reach it for the first time, and its
+  predicate is the refusal rather than `challenges.length === 0`. The old predicate is **kept as a
+  second branch** and checked live: a one-file repo with no history reaches it, prints its own note
+  and is not refused. `cli.ts`'s "no edges and therefore no radius" comment is gone with the branch
+  that carried it.
+
+  **The refusal creates a second cause for a number, and two panels had already merged them.** The
+  guide said *"every question answered"* over a repo that was never asked one, and the HUD said it
+  again 141 lines down the same file, in different words off a different variable. Both repaired from
+  one value.
+  What is missing is now said **on the map with no threshold at all** (`1 source file not on this map`
+  here, `920` on hugo): labelling and refusing are separate mechanisms with separate triggers, and one
+  sentence in `src/atlas/coverage.ts` serves the terminal and the player so they cannot drift.
+
+  Refusing is also **cheaper** — generation is skipped, not run and discarded — so hugo indexes in
+  4,328 ms against 4,829 and django 3,621 against 4,042, and their atlases shrink by 150 KB and 79 KB.
+  A shipping atlas pays **+60 bytes**, bounded by languages rather than files.
+
+  **Next**: **M5 — Go first**, unblocked and with its kill point decided (package granularity,
+  `ATLAS_VERSION` bump with a migration under guardrail 5); then `npx ark`, then the phenomenon
+  catalogue. Three narrower gaps replace the old one in `README.md` with their measurements: a non-JS
+  repo's source is still not on its map (that is M5), `UNREAD` omits ambiguous extensions on purpose
+  so an Objective-C repo still slips through, and the bar is a tenth rather than a majority so svelte
+  keeps its deck with 4,462 files absent.

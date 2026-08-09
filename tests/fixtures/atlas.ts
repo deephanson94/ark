@@ -112,7 +112,7 @@ export function atlasWith(
       commits: [],
     },
     challenges: [],
-    report: { truncations: [], skipped: [] },
+    report: { truncations: [], skipped: [], unreadable: [] },
   });
 }
 

@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 8;
+export const ATLAS_VERSION = 9;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -477,6 +477,25 @@ export interface SkipCount {
   readonly count: number;
 }
 
+/**
+ * Program source the walk recognised and could not read, by language.
+ *
+ * A **refinement of `skipped`'s `unsupported`**, not a new bucket: every file
+ * counted here is also counted there, so that number stays comparable across
+ * atlas versions. The refinement is the whole point — `unsupported` cannot tell
+ * a PNG from a Go file, and the difference between those two is the difference
+ * between *"this repo is its Markdown"* and *"this repo has 906 Go files we
+ * cannot see"* (ADR-0025).
+ *
+ * `lang` is a display name (`Go`, `Python`, `C++`), because it is printed to a
+ * human on both sides of the wall and there is no second table mapping a code to
+ * a name. The extension table is `walk.ts`'s `UNREAD`.
+ */
+export interface UnreadableCount {
+  readonly lang: string;
+  readonly count: number;
+}
+
 export interface RepoMeta {
   readonly name: string;
   /** Full 40-char HEAD sha, or `null` when there is no history. */
@@ -505,6 +524,8 @@ export interface IndexReport {
   readonly truncations: readonly Truncation[];
   /** Sorted by `reason`. */
   readonly skipped: readonly SkipCount[];
+  /** Sorted by `lang`. Empty when the walk saw no source it cannot read. */
+  readonly unreadable: readonly UnreadableCount[];
 }
 
 export interface Atlas {
