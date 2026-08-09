@@ -1789,3 +1789,25 @@ One line per iteration: what changed, and what to do next.
   nowhere** — Blast Radius has computed the import route since M2, three unit tests assert its shape,
   and the console has never drawn it — and **the unit fixtures produce two of Archaeology's four
   distractor classes**, so its reveal tests hand the class in deliberately and say so.
+
+- **Tracking fix: the one open item a cold session would not have found.** ADR-0020 measured a
+  disclosure direction and deliberately did not act on it — Archaeology's `sibling` witness is a
+  weakened atom of that commit's Placement key, 100%-precise on 9 of this repo's boards and 4 of
+  hono's — and recorded it in the ADR and in the CHANGELOG entry above. It was **not** in
+  `CLAUDE.md`'s *Next action*, which is the line the session rhythm actually sends a reader to. Two
+  of the four things left open were in three places each and this one was in two, which is exactly
+  how a measured, deliberate deferral becomes an accidental one. It is the Next action now, with its
+  numbers and a pointer to where the measurement lives.
+
+  The same edit puts the remaining backlog in size order and gives **M5 the kill-point it needs
+  stated in advance**: ADR-0003 makes an unresolved import produce no edge and guardrail 4 makes an
+  uncertain cone produce no challenge, so a language whose imports resolve poorly ships a sparse map
+  and an empty deck **while every suite passes** — the instrument-that-measures-nothing landmine one
+  level up, where the failure looks like a small repo rather than like a failure. Resolution rate,
+  edges/node against ark's 2.66 and hono's 2.51, and `report.unprovableNodes` get measured on a real
+  repo before a parser is written, and "this language does not ship" is an acceptable ADR.
+
+  Documentation only; no source, no schema, no atlas shape. **The atlas does move** — `CLAUDE.md` and
+  `CHANGELOG.md` are indexed nodes and this commit joins the history — which is worth saying rather
+  than waving at, for the reason the M4 close-out entry gives. **Next** is unchanged from what this
+  entry installs: score the subtree hint on the Placement board.
