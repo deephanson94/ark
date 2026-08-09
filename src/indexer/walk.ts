@@ -16,7 +16,16 @@ import { byteCompare } from '../atlas/index.js';
 import type { IgnoreLayer } from './ignore.js';
 import { isIgnored, layerFromPatterns, parseIgnoreFile } from './ignore.js';
 
-/** Extensions we parse for imports. */
+/**
+ * Extensions we parse for imports.
+ *
+ * **A row here is about the file, not about the node.** Go is scanned per file
+ * and mapped per *package* — `build.ts` groups a directory's `.go` files into
+ * one node — so "scanned" continues to mean exactly what it says: the walk
+ * reads this file and something parses it. What the file becomes afterwards is
+ * not this table's business, which is why adding Go needed no change to the
+ * disjointness rule `UNREAD` is held to (ADR-0025 decision 6).
+ */
 export const SCANNED: ReadonlyMap<string, Lang> = new Map([
   ['.ts', 'ts'],
   ['.tsx', 'tsx'],
@@ -26,6 +35,7 @@ export const SCANNED: ReadonlyMap<string, Lang> = new Map([
   ['.jsx', 'jsx'],
   ['.mjs', 'mjs'],
   ['.cjs', 'cjs'],
+  ['.go', 'go'],
 ]);
 
 /** Extensions we map but do not parse — they are still part of the terrain. */
@@ -58,7 +68,10 @@ export const CARRIED: ReadonlyMap<string, Lang> = new Map([
  * Adding a language to `SCANNED` means deleting its row here in the same commit.
  */
 export const UNREAD: ReadonlyMap<string, string> = new Map([
-  ['.go', 'Go'],
+  // `.go` was here until M5. Decision 6 of ADR-0025 makes that deletion part of
+  // the same commit that adds the language to `SCANNED`, and a unit test
+  // asserts the two tables are disjoint — an extension in both would be indexed
+  // *and* counted as missing, which is the one thing this trio must never do.
   ['.py', 'Python'],
   ['.pyi', 'Python'],
   ['.pyw', 'Python'],

@@ -75,12 +75,12 @@ simultaneously possible.
 | Path | What it is |
 |---|---|
 | `src/atlas/` | The schema, the validator, the graph queries, id identity, serialisation, and `coverage.ts`'s source-coverage rule. **The contract both sides share** — defined once, never twice. |
-| `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES-module imports) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates and generates. |
+| `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES modules) and `goscan`/`gomod` (Go) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates, groups files into nodes, and generates. |
 | `src/verbs/` | One directory per verb (`generate`, `grade`, `reveal`, distractors), plus what they share: `gate.ts` (the Ctrl+F gate), `difficulty.ts`, `score.ts` (F1), `disclosure.ts` (cross-verb facts), `sample.ts`, `paths.ts`. |
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 25 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 26 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -109,7 +109,7 @@ map, the field notes, the deck or the selector names a verb.
 | **M2** | **Kill point** | Blast Radius + F1 grading + distractors | ✅ passed |
 | **M3** | It's a game | Progression, field notes, localStorage save | ✅ |
 | **M4** | Git as rubric | Companion, Placement, Archaeology | ✅ |
-| **M5** | Generalisation | tree-sitter, 3–4 more languages | ⬜ **kill point measured — [ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**: Go yes at *package* granularity, Python yes for the map and the git verbs, **no** for Blast Radius |
+| **M5** | Generalisation | tree-sitter, 3–4 more languages | 🟡 **Go ships** at *package* granularity ([ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)); Python is next and is a *history* language — the map and the git verbs, **not** Blast Radius ([ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)) |
 | **M6** | The expensive tier | Trace verb (real call graph) | ⬜ |
 
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
@@ -132,8 +132,10 @@ offered (ADR-0020).
 
 | | Status | Notes |
 |---|---|---|
-| ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. Go and Python resolution measured at 99.8–100% and 93.8–98.6% of import sites (ADR-0024); the blocker is not parsing. |
-| Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Measured on 13 repos: refuses 6, ships 7, does not fire on this repo or hono. Its reach is bounded by a **list** of languages — see gaps. |
+| ES-module import scanner | ✅ | Build-free, no language server. TS/JS, one node per file. |
+| Go scanner + `go.mod` resolution | ✅ | Hand-rolled, ~200 lines, **zero runtime dependencies** — same 6,013/190 import sites as tree-sitter *and* as `go/parser`, 0 of 942 files disagreeing, 5.9× faster (ADR-0026 §1). One node per **package**: hugo `44da0860` is 193 packages holding 906 files, 6.61 edges each, 456 challenges, 0 unresolved sites. |
+| Python | ⬜ | Measured, not built. A *history* language when it lands — the map and the three git verbs, never Blast Radius: 7 computed `import_module(expr)` sites taint 83.7% of django's blast subjects, and no parser fixes it (ADR-0024 §4.1). |
+| Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Both sides of that ratio are counts of **files** since ADR-0026 — `mapped` counted *nodes*, which is a category error once a node is a package. Go landing flipped cobra and hugo from refused to shipping, exactly as ADR-0025 predicted. Its reach is bounded by a **list** of languages — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
@@ -153,13 +155,13 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **`npx ark` does not work.** `package.json` has no `bin` and `build` typechecks the indexer with
   `--noEmit` rather than emitting it. Use `npm run play -- <path>`. Packaging is real work nobody has
   done.
-- **A non-JS repo's *source* is still not on the map** — that part is M5 and unchanged. What is fixed
-  (**[ADR-0025](./docs/decisions/0025-a-deck-is-refused-when-the-map-is-not-of-the-repository.md)**)
-  is that ark no longer generates a confident deck about the Markdown that is left: `spf13/cobra`
-  shipped **48 challenges** about its README files and `gohugoio/hugo` **144** about its docs tree,
-  and both now ship **0**, with the map, the count and the reason. 315 questions withdrawn across 5
-  of 11 measured repos. **The remaining gap is what a Go or Python repo gets instead**: a map of its
-  documentation, which is true but thin, until M5 puts its source on the map.
+- **A Python repo's *source* is still not on the map.** Go is on it since
+  **[ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)** —
+  `spf13/cobra` and `gohugoio/hugo` were refused a deck entirely by ADR-0025 and now ship **59** and
+  **456** challenges about real Go packages — but Python, Rust, Ruby, Java and everything else still
+  gets a map of its documentation and, when that map is a sliver of the repo, no deck at all. The
+  Python half of M5 is measured and unbuilt: it is a *history* language (ADR-0024 decision 2), so it
+  buys a true map and the three git verbs and never Blast Radius.
 - **`UNREAD` is a list, and anything not on it is invisible — silently.** This is the residual half
   of the Markdown-map defect, and it is not hypothetical: a **Terraform** repo
   (`terraform-aws-modules/terraform-aws-vpc`) shipped **64 challenges over 24 Markdown files with
@@ -169,11 +171,13 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   excluded rather than guessed at, so an Objective-C repo still slips through. ADR-0025 §9.1 and
   decision 5 — the safe direction in both cases, and a one-line fix per language.
 - **A repo can keep its deck with most of its source missing.** The bar is a *tenth*, not a majority:
-  `sveltejs/svelte` maps 3,467 JavaScript files and misses 4,462 `.svelte` ones, and ships. Sharper
-  still, **`prometheus/prometheus` is 25.0%** — 249 mapped against 727 Go — so it ships 48 Blast
-  Radius boards about the React UI of a Go time-series database. The HUD says how much is missing on
-  every frame; the deck is not refused. ADR-0025 §4.2 and §9.2 — the bar is measured to be safe, not
-  measured to be tight.
+  `sveltejs/svelte` maps 3,467 JavaScript files and misses 4,462 `.svelte` ones, and ships. The HUD
+  says how much is missing on every frame; the deck is not refused. ADR-0025 §4.2 — the bar is
+  measured to be safe, not measured to be tight. *(The sharper witness this row used to name,
+  **`prometheus/prometheus` at 25.0%** shipping 48 Blast Radius boards about the React UI of a Go
+  time-series database, is **retired**: with Go on the map it reads 98.0% and 34 of its 63 blast
+  boards are Go packages. The gap is real and it now needs a new witness in a language ark cannot
+  read.)*
 - ~~**`npm run test:unit` has an undeclared dependency on `npm run build`.**~~ **Fixed.**
   `serve.test.ts` served `dist/player`, so on a fresh clone it failed 2 of 617 — measured on a clone
   of `fb68c7f2` before the fix, green with `dist/` absent after it. It now serves a temp directory it
@@ -195,17 +199,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**M5 — Go first**, now unblocked: ADR-0024 decision 3's precondition is met, its kill point is
-decided (package granularity, `ATLAS_VERSION` bump with a migration under guardrail 5), and Go's
-verdict is unconditional where Python's is a smaller product than the roadmap implies · then, in
-rough order of size: packaging **`npx ark`** (see gaps — the Definition of done has been
-unsatisfiable on it for four milestones) · the **phenomenon catalogue**.
+**M5's Python half** — the map and the three git verbs, never Blast Radius (ADR-0024 decision 2). The
+kill point is already measured and the verdict is unconditional; what is unbuilt is the scanner, the
+`sys.path`-free resolution, and the decision about what a Python node *is* (a file, almost certainly —
+Python's unit of import is the module, and a module is a file). **Score it against tree-sitter the way
+Go was scored** before writing a hand-rolled scanner: ADR-0026 decision 1 refuses tree-sitter for a
+language where it was measured to buy nothing, not as a policy · then, in rough order of size:
+packaging **`npx ark`** (see gaps — the Definition of done has been unsatisfiable on it for four
+milestones) · the **phenomenon catalogue**.
 
-*(Three items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Four items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
 exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as
-ADR-0025, and what remains of it is three narrower rows in Known gaps with their measurements.)*
+ADR-0025; and **Go's absence from the map**, which was the largest of the three rows that defect left
+behind, shipped as ADR-0026.)*
 
 ---
 
@@ -231,13 +239,16 @@ across sessions, which is the mechanic the whole product rests on.
 
 ## Try it on
 
-**`honojs/hono`** is the best third-party target — **425 nodes, 1,067 edges, 2.51 edges/node** at
-`7075369e`, 216 challenges, 142 of 425 nodes unprovable. Ark indexes **itself** as its first level,
-which is deliberate: every feature added becomes a new level, and if the tool cannot make its own
-architecture legible it does not work.
+**`honojs/hono`** is the best third-party TypeScript target — **425 nodes, 1,067 edges, 2.51
+edges/node** at `7075369e`, 216 challenges, 142 of 425 nodes unprovable. For **Go**, try
+`gohugoio/hugo` at `44da08608`: **193 packages holding 906 files**, 6.61 edges each, 456 challenges,
+and a 6.7 s index. `spf13/cobra` at `adbc881` is the honest small case — 2 packages, 1 edge, no Blast
+Radius deck at all, because cobra is one package and there is nothing to predict. Ark indexes
+**itself** as its first level, which is deliberate: every feature added becomes a new level, and if
+the tool cannot make its own architecture legible it does not work.
 
-Measured on a clean clone of `e6fe5e4`: **147 files, 500 edges (3.40 edges/node), 160 challenges**
-across four verbs, **25 of 147 nodes unprovable**, a **299.9 KiB** atlas in **~430 ms**. *(Ark
+Measured on a clean clone of `837970f2`: **152 files, 511 edges (3.36 edges/node), 160 challenges**
+across four verbs, **25 of 152 nodes unprovable**, a **308.8 KiB** atlas in **~640 ms**. *(Ark
 indexes itself, so these move with every commit — hence the sha, and the commit carrying a figure is
 always one later than the commit it describes. Prefer the invariants above to the counts.)*
 
@@ -269,7 +280,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 25 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 26 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

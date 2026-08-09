@@ -20,6 +20,7 @@ import type {
   Confidence,
   EdgeKind,
   Lang,
+  NodeKind,
   Region,
   SkipCount,
   Truncation,
@@ -45,8 +46,10 @@ import { detectRegions } from './regions.js';
 import { isManifest, loadConfigIndex } from './config.js';
 import { resolveSpecifier } from './resolve.js';
 import { scanModule } from './scan.js';
+import { scanGoModule } from './goscan.js';
+import { goPackageDir, isGoMod, loadGoModules, resolveGoImport } from './gomod.js';
 import { DEFAULT_WALK_OPTIONS, walk } from './walk.js';
-import type { WalkOptions } from './walk.js';
+import type { WalkOptions, WalkedFile } from './walk.js';
 import type { GenerationResult } from '../verbs/blastRadius/index.js';
 import { generateWithReport } from '../verbs/blastRadius/index.js';
 import type { GenerationResult as CompanionResult } from '../verbs/companion/index.js';
@@ -114,11 +117,29 @@ export function indexOptions(root: string, overrides: Partial<IndexOptions> = {}
 }
 
 interface PendingEdge {
-  readonly fromPath: string;
-  readonly toPath: string;
+  readonly fromKey: string;
+  readonly toKey: string;
   readonly kind: EdgeKind;
   confidence: Confidence;
   readonly specifiers: Set<string>;
+}
+
+/**
+ * Which node a walked file belongs to, and what that node is.
+ *
+ * **This is the whole of mixed granularity.** Every language ark reads is
+ * file-granular except Go, whose unit of import is the package — a directory —
+ * because a Go file references its own package's siblings with no import
+ * statement at all. At file granularity those edges are invisible *and*
+ * offered as wrong answers (ADR-0024 §6.1); as one node the reference is
+ * inside a node and the class cannot be expressed. ADR-0026.
+ *
+ * Everything downstream reads a key and a kind and never asks which language
+ * produced them.
+ */
+function nodeKeyOf(file: WalkedFile): { readonly key: string; readonly kind: NodeKind } {
+  if (file.lang === 'go') return { key: goPackageDir(file.path), kind: 'dir' };
+  return { key: file.path, kind: 'file' };
 }
 
 export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
@@ -131,59 +152,124 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     walked.files.map((file) => file.path).filter(isManifest),
   );
   const paths = walked.files.map((file) => file.path);
-  const indexed = new Set(paths);
+
+  // ---- node grouping ----------------------------------------------------
+  const keyByPath = new Map<string, string>();
+  const kindByKey = new Map<string, NodeKind>();
+  const membersByKey = new Map<string, WalkedFile[]>();
+  for (const file of walked.files) {
+    const { key, kind } = nodeKeyOf(file);
+    keyByPath.set(file.path, key);
+    kindByKey.set(key, kind);
+    const bucket = membersByKey.get(key);
+    if (bucket === undefined) membersByKey.set(key, [file]);
+    else bucket.push(file);
+  }
+  // `walked.files` is sorted by path, so each bucket is too, and every
+  // aggregate below (loc, the origin vote, the export union) reads them in the
+  // same order on every machine.
+  const nodeKeys = [...membersByKey.keys()];
+  const goPackages = new Set(
+    nodeKeys.filter((key) => membersByKey.get(key)?.[0]?.lang === 'go'),
+  );
+
+  const goModules = await loadGoModules(options.root, [...walked.onDisk].filter(isGoMod));
+  const goContext = {
+    packages: goPackages,
+    moduleFor: (path: string) => goModules.moduleFor(path),
+  };
   const context = {
-    indexed,
+    // `indexed` is "paths that became nodes", and a `.go` file does not — its
+    // package does. Leaving them in would let an ES specifier name a Go file
+    // and produce an edge to something with no `NodeRef`, which the edge loop
+    // would then drop in silence.
+    indexed: new Set(paths.filter((path) => keyByPath.get(path) === path)),
     onDisk: walked.onDisk,
     configFor: (path: string) => configIndex.for(path),
     workspaceNames: configIndex.workspaceNames,
   };
 
   // ---- scan and resolve -------------------------------------------------
-  const unresolvedByPath = new Map<string, string[]>();
-  const externalsByPath = new Map<string, string[]>();
-  const exportsByPath = new Map<string, readonly string[]>();
+  const unresolvedByKey = new Map<string, string[]>();
+  const externalsByKey = new Map<string, string[]>();
+  const exportsByKey = new Map<string, string[]>();
   const pending = new Map<string, PendingEdge>();
   let unresolvedDropped = 0;
   let exportsDropped = 0;
 
+  const addEdge = (
+    fromKey: string,
+    toKey: string,
+    kind: EdgeKind,
+    confidence: Confidence,
+    specifier: string,
+  ): void => {
+    const key = `${fromKey}\n${toKey}\n${kind}`;
+    const existing = pending.get(key);
+    if (existing === undefined) {
+      pending.set(key, { fromKey, toKey, kind, confidence, specifiers: new Set([specifier]) });
+    } else {
+      existing.specifiers.add(specifier);
+      if (confidence === 'probable') existing.confidence = 'probable';
+    }
+  };
+
   for (const file of walked.files) {
     if (file.source === null) continue;
+    const from = keyByPath.get(file.path) ?? file.path;
+
+    if (file.lang === 'go') {
+      const facts = scanGoModule(file.source);
+      pushAll(exportsByKey, from, facts.exports);
+      for (const reference of facts.imports) {
+        const resolution = resolveGoImport(file.path, reference.specifier, goContext);
+        switch (resolution.kind) {
+          case 'internal':
+            // A Go import path names one directory exactly — no extension
+            // guessing, no index file — so there is no `probable` arm to have.
+            // A self-edge here is `foo_test` importing `foo`, which package
+            // granularity has already made one node; the edge loop drops it.
+            addEdge(from, resolution.dir, 'import', 'certain', reference.specifier);
+            break;
+          case 'external':
+            push(externalsByKey, from, resolution.name);
+            break;
+          case 'unresolved':
+            push(unresolvedByKey, from, reference.specifier);
+            break;
+        }
+      }
+      continue;
+    }
+
     const facts = scanModule(file.source);
-    exportsByPath.set(file.path, facts.exports);
+    pushAll(exportsByKey, from, facts.exports);
 
     for (const reference of facts.imports) {
       if (reference.specifier === null) {
-        push(unresolvedByPath, file.path, reference.raw);
+        push(unresolvedByKey, from, reference.raw);
         continue;
       }
       const resolution = resolveSpecifier(file.path, reference.specifier, context);
       switch (resolution.kind) {
         case 'internal': {
           if (resolution.path === file.path) break; // a file importing itself
-          const key = `${file.path}\n${resolution.path}\n${reference.kind}`;
-          const existing = pending.get(key);
-          if (existing === undefined) {
-            pending.set(key, {
-              fromPath: file.path,
-              toPath: resolution.path,
-              kind: reference.kind,
-              confidence: resolution.confidence,
-              specifiers: new Set([reference.specifier]),
-            });
-          } else {
-            existing.specifiers.add(reference.specifier);
-            if (resolution.confidence === 'probable') existing.confidence = 'probable';
-          }
+          addEdge(
+            from,
+            keyByPath.get(resolution.path) ?? resolution.path,
+            reference.kind,
+            resolution.confidence,
+            reference.specifier,
+          );
           break;
         }
         case 'external':
-          push(externalsByPath, file.path, resolution.name);
+          push(externalsByKey, from, resolution.name);
           break;
         case 'offMap':
           break;
         case 'unresolved':
-          push(unresolvedByPath, file.path, reference.raw);
+          push(unresolvedByKey, from, reference.raw);
           break;
       }
     }
@@ -191,69 +277,60 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
 
   // ---- history ----------------------------------------------------------
   const git = await readGitHistory(options.root, options.maxCommitsWalked);
-  const history = buildHistory(git, paths, options.history);
+  const history = buildHistory(git, paths, (path) => keyByPath.get(path) ?? path, options.history);
 
   // ---- identity and node order -----------------------------------------
-  const originByPath = new Map<string, string>();
-  const claimed = new Map<string, string>();
-  for (const path of paths) {
-    const proposed = history.perFile.get(path)?.originPath ?? path;
-    const owner = claimed.get(proposed);
-    if (owner !== undefined) {
-      throw new Error(
-        `rename lineage is ambiguous: ${path} and ${owner} both trace back to ${proposed}`,
-      );
-    }
-    claimed.set(proposed, path);
-    originByPath.set(path, proposed);
-  }
+  const filesByKey = new Map(
+    [...membersByKey].map(([key, files]) => [key, files.map((file) => file.path)]),
+  );
+  const originByKey = claimOrigins(nodeKeys, filesByKey, goPackages, history.originByFile);
 
-  const idByPath = new Map<string, string>();
-  const pathById = new Map<string, string>();
-  for (const path of paths) {
-    const origin = originByPath.get(path) ?? path;
+  const idByKey = new Map<string, string>();
+  const keyById = new Map<string, string>();
+  for (const key of nodeKeys) {
+    const origin = originByKey.get(key) ?? key;
     const id = nodeIdFor(origin);
-    const clash = pathById.get(id);
+    const clash = keyById.get(id);
     if (clash !== undefined) {
-      throw new Error(`node id collision: ${origin} and ${originByPath.get(clash)} both hash to ${id}`);
+      throw new Error(`node id collision: ${origin} and ${originByKey.get(clash)} both hash to ${id}`);
     }
-    idByPath.set(path, id);
-    pathById.set(id, path);
+    idByKey.set(key, id);
+    keyById.set(id, key);
   }
 
-  const orderedPaths = [...paths].sort((a, b) =>
-    byteCompare(idByPath.get(a) ?? '', idByPath.get(b) ?? ''),
+  const orderedKeys = [...nodeKeys].sort((a, b) =>
+    byteCompare(idByKey.get(a) ?? '', idByKey.get(b) ?? ''),
   );
   const refByPath = new Map<string, number>();
-  for (const [ref, path] of orderedPaths.entries()) refByPath.set(path, ref);
+  for (const [ref, key] of orderedKeys.entries()) refByPath.set(key, ref);
 
   // ---- edges ------------------------------------------------------------
   const edges: AtlasEdge[] = [];
   for (const edge of pending.values()) {
-    const from = refByPath.get(edge.fromPath);
-    const to = refByPath.get(edge.toPath);
+    const from = refByPath.get(edge.fromKey);
+    const to = refByPath.get(edge.toKey);
     if (from === undefined || to === undefined || from === to) continue;
     edges.push({ from, to, kind: edge.kind, confidence: edge.confidence, weight: edge.specifiers.size });
   }
   edges.sort(edgeOrder);
 
   // ---- regions and layout ----------------------------------------------
-  const detected = detectRegions(orderedPaths, edges);
+  const detected = detectRegions(orderedKeys, edges);
   const regionByRef = new Map<number, string>();
   for (const region of detected) {
     for (const member of region.members) regionByRef.set(member, region.id);
   }
 
   // Regions before layout, so the layout can pull each cluster together.
-  const groupByRef = new Array<number>(orderedPaths.length).fill(0);
+  const groupByRef = new Array<number>(orderedKeys.length).fill(0);
   for (const [index, region] of detected.entries()) {
     for (const member of region.members) groupByRef[member] = index;
   }
-  const positions = computeLayout(orderedPaths.length, edges, options.layout, groupByRef);
+  const positions = computeLayout(orderedKeys.length, edges, options.layout, groupByRef);
   // The third coordinate: how load-bearing each file is. Derived from the same
   // edges the layout used, so it needs no extra pass over anything, and
   // measured at 7 ms on svelte's 4,059 nodes.
-  const { layers } = computeElevations(orderedPaths.length, edges);
+  const { layers } = computeElevations(orderedKeys.length, edges);
 
   const regions: Region[] = detected.map((region) => {
     let sumX = 0;
@@ -274,33 +351,36 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   });
 
   // ---- nodes ------------------------------------------------------------
-  const byPath = new Map(walked.files.map((file) => [file.path, file]));
-  const nodes: AtlasNode[] = orderedPaths.map((path, ref) => {
-    const file = byPath.get(path);
-    const fileHistory = history.perFile.get(path);
-    const unresolved = capped(unresolvedByPath.get(path) ?? [], MAX_UNRESOLVED_PER_NODE);
-    const exported = capped(exportsByPath.get(path) ?? [], MAX_EXPORTS_PER_NODE);
+  const nodes: AtlasNode[] = orderedKeys.map((key, ref) => {
+    const members = membersByKey.get(key) ?? [];
+    const nodeHistory = history.perNode.get(key);
+    const unresolved = capped(unresolvedByKey.get(key) ?? [], MAX_UNRESOLVED_PER_NODE);
+    const exported = capped(exportsByKey.get(key) ?? [], MAX_EXPORTS_PER_NODE);
     unresolvedDropped += unresolved.dropped;
     exportsDropped += exported.dropped;
     return {
-      id: idByPath.get(path) ?? nodeIdFor(path),
-      path,
-      originPath: originByPath.get(path) ?? path,
-      kind: 'file',
-      lang: file?.lang ?? 'other',
-      loc: file?.loc ?? 0,
-      bytes: file?.bytes ?? 0,
+      id: idByKey.get(key) ?? nodeIdFor(key),
+      path: key,
+      originPath: originByKey.get(key) ?? key,
+      kind: kindByKey.get(key) ?? 'file',
+      // Every member of a node shares its language by construction: grouping
+      // keys off the language, so a directory node holds only Go and a file
+      // node holds one file.
+      lang: members[0]?.lang ?? 'other',
+      fileCount: members.length,
+      loc: members.reduce((total, file) => total + file.loc, 0),
+      bytes: members.reduce((total, file) => total + file.bytes, 0),
       layout: positions[ref] ?? [0, 0],
       elevation: layers[ref] ?? 0,
       region: regionByRef.get(ref) ?? 'root',
       exports: exported.kept,
       unresolved: unresolved.kept,
-      externals: dedupeSorted(externalsByPath.get(path) ?? []),
-      lineage: fileHistory?.contested === true ? 'contested' : 'certain',
-      churn: fileHistory?.churn ?? 0,
-      authors: fileHistory?.authors ?? 0,
-      firstSeen: fileHistory?.firstSeen ?? null,
-      lastSeen: fileHistory?.lastSeen ?? null,
+      externals: dedupeSorted(externalsByKey.get(key) ?? []),
+      lineage: nodeHistory?.contested === true ? 'contested' : 'certain',
+      churn: nodeHistory?.churn ?? 0,
+      authors: nodeHistory?.authors ?? 0,
+      firstSeen: nodeHistory?.firstSeen ?? null,
+      lastSeen: nodeHistory?.lastSeen ?? null,
     };
   });
 
@@ -347,7 +427,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       headDate: git.headDate,
       root: git.root,
       languages,
-      fileCount: nodes.length,
+      nodeCount: nodes.length,
       tool: TOOL,
     },
     nodes,
@@ -453,6 +533,92 @@ function push(map: Map<string, string[]>, key: string, value: string): void {
   const bucket = map.get(key);
   if (bucket === undefined) map.set(key, [value]);
   else bucket.push(value);
+}
+
+function pushAll(map: Map<string, string[]>, key: string, values: readonly string[]): void {
+  const bucket = map.get(key);
+  if (bucket === undefined) map.set(key, [...values]);
+  else bucket.push(...values);
+}
+
+/**
+ * Each node's `originPath` — the thing its identity hashes (ADR-0002).
+ *
+ * For a file node this is git's answer and nothing more. For a node standing
+ * for a directory there is no git answer to have: **git records renames of
+ * files, never of directories**, so moving a package shows up as N file
+ * renames and the package's own lineage has to be read off them. The rule is
+ * the plurality of the members' origin directories, which survives the case
+ * that matters — a package moved wholesale, then given a new file, whose own
+ * origin is its current path.
+ *
+ * **Collisions are resolved, not thrown.** The previous version of this loop
+ * threw on two nodes proposing one origin, which was safe while every node was
+ * a file: `applyRenames` guarantees two live *files* never claim one historical
+ * path. A package **split** breaks that — carve `pkg/b` out of `pkg/a` and both
+ * live packages trace back to `pkg/a` — and that is an ordinary refactor, not a
+ * corrupt repo. So the rule is ADR-0002's own: first claimant in a fixed order
+ * keeps it, the loser keeps its current path, and a node's own key can never be
+ * taken from it.
+ */
+export function claimOrigins(
+  nodeKeys: readonly string[],
+  filesByKey: ReadonlyMap<string, readonly string[]>,
+  grouped: ReadonlySet<string>,
+  originByFile: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const ordered = [...nodeKeys].sort(byteCompare);
+  const proposals = new Map<string, string>();
+  for (const key of ordered) {
+    const members = filesByKey.get(key) ?? [];
+    if (!grouped.has(key)) {
+      proposals.set(key, originByFile.get(members[0] ?? key) ?? key);
+      continue;
+    }
+    proposals.set(key, votedDirectory(members, originByFile, key));
+  }
+
+  const live = new Set(ordered);
+  const taken = new Set<string>();
+  const origins = new Map<string, string>();
+  // A node proposing its own key settles first, so a rename cannot take a live
+  // node's identity away from it.
+  for (const key of ordered) {
+    if (proposals.get(key) !== key) continue;
+    origins.set(key, key);
+    taken.add(key);
+  }
+  for (const key of ordered) {
+    if (origins.has(key)) continue;
+    const proposed = proposals.get(key) ?? key;
+    const free = !live.has(proposed) && !taken.has(proposed);
+    origins.set(key, free ? proposed : key);
+    taken.add(free ? proposed : key);
+  }
+  return origins;
+}
+
+/** The directory most of these files came from. Ties break by byte order. */
+function votedDirectory(
+  members: readonly string[],
+  originByFile: ReadonlyMap<string, string>,
+  fallback: string,
+): string {
+  const votes = new Map<string, number>();
+  for (const path of members) {
+    const directory = goPackageDir(originByFile.get(path) ?? path);
+    votes.set(directory, (votes.get(directory) ?? 0) + 1);
+  }
+  let best = fallback;
+  let bestVotes = 0;
+  for (const directory of [...votes.keys()].sort(byteCompare)) {
+    const count = votes.get(directory) ?? 0;
+    if (count > bestVotes) {
+      best = directory;
+      bestVotes = count;
+    }
+  }
+  return best;
 }
 
 function dedupeSorted(values: readonly string[]): string[] {

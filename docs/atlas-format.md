@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 9,
+  "version": 10,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -90,7 +90,7 @@ to mean something without a lookup table.
 | `headDate` | `"YYYY-MM-DD" \| null` | HEAD's commit date. Null exactly when `head` is null. |
 | `root` | `string \| null` | Full 40-char sha of the repo's **first** commit. See below. |
 | `languages` | `Lang[]` | Sorted, unique. Every node's `lang` appears here. |
-| `fileCount` | `number` | Equals `nodes.length`. Redundant on purpose — it is a cheap integrity check. |
+| `nodeCount` | `number` | Equals `nodes.length`. Redundant on purpose — it is a cheap integrity check. It was called `fileCount` until a node stopped being a file; *files* are counted by `nodes[].fileCount`. |
 | `tool` | `string` | The indexer build, e.g. `ark@0.1.0`. |
 
 There is no `indexedAt`. See [ADR-0001](decisions/0001-no-wall-clock-time-in-the-atlas.md).
@@ -129,10 +129,11 @@ Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-note
 | `id` | `NodeId` | `"n:"` + 12 hex. A hash of `originPath`. The validator recomputes it. |
 | `path` | `string` | Current repo-relative POSIX path. Display and lookup — **not** identity. |
 | `originPath` | `string` | Earliest path git knows the file by. Equals `path` with no history. |
-| `kind` | `"file"` | `"dir"` and `"symbol"` are reserved for semantic zoom. |
-| `lang` | `Lang` | `ts \| tsx \| js \| jsx \| mjs \| cjs \| json \| md \| other`. |
-| `loc` | `number` | Physical lines. |
-| `bytes` | `number` | File size. |
+| `kind` | `"file" \| "dir"` | One file, or a directory standing for the source files in it. See below. `"symbol"` is still reserved for semantic zoom. |
+| `lang` | `Lang` | `ts \| tsx \| js \| jsx \| mjs \| cjs \| go \| json \| md \| other`. |
+| `fileCount` | `number` | Files on disk this node stands for. `1` for a `file` node, always. |
+| `loc` | `number` | Physical lines, summed over the members. |
+| `bytes` | `number` | File size, summed over the members. |
 | `layout` | `[number, number]` | Precomputed, deterministic, 2dp. |
 | `elevation` | `number` | Layer index — how load-bearing the file is. See below. |
 | `region` | `string` | A `regions[].id`. |
@@ -184,6 +185,22 @@ measurements: [`docs/prior-art.md`](prior-art.md) §4.3, `src/indexer/elevation.
 The distribution is lumpy, and that is terrain rather than a defect — 56% of this repo, 74% of
 `vite` and 90% of `svelte` sit at layer 0 because nothing imports them.
 
+#### `kind` — a node is a file, except in Go, where it is a package
+
+Every language ark reads is file-granular but Go, whose **unit of import is the directory**. A Go
+file references its own package's siblings with no import statement at all, so a file-granular Go
+atlas is missing every intra-package edge — and `treeSibling`, which offers *same-directory
+non-dependents* as wrong answers, then offers those siblings. Measured at up to 71 slots across 46 of
+`gohugoio/hugo`'s 244 boards ([ADR-0024](decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md) §6.1).
+With the package as the node, the reference is *inside* a node and the class cannot be expressed.
+
+So one Go node is one directory: `path` is the directory (`.` at the repo root), `fileCount` is how
+many `.go` files it holds, `loc` and `bytes` are sums, `exports` is the union of the package's
+exported declarations, and `churn` counts commits touching **any** member — once per commit, not once
+per file. A directory holding both `foo` and its external test package `foo_test` is one node; a
+non-Go file in a Go directory is still its own `file` node.
+[ADR-0026](decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md).
+
 #### Identity across renames
 
 `id` hashes `originPath`, not `path`, so `git mv` does not reset the player's fog of war or
@@ -191,11 +208,19 @@ invalidate their field notes. The rename chain is read from one `git log -M` pas
 files chase the same historical path, the first claimant in log order keeps it. Full reasoning and
 alternatives: [ADR-0002](decisions/0002-node-identity-survives-renames.md).
 
+**git records renames of files, never of directories**, so a `dir` node has no lineage of its own to
+read. Its `originPath` is the directory most of its members came from — which follows a package moved
+wholesale, and survives one that has since gained a file. Two nodes proposing one origin (a package
+*split*) is an ordinary refactor rather than a corrupt repo, so the first claimant in path order keeps
+it and the other keeps its current path; a node's own key can never be taken from it.
+
 #### What becomes a node
 
-Indexed and scanned for imports: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`.
+Indexed and scanned for imports: `.ts .tsx .mts .cts .js .jsx .mjs .cjs` one node per file, and
+`.go` one node per **directory**.
 Indexed but not scanned: `.json .jsonc .md` — they are part of the terrain and carry real history.
-Everything else is skipped and counted in `report.skipped`.
+Everything else is skipped and counted in `report.skipped`, and program source among it is counted
+again by language in `report.unreadable`.
 
 Also skipped: anything matching `.gitignore` (root and nested), the built-in excludes
 (`node_modules/ dist/ build/ coverage/ .next/ vendor/`), `.git`, **all symlinks** (a loop would hang
@@ -556,15 +581,26 @@ field says why; the map, regions, history and layout are all present and valid a
 
 ## 4. Compatibility
 
-`version` is `9`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `10`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v9, got v8 — reindex required
+atlas.version: this build reads atlas v10, got v9 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v9 → v10 has no migration either, and it could not have one.** `nodes[].fileCount` is a new
+required field, `repo.fileCount` is renamed to `repo.nodeCount`, `NodeKind` gains `dir` and `Lang`
+gains `go`. On an atlas whose nodes are all files a default of `1` would even be *correct* — and the
+reason to refuse it anyway is that on the atlases where it is wrong, it is wrong silently and in the
+direction that decides a deck: `sourceCoverage` weighs mapped files against unreadable ones, and a Go
+atlas defaulted to 1 would weigh 193 packages against a repo's Python.
+
+Cost, measured byte-for-byte through the real serialiser on clean clones of ark `837970f2` and hono
+`7075369e`: **+2,273 B (0.72%)** and **+6,207 B (1.01%)** — one integer per node. Both decks are
+**byte-identical**, as are their nodes minus the new field, edges, regions, history and report.
 
 **v8 → v9 has no migration, and it is the cheapest bump yet — but the *reason* is new.**
 `report.unreadable` is a new required field, and unlike every earlier bump the missing information is

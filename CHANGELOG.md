@@ -2378,3 +2378,59 @@ One line per iteration: what changed, and what to do next.
   with the class it guarded; the mechanism is still live for `adjacent` and `partners`.
 
   **Next**: **M5 — Go first**. The two small fixes of #32 rebase on top of this.
+
+- **M5, Go half: a node is a package, and the parser is hand-rolled.** ADR-0024 decided the
+  granularity and left two things unmeasured; both are now measured and the second changed a
+  north-star answer. **The parser.** NORTH-STAR §7.2 says *"v2: tree-sitter"*, so tree-sitter and a
+  hand-rolled scanner were run over the same corpus with a gate proving each returned something:
+  **both find 6,013 import sites on hugo and 190 on cobra — the same counts ADR-0024 got from Go's
+  own `go/parser`** — and disagree on **no file at all** out of 942, and on none of seventeen
+  adversarial fixtures. tree-sitter is **5.9× slower** (1,619 ms against 261 on hugo, against a 10 s
+  index budget) and would be this project's **first runtime dependency**, 8.8 MB installed against a
+  `package.json` with no `dependencies` key at all. So it is refused **for Go**, on the measurement,
+  and the condition that reverses it is written down: a language where the two disagree on real
+  files. **The granularity.** hugo is 906 Go files beside 23 JavaScript ones, so one atlas holds both
+  kinds of node and every derived field needed an answer — `churn` counts a commit **once** per
+  package rather than once per file, `lineage` is contested if any member is, and a `dir` node's
+  `originPath` is the plurality of its members' origin directories, because **git records renames of
+  files and never of directories**. That last rule needed the throw removed: two nodes proposing one
+  origin is a package *split*, an ordinary refactor, not a corrupt repo.
+
+  **The class the granularity was bought for is gone, and it was checked rather than assumed.**
+  ADR-0024 §6.1 measured up to 71 wrong answer keys across 46 of hugo's 244 file-granular boards,
+  from `treeSibling` offering a same-package file as a wrong answer to an edge Go writes no import
+  for. Measured on the shipped indexer: **0 same-package distractor slots on hugo's 156 boards, on
+  prometheus's 63 and on cobra's**, no directory producing two nodes on any of the three, and **0
+  violations of ADR-0008's `candidates ∩ dependents(subject, ∞) = truth`** across 187 Go boards.
+  hugo: **193 packages, 1,275 Go edges, 6.61 per package — ADR-0024 §7's prediction to the digit**,
+  now from the shipped code rather than a shim; **6,733 ms against 16,194** at file granularity, and
+  a 1,337 KiB atlas against 3,804. Every Go repo's atlas is byte-identical across two runs.
+
+  **ADR-0025's rule compared a count of nodes with a count of files**, which was exactly right while
+  every node was a file. `AtlasNode.fileCount` fixes it and the validator pins
+  `kind === 'file' ⇒ fileCount === 1`, so a JavaScript repo's numerator cannot drift. Re-measured:
+  hugo **2.5% → 98.5%** and cobra **0.0% → 100.0%** flip from refused to shipping, **456 and 59
+  challenges** where ADR-0025 withdrew 144 and 48; `prometheus/prometheus` — the repo ADR-0025 §9.2
+  named as sitting inside the band it had called empty, shipping *"48 Blast Radius boards about the
+  React web UI of a Go time-series database"* — now ships **34 of 63 about Go packages**. The other
+  rows cannot move, and that is a proof rather than a re-measure: adding a language to `SCANNED`
+  strictly increases the mapped share, so **no repo can go from shipping to refused**.
+
+  **The bootstrap fixture and the third-party control did not move.** Old indexer against new on
+  clean clones of ark `837970f2` and hono `7075369e`: `challenges` **byte-identical** (160 and 216),
+  and nodes minus the new field, edges, regions, history and report likewise; the field costs +0.72%
+  and +1.01% of the atlas. `ATLAS_VERSION` 9 → 10, reindex required.
+
+  One thing found on the way, and it is the `.first()` landmine with a new face: **the e2e's
+  board-playing step predicted a verb**. It asserted Blast Radius's wording over anything that was
+  not Companion, and matched the board with a map covering only half of `AtlasId` — so when this
+  change re-rolled ark's own deck onto an Archaeology board it reported the wrong prompt and then hung
+  30 s on a Submit that was correctly disabled. Both the map it needed and the comment describing the
+  mistake were already in the file, 300 lines up. A third bug sat under those two: `innerText` returns
+  **rendered** text, so `commitLabel`'s double spaces arrive collapsed and a commit row can never
+  equal the string the code built — invisible on three verbs out of four. The suite now plays an
+  Archaeology board end to end, which it never had.
+
+  **Next**: M5's Python half — ADR-0024 decision 2 makes it a *history* language, the map and the
+  three git verbs and never Blast Radius, which is a smaller product than the roadmap implies and
+  needs its own measurement. Then `npx ark` packaging, then the phenomenon catalogue.

@@ -223,10 +223,18 @@ describe('the walk tallies unreadable source', () => {
       'logo.png': 'not really a png\n',
       'config.yml': 'a: 1\n',
     });
-    expect(result.files.map((f) => f.path)).toEqual(['README.md', 'src/main.ts']);
+    // **Go is scanned since M5**, so its files are indexed and are not
+    // unreadable. That is decision 6 of ADR-0025 doing its job in the direction
+    // it was written for: a language arriving in `SCANNED` leaves `UNREAD` in
+    // the same commit, and this fixture is where the move is visible.
+    expect(result.files.map((f) => f.path)).toEqual([
+      'README.md',
+      'cmd/flags.go',
+      'cmd/root.go',
+      'src/main.ts',
+    ]);
     // Sorted by language, which is what the atlas stores and the validator checks.
     expect(result.unreadable).toEqual([
-      { lang: 'Go', count: 2 },
       { lang: 'Python', count: 1 },
       { lang: 'Shell', count: 1 },
     ]);
@@ -237,7 +245,7 @@ describe('the walk tallies unreadable source', () => {
     // A tally that outran its parent would mean something was counted twice or
     // counted after being indexed.
     const result = await tree({
-      'a.go': 'package a\n',
+      'a.rs': 'fn main() {}\n',
       'b.py': 'x = 1\n',
       'c.png': 'x\n',
       'd.ts': 'export const d = 1;\n',

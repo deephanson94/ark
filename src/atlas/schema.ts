@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 9;
+export const ATLAS_VERSION = 10;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -70,7 +70,7 @@ export type NodeRef = number;
 /** A `YYYY-MM-DD` calendar date in the committer's local zone, as git reports it. */
 export type IsoDate = string;
 
-export type Lang = 'ts' | 'tsx' | 'js' | 'jsx' | 'mjs' | 'cjs' | 'json' | 'md' | 'other';
+export type Lang = 'ts' | 'tsx' | 'js' | 'jsx' | 'mjs' | 'cjs' | 'go' | 'json' | 'md' | 'other';
 
 /**
  * Languages the scanner parses for imports. Sorted.
@@ -83,13 +83,29 @@ export type Lang = 'ts' | 'tsx' | 'js' | 'jsx' | 'mjs' | 'cjs' | 'json' | 'md' |
  * Kept next to `Lang` rather than in the indexer because it is a fact about the
  * enum, and both sides of the wall need it.
  */
-export const IMPORTING_LANGS: readonly Lang[] = ['cjs', 'js', 'jsx', 'mjs', 'ts', 'tsx'];
+export const IMPORTING_LANGS: readonly Lang[] = ['cjs', 'go', 'js', 'jsx', 'mjs', 'ts', 'tsx'];
 
 export function canImport(lang: Lang): boolean {
   return IMPORTING_LANGS.includes(lang);
 }
 
-export type NodeKind = 'file';
+/**
+ * What a node stands for on disk.
+ *
+ * - `file` — one file. `fileCount` is 1, and this is every node in a JS or
+ *   TypeScript repo.
+ * - `dir`  — a directory, standing for every source file in it. Go's unit of
+ *   import is the **package**, which is a directory, and a Go file has no
+ *   import statement for its own package's siblings — so at file granularity
+ *   every intra-package reference is an edge the atlas cannot see, and
+ *   `treeSibling` offers those siblings as *wrong answers*. ADR-0024 §6.1
+ *   measured that at up to 71 slots across 46 of `gohugoio/hugo`'s 244 boards.
+ *   A directory node makes the class unrepresentable rather than gated:
+ *   the reference is *inside* a node (ADR-0026).
+ *
+ * `symbol` is still reserved for semantic zoom and does not exist.
+ */
+export type NodeKind = 'file' | 'dir';
 
 /**
  * How much we trust an edge.
@@ -147,7 +163,21 @@ export interface AtlasNode {
   readonly originPath: string;
   readonly kind: NodeKind;
   readonly lang: Lang;
-  /** Physical lines in the file. */
+  /**
+   * How many files on disk this node stands for. `1` for a `file` node,
+   * always; the count of source files in the directory for a `dir` one.
+   *
+   * **It exists because a ratio needs both sides in the same unit.**
+   * `sourceCoverage` weighs what the map holds against what the walk
+   * recognised and could not read, and the second is a count of *files*
+   * (ADR-0025). Counting *nodes* on the first side was exactly right while
+   * every node was a file, and becomes a category error the moment one is not
+   * — a Go repo would compare 193 packages against its unreadable Python and
+   * silently get a different verdict. Every node carries the number so the
+   * comparison stays honest without anybody remembering to convert.
+   */
+  readonly fileCount: number;
+  /** Physical lines. Summed over the members when this node is a directory. */
   readonly loc: number;
   readonly bytes: number;
   /** Precomputed, deterministic, rounded to 2dp. Geography is topology (pillar 4). */
@@ -514,7 +544,17 @@ export interface RepoMeta {
   readonly root: string | null;
   /** Sorted. */
   readonly languages: readonly Lang[];
-  readonly fileCount: number;
+  /**
+   * Equals `nodes.length`. Redundant on purpose — it is a cheap integrity
+   * check, and that is all it has ever been.
+   *
+   * **It was called `fileCount` until a node stopped being a file.** The
+   * validator has always asserted it against `nodes.length`, so the name was a
+   * description of the data rather than of the field, and package granularity
+   * would have made it quietly false. Files are counted by
+   * `AtlasNode.fileCount`, which is the number `sourceCoverage` needs.
+   */
+  readonly nodeCount: number;
   /** The indexer build that produced this atlas, e.g. `ark@0.1.0`. */
   readonly tool: string;
 }

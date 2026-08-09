@@ -27,6 +27,9 @@ function history(commits: readonly GitCommit[]): GitHistory {
   };
 }
 
+/** Every language but Go is file-granular: the node key is the path. */
+const samePath = (path: string): string => path;
+
 describe('parseLog', () => {
   it('reads the NUL-delimited name-status stream', () => {
     const log =
@@ -95,22 +98,23 @@ describe('buildHistory — churn', () => {
       commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'], author: 'ada' }),
     ]),
     paths,
+    samePath,
     DEFAULT_HISTORY_LIMITS,
   );
 
   it('counts commits touching each file', () => {
-    expect(result.perFile.get('a.ts')?.churn).toBe(3);
-    expect(result.perFile.get('b.ts')?.churn).toBe(1);
+    expect(result.perNode.get('a.ts')?.churn).toBe(3);
+    expect(result.perNode.get('b.ts')?.churn).toBe(1);
   });
 
   it('gets first and last seen the right way round despite the newest-first log', () => {
-    expect(result.perFile.get('a.ts')?.firstSeen).toBe('2026-01-01');
-    expect(result.perFile.get('a.ts')?.lastSeen).toBe('2026-03-01');
+    expect(result.perNode.get('a.ts')?.firstSeen).toBe('2026-01-01');
+    expect(result.perNode.get('a.ts')?.lastSeen).toBe('2026-03-01');
   });
 
   it('counts distinct authors', () => {
-    expect(result.perFile.get('a.ts')?.authors).toBe(2);
-    expect(result.perFile.get('b.ts')?.authors).toBe(1);
+    expect(result.perNode.get('a.ts')?.authors).toBe(2);
+    expect(result.perNode.get('b.ts')?.authors).toBe(1);
   });
 
   it('reports the window the history covers', () => {
@@ -118,9 +122,9 @@ describe('buildHistory — churn', () => {
   });
 
   it('gives a file with no commits a zeroed record rather than omitting it', () => {
-    const fresh = buildHistory(history([]), ['new.ts'], DEFAULT_HISTORY_LIMITS);
-    expect(fresh.perFile.get('new.ts')).toEqual({
-      originPath: 'new.ts',
+    const fresh = buildHistory(history([]), ['new.ts'], samePath, DEFAULT_HISTORY_LIMITS);
+    expect(fresh.originByFile.get('new.ts')).toBe('new.ts');
+    expect(fresh.perNode.get('new.ts')).toEqual({
       churn: 0,
       authors: 0,
       firstSeen: null,
@@ -143,7 +147,7 @@ describe('buildHistory — dates that do not decrease along the log', () => {
   ]);
 
   it('emits commits in a total order the validator can check', () => {
-    const result = buildHistory(jumbled, ['a.ts'], DEFAULT_HISTORY_LIMITS);
+    const result = buildHistory(jumbled, ['a.ts'], samePath, DEFAULT_HISTORY_LIMITS);
     expect(result.commits.map((entry) => entry.date)).toEqual(['2026-03-09', '2026-02-07', '2026-01-05']);
   });
 
@@ -153,14 +157,14 @@ describe('buildHistory — dates that do not decrease along the log', () => {
       commit({ sha: 'aa', date: '2026-01-01', files: ['a.ts'] }),
       commit({ sha: 'mm', date: '2026-01-01', files: ['a.ts'] }),
     ]);
-    const result = buildHistory(sameDay, ['a.ts'], DEFAULT_HISTORY_LIMITS);
+    const result = buildHistory(sameDay, ['a.ts'], samePath, DEFAULT_HISTORY_LIMITS);
     expect(result.commits.map((entry) => entry.sha)).toEqual(['aa', 'mm', 'zz']);
   });
 
   it('takes first and last seen as the min and max date, not the log ends', () => {
-    const result = buildHistory(jumbled, ['a.ts'], DEFAULT_HISTORY_LIMITS);
-    expect(result.perFile.get('a.ts')?.firstSeen).toBe('2026-01-05');
-    expect(result.perFile.get('a.ts')?.lastSeen).toBe('2026-03-09');
+    const result = buildHistory(jumbled, ['a.ts'], samePath, DEFAULT_HISTORY_LIMITS);
+    expect(result.perNode.get('a.ts')?.firstSeen).toBe('2026-01-05');
+    expect(result.perNode.get('a.ts')?.lastSeen).toBe('2026-03-09');
   });
 });
 
@@ -177,14 +181,15 @@ describe('buildHistory — rename lineage', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: ['src/old.ts'] }),
       ]),
       ['src/new.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
-    const record = result.perFile.get('src/new.ts');
+    const record = result.perNode.get('src/new.ts');
     // Without rename following this would be churn 1 and firstSeen February —
     // the file would look new when it is the oldest thing in the repo.
     expect(record?.churn).toBe(2);
     expect(record?.firstSeen).toBe('2026-01-01');
-    expect(record?.originPath).toBe('src/old.ts');
+    expect(result.originByFile.get('src/new.ts')).toBe('src/old.ts');
   });
 
   it('follows a chain of renames to the earliest path', () => {
@@ -195,10 +200,11 @@ describe('buildHistory — rename lineage', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'] }),
       ]),
       ['c.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
-    expect(result.perFile.get('c.ts')?.originPath).toBe('a.ts');
-    expect(result.perFile.get('c.ts')?.churn).toBe(3);
+    expect(result.originByFile.get('c.ts')).toBe('a.ts');
+    expect(result.perNode.get('c.ts')?.churn).toBe(3);
   });
 
   it('does not hand one file the history of another that reused its path', () => {
@@ -210,9 +216,10 @@ describe('buildHistory — rename lineage', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'] }),
       ]),
       ['a.ts', 'b.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
-    const origins = [result.perFile.get('a.ts')?.originPath, result.perFile.get('b.ts')?.originPath];
+    const origins = [result.originByFile.get('a.ts'), result.originByFile.get('b.ts')];
     expect(new Set(origins).size).toBe(2);
   });
 });
@@ -227,6 +234,7 @@ describe('buildHistory — co-change', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts', 'b.ts'] }),
       ]),
       ['a.ts', 'b.ts'],
+      samePath,
       limits,
     );
     expect(result.coChange).toEqual([['a.ts', 'b.ts', 2]]);
@@ -236,6 +244,7 @@ describe('buildHistory — co-change', () => {
     const result = buildHistory(
       history([commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts', 'b.ts'] })]),
       ['a.ts', 'b.ts'],
+      samePath,
       limits,
     );
     expect(result.coChange).toEqual([]);
@@ -249,6 +258,7 @@ describe('buildHistory — co-change', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: wide }),
       ]),
       wide,
+      samePath,
       limits,
     );
     expect(result.coChange).toEqual([]);
@@ -263,6 +273,7 @@ describe('buildHistory — co-change', () => {
         commit({ sha: 'c1', date: '2026-01-01', files: ['b.ts', 'c.ts'] }),
       ]),
       ['a.ts', 'b.ts', 'c.ts'],
+      samePath,
       { ...limits, minCoChangeCount: 1 },
     );
     expect(result.coChange.map(([, , count]) => count)).toEqual([2, 1]);
@@ -275,7 +286,7 @@ describe('buildHistory — budget', () => {
   );
 
   it('retains only the newest commits and says how many it dropped', () => {
-    const result = buildHistory(history(many), ['a.ts'], { ...DEFAULT_HISTORY_LIMITS, maxCommits: 5 });
+    const result = buildHistory(history(many), ['a.ts'], samePath, { ...DEFAULT_HISTORY_LIMITS, maxCommits: 5 });
     expect(result.commits).toHaveLength(5);
     expect(result.truncations).toContainEqual({ what: 'commits', kept: 5, dropped: 15 });
   });
@@ -285,6 +296,7 @@ describe('buildHistory — budget', () => {
     const result = buildHistory(
       history([commit({ sha: 'big', date: '2026-01-01', files })]),
       files,
+      samePath,
       { ...DEFAULT_HISTORY_LIMITS, maxCommitFiles: 10, wideCommitFiles: 100 },
     );
     expect(result.commits[0]?.files).toHaveLength(10);
@@ -295,6 +307,7 @@ describe('buildHistory — budget', () => {
     const result = buildHistory(
       history([commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'] })]),
       ['a.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
     expect(result.truncations).toEqual([]);
@@ -304,6 +317,7 @@ describe('buildHistory — budget', () => {
     const result = buildHistory(
       history([commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'], subject: 'x'.repeat(300) })]),
       ['a.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
     expect(result.commits[0]?.subject).toHaveLength(120);
@@ -313,6 +327,7 @@ describe('buildHistory — budget', () => {
     const result = buildHistory(
       history([commit({ sha: 'c1', date: '2026-01-01', files: ['a.ts'], subject: 'fix crash (#4412)' })]),
       ['a.ts'],
+      samePath,
       DEFAULT_HISTORY_LIMITS,
     );
     expect(result.commits[0]?.issue).toBe(4412);

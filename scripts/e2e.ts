@@ -50,6 +50,19 @@ interface Failure {
   readonly detail: string;
 }
 
+/**
+ * Text as the browser *renders* it, which is the only form worth comparing.
+ *
+ * `innerText` collapses runs of whitespace under `white-space: normal`, so a
+ * label the code built with two spaces — `commitLabel`, whose fields are
+ * separated that way — never equals the string on screen. A file path survives
+ * the round trip unchanged, which is exactly why this went unnoticed until a
+ * board of commits was played: the bug is invisible on three verbs out of four.
+ */
+function rendered(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 async function indexForPlayer(): Promise<Atlas> {
   const atlas = await buildAtlas(indexOptions(ROOT));
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
@@ -79,9 +92,15 @@ async function main(): Promise<number> {
   // Every id to the string the console prints for it — a path for a file, a date
   // and message for a commit. `pathById` covers only half the union since
   // ADR-0018, and a board of commits would silently match nothing.
+  // Values are **rendered** text: `innerText` collapses whitespace under
+  // `white-space: normal`, and `commitLabel` separates its fields with two
+  // spaces — so an unnormalised label matches a file path and never a commit,
+  // which is a board of twenty rows silently matching none of them.
   const labelById = new Map(
-    [...atlas.nodes.map((node) => [node.id, node.path] as const)].concat(
-      atlas.history.commits.map((commit) => [commitIdFor(commit.sha), commitLabel(commit)] as const),
+    [...atlas.nodes.map((node) => [node.id, rendered(node.path)] as const)].concat(
+      atlas.history.commits.map(
+        (commit) => [commitIdFor(commit.sha), rendered(commitLabel(commit))] as const,
+      ),
     ),
   );
   process.stdout.write(
@@ -325,7 +344,23 @@ async function main(): Promise<number> {
       // is `text-transform: uppercase` — it reads `COMPANION`, not `companion`.
       const title = (await page.locator('.console-verb').innerText()).trim().toLowerCase();
       process.stdout.write(`e2e: verb → ${title}\n`);
-      const expected = title === 'companion' ? 'changed alongside' : 'depend on it';
+      // **One entry per verb, not a binary.** This read
+      // `title === 'companion' ? … : 'depend on it'`, which asserts Blast
+      // Radius's wording over *any* verb that is not Companion — so the day the
+      // grid scan landed on an Archaeology board it reported the wrong prompt
+      // and then hung for 30 s on a Submit that was correctly disabled. ark
+      // indexes itself, so which board this step plays moves with every commit;
+      // a default arm here is a prediction about a deck nobody controls.
+      const WORDING: Record<string, string> = {
+        'blast radius': 'depend on it',
+        companion: 'changed alongside',
+        archaeology: 'commits changed',
+        placement: 'did it change',
+      };
+      const expected = WORDING[title] ?? '';
+      if (expected === '') {
+        failures.push({ what: 'prompt', detail: `no expected wording for verb "${title}"` });
+      }
       if (!question.includes(expected)) {
         failures.push({ what: 'prompt', detail: `unexpected wording: "${question}"` });
       }
@@ -353,13 +388,19 @@ async function main(): Promise<number> {
       // The witness step below already reads the choice set off the screen and
       // matches the board whose candidates those are — CLAUDE.md's `.first()`
       // landmine, fixed there and left standing here, four hundred lines apart.
-      const shownHere = (await page.locator('.choice-path').allInnerTexts()).map((t) => t.trim());
+      const shownHere = (await page.locator('.choice-path').allInnerTexts()).map(rendered);
       const shownHereSet = new Set(shownHere);
       const challenge = atlas.challenges.find(
         (entry) =>
           pathById.get(entry.subject) === subject &&
           entry.candidates.length === shownHere.length &&
-          entry.candidates.every((id) => shownHereSet.has(pathById.get(id) ?? ' ')),
+          // `labelById`, not `pathById`: a member is a place **or an event**
+          // (ADR-0018), and `pathById` covers only the first arm — so an
+          // Archaeology board, whose rows are commits, matched nothing at all,
+          // `clicked` stayed 0 and the step hung 30 s on a Submit that was
+          // correctly disabled. The same half-of-the-union mistake the comment
+          // above describes, one map along.
+          entry.candidates.every((id) => shownHereSet.has(labelById.get(id) ?? ' ')),
       );
       if (!question.includes(subject)) {
         failures.push({ what: 'prompt', detail: `asked about ${subject} but says "${question}"` });
@@ -367,11 +408,11 @@ async function main(): Promise<number> {
       if (challenge === undefined) {
         failures.push({ what: 'challenge', detail: `no challenge in the atlas for ${subject}` });
       } else {
-        const wanted = new Set(challenge.truth.map((id) => pathById.get(id) ?? ''));
+        const wanted = new Set(challenge.truth.map((id) => labelById.get(id) ?? ''));
         let clicked = 0;
         for (let i = 0; i < choices; i++) {
           const button = page.locator('.choice-button').nth(i);
-          if (!wanted.has((await button.innerText()).trim())) continue;
+          if (!wanted.has(rendered(await button.innerText()))) continue;
           await button.click();
           clicked++;
         }
@@ -697,7 +738,7 @@ async function main(): Promise<number> {
       if (await page.locator('.console-scrim:not([hidden])').count()) {
         failures.push({ what: 'guide', detail: 'the suggestion opened a modal instead of moving the map' });
       }
-      const landedOn = (await page.locator('.inspector-path').innerText()).trim();
+      const landedOn = rendered(await page.locator('.inspector-path').innerText());
       process.stdout.write(`e2e: guide sent us to ${landedOn}\n`);
       if (landedOn === '') {
         failures.push({ what: 'guide', detail: 'the suggestion selected nothing' });
@@ -763,7 +804,7 @@ async function main(): Promise<number> {
       );
       await page.locator('.inspector-action').click();
       await page.waitForSelector('.console-panel', { timeout: 5000 });
-      const shown = (await page.locator('.choice-path').allInnerTexts()).map((text) => text.trim());
+      const shown = (await page.locator('.choice-path').allInnerTexts()).map(rendered);
       const shownSet = new Set(shown);
       const witnessBoard = boardsHere.find(
         (entry) =>
@@ -1096,7 +1137,7 @@ async function main(): Promise<number> {
           let clicked = 0;
           for (let i = 0; i < options; i++) {
             const button = seededPage.locator('.choice-button').nth(i);
-            if (!wanted.has((await button.innerText()).trim())) continue;
+            if (!wanted.has(rendered(await button.innerText()))) continue;
             await button.click();
             clicked++;
           }
