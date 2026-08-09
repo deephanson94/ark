@@ -2472,5 +2472,12 @@ One line per iteration: what changed, and what to do next.
   wording belongs to the verb rather than the console that would be the cheap place for it. The
   boards are correct; the noun is not. `README.md` Known gaps, with the counts.
 
+  And a **third** e2e defect of the same family, found only by reproducing the CI merge commit before
+  pushing: the field-notes step selected its note with `claims.find(t => t.includes(subject))`, which
+  also matches a note about somebody *else* that lists this subject among its members. On the merge
+  tree — a different commit, a different deck — it picked a note for `tests/unit/placement.test.ts`
+  and compared its count against this challenge's key. The comment two lines above it already said
+  *"find the note by its subject, never by its position"*; **a substring is a position.**
+
   **Next**: the noun, then M5's Python half — a *history* language, the map and the three git verbs
   and never Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was.

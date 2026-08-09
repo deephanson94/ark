@@ -611,6 +611,13 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   arrive collapsed to one and a commit row can never equal the string the code built. That one is
   invisible on three verbs out of four, which is why it survived a milestone. **Compare rendered text
   to rendered text, enumerate every verb rather than defaulting, and never predict the board.**
+  A **third** instance in the same file surfaced only from reproducing the CI merge commit: the field
+  notes step selects its note with `claims.find(t => t.includes(subject))`, and a claim reads
+  *"You proved N files that change with SUBJECT — member, member, …"* — so a note about somebody
+  **else** that merely lists this subject as a member matches, and `find` takes the first. The comment
+  two lines above it already said *"find the note by its subject, never by its position"*. **A
+  substring is a position.** Match against the part of the sentence that is a claim about the
+  subject, not against the sentence.
 - **A path in a language you have just added can be dead in a way the language's own shape hides.**
   Go's masker skipped recording rune-literal bodies as string literals, with a comment explaining that
   a rune can never be an import path. True, and the branch is unreachable: the import scan only ever
