@@ -42,11 +42,14 @@ Both instruments were run over the same corpus, with the gate this repo insists 
 of "how fast is X" needs a gate proving X happened*: nothing is reported unless both return more than
 zero sites, and the two are compared **file by file**.
 
-| instrument | hugo sites | cobra sites | hugo ms | cobra ms | files disagreeing |
+| instrument | hugo sites | cobra sites | hugo ms, three runs **in run order** | cobra ms | files disagreeing with tree-sitter |
 |---|---|---|---|---|---|
 | `go/parser` (ADR-0024 §3) | 6,013 | 190 | — | — | — |
-| tree-sitter 0.25, WASM grammar | **6,013** | **190** | 1,589 / 1,620 / 1,648 | 162 | — |
-| hand-rolled (`goscan.ts`) | **6,013** | **190** | 247 / 260 / 276 | 35 | **0 of 942** |
+| tree-sitter 0.25, WASM grammar | **6,013** | **190** | 1,621 / 1,589 / 1,648 | 162 | — |
+| hand-rolled (`goscan.ts`) | **6,013** | **190** | 276 / 247 / 260 | 35 | **0 of 942** |
+
+*(Run order, not sorted — the per-run ratios below pair by run, and a sorted pair of columns would
+give three different ones.)*
 
 Three independent instruments agree on the site count **to the digit**, on both repos, and the two
 that can be compared per file disagree on **no file at all**. Seventeen adversarial fixtures — the
@@ -57,9 +60,10 @@ agree seventeen times.
 So the accuracy argument for tree-sitter, on the only thing ark reads out of a Go file, is worth
 **zero measured points**. What is left is cost:
 
-- **6.2× slower** on hugo — 1,619 ms mean against 261, per-run ratios 5.88 / 6.43 / 6.33 — plus
-  16–33 ms to initialise the runtime and load the grammar. hugo's whole index has to fit in 10 s
-  (§5). *(This document first said 5.9×, which is the **smallest** of the three per-run ratios quoted
+- **6.2× slower** on hugo — 1,619 ms mean against 261, per-run ratios 5.88 / 6.43 / 6.33 in the same
+  order as the table — plus 16–33 ms to initialise the runtime and load the grammar. hugo's whole
+  index has to fit in 10 s (§5).
+  *(This document first said 5.9×, which is the **smallest** of the three per-run ratios quoted
   as the headline while the mean sat two lines below it: the lower-bound-as-margin landmine, in the
   paragraph deciding the change. On cobra the ratio is 4.6×.)*
 - **The first runtime dependency this project would have.** `package.json` has no `dependencies` key
@@ -119,6 +123,14 @@ ones** — so one atlas holds both kinds of node and every field needs an answer
 **A non-Go file in a Go directory keeps its own node.** `web/server.go` and `web/client.ts` are two
 nodes, `web` and `web/client.ts`. Node paths stay unique because a file path and a directory path can
 never collide.
+
+**"A directory is a package" is Go's rule, and ark does not compile, so it was checked rather than
+assumed.** Across hugo, cobra and prometheus: **318 directories, 0 with more than one package clause**
+(ignoring the `_test` suffix) and **0 `.go` files with no clause at all**. The directory counts —
+193, 2, 123 — are the package counts in §5.1 exactly, which is the gate saying this counted what the
+indexer grouped. A repo that broke the rule (a `testdata/` fixture, a code sample) would merge two
+packages into one node; that is a coarser node, **not a wrong answer key**, because whoever imports
+the directory depends on all of it.
 
 **`foo` and its external test package `foo_test` are one node.** They compile together, they move
 together in git, and separating them would re-create at file level the distinction package
@@ -244,7 +256,14 @@ end-to-end check — real walk, real build, real validator, over a temp Go repo 
 | cobra | 190 | **0** | 0.00% | 0.5 | **0 of 2** |
 | hugo | 6,013 | **0** | 0.00% | 128.3 | **0 of 193** |
 | prometheus | 6,511 | **0** | 0.00% | 24.1 | **0 of 123** |
-| *(hono `7075369e`, the TypeScript control)* | 1,202 | 18 | 1.5% | 19.1 | 25 of 425 (5.9%) |
+| *(hono `7075369e`, the TypeScript control)* | 1,202† | 18† | 1.5%† | 19.1 | 25 of 425 (5.9%) |
+
+† **A different instrument, marked rather than blended.** The Go rows are **raw** sites, counted by
+running `scanGoModule` over every `.go` file, so they are directly comparable to ADR-0024 §3's
+6,013 and 190. hono's are read off `atlas.json`, where `externals` and `unresolved` are **deduped per
+node** — so 1,202 is not a site count and the two columns must not be subtracted from each other.
+Nothing in the Go verdict rests on it: their unresolved count is **0**, which is a rate of zero under
+any denominator.
 
 The product is **0 on all three Go repos**, so guardrail 4 costs Go nothing at all — where it costs
 Python its entire import verb (django 84.0% of subjects tainted). The rate is better than ADR-0024's
@@ -261,16 +280,49 @@ figures are **not** comparable to that document's: 128.3 is over 193 packages an
 
 | | file granularity (ADR-0024 §7) | **package granularity** | ceiling |
 |---|---|---|---|
-| hugo nodes | 1,955 | **1,242** (193 packages holding 906 files) | — |
-| hugo edges / Go edges-per-package | 25,500 / 13.04 | **1,289 / 6.61** | — |
+| hugo nodes | 1,955 | **1,242** (193 packages holding 906 files, plus 1,049 terrain) | — |
+| hugo edges, all | 25,500 | **1,289** | — |
+| hugo edges per node, **all-node** | 13.04 | **1.04** | — |
+| hugo edges per node, **Go-only** | 28.13 | **6.61** (1,275 Go edges over 193 packages) | — |
 | hugo index time | 16,194 ms | **6,733 ms** | 10,000 ms |
 | hugo atlas | 3,804 KiB | **1,337 KiB** | 5,120 KiB |
 
-**193 packages and 1,275 Go edges at 6.61 per package reproduces ADR-0024 §7's prediction to the
-digit**, from the shipped code rather than from a shim.
+**Both density rows reproduce ADR-0024 §7 to the digit** — it predicted 193 packages, 1,275 edges,
+6.61 Go-only and *"~1.04"* all-node — from the shipped code rather than from a shim. Two rows rather
+than one because that section's own correction says so: its printed pair changed two knobs and named
+one, and the Go-only row is the honest version.
 
 `prometheus` indexes in ~6.4 s to an 873 KiB atlas. All three Go atlases are **byte-identical across
 two runs**.
+
+### 5.2 How often each new branch fires, counted before it was trusted
+
+*"Count how many times a new path fires on a real repo before you write tests around it."* Across
+hugo, cobra and prometheus — 3, 1 and 5 `go.mod` files, so the nested-module walk is live:
+
+| branch | hugo | cobra | prometheus |
+|---|---|---|---|
+| `internal` / `external` | 2,184 / 3,829 | 12 / 178 | 1,718 / 4,793 |
+| **root package** (`''` normalised to `.`) | 0 | **11** | 0 |
+| `replace` into the repo | 0 | 0 | 0 |
+| no `go.mod` in scope | 0 | 0 | 0 |
+| relative or absolute specifier | 0 | 0 | 0 |
+| `import "C"` | 0 | 0 | 0 |
+
+Two things follow and both are acted on rather than noted.
+
+**The root-package normalisation is cobra's whole story** — 11 of its 12 internal sites — and fires
+nowhere else, which is why the bug it fixes (§2, `asPackage`) was findable only on the smallest repo
+in the set.
+
+**`import "C"` was deleted, and the other three dead branches were kept.** The cgo case returned
+*exactly* what the line below it already returns — `C` has no dot, so Go's own standard-library rule
+answers it — so it was a branch that could not change an outcome, which is worse than no branch. The
+absolute-path guard looks like the same thing and is not: `/opt/x`'s first path element is **empty**,
+hence domain-less, so removing it makes an absolute path read as the standard library. It is a guard
+against an invented answer rather than a fallback claiming a behaviour, it is mutation-tested, and it
+fires zero times. `replace`-into-repo and no-`go.mod` are likewise unit-tested and unexercised by
+these three repos; a pre-modules Go tree would reach the second.
 
 ---
 
@@ -331,10 +383,12 @@ bytes and it is a second encoding of something derivable from the nodes, which A
 alternatives section refuses for the deck-refusal flag on exactly this ground. A package's `loc` is a
 sum and the file count is what makes that legible anyway.
 
-**Split `foo` and `foo_test` into two nodes.** They are two Go packages by the language's rules. They
-are also compiled together, released together and moved together in git, and separating them
-re-creates the same-directory-non-dependent pair that this whole decision exists to remove — ADR-0024
-counted 68 of hugo's 665 slots as exactly that pair.
+**Split `foo` and `foo_test` into two nodes.** They are two Go packages by the language's rules, and
+ADR-0024 counted 68 of hugo's 665 same-directory slots as that pair. They are also compiled together,
+released together and moved together in git — and the relation between them is an **import**, which
+names a *directory*, so two nodes sharing one directory would need an edge whose endpoints are not
+what a Go import can address. Splitting them buys a distinction the import graph cannot express and
+gives it back a same-directory pair to get wrong.
 
 **Treat a Go import we cannot resolve as external.** This is ADR-0003 and it is not reopened. A path
 inside the module holding no indexed Go file is *ours and invisible*, which is `unresolved`; the cost
@@ -353,10 +407,11 @@ on these three repos is zero sites.
 - **`ATLAS_VERSION` is 10 and every saved atlas is stale.** The validator's "reindex required" error
   is the migration, as with every bump since ADR-0010. Progress in `localStorage` is keyed on the
   repo's root commit and independent of this number (ADR-0011).
-- **A second `NodeKind` is now real, and `AtlasNode.kind` had exactly one reader outside the
-  validator** — none. That is the seam holding, and it is not a claim about the *next* kind: `symbol`
-  would change what a node's `path` means, which `paths.ts`, the region labeller and every distractor
-  strategy read.
+- **A second `NodeKind` is now real, and before this change `AtlasNode.kind` had no reader at all
+  outside the validator** — grepped, not assumed; it now has one, `cli.ts`'s node line. Nothing in
+  `src/verbs/` or `src/player/` asks what kind a node is. That is the seam holding, and it is **not**
+  a claim about the *next* kind: `symbol` would change what a node's `path` means, which `paths.ts`,
+  the region labeller and every distractor strategy read.
 - **The e2e's board-playing step predicted a verb**, and this change re-rolled ark's own deck onto an
   Archaeology board, where it asserted Blast Radius's wording and then hung 30 s on a Submit that was
   correctly disabled. It is fixed to read the verb it was served and to match a board by

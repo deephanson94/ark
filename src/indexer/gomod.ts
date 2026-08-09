@@ -138,10 +138,16 @@ export function resolveGoImport(
   context: GoContext,
 ): GoResolution {
   if (specifier.length === 0) return { kind: 'unresolved' };
-  // cgo. It is a compiler directive wearing an import's clothes.
-  if (specifier === 'C') return { kind: 'external', name: 'C' };
   // Illegal inside a module, and it survives in pre-module trees. We have no
   // module path to anchor it to, so we do not guess.
+  //
+  // **Not redundant, unlike the branch that used to sit above it.** `./b` falls
+  // through to `unresolved` anyway, but `/abs/path` has an empty first segment,
+  // which `isStandardLibrary` reads as domain-less and would call **external**.
+  // A guard is not the same thing as a fallback: this one fires zero times on
+  // hugo, cobra and prometheus and is kept because deleting it invents an
+  // answer, where deleting cgo's `import "C"` case changed nothing at all —
+  // `C` has no dot, so Go's own stdlib rule already returns exactly it.
   if (specifier.startsWith('.') || specifier.startsWith('/')) return { kind: 'unresolved' };
 
   const module = context.moduleFor(fromPath);

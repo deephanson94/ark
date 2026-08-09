@@ -111,7 +111,19 @@ describe('resolveGoImport tells external from unknown', () => {
   });
 
   it('treats cgo’s pseudo-package as external', () => {
+    // Through the *stdlib* rule, not a special case: `C` has no dot in its
+    // first path element, so Go's own rule already answers this. The special
+    // case that used to sit at the top of the function returned the identical
+    // value and fired zero times on three repos — a branch that can never
+    // change an outcome is worse than no branch (CLAUDE.md).
     expect(resolveGoImport('main.go', 'C', context(['.']))).toEqual({ kind: 'external', name: 'C' });
+  });
+
+  it('refuses an absolute path rather than reading it as the standard library', () => {
+    // `/opt/x`'s first path element is empty, so it has no dot in it — which is
+    // exactly `isStandardLibrary`'s test. Without the guard above it this comes
+    // back **external**, which is an invented answer.
+    expect(resolveGoImport('main.go', '/opt/x', context(['.']))).toEqual({ kind: 'unresolved' });
   });
 
   it('refuses a relative import rather than anchoring it to a guess', () => {
