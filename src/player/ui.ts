@@ -13,6 +13,7 @@
 
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
+import { guideExhausted, notesEmpty, questsLine } from './empty.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS } from '../verbs/index.js';
@@ -117,15 +118,12 @@ export function createGuide(onSuggest: () => void): Guide {
     update({ next, refusal, path, placed, arrived, questionsLeft }) {
       if (next === null) {
         button.disabled = true;
-        if (refusal !== null) {
-          button.textContent = 'no questions for this repo';
-          caption.textContent = refusal;
-          return;
-        }
-        button.textContent = 'every question answered';
-        // Derived, never canned: the count is the deck's, and the pointer is
-        // the only true thing left to say — a newer HEAD generates a new deck.
-        caption.textContent = 'Reindex at a newer commit for more.';
+        // The fork itself lives in `empty.ts` and is unit-tested there. Written
+        // inline, the repair to "every question answered over a refused deck"
+        // was reachable by no suite at all, so it could return silently.
+        const state = guideExhausted(refusal);
+        button.textContent = state.label;
+        caption.textContent = state.caption;
         return;
       }
       button.disabled = false;
@@ -255,18 +253,12 @@ export function createHud(
       // left would have read "36 questions ringed on the map" over a map with
       // none — a sentence about the map, counted off the deck. The short form
       // survives for the case where they agree, which is most of a session.
-      // **Three states, not two.** A refused deck (ADR-0025) and an exhausted
-      // one both leave `questionsLeft` at zero, and only one of them means the
-      // player finished anything. Latched from the atlas rather than recomputed
-      // because — unlike a pass, which can decay — this cannot change without a
-      // reindex.
-      quests.textContent = source.deckRefused
-        ? 'no questions for this repo'
-        : questionsLeft === 0
-          ? 'every question answered'
-          : ringed === questionsLeft
-            ? `${questionsLeft} question${questionsLeft === 1 ? '' : 's'} ringed on the map`
-            : `${questionsLeft} left · ${ringed} ringed on the map`;
+      // **Three states, not two**, and the fork is in `empty.ts` beside the
+      // guide's — they are the same question asked one panel apart, which is
+      // how the second one survived the first repair. `deckRefused` is latched
+      // from the atlas rather than recomputed because — unlike a pass, which
+      // can decay — it cannot change without a reindex.
+      quests.textContent = questsLine(source.deckRefused, questionsLeft, ringed);
       detail.textContent = `${level} · ${stats}`;
     },
   };
@@ -444,19 +436,7 @@ export function createNotebook(deckRefused: boolean): Notebook {
   // product does not have. It is a weaker defect than the guide's — an
   // impossible instruction rather than a false claim — but it is the same one a
   // panel over.
-  const empty = el(
-    'div',
-    'notes-empty',
-    deckRefused
-      ? [
-          'Nothing to prove here. Ark could not read enough of this repository ',
-          'to ask a question about it, so there is nothing to write down.',
-        ]
-      : [
-          'Nothing proved yet. Answer a question and what you establish is written down here — ',
-          'only what you proved, never what you were shown.',
-        ],
-  );
+  const empty = el('div', 'notes-empty', [notesEmpty(deckRefused)]);
   const heading = el('div', 'notes-title', ['FIELD NOTES']);
   const close = el('button', 'console-close', ['✕']);
   close.type = 'button';

@@ -134,8 +134,11 @@ This is the whole reason there are two, and it is measured rather than asserted:
 - **Together**: 0 errors on all eleven.
 
 Each was mutation-tested rather than reasoned about, and the mutants separate cleanly: setting
-`UNREADABLE_FLOOR` to 0 reddens the two clause-1 assertions and no clause-2 assertion; replacing
-clause 2 with the majority rule reddens the two clause-2 assertions and no clause-1 assertion. The
+`UNREADABLE_FLOOR` to 0 reddens **three** assertions — the two clause-1 ones and the sentence test,
+which carries the refusal's suffix — and **no** clause-2 assertion; replacing clause 2 with the
+majority rule reddens the two clause-2 assertions and no clause-1 assertion. (The "three" was "two"
+until a review re-ran it: the third assertion was added *after* the mutation was measured, which is
+the shape of every stale constant in this repo.) The
 unit suite asserts the clauses **separately** as well as together, because `CLAUDE.md` has a landmine
 about a rule named after a conjunction enforcing one clause and keeping the label.
 
@@ -144,9 +147,14 @@ about a rule named after a conjunction enforcing one clause and keeping the labe
 The first draft of clause 2 was `mapped ≤ unreadable` — *the map must hold a majority of the
 repository's source* — chosen because it is the only threshold on `[0,1]` with a name instead of a
 number. It is wrong, and the data says so in one row: it **refuses `sveltejs/svelte`**, whose 4,462
-`.svelte` files outnumber the 3,467 TypeScript files its compiler is actually written in. A
-JavaScript tool refusing the Svelte repo is not a defensible outcome, and the semantics were doing
-the deciding where the measurement should have.
+`.svelte` files outnumber the 3,467 files its compiler is actually written in. A JavaScript tool
+refusing the Svelte repo is not a defensible outcome, and the semantics were doing the deciding where
+the measurement should have.
+
+*(Those 3,467 are **3,382 `.js`, 84 `.ts` and 1 `.mjs`** — svelte's compiler is JSDoc-typed
+JavaScript. Every document in this change first called them "TypeScript files", which is false of
+97.6% of them and was caught only by counting; the count and the verdict are unaffected, and the
+sentence it appears in is *strengthened*, which is exactly why nobody checked it.)*
 
 Sorted, the mapped share of the **ten repos whose verdict clause 2 decides** reads: **99.7, 99.1,
 97.0, 95.7, 43.7 │ 2.5, 1.5, 0.0, 0.0, 0.0**. (`awesome` is the eleventh and is *also* at 0.0%, which
@@ -165,7 +173,7 @@ Clause 2's denominator is source, not files, so a large documentation tree does 
 repo — hugo's 1,016 Markdown pages do not appear in its 2.5%. That is deliberate and it is what makes
 hugo refusable. The cost is on the other side: a repo whose readable source is a tenth or more of its
 total keeps its deck **however much of it is missing**, so `sveltejs/svelte` is not refused with 4,462
-files absent from its map. The badge says so on every frame; the deck is not refused. That is the
+`.svelte` files absent from its map. The badge says so on every frame; the deck is not refused. That is the
 line this ADR draws — **label always, refuse only when the map is a sliver** — and §7 says what would
 move it.
 
@@ -189,9 +197,11 @@ is the trade: they were correct *questions about the wrong repository*, and guar
 applies one level up — a missing challenge costs nothing, a challenge that reads as success while
 teaching a shadow costs trust.
 
-The three unchanged decks each pay **+60 bytes**, one `unreadable` entry. The field is bounded by the
-number of languages rather than the number of files, so hugo's 920 unreadable files across three
-languages would cost 60 bytes too.
+The three unchanged decks each pay **+60 bytes** — one `unreadable` entry, whose serialised form is
+54 bytes plus the key. The field is bounded by the number of *languages* rather than the number of
+files, which is the property worth having: hugo's **920** unreadable files cost **118 bytes**, because
+they are three languages rather than 920 rows. *(This paragraph first said three entries "would cost
+60 bytes too", which is the bound misread as a constant — it is ~2× one entry, not equal to it.)*
 
 **Refusing is also cheaper.** Generation is skipped rather than run and discarded, so hugo indexes in
 4,328 ms against 4,829 and django in 3,621 against 4,042. A repo ark cannot read now gets its answer
@@ -209,9 +219,12 @@ repo is a judgement about intent, and pillar 1 is that ark does not make those.
 
 ## 6. Where the refusal is said
 
-Four surfaces, one sentence, composed in `src/atlas/coverage.ts` so the terminal and the player
-cannot drift — `CLAUDE.md` has a landmine about two individually-honest panels stating contradictory
-facts about one population.
+Four surfaces. **Three of them share one sentence**, composed in `src/atlas/coverage.ts` so the
+terminal and the player cannot drift — `CLAUDE.md` has a landmine about two individually-honest
+panels stating contradictory facts about one population. The fourth (the field notes, item 4) says
+something else entirely, in its own words, in `ui.ts`: it is about *notes*, not about coverage, so
+there is nothing for it to agree with. That is a deliberate exception rather than the rule, and this
+header claimed the rule covered all four until a review read it against the code.
 
 1. **The CLI, on both commands.** The guard moved above the `command === 'index'` return, so
    `npm run index` and `scripts/budget.ts` reach it. Its predicate is the refusal, not
@@ -258,10 +271,16 @@ facts about one population.
    the count; only a sliver gets the refusal.
 5. **`UNREAD` lists program source and nothing else, and omits an extension rather than guessing at
    it.** `.html`, `.rst`, `.css` and `.txt` are out — counting markup would refuse a book with an
-   HTML build directory. `.m`, `.pl`, `.v` and `.d` are out because each names more than one thing, and
-   the
-   cost of an undercount is a shipped deck while the cost of a wrong name is ark printing a false
-   claim about the reader's own repo.
+   HTML build directory. `.m`, `.pl`, `.v` and `.d` are out because each names two *unrelated*
+   languages with no dominant reading, and the cost of an undercount is a shipped deck while the cost
+   of a wrong name is ark printing a false claim about the reader's own repo.
+   **Two entries are kept knowingly against that rule and the cost is stated rather than denied**:
+   `.h` is C, C++ or Objective-C and is reported as **C**, because dropping it would blind the rule to
+   every C and C++ repo there is; `.fs` is F#, a GLSL fragment shader or Forth, and is reported as
+   **F#**. Both print a name that is wrong for some repos. The third instance of this — folding
+   `.C` (C++ by convention) onto `.c` and printing **C** — was a `toLowerCase()` at the lookup and is
+   **removed**: upper-case spellings worth having are rows of their own, and everything else is an
+   undercount, which is the safe direction.
 6. **Adding a language to `SCANNED` deletes its row from `UNREAD` in the same commit.** They are
    disjoint by construction and a unit test asserts it over every entry, because an extension in both
    would be indexed *and* counted as missing.
@@ -312,8 +331,10 @@ because both are markup, which the map already carries a kind of (`md`) without 
   the way that ADR assumed they already did — a map and no deck — rather than the way they actually
   did.
 - **The refusal will resolve itself as languages land.** cobra and hugo flip to shipping the moment Go
-  is on the map, and the numbers say by how much: hugo goes from 24 mapped source files to 930. That
-  is the property that makes refusing acceptable rather than permanent.
+  is on the map. The size of the flip depends on the granularity ADR-0024 decided: at **package**
+  granularity — the one that ships — hugo's 906 Go files become roughly **193 package nodes** beside
+  its 24 JS files, not 930 file nodes. Either way clause 2 stops holding by a wide margin. *(This line
+  said "24 to 930", which describes the file granularity that ADR-0024 refused.)*
 - **`ATLAS_VERSION` is 9 and every saved atlas is stale.** The validator's existing "reindex required"
   error is the migration, as with every bump since ADR-0010. Progress in `localStorage` is keyed on
   the repo's root commit and independent of this number (ADR-0011), so a reindex costs nothing a
@@ -324,6 +345,69 @@ because both are markup, which the map already carries a kind of (`md`) without 
   deck.
 - The probe scripts are scratch and are **not** committed. What is committed is this document, the
   rule, and the tests.
+
+---
+
+## 9. Post-ship review — what an adversary found, reproduced
+
+Ten findings against the merged commit, every one re-derived here before being accepted. Four were
+false statements, and **the two that matter are both about the same thing: this document described a
+rule, and what shipped is a list.**
+
+### 9.1 The defect recurs on any language the table does not name — measured, not feared
+
+`terraform-aws-modules/terraform-aws-vpc` at `0a36bd54` is 77 `.tf` files and 24 Markdown ones.
+Indexed with the shipped code it produced **25 nodes and 64 challenges** — 15 Companion, 32
+Placement, 17 Archaeology — over nothing but documentation, with `report.unreadable` **empty**. So
+every surface this ADR added was silent: no badge, no sentence, no CLI note, no refusal. That is
+ADR-0025's own §1 defect, intact, three commits after ADR-0025.
+
+`.tf` is not ambiguous and no decision excluded it; it was simply not on the list. Nor are `.el`,
+`.nix`, `.vim` or `.proto`. The Known-gaps row said the undercount was *"on purpose"* and named
+ambiguous extensions and an Objective-C repo, which describes a decision that was never taken for
+this class and understates who slips through.
+
+**Fixed**: `UNREAD` gains Terraform, Emacs Lisp, Nix, Vim script and Protocol Buffers. Re-measured,
+the eleven repos' verdicts are **unchanged in every cell**, and tfvpc is refused with
+`77 Terraform`. The honest statement of the residual gap is not *"ambiguous extensions are excluded"*
+— it is **a list has a failure mode a rule does not, and this is a list**; anything not on it is
+invisible, silently, exactly as before.
+
+### 9.2 A mainstream repo sits in the band §7 called empty, and it ships
+
+`prometheus/prometheus` at HEAD: **249 mapped source files against 747 unreadable** (727 Go, 16
+Shell, 4 Protocol Buffers) — a mapped share of **25.0%**, inside the 2.5% → 43.7% gap this document
+placed its threshold in and called uninhabited. It **ships**, and its Blast Radius deck is 48 boards
+about the React web UI of a Go time-series database.
+
+This does not move the bar — the gap is still the largest in the distribution and one tenth is still
+~4× clear on the refusing side — but *"there is none in this set"* was a fact about the set, and the
+first repo cloned to test it landed in the middle of the band. §4.2's trade now has a witness with a
+name instead of a hypothetical, and the sentence that survives is the one already written: the bar is
+**measured to be safe, not measured to be tight**.
+
+### 9.3 The rest
+
+- **`sveltejs/svelte`'s 3,467 files are JavaScript** (3,382 `.js`, 84 `.ts`, 1 `.mjs`), not
+  TypeScript, in six documents. The count and the verdict are unaffected and the sentence is
+  *strengthened* by the correction, which is why nobody checked it. §4.1.
+- **`.C` printed the wrong language name.** A `toLowerCase()` at the lookup folded it onto `.c` and
+  reported C++ as **C** — the one cost decision 5 says this mechanism never pays, paid by the line
+  written to be helpful about `.R`. The fold is gone; upper-case spellings are rows.
+- **Three player surfaces had no test at all**, and the review proved it by reverting the guide's
+  refusal branch and running everything green: 606 unit, 102 atlas, clean build, and the panel back
+  to *"every question answered"* over a refused deck. The forks are now `src/player/empty.ts`, unit
+  tested, and both mutations are caught.
+- Three numbers were wrong in this document and are corrected in place with the wrongness named:
+  three `unreadable` entries cost **118 bytes**, not 60; the floor mutation reddens **three**
+  assertions, not two; and hugo's post-M5 map is ~193 **package** nodes, not 930 file nodes.
+- **§6's header claimed four surfaces share one composed sentence**; the fourth writes its own, and
+  the header is corrected rather than the code — the field notes are about notes, not coverage.
+
+The tally is worth keeping: of ten findings, **four were prose contradicting a measurement in the
+same change**, one was a shipped behaviour with no test, and **one was the fixed defect still live in
+production on a repo nobody had tried**. The last is the only one that no amount of re-reading would
+have found, and it cost one clone.
 
 ---
 

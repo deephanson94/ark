@@ -133,7 +133,7 @@ offered (ADR-0020).
 | | Status | Notes |
 |---|---|---|
 | ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. Go and Python resolution measured at 99.8–100% and 93.8–98.6% of import sites (ADR-0024); the blocker is not parsing. |
-| Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Measured on 11 repos: refuses 5, ships 6, does not fire on this repo or hono. |
+| Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Measured on 13 repos: refuses 6, ships 7, does not fire on this repo or hono. Its reach is bounded by a **list** of languages — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
@@ -160,15 +160,22 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   and both now ship **0**, with the map, the count and the reason. 315 questions withdrawn across 5
   of 11 measured repos. **The remaining gap is what a Go or Python repo gets instead**: a map of its
   documentation, which is true but thin, until M5 puts its source on the map.
-- **`UNREAD` undercounts on purpose, so a few repos still slip through.** Ambiguous extensions are
-  excluded rather than guessed at (`.m`, `.pl`, `.v`, `.d`), so an Objective-C repo is invisible to
-  the refusal and would still get a Markdown deck. ADR-0025 decision 5 — the safe direction, and a
-  one-line fix per language.
+- **`UNREAD` is a list, and anything not on it is invisible — silently.** This is the residual half
+  of the Markdown-map defect, and it is not hypothetical: a **Terraform** repo
+  (`terraform-aws-modules/terraform-aws-vpc`) shipped **64 challenges over 24 Markdown files with
+  `report.unreadable` empty**, three commits after ADR-0025 — no badge, no note, no refusal. `.tf`,
+  `.el`, `.nix`, `.vim` and `.proto` are now on the list; the next language nobody thought of is not.
+  A deliberate second undercount sits beside it: ambiguous extensions (`.m`, `.pl`, `.v`, `.d`) are
+  excluded rather than guessed at, so an Objective-C repo still slips through. ADR-0025 §9.1 and
+  decision 5 — the safe direction in both cases, and a one-line fix per language.
 - **A repo can keep its deck with most of its source missing.** The bar is a *tenth*, not a majority:
-  `sveltejs/svelte` maps 3,467 TypeScript files and misses 4,462 `.svelte` ones, and ships. The HUD
-  says so on every frame; the deck is not refused. ADR-0025 §4.2.
+  `sveltejs/svelte` maps 3,467 JavaScript files and misses 4,462 `.svelte` ones, and ships. Sharper
+  still, **`prometheus/prometheus` is 25.0%** — 249 mapped against 727 Go — so it ships 48 Blast
+  Radius boards about the React UI of a Go time-series database. The HUD says how much is missing on
+  every frame; the deck is not refused. ADR-0025 §4.2 and §9.2 — the bar is measured to be safe, not
+  measured to be tight.
 - **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
-  2 of 606 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
+  2 of 617 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
   built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
   runs `build` (as "typecheck") before `test:unit`. Pre-existing at `b9f4d33` and reproduced on a
   clean clone of it. The testing table in `CLAUDE.md` lists the two as independent rows, which is

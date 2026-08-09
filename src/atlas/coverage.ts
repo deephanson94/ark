@@ -59,9 +59,9 @@ export const UNREADABLE_FLOOR = 5;
  *
  * A **majority** rule — the first draft, and the one with the nicer English —
  * puts the bar at 50% and **refuses `sveltejs/svelte`**, whose 4,462 `.svelte`
- * files outnumber the 3,467 TypeScript files its compiler is actually written
- * in. A JS tool refusing a JS repo is the wrong answer, and the semantics were
- * doing the deciding rather than the data.
+ * files outnumber the 3,467 (3,382 `.js`, 84 `.ts`, 1 `.mjs`) its compiler is
+ * actually written in. A JS tool refusing a JS repo is the wrong answer, and
+ * the semantics were doing the deciding rather than the data.
  */
 export const MAPPED_SHARE = 10;
 

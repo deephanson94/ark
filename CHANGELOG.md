@@ -2275,3 +2275,35 @@ One line per iteration: what changed, and what to do next.
   repo's source is still not on its map (that is M5), `UNREAD` omits ambiguous extensions on purpose
   so an Objective-C repo still slips through, and the bar is a tenth rather than a majority so svelte
   keeps its deck with 4,462 files absent.
+
+- **Post-ship adversarial review of ADR-0025, and the headline finding is that the fix was a list.**
+  Ten findings, all independently reproduced before being accepted; four were prose contradicting a
+  measurement in the same change. **The one that mattered was the defect still live in production:**
+  `terraform-aws-modules/terraform-aws-vpc` — 77 `.tf` files, 24 Markdown — indexed to **25 nodes and
+  64 challenges over nothing but documentation, with `report.unreadable` empty**, so every surface
+  ADR-0025 added was silent. Three commits after the fix, on a repo nobody had tried. `.tf` is not
+  ambiguous and no decision excluded it; it was not on the list. `UNREAD` gains Terraform, Emacs Lisp,
+  Nix, Vim script and Protocol Buffers — the eleven repos' verdicts are **unchanged in every cell**
+  and tfvpc is now refused — and the Known-gaps row says the true thing instead of the flattering one:
+  **a list has a failure mode a rule does not.**
+
+  **A mainstream repo sits in the band the ADR called empty.** `prometheus/prometheus` is 249 mapped
+  against 747 unreadable — **25.0%**, inside the 2.5 → 43.7 gap — and ships 48 Blast Radius boards
+  about the React UI of a Go time-series database. The bar does not move; *"there is none in this
+  set"* was a fact about the set, and the first repo cloned to test it landed in the middle.
+
+  **Three player surfaces had no test, and the review proved it rather than asserting it** — reverting
+  the guide's refusal branch left 606 unit tests, 102 atlas tests and the build green with the panel
+  back to *"every question answered"* over a refused deck. `vitest.config.ts` has no DOM, so a
+  sentence assembled in a callback is unreachable by the fast suite; the three forks moved to
+  `src/player/empty.ts` and both mutations are now caught.
+
+  Corrections with the wrongness named rather than smoothed: svelte's 3,467 files are **JavaScript**
+  (3,382 `.js`, 84 `.ts`, 1 `.mjs`) in six documents; a `toLowerCase()` at the `UNREAD` lookup
+  reported `.C` — C++ by convention — as **C**, which is the one cost decision 5 refuses, so the fold
+  is gone and upper-case spellings are rows; three `unreadable` entries cost **118 bytes**, not 60;
+  the floor mutation reddens **three** assertions, not two; hugo's post-M5 map is ~193 **package**
+  nodes, not 930 file nodes; and §6's header claimed four surfaces share one composed sentence when
+  the fourth writes its own.
+
+  **Next** is unchanged: **M5 — Go first**, then `npx ark`, then the phenomenon catalogue.

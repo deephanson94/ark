@@ -122,6 +122,24 @@ export const UNREAD: ReadonlyMap<string, string> = new Map([
   ['.scm', 'Scheme'],
   ['.sol', 'Solidity'],
   ['.hx', 'Haxe'],
+  // **Added after shipping, because a Terraform module repo reproduced the
+  // exact defect this table exists to stop**: 77 `.tf` files invisible, 64
+  // challenges about 24 Markdown files, and `unreadable` empty — so every
+  // surface ADR-0025 added was silent. None of these is ambiguous and none was
+  // excluded by a decision; they were simply missing, which is the failure mode
+  // a list has and a rule does not (ADR-0025 §9).
+  ['.tf', 'Terraform'],
+  ['.tfvars', 'Terraform'],
+  ['.el', 'Emacs Lisp'],
+  ['.nix', 'Nix'],
+  ['.vim', 'Vim script'],
+  ['.proto', 'Protocol Buffers'],
+  // The conventional upper-case spellings, as their own rows. There used to be
+  // a `toLowerCase()` on the lookup instead, and it printed a **wrong language
+  // name**: `.C` is C++ by convention and folded to `C`. An undercount is the
+  // safe direction; a false claim about the reader's own repo is the one this
+  // whole mechanism exists to avoid.
+  ['.R', 'R'],
 ]);
 
 /**
@@ -279,11 +297,10 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
       const carried = CARRIED.get(extension);
       if (scanned === undefined && carried === undefined) {
         note('unsupported');
-        // Lower-cased for this lookup only, so `.R` and `.C` land on their
-        // language. The two tables above are left exact-case, because changing
-        // what gets *indexed* is a different decision from counting what does
-        // not.
-        const language = UNREAD.get(extension.toLowerCase());
+        // Exact case, like `SCANNED` and `CARRIED`. A `toLowerCase()` here
+        // looked like a kindness and printed `.C` — C++ by convention — as
+        // **C**; the upper-case spellings worth having are rows of their own.
+        const language = UNREAD.get(extension);
         if (language !== undefined) unread.set(language, (unread.get(language) ?? 0) + 1);
         continue;
       }
