@@ -500,12 +500,20 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   **98.6%** of its import sites and ships **16 Blast Radius boards of 976 subjects**; flask resolves
   93.8% and ships **zero of 30**. A session that measured only "does the language resolve" would have
   shipped a parser and found the deck afterwards. **When a rule walks a closure, measure the closure.**
+  **And then measure *where* the taint sits, because that is the real story and the rate-times-depth
+  version is a comfortable half of it.** A post-ship review made this session compute the
+  counterfactual it had skipped: solving Python's import roots **and** its dist-name-to-module gap —
+  the two causes this repo's own ADR first named as the things that would change the verdict — moves
+  django from 84.0% to **83.7%**. The whole effect is **7 computed `import_module(expr)` sites out of
+  12,000**, sitting in `django/conf/__init__.py` and friends, which everything reaches. 0.06% of sites
+  taint 83.7% of subjects. **Position beats rate by two orders of magnitude**, and a revisit condition
+  written from the rate would have sent the next session to build something worth 0.3 points.
 - **ADR-0003's safety rests on a sentence that is not true of every language: *an import we cannot
   resolve is recorded*.** Where a dependency is not an import at all, there is no specifier, nothing
   lands on `unresolved`, and guardrail 4 is blind by construction. Go's intra-package references are
   the structural case — files in one package see each other's identifiers with no import — so
   `treeSibling`, which picks *same-directory files that are not dependents*, picks them as **wrong
-  answers**: 80 verified slots across **49 of hugo's 244 boards**. Python's is the idiomatic case,
+  answers**: ≤71 slots across **≤46 of hugo's 244 boards**. Python's is the idiomatic case,
   modules named by string literals in settings and registries: **562 pairs on django, 3 on flask** —
   repo-dependent where Go's is universal. **Before adding a language, enumerate its dependencies that
   are not imports**, and note that the first count of the Go leak was 153 because the test counted
@@ -932,9 +940,11 @@ taint is *transitive*, so the cost is the unresolved rate **times the closure de
 have near-identical direct taint (3.8% / 3.3%) and amplify by **1.55× and 21×**, django's mean closure
 being 164.8 against hono's 17.3. **Resolution rate is not the kill-point metric; `rate × mean closure`
 is.** Go ships at **package** granularity and only there — at file granularity, `treeSibling` offers a
-same-package file as a wrong answer on 172 of hugo's 244 boards and **80 of those slots, across 49
-boards (20.1%), are verified wrong answer keys**, because an intra-package reference is not an import
-and leaves guardrail 4 nothing to refuse. Package granularity takes hugo from 1,955 nodes / 13.04
+same-package file as a wrong answer on 172 of hugo's 244 boards and **up to 71 of those slots, across
+46 boards (18.9%), are wrong answer keys**, because an intra-package reference is not an import and
+leaves guardrail 4 nothing to refuse. (That count went 153 → 80 → **71** across three instruments;
+the ADR's §6.1 has the three false-positive classes and why the second correction shipped inside the
+paragraph boasting about the first.) Package granularity takes hugo from 1,955 nodes / 13.04
 edges-per-node / a 16.2 s index (ceiling 10 s) to **193 / 6.61** and makes the class unrepresentable.
 Python ships as a **history** language: the map and the three git verbs, never Blast Radius.
 

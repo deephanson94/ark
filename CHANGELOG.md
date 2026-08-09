@@ -2156,3 +2156,48 @@ One line per iteration: what changed, and what to do next.
   **Next**: the **Markdown-map defect** (no parser needed, and ADR-0024 decision 3 gates M5 behind
   it), then packaging **`npx ark`**, the **phenomenon catalogue**, and **M5 itself — Go first**,
   because its verdict is unconditional where Python's is a smaller product than the roadmap implies.
+
+- **Post-ship adversarial review of the above, and it found the instrument as well as the argument.**
+  Six findings, every one in a category `CLAUDE.md` already names; all six independently reproduced
+  before being accepted. **The headline leak number was wrong and its adjective was worse.** §6.1's
+  *"80 verified wrong answers on 49 of 244 boards"* is **≤71 on ≤46 (18.9%)**, and "verified" is not a
+  word it was entitled to: `refs_go.go` counted every `ast.Ident`, so the `Fs` of `afero.Fs` matched a
+  subject declaring `Fs`, struct-field names and composite-literal keys matched, and **build-tag
+  variants** matched their own declarations — `testenv_unix.go` and `testenv_notunix.go` legally
+  declare the *same* package-level names, which **falsifies the uniqueness premise the fix was argued
+  from**. The count went 153 → 80 → 71 across three instruments, and the middle correction shipped
+  **inside the paragraph congratulating itself for testing the claim rather than the wording**, with
+  three more false-positive classes untouched twelve lines away. *The bug you already fixed is still
+  there, one line down* — in the showcase paragraph.
+
+  **The Python causal story was half right and its revisit condition was actively misleading.** The
+  document said the residue splits into two kinds — unrooted imports and the dist-name gap — and
+  offered solving both as the thing that would change the verdict. There is a **third** kind it folded
+  away, and that kind is the whole effect: **7 computed `import_module(<expression>)` sites out of
+  django's 12,000**, in `django/conf/__init__.py` and friends. Solving roots **and** dist-mappings
+  perfectly moves django from **84.0% to 83.7%** of blast-eligible subjects with a tainted closure;
+  the computed sites alone produce 83.7%. **0.06% of sites taint 83.7% of subjects.** So decision 2 is
+  *stronger* than the argument first given for it, §4 gains a §4.1, and the "what would change this"
+  section no longer sends the next session to build something worth 0.3 points. Position beats rate by
+  two orders of magnitude.
+
+  Three more, all prose against tables. **`AtlasNode.kind` is `'file'`** — `schema.ts:92` — and the
+  claim that the format "already" allowed `'dir' | 'symbol'` quoted **NORTH-STAR §7.1's sketch comment
+  as if it were the code**, in a sentence asserting decision 1's schema cost was already paid; it
+  needs an `ATLAS_VERSION` bump and a migration under guardrail 5. **Gating `treeSibling` would not
+  close the Go leak**: read off the atlas's own witness tokens the 665 same-directory wrong-answer
+  slots are `treeSibling` 389, `graphAdjacent` 129, `nameSimilar` 93, `coChange` 54, so gating it
+  leaves **42% on the boards** — the rejected alternative's price flattered it, which is the direction
+  that gets believed. And §7's pricing table **changes two knobs**, 13.04 being all-node and 6.61
+  Go-only; held to one it is 28.13 → 6.61, so the printed pair *understated* the fan-out artifact by
+  2.2×. Plus two arithmetic slips the tables themselves refute: "26 points" where §4 gives 22.0 direct
+  and 16.9 closure, and "all within 3%" where cobra's liveness gap is 5.0%.
+
+  **What survived attack, re-derived rather than assumed**: every row of §4's amplification table and
+  §5's deck table to the digit — including that flask's 30 refusals are **all** `uncertain` rather
+  than small-repo effects, and django's 949 of 976 likewise, so the closure story really is what
+  refuses the deck; §8's Markdown-map figures on all four production atlases; §0's stale-baseline
+  claim at every commit; and the harness's byte-identical inertness. **No decision flipped.**
+
+  **Next** is unchanged: the **Markdown-map defect**, then `npx ark`, the **phenomenon catalogue**,
+  and **M5 — Go first**.
