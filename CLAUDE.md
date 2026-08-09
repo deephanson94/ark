@@ -488,8 +488,8 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   ADR-0025's clause 2 was first written as *the map must hold a **majority** of the repository's
   source* — chosen precisely because majority is the only value on `[0,1]` with a name instead of a
   number, which felt like the opposite of arbitrary. It **refuses `sveltejs/svelte`**, whose 4,462
-  `.svelte` files outnumber the 3,467 TypeScript files its compiler is written in: a JavaScript tool
-  refusing the Svelte repo. Sorted, the mapped share of the ten repos that clause decides reads 99.7,
+  `.svelte` files outnumber the 3,467 its compiler is written in: a JavaScript tool refusing the
+  Svelte repo. Sorted, the mapped share of the ten repos that clause decides reads 99.7,
   99.1, 97.0, 95.7, 43.7 │ 2.5, 1.5, 0.0, 0.0, 0.0 — the gap is 2.5% → 43.7% and a majority rule sits
   *outside* it, 1.14× from the nearest ship. (The eleventh, `awesome`, is *also* 0.0% and ships,
   which is what the other clause is for — so quoting this axis as if it separated eleven repos would
@@ -520,6 +520,24 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   number arrived later. This is the verb-blind-state family with no verb in it: **when you add a new
   way for a quantity to reach its extreme, grep every reader of that quantity and ask what it thinks
   the extreme means.**
+- **A list has a failure mode a rule does not, and "we excluded that on purpose" is the sentence that
+  hides it.** ADR-0025 refuses a deck by counting *program source ark recognises and cannot read*,
+  which sounds like a rule and is a **table of 64 extensions**. Three commits after it shipped, a
+  Terraform repo — 77 `.tf` files, 24 Markdown — produced **64 challenges about the documentation with
+  `report.unreadable` empty**: the original defect, intact, with every new surface silent, because
+  `.tf` was not on the list. The Known-gaps row made it worse by naming the *deliberate* exclusions
+  (ambiguous extensions, an Objective-C repo) as the residual gap, so the accidental omissions —
+  `.tf`, `.el`, `.nix`, `.vim`, `.proto` — read as covered. **A decision not to include something and
+  a failure to think of it look identical in a table**, and only the first one is honest to write
+  down. When a mechanism is a whitelist, say so in the words a reader will check it against, and test
+  it on a repo in a language nobody on the team uses.
+- **The band you called empty is where the next repo lands.** The same ADR placed its threshold in
+  the largest gap in a measured distribution — 2.5% → 43.7% — and wrote that no repo sits between
+  2.5% and 10%. The **first** repo cloned to test that afterwards, `prometheus/prometheus`, came in at
+  **25.0%**: a Go time-series database that ships 48 Blast Radius boards about its React UI. The bar
+  did not move and did not need to; the sentence that needed to move was *"there is none in this
+  set"*, which is a fact about the set being quoted as a fact about the world. **A gap in eleven
+  samples is a gap in eleven samples.**
 - **A relation over a set of one is an identity.** A reveal that deliberately says *"it changed a file
   that usually moves with this one"* rather than naming the file — because the name is another verb's
   answer key — names it anyway whenever the subject has exactly one co-change partner. Measured at 4
@@ -970,15 +988,19 @@ Definition of done) and the **phenomenon catalogue**, a repo-independent vocabul
 structural phenomena, which is the atom that would let anything *transfer* to another repo and the
 other half of risk #1.
 
-**Three narrower gaps replace it in `README.md`, each with its measurement**, and none is a
-regression of the old one: a Go or Python repo still gets no *source* on its map (that is M5);
-`UNREAD` omits ambiguous extensions on purpose, so an Objective-C repo still slips through; and the
-bar is a tenth rather than a majority, so `sveltejs/svelte` keeps its deck with 4,462 `.svelte` files
-absent from the map. That last one was the **first draft's rule**, and one row killed it.
+**Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
+they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and
+anything not on it is invisible — silently**: a Terraform repo shipped **64 challenges over 24
+Markdown files with `report.unreadable` empty**, three commits after the fix, which is the original
+defect intact. `.tf`, `.el`, `.nix`, `.vim` and `.proto` are on the list now; the next language
+nobody thought of is not. And the tenth bar has a mainstream witness inside the band this repo called
+empty — **`prometheus/prometheus` at 25.0%** ships 48 Blast Radius boards about the React UI of a Go
+time-series database. The third gap is unchanged: a Go or Python repo still gets no *source* on its
+map, which is M5.
 
 Still open, still unfixed, and still in **Known gaps** with its measurement:
 **`npm run test:unit` has an undeclared dependency on `npm run build`**. On a fresh clone it fails 2
-of 605 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
+of 617 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
 always been green because `ci.yml` runs `build` before `test:unit`; the testing table above lists
 them as independent rows, which is exactly what makes a cold session read the red as its own doing.
 

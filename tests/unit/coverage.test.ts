@@ -182,8 +182,21 @@ describe('the walk’s three language tables', () => {
   it('name a language for every entry', () => {
     for (const [extension, lang] of UNREAD) {
       expect(extension.startsWith('.'), extension).toBe(true);
-      expect(extension).toBe(extension.toLowerCase());
       expect(lang.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('spell an upper-case extension out rather than folding case at the lookup', () => {
+    // `.R` and `.r` are both R and both have a row. The alternative — one row
+    // and a `toLowerCase()` — is what shipped first, and it reported `.C`
+    // (C++ by convention) as **C**. Any upper-case row must therefore name the
+    // same language as its lower-case twin, or the fold has come back wearing
+    // a different hat.
+    for (const [extension, lang] of UNREAD) {
+      const lower = extension.toLowerCase();
+      if (lower === extension) continue;
+      const twin = UNREAD.get(lower);
+      expect(twin === undefined || twin === lang, `${extension} is ${lang}, ${lower} is ${twin}`).toBe(true);
     }
   });
 });
@@ -236,11 +249,26 @@ describe('the walk tallies unreadable source', () => {
     expect(unreadable).toBeLessThanOrEqual(unsupported);
   });
 
-  it('reads a language off an upper-case extension', async () => {
-    // `.R` is the conventional spelling and `.C` is a real C++ one. The lookup
-    // is lower-cased for exactly this; the tables above are not.
+  it('has a row for the conventional upper-case spelling', async () => {
     const result = await tree({ 'analysis.R': 'x <- 1\n' });
     expect(result.unreadable).toEqual([{ lang: 'R', count: 1 }]);
+  });
+
+  it('undercounts rather than printing a wrong language name', async () => {
+    // `.C` is C++ by convention. A `toLowerCase()` on the lookup — which is
+    // what shipped first — folded it onto `.c` and reported it as **C**, the
+    // one cost decision 5 says this mechanism never pays. Not counting it is
+    // the safe direction and is what happens now.
+    const result = await tree({ 'legacy.C': 'int main(){}\n' });
+    expect(result.unreadable).toEqual([]);
+  });
+
+  it('counts the languages a real repo is made of, not only the famous ones', async () => {
+    // A Terraform module repo reproduced ADR-0025's own defect after it
+    // shipped: `.tf` was not in the table, so 77 invisible files produced 64
+    // challenges about 24 Markdown ones with every new surface silent.
+    const result = await tree({ 'main.tf': 'resource "x" "y" {}\n', 'vars.tfvars': 'a = 1\n' });
+    expect(result.unreadable).toEqual([{ lang: 'Terraform', count: 2 }]);
   });
 
   it('counts nothing for a repo that is only its documentation', async () => {
