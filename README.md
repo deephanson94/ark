@@ -74,13 +74,13 @@ simultaneously possible.
 
 | Path | What it is |
 |---|---|
-| `src/atlas/` | The schema, the validator, the graph queries, id identity, serialisation. **The contract both sides share** — defined once, never twice. |
+| `src/atlas/` | The schema, the validator, the graph queries, id identity, serialisation, and `coverage.ts`'s source-coverage rule. **The contract both sides share** — defined once, never twice. |
 | `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES-module imports) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates and generates. |
 | `src/verbs/` | One directory per verb (`generate`, `grade`, `reveal`, distractors), plus what they share: `gate.ts` (the Ctrl+F gate), `difficulty.ts`, `score.ts` (F1), `disclosure.ts` (cross-verb facts), `sample.ts`, `paths.ts`. |
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 24 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 25 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -133,6 +133,7 @@ offered (ADR-0020).
 | | Status | Notes |
 |---|---|---|
 | ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. Go and Python resolution measured at 99.8–100% and 93.8–98.6% of import sites (ADR-0024); the blocker is not parsing. |
+| Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Measured on 11 repos: refuses 5, ships 6, does not fire on this repo or hono. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
@@ -152,18 +153,22 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **`npx ark` does not work.** `package.json` has no `bin` and `build` typechecks the indexer with
   `--noEmit` rather than emitting it. Use `npm run play -- <path>`. Packaging is real work nobody has
   done.
-- **Non-JS repos produce a map of their *Markdown*, and a full deck of questions about it.** This
-  entry used to read "no edges and no questions"; the second half is **false** and was measured at
-  `b9f4d33`: `spf13/cobra` indexes to **17 nodes, all Markdown, and 48 challenges**; `gohugoio/hugo`
-  to **1,049 nodes of which 1,016 are Markdown, and 144 challenges**. Not one line of Go or Python is
-  on either map. The three history verbs are graded on git rather than imports, so they generate a
-  confident, playable game about a shadow of the repo. `cli.ts`'s zero-challenge warning did not fire
-  on any of the four and could not have: it guards `challenges.length === 0` (hugo's count is 144),
-  and it sits on the `play` path only, which `ark index` never reaches. A live guard aimed at the
-  wrong thing, not a dead branch. **This is a labelling defect that exists now, not M5 work** —
-  ADR-0024 decision 3 blocks any new language behind fixing it.
+- **A non-JS repo's *source* is still not on the map** — that part is M5 and unchanged. What is fixed
+  (**[ADR-0025](./docs/decisions/0025-a-deck-is-refused-when-the-map-is-not-of-the-repository.md)**)
+  is that ark no longer generates a confident deck about the Markdown that is left: `spf13/cobra`
+  shipped **48 challenges** about its README files and `gohugoio/hugo` **144** about its docs tree,
+  and both now ship **0**, with the map, the count and the reason. 315 questions withdrawn across 5
+  of 11 measured repos. **The remaining gap is what a Go or Python repo gets instead**: a map of its
+  documentation, which is true but thin, until M5 puts its source on the map.
+- **`UNREAD` undercounts on purpose, so a few repos still slip through.** Ambiguous extensions are
+  excluded rather than guessed at (`.m`, `.pl`, `.v`, `.d`), so an Objective-C repo is invisible to
+  the refusal and would still get a Markdown deck. ADR-0025 decision 5 — the safe direction, and a
+  one-line fix per language.
+- **A repo can keep its deck with most of its source missing.** The bar is a *tenth*, not a majority:
+  `sveltejs/svelte` maps 3,467 TypeScript files and misses 4,462 `.svelte` ones, and ships. The HUD
+  says so on every frame; the deck is not refused. ADR-0025 §4.2.
 - **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
-  2 of 586 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
+  2 of 606 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
   built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
   runs `build` (as "typecheck") before `test:unit`. Pre-existing at `b9f4d33` and reproduced on a
   clean clone of it. The testing table in `CLAUDE.md` lists the two as independent rows, which is
@@ -180,16 +185,17 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**The Markdown-map defect above**, which ADR-0024 decision 3 makes a precondition for any new
-language and which needs no parser · then, in rough order of size: packaging **`npx ark`** (see gaps
-— the Definition of done has been unsatisfiable on it for four milestones) · the **phenomenon
-catalogue** · **M5 itself**, now that its kill point is decided — Go first, because it is the one
-whose verdict is unconditional.
+**M5 — Go first**, now unblocked: ADR-0024 decision 3's precondition is met, its kill point is
+decided (package granularity, `ATLAS_VERSION` bump with a migration under guardrail 5), and Go's
+verdict is unconditional where Python's is a smaller product than the roadmap implies · then, in
+rough order of size: packaging **`npx ark`** (see gaps — the Definition of done has been
+unsatisfiable on it for four milestones) · the **phenomenon catalogue**.
 
-*(Two items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Three items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
-exposure, which it was measured against and does not move.)*
+exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as
+ADR-0025, and what remains of it is three narrower rows in Known gaps with their measurements.)*
 
 ---
 
@@ -220,8 +226,8 @@ across sessions, which is the mechanic the whole product rests on.
 which is deliberate: every feature added becomes a new level, and if the tool cannot make its own
 architecture legible it does not work.
 
-Measured on a clean clone of `b9f4d33`: **146 files, 500 edges (3.42 edges/node), 160 challenges**
-across four verbs, **24 of 146 nodes unprovable**, a **298.3 KiB** atlas in **~600 ms**. *(Ark
+Measured on a clean clone of `e6fe5e4`: **147 files, 500 edges (3.40 edges/node), 160 challenges**
+across four verbs, **25 of 147 nodes unprovable**, a **299.9 KiB** atlas in **~430 ms**. *(Ark
 indexes itself, so these move with every commit — hence the sha, and the commit carrying a figure is
 always one later than the commit it describes. Prefer the invariants above to the counts.)*
 
@@ -253,7 +259,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 24 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 25 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

@@ -27,7 +27,15 @@ import {
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { CTRL_F_THRESHOLD, directoryOf, isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
-import { commitIdFor, isCommitId, isNodeId } from '../../src/atlas/index.js';
+import {
+  MAPPED_SHARE,
+  UNREADABLE_FLOOR,
+  commitIdFor,
+  coverageSentence,
+  isCommitId,
+  isNodeId,
+  sourceCoverage,
+} from '../../src/atlas/index.js';
 import { decidedFact, touchedFact } from '../../src/verbs/index.js';
 import { VERBS } from '../../src/verbs/index.js';
 import { placement } from '../../src/verbs/placement/index.js';
@@ -54,6 +62,12 @@ let manifest: Manifest;
 beforeAll(async () => {
   const built = await buildIndex(indexOptions(ROOT));
   atlas = built.atlas;
+  // A refused deck (ADR-0025) would make every deck assertion below vacuous
+  // rather than red, so it fails here with the reason rather than there with a
+  // count of zero.
+  if (built.generation === null) {
+    throw new Error(`the bootstrap repo's deck was refused: ${coverageSentence(sourceCoverage(atlas)) ?? ''}`);
+  }
   declinedReasons = built.generation.blastRadius.report.skipped;
   serialized = serializeAtlas(atlas);
   manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as Manifest;
@@ -180,6 +194,46 @@ describe('what it found in this repo', () => {
           `${node.path} claims an external dependency on ${external}, which package.json does not declare`,
         ).toBe(true);
       }
+    }
+  });
+});
+
+describe('what this map is missing (ADR-0025)', () => {
+  it('counts unreadable source as a refinement of `unsupported`, never beside it', () => {
+    // The claim `UnreadableCount`'s doc-comment makes: every file counted here
+    // was also counted as skipped-unsupported. If the tally ever ran on a file
+    // the walk indexed — or on one it skipped for another reason — the sum would
+    // outrun its parent and the ratio the refusal rests on would be measuring
+    // two populations.
+    const unsupported = atlas.report.skipped.find((s) => s.reason === 'unsupported')?.count ?? 0;
+    const unreadable = atlas.report.unreadable.reduce((total, u) => total + u.count, 0);
+    expect(unreadable).toBeLessThanOrEqual(unsupported);
+    // Non-vacuous: this repo really does carry source the scanner cannot read
+    // (a shell script), so the assertion above is comparing two live numbers.
+    expect(unreadable).toBeGreaterThan(0);
+  });
+
+  it('does not fire on the bootstrap repo, and not narrowly', () => {
+    const coverage = sourceCoverage(atlas);
+    expect(coverage.deckRefused).toBe(false);
+    // **Both clauses, separately.** A conjunction asserted only as a conjunction
+    // can have one half rot into a no-op. Each of these is a margin rather than
+    // a bit: this repo is two orders of magnitude clear of the floor's other
+    // side, and its mapped share is far above a tenth.
+    expect(coverage.bodyOfSource).toBe(false);
+    expect(coverage.unreadable).toBeLessThan(UNREADABLE_FLOOR);
+    expect(coverage.sliver).toBe(false);
+    expect(coverage.mapped).toBeGreaterThan(coverage.unreadable * MAPPED_SHARE);
+  });
+
+  it('names a language ark could not have indexed anyway', () => {
+    // The tables are disjoint (`tests/unit/coverage.test.ts`), so nothing on the
+    // map can also be counted as missing from it. Checked here against the real
+    // walk rather than against the table.
+    const langs = new Set(atlas.nodes.map((node) => node.lang));
+    for (const entry of atlas.report.unreadable) {
+      expect(entry.count).toBeGreaterThan(0);
+      expect(langs.has(entry.lang as never)).toBe(false);
     }
   });
 });

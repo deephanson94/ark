@@ -484,6 +484,42 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   falsifiable by the player with one `git log`**. A test asserts a state; this defect lives *between*
   two states, exactly as ADR-0016's vanishing wires did between two frames. When two surfaces
   describe the same population, assert that they **agree**, not that each is individually right.
+- **A threshold named for its English is a threshold nobody measured, and one row can kill it.**
+  ADR-0025's clause 2 was first written as *the map must hold a **majority** of the repository's
+  source* — chosen precisely because majority is the only value on `[0,1]` with a name instead of a
+  number, which felt like the opposite of arbitrary. It **refuses `sveltejs/svelte`**, whose 4,462
+  `.svelte` files outnumber the 3,467 TypeScript files its compiler is written in: a JavaScript tool
+  refusing the Svelte repo. Sorted, the mapped share of the ten repos that clause decides reads 99.7,
+  99.1, 97.0, 95.7, 43.7 │ 2.5, 1.5, 0.0, 0.0, 0.0 — the gap is 2.5% → 43.7% and a majority rule sits
+  *outside* it, 1.14× from the nearest ship. (The eleventh, `awesome`, is *also* 0.0% and ships,
+  which is what the other clause is for — so quoting this axis as if it separated eleven repos would
+  itself be the error one row down.) **Put the bar in the largest gap and name both neighbours**; the roundness of the
+  number is a tie-break, never the argument. And note which way the error ran: the semantic bar was
+  *stricter* than the data supports, so it would have withdrawn a working deck, which is the failure
+  a session congratulating itself on being conservative will not notice.
+- **A conjunction is only justified by the row each clause alone gets wrong.** Asserting both halves
+  separately (the landmine below) catches a clause that stops firing; it does not catch one that
+  never needed to exist. ADR-0025's rule is *body of unreadable source* **and** *map holds under a
+  tenth of it*, and the check that earned the "and" was running each half alone over eleven repos:
+  clause 1 alone is wrong on three (react, next.js, svelte), clause 2 alone is wrong on one
+  (`awesome`), together zero. Before that measurement clause 2 changed **no** verdict on the eight
+  repos then in hand, and would have read as decoration. **Count the verdicts each clause flips, not
+  the times it evaluates true.**
+- **A candidate signal can be refuted outright, and that is cheaper than preferring another.** Two
+  rules were on the table for the same job. The first — *no scanned-language nodes ⇒ refuse* — is
+  wrong in **both** directions on the same table: 24 stray JavaScript files save hugo and 45 save
+  django, the two worst offenders, while `sindresorhus/awesome` is refused for being what it says it
+  is. The second — `unsupported / onDisk` — needs no taste at all: refusing hugo requires a bar
+  ≤ 58.7% and `awesome` sits at **69.6%**, so the shipping and refusing sets *overlap* and **no
+  threshold exists**. Two cells settle it forever. Look for the pair of rows that makes a candidate
+  impossible before arguing about where its bar should go.
+- **A count of zero has more than one cause, and the panel that reads it merges them.** With the deck
+  refused, the guide said **"every question answered"** — over a repo that was never asked one — and
+  the HUD said it again **141 lines down the same file**, in different words off a different
+  variable, because both ultimately derive their sentence from a deck count of zero. Neither was wrong when it was written; a second cause for the same
+  number arrived later. This is the verb-blind-state family with no verb in it: **when you add a new
+  way for a quantity to reach its extreme, grep every reader of that quantity and ask what it thinks
+  the extreme means.**
 - **A relation over a set of one is an identity.** A reveal that deliberately says *"it changed a file
   that usually moves with this one"* rather than naming the file — because the name is another verb's
   answer key — names it anyway whenever the subject has exactly one co-change partner. Measured at 4
@@ -737,12 +773,13 @@ existing board rather than adding a fifth verb — is done.
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node at
 `7075369e` — and the only outside repo where the generator had more supply than the deck cap
-allowed). Ark itself is **3.42** at `b9f4d33`, measured on a clean clone. *This line said 2.66 for
+allowed). Ark itself is **3.40** at `e6fe5e4`, measured on a clean clone. *This line said 2.66 for
 five milestones and that figure reproduces nowhere* — 2.57 at `0fac922`, the commit whose CHANGELOG
 recorded it, and 2.54–2.59 across the window around it, under the only denominator that reproduces
 hono's 2.51 (edges ÷ **all** nodes; code-only reads 3.25 there). The hono half of the same sentence
-was exact, which is what made the ark half diagnosable. The scanner is **ES modules only**, so a
-Python or Go repo produces a map with no edges and no questions until M5.
+was exact, which is what made the ark half diagnosable. The scanner is **ES modules only**, so until
+M5 a Python or Go repo produces a map with no edges — and, since ADR-0025, **no deck either**, said
+out loud with the count of what is missing rather than filled in with questions about the Markdown.
 
 Press **`o`** for the orbit view: every file a column standing on its 2D footing, height =
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
@@ -766,8 +803,8 @@ imports, and the one that reaches the edgeless files the import graph structural
 (**[ADR-0018](./docs/decisions/0018-a-subject-is-a-place-or-an-event.md)**); `src/verbs/archaeology/`
 shows a file and asks which commits landed on it
 (**[ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md)**). Together
-they leave 19 of this repo's 140 nodes unprovable where Blast Radius alone leaves 52; on hono 138
-against 269. (Measured at `11c92c0` on a clean clone — ark indexes itself, so a figure about this
+they leave 25 of this repo's 147 nodes unprovable where Blast Radius alone leaves 61; on hono 142
+against 269. (Measured at `e6fe5e4` on a clean clone — ark indexes itself, so a figure about this
 repo is only checkable if it names the commit it was taken at, and the commit carrying the sentence
 is always one later than the one it describes.)
 
@@ -864,8 +901,8 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. ~89 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npm run index` produces
-a valid ~250 KiB atlas in ~455 ms (measured at `11c92c0`).
+sentence. ~95 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npm run index` produces
+a valid 299.9 KiB atlas in ~430 ms (measured at `e6fe5e4`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -910,25 +947,40 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: **the Markdown-map defect**, which needs no parser and which ADR-0024 decision 3 makes a
-precondition for any new language. Today a Go or Python repo does not index into a silhouette — it
-indexes into **a map of its Markdown with a full deck of questions about it**: cobra is 17 nodes, all
-Markdown, and **48 challenges**; hugo is 1,049 nodes of which 1,016 are Markdown, and **144
-challenges**; not one line of source is on either map, and `cli.ts`'s zero-challenge warning cannot
-fire because the count is 144. Three documents including this one said *"no edges and no questions"*
-— the first half was right and **the second was false for four milestones**. Then, in rough order of
-size: packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the Definition of done);
-the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is
-the atom that would let anything *transfer* to another repo and the other half of risk #1; and **M5
-itself**, now that its kill point is decided — Go first, because its verdict is unconditional where
-Python's is a smaller product than the roadmap implies.
+**The Markdown-map defect is fixed**
+(**[ADR-0025](./docs/decisions/0025-a-deck-is-refused-when-the-map-is-not-of-the-repository.md)**),
+so ADR-0024 decision 3's precondition is met and **M5 is unblocked**. A Go or Python repo used to
+index into *a map of its Markdown with a full deck of questions about it* — cobra 17 nodes and **48
+challenges**, hugo 1,049 nodes of which 1,016 Markdown and **144** — and now indexes into the map
+with **no deck**, the count, and the reason. **315 questions withdrawn across 5 of 11 measured
+repos**; ark, hono and `sindresorhus/awesome` are untouched.
 
-One more thing found on the way past and left unfixed, in **Known gaps** with its measurement:
+The rule is two clauses over what the **walk skipped**, refined by language: refuse when there are
+≥ 5 recognised-but-unreadable source files **and** the map holds less than a tenth of the
+repository's source. Both are load-bearing and each rescues a repo the other gets wrong — the floor
+saves `awesome` (seven Markdown files and one shell script), the tenth saves react, next.js and
+svelte. **The obvious rule is wrong in both directions**: *no scanned-language nodes ⇒ refuse* ships
+hugo and django, the two worst offenders, on the strength of 24 and 45 stray JavaScript files, and
+refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
+≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
+
+Next action: **M5 — Go first**, now that its kill point is decided and its precondition met; then, in
+rough order of size, packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the
+Definition of done) and the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60
+structural phenomena, which is the atom that would let anything *transfer* to another repo and the
+other half of risk #1.
+
+**Three narrower gaps replace it in `README.md`, each with its measurement**, and none is a
+regression of the old one: a Go or Python repo still gets no *source* on its map (that is M5);
+`UNREAD` omits ambiguous extensions on purpose, so an Objective-C repo still slips through; and the
+bar is a tenth rather than a majority, so `sveltejs/svelte` keeps its deck with 4,462 `.svelte` files
+absent from the map. That last one was the **first draft's rule**, and one row killed it.
+
+Still open, still unfixed, and still in **Known gaps** with its measurement:
 **`npm run test:unit` has an undeclared dependency on `npm run build`**. On a fresh clone it fails 2
-of 586 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
+of 605 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
 always been green because `ci.yml` runs `build` before `test:unit`; the testing table above lists
 them as independent rows, which is exactly what makes a cold session read the red as its own doing.
-It cost this session ten minutes and two refuted hypotheses.
 
 **M5's kill point is measured and decided** —
 **[ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**, on flask

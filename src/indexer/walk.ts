@@ -11,13 +11,13 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { Lang, SkipCount } from '../atlas/index.js';
+import type { Lang, SkipCount, UnreadableCount } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
 import type { IgnoreLayer } from './ignore.js';
 import { isIgnored, layerFromPatterns, parseIgnoreFile } from './ignore.js';
 
 /** Extensions we parse for imports. */
-const SCANNED: ReadonlyMap<string, Lang> = new Map([
+export const SCANNED: ReadonlyMap<string, Lang> = new Map([
   ['.ts', 'ts'],
   ['.tsx', 'tsx'],
   ['.mts', 'ts'],
@@ -29,10 +29,99 @@ const SCANNED: ReadonlyMap<string, Lang> = new Map([
 ]);
 
 /** Extensions we map but do not parse — they are still part of the terrain. */
-const CARRIED: ReadonlyMap<string, Lang> = new Map([
+export const CARRIED: ReadonlyMap<string, Lang> = new Map([
   ['.json', 'json'],
   ['.jsonc', 'json'],
   ['.md', 'md'],
+]);
+
+/**
+ * The third of the trio: **program source we recognise and cannot read.**
+ *
+ * Scanned files get an import graph, carried files get terrain, and these get a
+ * *count* — nothing else. They are not indexed, not on the map, and not in any
+ * answer key. The count exists because `skipped`'s `unsupported` tally cannot
+ * tell a PNG from a Go file, and that difference decides whether a deck is about
+ * the repository or about its documentation (ADR-0025).
+ *
+ * **The list is program source and nothing else.** Markup and prose are out —
+ * `.html`, `.rst`, `.css`, `.txt` — and deliberately so: counting them would put
+ * a book with an HTML build directory over the bar and refuse a deck that is
+ * honestly about its Markdown. Data and config are out for the same reason.
+ *
+ * **Ambiguous extensions are out rather than guessed at.** `.m` is Objective-C
+ * or MATLAB, `.pl` is Perl or Prolog, `.v` is Verilog or Coq or V, `.d` is D or
+ * a Make dependency file. The cost of omitting one is an undercount; the cost of
+ * including one is printing a false language name at the player, and this whole
+ * mechanism exists to stop ark claiming things it has not checked.
+ *
+ * Adding a language to `SCANNED` means deleting its row here in the same commit.
+ */
+export const UNREAD: ReadonlyMap<string, string> = new Map([
+  ['.go', 'Go'],
+  ['.py', 'Python'],
+  ['.pyi', 'Python'],
+  ['.pyw', 'Python'],
+  ['.rb', 'Ruby'],
+  ['.rake', 'Ruby'],
+  ['.rs', 'Rust'],
+  ['.java', 'Java'],
+  ['.kt', 'Kotlin'],
+  ['.kts', 'Kotlin'],
+  ['.scala', 'Scala'],
+  ['.swift', 'Swift'],
+  ['.mm', 'Objective-C++'],
+  ['.c', 'C'],
+  ['.h', 'C'],
+  ['.cc', 'C++'],
+  ['.cpp', 'C++'],
+  ['.cxx', 'C++'],
+  ['.hh', 'C++'],
+  ['.hpp', 'C++'],
+  ['.hxx', 'C++'],
+  ['.cs', 'C#'],
+  ['.php', 'PHP'],
+  ['.pm', 'Perl'],
+  ['.ex', 'Elixir'],
+  ['.exs', 'Elixir'],
+  ['.erl', 'Erlang'],
+  ['.hrl', 'Erlang'],
+  ['.hs', 'Haskell'],
+  ['.lua', 'Lua'],
+  ['.dart', 'Dart'],
+  ['.jl', 'Julia'],
+  ['.clj', 'Clojure'],
+  ['.cljc', 'Clojure'],
+  ['.cljs', 'Clojure'],
+  ['.fs', 'F#'],
+  ['.fsi', 'F#'],
+  ['.fsx', 'F#'],
+  ['.ml', 'OCaml'],
+  ['.mli', 'OCaml'],
+  ['.nim', 'Nim'],
+  ['.zig', 'Zig'],
+  ['.cr', 'Crystal'],
+  ['.elm', 'Elm'],
+  ['.vue', 'Vue'],
+  ['.svelte', 'Svelte'],
+  ['.astro', 'Astro'],
+  ['.sh', 'Shell'],
+  ['.bash', 'Shell'],
+  ['.zsh', 'Shell'],
+  ['.ps1', 'PowerShell'],
+  ['.groovy', 'Groovy'],
+  ['.r', 'R'],
+  ['.tcl', 'Tcl'],
+  ['.vb', 'Visual Basic'],
+  ['.pas', 'Pascal'],
+  ['.f90', 'Fortran'],
+  ['.f95', 'Fortran'],
+  ['.f03', 'Fortran'],
+  ['.gleam', 'Gleam'],
+  ['.rkt', 'Racket'],
+  ['.scm', 'Scheme'],
+  ['.sol', 'Solidity'],
+  ['.hx', 'Haxe'],
 ]);
 
 /**
@@ -97,6 +186,12 @@ export interface WalkResult {
   readonly onDisk: ReadonlySet<string>;
   /** Sorted by reason. */
   readonly skipped: readonly SkipCount[];
+  /**
+   * Program source we recognised and did not read, by language. Sorted by
+   * language. Every file counted here is also counted in `skipped` as
+   * `unsupported` — this is a refinement of that number, not a second bucket.
+   */
+  readonly unreadable: readonly UnreadableCount[];
 }
 
 function extensionOf(name: string): string {
@@ -122,6 +217,7 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
   const files: WalkedFile[] = [];
   const onDisk = new Set<string>();
   const skips = new Map<SkipCount['reason'], number>();
+  const unread = new Map<string, number>();
   const note = (reason: SkipCount['reason']): void => {
     skips.set(reason, (skips.get(reason) ?? 0) + 1);
   };
@@ -133,7 +229,10 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
   const skipped = [...skips.entries()]
     .map(([reason, count]) => ({ reason, count }))
     .sort((a, b) => byteCompare(a.reason, b.reason));
-  return { files, onDisk, skipped };
+  const unreadable = [...unread.entries()]
+    .map(([lang, count]) => ({ lang, count }))
+    .sort((a, b) => byteCompare(a.lang, b.lang));
+  return { files, onDisk, skipped, unreadable };
 
   async function descend(relativeDir: string, inherited: readonly IgnoreLayer[]): Promise<void> {
     const absoluteDir = relativeDir === '' ? options.root : join(options.root, relativeDir);
@@ -180,6 +279,12 @@ export async function walk(options: WalkOptions): Promise<WalkResult> {
       const carried = CARRIED.get(extension);
       if (scanned === undefined && carried === undefined) {
         note('unsupported');
+        // Lower-cased for this lookup only, so `.R` and `.C` land on their
+        // language. The two tables above are left exact-case, because changing
+        // what gets *indexed* is a different decision from counting what does
+        // not.
+        const language = UNREAD.get(extension.toLowerCase());
+        if (language !== undefined) unread.set(language, (unread.get(language) ?? 0) + 1);
         continue;
       }
 

@@ -13,7 +13,13 @@
  */
 
 import type { Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
-import { challengeOrder, isNodeId, parseAtlas } from '../atlas/index.js';
+import {
+  challengeOrder,
+  coverageSentence,
+  isNodeId,
+  parseAtlas,
+  sourceCoverage,
+} from '../atlas/index.js';
 import type { Camera, Point } from './camera.js';
 import {
   NORTH,
@@ -446,10 +452,21 @@ function start(scene: Scene, root: HTMLElement): void {
     });
   };
 
+  /**
+   * Why this atlas has no deck, or `null` when the deck is simply finished.
+   *
+   * A property of the atlas, so it is read once — the only latched thing near
+   * the guide, and the exception proves the rule: everything else there is
+   * recomputed because a pass can decay, and nothing can un-refuse a deck
+   * without a reindex.
+   */
+  const mapCoverage = sourceCoverage(scene.atlas);
+  const deckRefusal = mapCoverage.deckRefused ? coverageSentence(mapCoverage) : null;
+
   // Notes are re-derived on every open, never cached: a claim can decay between
   // sessions and a cached sentence would go on asserting something the graph has
   // stopped supporting (ADR-0011 decision 3).
-  const notebook = createNotebook();
+  const notebook = createNotebook(mapCoverage.deckRefused);
   const refreshNotes = (): void => {
     notebook.update(fieldNotes(scene.graph, progress, liveness));
   };
@@ -689,6 +706,10 @@ function start(scene: Scene, root: HTMLElement): void {
         upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
       guide.update({
         next: upcoming,
+        // Only when the deck is empty *because it was refused*. A repo whose
+        // questions have all been answered gets the other sentence, and merging
+        // the two would tell a Go-repo player they had finished (ADR-0025).
+        refusal: deckRefusal,
         // The map's own short label when the subject is on the map; otherwise
         // the verb's name for its subject, because only the verb knows what a
         // commit is called. The shell asks *whether* it is placed and *what* it

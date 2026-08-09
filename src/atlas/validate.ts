@@ -35,6 +35,7 @@ import type {
   RepoMeta,
   SkipCount,
   Truncation,
+  UnreadableCount,
 } from './schema.js';
 
 export class AtlasValidationError extends Error {
@@ -583,7 +584,21 @@ function validateReport(value: unknown, at: string): IndexReport {
   if (!isStrictlySorted(skipped.map((s) => s.reason))) {
     fail(`${at}.skipped`, 'must be sorted by `reason` with one entry per kind');
   }
-  return { truncations, skipped };
+  // `lang` is an open set of display names rather than a union: the extension
+  // table lives in the indexer's `walk.ts` and adding a language to it must not
+  // be a schema change. So the shape is checked and the vocabulary is not.
+  const unreadable: UnreadableCount[] = asArray(r['unreadable'], `${at}.unreadable`).map(
+    (item, i) => {
+      const u = asRecord(item, `${at}.unreadable[${i}]`);
+      const lang = asString(u['lang'], `${at}.unreadable[${i}].lang`);
+      if (lang.length === 0) fail(`${at}.unreadable[${i}].lang`, 'must not be empty');
+      return { lang, count: asIntAtLeast(u['count'], `${at}.unreadable[${i}].count`, 1) };
+    },
+  );
+  if (!isStrictlySorted(unreadable.map((u) => u.lang))) {
+    fail(`${at}.unreadable`, 'must be sorted by `lang` with one entry per language');
+  }
+  return { truncations, skipped, unreadable };
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import {
   edgeOrder,
   nodeIdFor,
   round2,
+  sourceCoverage,
   validateAtlas,
 } from '../atlas/index.js';
 import { readGitHistory } from './git.js';
@@ -91,13 +92,21 @@ export const DEFAULT_INDEX_OPTIONS: Omit<IndexOptions, 'root'> = {
 
 export interface IndexResult {
   readonly atlas: Atlas;
-  /** What each verb shipped and what it refused to. Printed by the CLI. */
+  /**
+   * What each verb shipped and what it refused to. Printed by the CLI.
+   *
+   * **`null` when the whole deck was refused** (ADR-0025) — not four empty
+   * reports, because "this verb found nothing to ask about" and "nobody asked
+   * this verb" are different facts and only one of them is about the verb. The
+   * generators are not run at all in that case, which is also why a repo ark
+   * cannot read now indexes faster rather than slower.
+   */
   readonly generation: {
     readonly blastRadius: GenerationResult;
     readonly companion: CompanionResult;
     readonly placement: PlacementResult;
     readonly archaeology: ArchaeologyResult;
-  };
+  } | null;
 }
 
 export function indexOptions(root: string, overrides: Partial<IndexOptions> = {}): IndexOptions {
@@ -360,11 +369,21 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     // atlas to run against — and running it against a *validated* draft means
     // a bug in the graph surfaces before it can reach an answer key.
     challenges: [],
-    report: { truncations, skipped },
+    report: { truncations, skipped, unreadable: walked.unreadable },
   };
 
   // Fail here rather than in the player (guardrail 5).
   const validated = validateAtlas(draft);
+
+  // **The map ships; the deck does not, when the map is not of this repository.**
+  // ADR-0025. Every question below would be graded against ground truth and
+  // every answer key would be right — and the whole set would be about the
+  // files ark happens to be able to read, which on a Go or Python repo is its
+  // documentation. That reads as success, which is worse than an empty deck
+  // saying why. The rule is `sourceCoverage`'s and lives in `src/atlas/` because
+  // the player states the same fact to the same person.
+  const coverage = sourceCoverage(validated);
+  if (coverage.deckRefused) return { atlas: validated, generation: null };
 
   // **The cap is per verb, deliberately.** `maxChallengesFor` scales the deck
   // with the repo so a 2,000-file codebase is not exhausted in one sitting; a

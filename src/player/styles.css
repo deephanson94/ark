@@ -85,6 +85,17 @@ body {
   margin-top: 2px;
 }
 
+/* What this map is missing (ADR-0025). Warmer than `--text-dim` and dimmer than
+   `--accent`: it is a standing qualification on everything else in the panel,
+   not an error and not a thing to click. */
+.hud-partial {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
 .hud-progress {
   margin: 10px 0 6px;
   height: 3px;
