@@ -336,7 +336,21 @@ no edges and no questions."* **The second half is false.** Indexed with the prod
 Not one line of Go or Python is on any of these maps. The three history verbs are graded on git
 rather than on imports, so they cheerfully generate a full deck **about the repository's
 documentation** — a confident, playable game about a shadow of the repo. `cli.ts`'s
-`challenges.length === 0` warning never fires, because the count is 144.
+`challenges.length === 0` warning did not fire on any of the four, and could not have, for **two**
+independent reasons — each of which decision 3 has to fix.
+
+1. **The predicate is wrong.** It guards `challenges.length === 0`, and hugo's count is 144. "This
+   repo produced no questions" and "this repo produced questions about nothing but its documentation"
+   are different failures, and only the first has a check.
+2. **The branch is on the `play` path only** (`cli.ts:291`, after `serveDirectory`, past the
+   `command === 'index'` return at :269). So `ark index` — which is what `npm run index`, the budget
+   script and every measurement in this document use — cannot reach it at all.
+
+The warning is not dead code; it is a live guard aimed at the wrong thing and reachable from one of
+two commands. Decision 3 should replace the predicate and lift it above the command split, not delete
+the branch. Its comment (`cli.ts:292–294`) also still asserts the "no edges and therefore no radius"
+claim §8 refutes, and is left in place deliberately: it is production source, and this session
+shipped none.
 
 This is the instrument-that-measures-nothing landmine one level up, exactly as the brief predicted,
 and it is **not M5 work**: it exists now and is a labelling defect, not a parser gap.

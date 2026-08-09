@@ -2201,3 +2201,17 @@ One line per iteration: what changed, and what to do next.
 
   **Next** is unchanged: the **Markdown-map defect**, then `npx ark`, the **phenomenon catalogue**,
   and **M5 — Go first**.
+
+- **One sentence of my own, corrected on a re-read: a live guard described as a dead one.** ADR-0024
+  §8 and `README.md` both said `cli.ts`'s zero-challenge warning *"never fires"* — an unscoped
+  universal where the measurement supports only *"did not fire on these four repos"*. It matters in
+  the direction that gets things deleted: this repo has a landmine about paths that never execute
+  being worse than no path, and a next session reading "never fires" could remove a guard that works.
+  Checked against the code rather than from memory, it could not have fired for **two** independent
+  reasons, and the second was not in the original finding at all: the predicate is
+  `challenges.length === 0` (hugo's count is 144), **and** the branch sits on the `play` path only
+  (`cli.ts:291`, past the `command === 'index'` return at :269), so `ark index` — every measurement in
+  the document — never reaches it. Decision 3 must replace the predicate *and* lift it above the
+  command split. `cli.ts:292–294`'s comment still asserts the "no edges and therefore no radius" claim
+  §8 refutes; left in place deliberately, because it is production source and this session shipped
+  none. **Next** is unchanged.
