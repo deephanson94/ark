@@ -34,9 +34,9 @@ import { commitSupply } from '../../src/verbs/commits.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /**
- * Twenty-two files and a history with a shape: `src/core/engine.ts` is touched
- * by nine commits spread across three months, everything else by one or two, and
- * a handful of commits touch neighbours of the engine without touching it.
+ * Twenty-two files, with `src/core/engine.ts` as the busy one and a handful of
+ * commits touching its neighbours without touching it. The commit list below
+ * owns the counts, and states them in both senses — see there.
  *
  * Filenames deliberately share no tokens with the commit messages except where a
  * test wants them to — otherwise `mentions` would fire everywhere and every
@@ -87,10 +87,16 @@ interface CommitSpec {
  * Real repos land several commits a day, which dilutes that guess; a fixture
  * that did not would have made every assertion below vacuous on a deck of one.
  *
- * `src/core/engine.ts` is touched **eight** times across the whole window, so
- * its key of six is a genuine sample and two real touchers stay off the board;
- * `src/io/socket.ts` three times inside a **narrow** one, which is what gives
- * the pool-filter assertions something to bite on.
+ * `src/core/engine.ts` is touched by **nine retained commits, eight of them
+ * eligible** — the ninth is the `wide` one below. Both numbers are stated
+ * because the difference between them is a defect this verb shipped once: the
+ * reveal counted eligible touchers and the field note counted retained ones, and
+ * a comment saying only "nine" or only "eight" is how the next reader picks the
+ * wrong one. Eight eligible against a key of six makes the sample genuine, with
+ * two real touchers off the board.
+ *
+ * `src/io/socket.ts` is touched three times inside a **narrow** window, which is
+ * what gives the pool-filter assertions something to bite on.
  */
 const COMMITS: readonly CommitSpec[] = [
   { sha: 'aa0000000001', date: '2026-01-05', subject: 'start the loop', files: [ENGINE, 1] },

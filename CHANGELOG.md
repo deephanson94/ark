@@ -1669,3 +1669,25 @@ One line per iteration: what changed, and what to do next.
   no bump. After that, the **phenomenon catalogue** — a repo-independent vocabulary of ~30–60
   structural phenomena, the atom that would let anything *transfer* to another repo, which is the
   other half of risk #1.
+
+- **Two nits from the M4 close-out, both of the same kind: a document stating something the code
+  does not do.** `npx ark index .` has been in the Definition of done for four milestones and **has
+  never worked** — `package.json` has no `bin`, and `build` typechecks the indexer with `--noEmit`
+  rather than emitting it, so there is nothing for `npx` to resolve. Corrected to `npm run index`,
+  which exercises the same path; `npx ark` stays in NORTH-STAR §10 where it belongs, as the intent it
+  is, now labelled **unbuilt rather than broken** — packaging the CLI is real work nobody has done,
+  and it is not a nit. The lesson is narrower than "docs go stale": **a checklist item nobody can
+  literally satisfy gets ticked from memory**, which is the one failure the Definition of done exists
+  to prevent, so it was worse than a wrong command.
+
+  And the Archaeology fixture's two doc comments stated the engine's toucher count in two different
+  senses — "nine commits" (retained) in the header, "eight times" (eligible) beside the commit list —
+  which is the *exact* ambiguity that produced the shipped defect the review caught a commit earlier,
+  reproduced in the test file written to pin the fix. Both numbers are stated now, with the reason.
+
+  No source and no schema changed — **though the atlas did**, which is worth saying rather than
+  waving at: `CLAUDE.md`, `CHANGELOG.md` and the test file are all indexed nodes, and the commit
+  itself joins the history, so the deck moves. Writing "no atlas change" here would have been the
+  same species of imprecision this entry is about. **Next** is unchanged — the negative witness,
+  with its one design fork (strategy provenance in the atlas and a version bump, or re-derived
+  player-side with neither), or M5 by the roadmap.
