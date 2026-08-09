@@ -2307,3 +2307,27 @@ One line per iteration: what changed, and what to do next.
   the fourth writes its own.
 
   **Next** is unchanged: **M5 — Go first**, then `npx ark`, then the phenomenon catalogue.
+
+- **Three loose ends from the review, and one of them is a correction to this file's own testing
+  table.** The table's `test:e2e` row said *"Big changes only — **ask first**"*, which is an
+  instruction to the agent; a session read it as a statement that the suite had not run and told the
+  human **three times** that e2e was outstanding and awaiting their decision. `ci.yml`'s `player
+  smoke test` job **is** `npm run test:e2e` and runs unconditionally on every push, so the Definition
+  of done's *"no console errors in the player"* had been satisfied continuously by a job nobody
+  opened. The row now says so, and the landmine is that **a rule about your own behaviour is not a
+  fact about the project** — the same shape as *"list the workflows before you claim they passed"*,
+  run in reverse.
+
+  The review's tenth finding is recorded rather than fixed: the `UNREAD` tally runs *before* the size
+  and binary checks, so a 2 MB Go file counts as unreadable source while a 2 MB TypeScript file
+  counts as neither. The bias runs toward refusing, it flips **no verdict on any of the thirteen**,
+  and the alternative is worse — moving the tally after those checks would make a large Go file
+  invisible, which is the defect ADR-0025 exists to stop. ADR-0025 §9.3.
+
+  And *"2 of 617 on a fresh clone"* is now measured rather than inherited: cloned from the remote at
+  `fb68c7f2`, `npm ci`, `npm run test:unit` with no build → **2 failed, 615 passed**, both in
+  `serve.test.ts`. The first attempt at that measurement cloned the *local* repo and landed on
+  `412cb18` because this machine's `master` ref was months stale — an ancient tree answering a
+  question about the current one, caught only because its `package.json` still said `vitest run`.
+
+  **Next** is unchanged: **M5 — Go first**, then `npx ark`, then the phenomenon catalogue.
