@@ -80,7 +80,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 23 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 24 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -109,7 +109,7 @@ map, the field notes, the deck or the selector names a verb.
 | **M2** | **Kill point** | Blast Radius + F1 grading + distractors | ✅ passed |
 | **M3** | It's a game | Progression, field notes, localStorage save | ✅ |
 | **M4** | Git as rubric | Companion, Placement, Archaeology | ✅ |
-| **M5** | Generalisation | tree-sitter, 3–4 more languages | ⬜ **needs its kill-point measured first** |
+| **M5** | Generalisation | tree-sitter, 3–4 more languages | ⬜ **kill point measured — [ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**: Go yes at *package* granularity, Python yes for the map and the git verbs, **no** for Blast Radius |
 | **M6** | The expensive tier | Trace verb (real call graph) | ⬜ |
 
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
@@ -132,7 +132,7 @@ offered (ADR-0020).
 
 | | Status | Notes |
 |---|---|---|
-| ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. |
+| ES-module import scanner | ✅ | Build-free, no language server. **TS/JS only** — see gaps. Go and Python resolution measured at 99.8–100% and 93.8–98.6% of import sites (ADR-0024); the blocker is not parsing. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
@@ -152,10 +152,20 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **`npx ark` does not work.** `package.json` has no `bin` and `build` typechecks the indexer with
   `--noEmit` rather than emitting it. Use `npm run play -- <path>`. Packaging is real work nobody has
   done.
-- **Non-JS repos produce a map with no edges and no questions.** The scanner is ES modules only, so a
-  Python or Go repo indexes into a silhouette. This is M5, and it will look like a small repo rather
-  than like a failure — which is why M5 needs resolution rate and `report.unprovableNodes` measured
-  *before* a parser is written.
+- **Non-JS repos produce a map of their *Markdown*, and a full deck of questions about it.** This
+  entry used to read "no edges and no questions"; the second half is **false** and was measured at
+  `b9f4d33`: `spf13/cobra` indexes to **17 nodes, all Markdown, and 48 challenges**; `gohugoio/hugo`
+  to **1,049 nodes of which 1,016 are Markdown, and 144 challenges**. Not one line of Go or Python is
+  on either map. The three history verbs are graded on git rather than imports, so they generate a
+  confident, playable game about a shadow of the repo, and `cli.ts`'s zero-challenge warning never
+  fires. **This is a labelling defect that exists now, not M5 work** — ADR-0024 decision 3 blocks any
+  new language behind fixing it.
+- **`npm run test:unit` has an undeclared dependency on `npm run build`.** On a fresh clone it fails
+  2 of 586 tests: `serve.test.ts` serves `dist/player`, which does not exist until the player is
+  built, so `atlas.json` 404s where the test expects 200. CI has always been green because `ci.yml`
+  runs `build` (as "typecheck") before `test:unit`. Pre-existing at `b9f4d33` and reproduced on a
+  clean clone of it. The testing table in `CLAUDE.md` lists the two as independent rows, which is
+  what makes a cold session read the red as its own doing.
 - **`RevealNote.route` is rendered nowhere.** Blast Radius has computed the import route since M2 and
   the console has never drawn it. Infrastructure with no consumer.
 - **Map interaction is below its fps budget on headless software rasterisation** (45/33/43 fps at p95
@@ -168,9 +178,11 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-In rough order of size: packaging **`npx ark`** (see gaps — the Definition of done has been
-unsatisfiable on it for four milestones) · the **phenomenon catalogue** · **M5**, whose kill point
-needs measuring before a parser is written.
+**The Markdown-map defect above**, which ADR-0024 decision 3 makes a precondition for any new
+language and which needs no parser · then, in rough order of size: packaging **`npx ark`** (see gaps
+— the Definition of done has been unsatisfiable on it for four milestones) · the **phenomenon
+catalogue** · **M5 itself**, now that its kill point is decided — Go first, because it is the one
+whose verdict is unconditional.
 
 *(Two items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
@@ -201,14 +213,20 @@ across sessions, which is the mechanic the whole product rests on.
 
 ## Try it on
 
-**`honojs/hono`** is the best third-party target (425 nodes, 2.51 edges/node — ark itself is 2.66).
-Ark indexes **itself** as its first level, which is deliberate: every feature added becomes a new
-level, and if the tool cannot make its own architecture legible it does not work.
+**`honojs/hono`** is the best third-party target — **425 nodes, 1,067 edges, 2.51 edges/node** at
+`7075369e`, 216 challenges, 142 of 425 nodes unprovable. Ark indexes **itself** as its first level,
+which is deliberate: every feature added becomes a new level, and if the tool cannot make its own
+architecture legible it does not work.
 
-Measured on a clean clone of `d91ba27`: **145 files, 498 edges, 154 challenges** across four verbs,
-a **291.5 KiB** atlas in **~475 ms**, first paint ~310 ms. *(Ark indexes itself, so these move with
-every commit — hence the sha, and the commit carrying a figure is always one later than the commit it
-describes. Prefer the invariants above to the counts.)*
+Measured on a clean clone of `b9f4d33`: **146 files, 500 edges (3.42 edges/node), 160 challenges**
+across four verbs, **24 of 146 nodes unprovable**, a **298.3 KiB** atlas in **~600 ms**. *(Ark
+indexes itself, so these move with every commit — hence the sha, and the commit carrying a figure is
+always one later than the commit it describes. Prefer the invariants above to the counts.)*
+
+*This block said ark was **2.66** edges/node for five milestones.* It reproduces at no commit and
+under no denominator; hono's 2.51, recorded in the same sentence, reproduces to the digit. See
+[ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md) §0 — the stale
+figure was the bar M5 was about to be judged against.
 
 ---
 
@@ -233,7 +251,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 23 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 24 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves
