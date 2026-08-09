@@ -347,9 +347,13 @@ describe('grading and wording', () => {
     expect(reveal.notes.length).toBe(challenge.truth.length);
     for (const note of reveal.notes) {
       expect(note.note).toContain('commit');
-      // A co-change pair is not a path through anything. An import route here
-      // would be evidence that did not produce the grade.
-      expect(note.route).toEqual([]);
+      // A co-change pair is not a path through anything, and an import route
+      // here would be evidence that did not produce the grade. Asserted against
+      // the sentence rather than against an empty `route` array, because the
+      // array was never rendered — a verb could have put a chain in the prose
+      // and kept the array empty, and this assertion would have passed.
+      expect(note.note).not.toContain(' hops');
+      expect(note.note).not.toContain(' → ');
     }
     // The summary names the subject and says how much of its history the board
     // left out — the sampling admission ADR-0008 requires, in this verb's unit.

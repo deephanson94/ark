@@ -9,13 +9,40 @@
  * breaks. The rest of the server is a `createReadStream` pipe.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { get } from 'node:http';
-import { resolve } from 'node:path';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { isLocalHost, resolveWithin, serveDirectory } from '../../src/indexer/serve.js';
 
 const ROOT = resolve('/srv/player');
+
+/**
+ * A directory with one file in it, made here rather than borrowed from
+ * `dist/player`.
+ *
+ * **The three tests below used to serve the built player**, which gave this
+ * file an undeclared dependency on `npm run build`: on a fresh clone `dist/`
+ * does not exist, `atlas.json` 404s where a 200 is expected, and
+ * `npm run test:unit` fails 2 of 617 for a reason that has nothing to do with
+ * the change in front of you. It stayed green in CI for four milestones because
+ * `ci.yml` happens to order `build` before `test:unit`, while the testing table
+ * lists them as independent rows at the same frequency — so following the table
+ * went red and following CI did not.
+ *
+ * Nothing was gained by using the real bundle. The property under test is the
+ * *server* — that the url it prints answers, and that a rebound Host is refused
+ * — and a directory holding one file exercises it identically while depending
+ * on nothing.
+ */
+let served_root = '';
+
+beforeAll(async () => {
+  served_root = await mkdtemp(join(tmpdir(), 'ark-serve-'));
+  await writeFile(join(served_root, 'atlas.json'), '{"version":9}\n', 'utf8');
+});
 
 /**
  * One GET, over `node:http` rather than `fetch`.
@@ -99,7 +126,7 @@ describe('resolveWithin — what may be served', () => {
 
 describe('serveDirectory', () => {
   it('binds loopback only, and reports the port it actually got', async () => {
-    const served = await serveDirectory(resolve('dist/player'), 4271);
+    const served = await serveDirectory(served_root, 4271);
     try {
       expect(served.port).toBeGreaterThanOrEqual(4271);
       expect(served.url).toBe(`http://127.0.0.1:${served.port}/`);
@@ -124,8 +151,8 @@ describe('serveDirectory', () => {
     // number, it is a printed url that refuses the connection — so that is what
     // is checked. Comparing ports let two independent fixes mask each other,
     // which a mutation run found.
-    const first = await serveDirectory(resolve('dist/player'), 4281);
-    const second = await serveDirectory(resolve('dist/player'), 4281);
+    const first = await serveDirectory(served_root, 4281);
+    const second = await serveDirectory(served_root, 4281);
     try {
       expect(second.port).not.toBe(first.port);
       const response = await fetchStatus(`${second.url}atlas.json`);
@@ -173,7 +200,7 @@ describe('isLocalHost — the DNS-rebinding guard', () => {
   });
 
   it('turns a rebound request away over the wire', async () => {
-    const served = await serveDirectory(resolve('dist/player'), 4291);
+    const served = await serveDirectory(served_root, 4291);
     try {
       expect((await fetchStatus(`${served.url}atlas.json`)).status).toBe(200);
       const spoofed = await new Promise<number>((ok, fail) => {

@@ -179,13 +179,20 @@ export interface RevealNote {
   readonly label: string;
   readonly kind: NoteKind;
   /**
-   * The chain of files the verb traced to justify `note`, as paths, or empty
-   * when the verb's evidence is not a path. Blast Radius fills it with the
-   * import route; Companion has no route to draw, and leaves it empty rather
-   * than inventing one.
+   * Why. Derived from the graph or the history, never canned.
+   *
+   * **This used to have a `route: string[]` beside it**, holding the chain of
+   * files Blast Radius traced, and the console never drew it: `whyYes` already
+   * spells the chain into this sentence (*"reaches the subject in 2 hops through
+   * src/a/direct.ts"*), so the field was a second encoding of a fact the player
+   * was already being told. Three unit tests asserted its shape and nothing
+   * rendered it — infrastructure with no consumer, which `CLAUDE.md` has a
+   * landmine about, sitting under it since M2.
+   *
+   * The claim the empty-array assertions were really making — *a history-graded
+   * verb must not show import evidence* — is now made against this string, which
+   * is the thing a player reads.
    */
-  readonly route: readonly string[];
-  /** Why. Derived from the graph or the history, never canned. */
   readonly note: string;
   /**
    * **Why this wrong answer was put on the board** — the generator's own reason,

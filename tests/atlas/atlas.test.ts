@@ -25,7 +25,7 @@ import {
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
-import { CTRL_F_THRESHOLD, directoryOf, isGameable, scoreSet } from '../../src/verbs/index.js';
+import { isGameable, scoreSet } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import {
   MAPPED_SHARE,
@@ -756,8 +756,7 @@ describe('challenges', () => {
     const dirOf = (path: string): string =>
       path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
     let treeRows = 0;
-    let cornerRows = 0;
-    for (const challenge of atlas.challenges) {
+      for (const challenge of atlas.challenges) {
       const verb = VERBS[challenge.verb];
       const truth = new Set(challenge.truth);
       const witness = readWitness(challenge);
@@ -789,75 +788,50 @@ describe('challenges', () => {
           ).toBe(true);
         }
 
-        if (strategy === 'sibling') {
-          cornerRows++;
-          const home = dirOf(subjectPath);
-          const commit = atlas.history.commits.find((entry) => commitIdFor(entry.sha) === note.id);
-          const exact = (commit?.files ?? []).some(
-            (ref) => ref !== subjectRef && dirOf(nodeAt(graph, ref).path) === home,
-          );
-          const subtree = (commit?.files ?? []).some((ref) => {
-            if (ref === subjectRef) return false;
-            const dir = dirOf(nodeAt(graph, ref).path);
-            return dir === home || dir.startsWith(`${home}/`);
-          });
-          expect(
-            note.witness.includes('own directory') ? exact : subtree,
-            `${challenge.id}: "${note.witness}" is false of ${note.label} against ${home}`,
-          ).toBe(true);
-        }
+        // **Archaeology's `sibling` arm used to be checked here** — that the
+        // commit really did touch the subject's corner of the tree. It is gone
+        // because the sentence is: the class is withheld (ADR-0021's
+        // re-measure), so there is no claim left to be false. The silence is
+        // asserted directly by the test below.
       }
     }
-    // Both populations must exist, or the loop above proved nothing.
+    // The population must exist, or the loop above proved nothing.
     expect(treeRows).toBeGreaterThan(50);
-    expect(cornerRows).toBeGreaterThan(20);
   });
 
-  it('states no structure-blind hint that decides another verb’s board', () => {
-    // **ADR-0021, and the direction ADR-0020 measured and deliberately left
-    // open.** Archaeology's `sibling` witness says *"a commit that touched this
-    // file's own corner of the tree"*, which is an existential over a subtree
-    // and therefore a weakened atom of that commit's **Placement** answer key:
-    // go to that board, tick the candidates whose paths sit under the hinted
-    // directory. Of the three existentials that reveal states, this is the only
-    // one a player can run knowing nothing about the repo — a subtree is a
-    // string prefix, which is pillar 3's `Ctrl+F` word for word — so it is the
-    // one that has to stay below the bar, and this is what holds it there.
+  it('speaks no structure-blind hint at all, which is why none can decide a board', () => {
+    // **ADR-0021's re-measure, and the answer that ADR named in advance.**
+    // Archaeology's `sibling` witness used to say *"a commit that touched this
+    // file's own corner of the tree"* — an existential over a subtree, and
+    // therefore a weakened atom of that commit's **Placement** answer key: go to
+    // that board and tick the candidates whose paths sit under the hinted
+    // directory. Of the three existentials the reveal states it was the only one
+    // a player could run knowing nothing about the repo, because a subtree is a
+    // string prefix, which is pillar 3's `Ctrl+F` word for word.
     //
-    // **Two guesses, because one row is not the only thing a player holds.** A
-    // single hint names one subtree; several boards hinting about the *same*
-    // commit name several, and the union of them is still pure string prefixes.
-    // Measured on clean clones at `a063f01` / `cf78528`: the single-row guess
-    // tops out at 0.600 and 0.727, the per-commit union at **0.769** and 0.526.
-    // So the real margin under the 0.78 bar is **0.011**, not the 0.18 the
-    // single-row figure suggests — this is not the plateau `gate.ts` asks for,
-    // and the union is why this test scores both. If it goes red the answer is
-    // in ADR-0021: gate it, or withhold the class.
+    // ADR-0021 held it *below* the bar instead of closing it, at a measured
+    // union of **0.769** against 0.78 — a margin of 0.011 that this repo's own
+    // landmine calls a knife edge recorded as a plateau. Ark indexes itself, so
+    // one more commit re-rolled the Placement deck and the union reached
+    // **0.800** at `1220b9b`. The old version of this test is what caught it,
+    // and its closing line said what to do: *gate it, or withhold the class.*
     //
-    // **The other two arms are not asserted here and they are not clean.**
-    // Pooling what one board says about one commit, `companion` and `neighbour`
-    // together beat band A on **3 of this repo's 40 Placement boards and 3 of
-    // hono's 54** — every firing through the co-change relation, none through a
-    // path. They are accepted rather than gated because running them needs the
-    // matrix or the import graph, which is the line `gate.ts` has drawn since M2
-    // and ADR-0021 states. Do not read this test as "no hint decides another
-    // board"; it says the *structure-blind* one does not.
+    // **Both cheaper guards were measured and both are refuted.** By board —
+    // where ADR-0021's review left this — cannot bound it: the best single board
+    // reaches 0.667 and the 0.800 is the union of **three**. Narrowing the class
+    // to the subject's exact directory scores **0.800 too**, because the subject
+    // sits in a leaf directory and subtree and directory are the same set. So
+    // ADR-0020's escalation runs out at *by class*, and the class is withheld.
+    //
+    // What is asserted now is the silence itself, which is a stronger claim than
+    // a score under a threshold: there is no bar left to drift across.
     const graph = buildGraph(atlas);
-    const placementFor = new Map(
-      atlas.challenges.filter((c) => c.verb === 'placement').map((c) => [c.subject, c]),
-    );
-    let scored = 0;
-    // Every subtree hinted about a given commit, across the whole deck — the
-    // union below is the same guess with more than one board in hand.
-    const seedsFor = new Map<string, Set<number>>();
-    for (const challenge of atlas.challenges.filter((c) => c.verb === 'archaeology')) {
-      const subjectRef = graph.refById.get(challenge.subject);
-      if (subjectRef === undefined) continue;
-      const home = directoryOf(nodeAt(graph, subjectRef).path);
+    let cornerRows = 0;
+    let spokenSeeds = 0;
+    for (const challenge of atlas.challenges) {
+      if (challenge.verb !== 'archaeology') continue;
       const truth = new Set(challenge.truth);
       const witness = readWitness(challenge);
-      // Read what the panel actually shows: the reveal applies every guard, so a
-      // class withheld on this board never reaches the loop below.
       const reveal = VERBS.archaeology.reveal(atlas, graph, challenge, {
         score: 0,
         correct: [],
@@ -866,59 +840,21 @@ describe('challenges', () => {
         evidence: '',
       });
       for (const note of reveal.notes) {
-        if (note.witness === null || witness.get(note.id) !== 'sibling') continue;
-        const board = placementFor.get(note.id);
-        if (board === undefined) continue;
-        const seeds = seedsFor.get(note.id) ?? new Set<number>();
-        seeds.add(subjectRef);
-        seedsFor.set(note.id, seeds);
-        // The subtree, matching the strategy's bucket, the reveal's guard and
-        // the sentence — one set, not the three this class once had.
-        const picked = board.candidates.filter((id) => {
-          const ref = graph.refById.get(id);
-          if (ref === undefined || ref === subjectRef) return false;
-          const dir = directoryOf(nodeAt(graph, ref).path);
-          return dir === home || dir.startsWith(`${home}/`);
-        });
-        scored++;
-        // The real scorer against the real bar, so this moves if §8.2's bands do.
-        const { score } = scoreSet(picked, board.truth);
+        if (witness.get(note.id) !== 'sibling') continue;
+        cornerRows++;
+        if (note.witness !== null) spokenSeeds++;
         expect(
-          score,
-          `${challenge.id}'s corner hint decides ${board.id} (${score.toFixed(3)})`,
-        ).toBeLessThan(CTRL_F_THRESHOLD);
+          note.witness,
+          `${challenge.id} speaks the subtree class on ${note.label}`,
+        ).toBeNull();
       }
     }
-    // **The same guess with more than one board in hand**, which the per-row
-    // loop above structurally cannot see: several Archaeology boards hint about
-    // one commit, and a player ticks the candidates in *any* of the named
-    // subtrees. Still nothing but string prefixes, and it is the variant that
-    // comes closest to the bar — 0.769 on this repo at `a063f01`, where the
-    // sharpest single row reads 0.600.
-    let unions = 0;
-    for (const [commit, seeds] of seedsFor) {
-      const board = placementFor.get(commit);
-      if (board === undefined) continue;
-      const homes = [...seeds].map((ref) => directoryOf(nodeAt(graph, ref).path));
-      const picked = board.candidates.filter((id) => {
-        const ref = graph.refById.get(id);
-        if (ref === undefined || seeds.has(ref)) return false;
-        const dir = directoryOf(nodeAt(graph, ref).path);
-        return homes.some((home) => dir === home || dir.startsWith(`${home}/`));
-      });
-      unions++;
-      const { score } = scoreSet(picked, board.truth);
-      expect(
-        score,
-        `the corner hints about ${commit} together decide ${board.id} (${score.toFixed(3)})`,
-      ).toBeLessThan(CTRL_F_THRESHOLD);
-    }
-    // Vacuity guards, and they are not decoration: these assertions live inside
-    // three filters that a deck change could empty — spoken `sibling` rows, and
-    // rows whose commit happens to ship a Placement board. A zero here means the
-    // canary has stopped watching, not that the hint has stopped hinting.
-    expect(scored, 'no sibling hint reached a placement board').toBeGreaterThan(20);
-    expect(unions, 'no commit carried a sibling hint').toBeGreaterThan(10);
+    // **The vacuity guard, and it is the half that matters.** The rows are still
+    // generated and still on the boards — it is the sentence that is gone, not
+    // the wrong answers. A zero here would mean the class stopped being *picked*,
+    // and this assertion would be proving nothing about what the reveal says.
+    expect(cornerRows, 'no sibling row reached a reveal').toBeGreaterThan(20);
+    expect(spokenSeeds).toBe(0);
   });
 
   it('names only files its own answer key holds', () => {

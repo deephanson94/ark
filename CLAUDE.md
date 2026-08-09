@@ -524,6 +524,22 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   number arrived later. This is the verb-blind-state family with no verb in it: **when you add a new
   way for a quantity to reach its extreme, grep every reader of that quantity and ask what it thinks
   the extreme means.**
+- **A margin under a bar is a deferral with a timer on it, and on a self-indexing repo the timer is
+  the next commit.** ADR-0021 measured a structure-blind hint at **0.769** against a 0.78 gate bar,
+  called it accepted, and shipped a canary to hold it there. That is a margin of **0.011** — and this
+  file already had the landmine saying a lower bound quoted as a margin is how a knife edge gets
+  recorded as a plateau. Three milestones later an ordinary commit — two test files and a comment —
+  re-rolled the Placement deck and the union hit **0.800**. Nothing about the change touched the deck;
+  ark indexes itself, so *any* commit re-rolls it. **When a measured exposure sits inside a few
+  hundredths of a threshold, the honest options are close it or state the date it will fail** — not
+  accept it and write a test that will one day fail on somebody else's unrelated work.
+- **When a guard is refused as "too costly", price the cost in the unit the player feels.**
+  Withholding that class silences **171 of this repo's 626 spoken witness rows**, which reads as a 27%
+  regression to the negative-witness feature and is why a cheaper guard was hunted first. But
+  `discloses` never calls the reveal and neither does any generator, so **the deck is byte-identical
+  and not one question is lost** — 171 *explanations* go, zero *questions*. The scary number was
+  counting rows in the wrong ledger, and the two cheaper guards it sent me hunting were both refuted
+  by measurement (by-board bounds 0.667 against a 0.800 union; narrowing the class scores 0.800 too).
 - **A rule about your own behaviour is not a fact about the project, and the testing table reads like
   both.** The row for `test:e2e` said *"Big changes only — **ask first**"*, which is an instruction to
   the agent; a session read it as a statement that the suite had not run, told the human three times
@@ -1012,11 +1028,14 @@ empty — **`prometheus/prometheus` at 25.0%** ships 48 Blast Radius boards abou
 time-series database. The third gap is unchanged: a Go or Python repo still gets no *source* on its
 map, which is M5.
 
-Still open, still unfixed, and still in **Known gaps** with its measurement:
-**`npm run test:unit` has an undeclared dependency on `npm run build`**. On a fresh clone it fails 2
-of 617 — `serve.test.ts` serves `dist/player`, which does not exist until the player is built. CI has
-always been green because `ci.yml` runs `build` before `test:unit`; the testing table above lists
-them as independent rows, which is exactly what makes a cold session read the red as its own doing.
+**Two long-standing gaps are closed, both of them small and both overdue.** `npm run test:unit` no
+longer depends on `npm run build` — `serve.test.ts` served `dist/player` and now writes its own temp
+directory, so a fresh clone goes green instead of failing 2 of 617 for a reason unrelated to the
+change in front of you. And **`RevealNote.route` is gone rather than wired up**: the console never
+drew it because `whyYes` already spells the chain into the sentence the console *does* draw, so the
+field was a second encoding of a fact the player already had, and the two tests whose real claim was
+*a history-graded verb shows no import evidence* now assert that against the prose — which the empty
+array could never have caught.
 
 **M5's kill point is measured and decided** —
 **[ADR-0024](./docs/decisions/0024-a-language-ships-on-its-deck-not-on-its-map.md)**, on flask
@@ -1071,6 +1090,16 @@ every existing board rather than adding a fifth verb, and pillar 5's distractor 
 §8.3 calls "a real subsystem, not a helper function". If a session would rather open M5, that is a
 defensible call and not a deviation.
 
+
+**ADR-0021's accepted exposure is closed, and the canary is what closed it.** The structure-blind
+`sibling` hint — *"a commit that touched this file's own corner of the tree"* — is **withheld**, the
+third class to be. It sat 0.011 under the gate bar for three milestones; an ordinary commit re-rolled
+this repo's own Placement deck and the per-commit union reached **0.800**. By-board cannot bound it
+(best single board **0.667**, the 0.800 is a union of **three**) and narrowing the class to the exact
+directory scores **0.800 too**, so ADR-0020's escalation runs out at *by class*. The cost is 171 of
+626 spoken rows here and 101 of 734 on hono — **and no deck change at all**, because no generator
+calls a reveal. The canary now asserts the silence rather than a score, which has no bar to drift
+across.
 
 The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radius set is
 `subjectsPassed` and returns subjects only, so a file unlocks its own cone by passing its own
