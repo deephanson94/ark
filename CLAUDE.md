@@ -16,6 +16,7 @@
 |---|---|---|
 | [`NORTH-STAR.md`](./NORTH-STAR.md) | North star: pillars, core loop, verbs, grading contract, atlas format, roadmap | **Every session, first** |
 | `CLAUDE.md` (this file) | Working agreement, guardrails, testing strategy, conventions, landmines | **Every session, second** |
+| [`README.md`](./README.md) | **Where we are**: architecture, and a done/ongoing/todo status for every milestone, verb and subsystem | On pickup; **update at every close-out** |
 | `CHANGELOG.md` | One line per iteration: what changed, what to do next | Read the last few on pickup; append on close-out |
 | `docs/atlas-format.md` | The versioned atlas schema (the contract between indexer and player) | Before touching either side |
 | `docs/decisions/` | ADRs for anything that contradicts or extends the north star | When you're about to make a call the spec doesn't cover |
@@ -450,6 +451,28 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   shape is the repo's own landmine about the proudest paragraph, one step earlier: when a document
   argues *"and anyway we could not have fixed it"*, that sentence is doing the work of an excuse and
   is the first thing to measure. Measure the fix you are declining before you decline it.
+- **A claim about what the *player* can do is not checkable in the verb — go and read the player.**
+  ADR-0021 accepted a measured exposure on the argument that running the guess needs a relation the
+  player must have **learned**, so it was reasoning rather than lookup. Nobody opened `src/player/`.
+  `main.ts` builds `openBoards` from `channelOf(verb) === 'coChangeTies'` alone, so an open
+  **Placement** board suppresses no wire and `ties.ts` draws every pair an answered Companion reveal
+  named — beside the open board, over the map §9 keeps visible behind the scrim. Measured with only
+  the wires a player can actually see, the guess still beats band A on **3 of this repo's 40 boards**
+  (measured on a clean clone of `a063f01`).
+  The refutation was already written in the repo: `ties.ts`'s own comment says *"a wired answer is the
+  map's `Ctrl+F`"*. Two lessons, and the second is the sharper one: a sentence of the form *"a player
+  would have to know X"* is a claim about the **UI**, and belongs to whoever renders X — and when a
+  decision quotes a rule from an ADR (*"no board open"*), **grep for the code that implements it**,
+  because `main.ts` implemented that rule for one channel and the divergence read as a design choice
+  for a whole milestone.
+- **Scoring one row at a time measures a player holding one board.** The same ADR scored its
+  structure-blind hint per row, got 0.600 against a 0.78 bar, and called the margin a plateau. Several
+  boards hint about the same commit; the **union** of the subtrees they name is still nothing but
+  string prefixes, and it reads **0.769** at `a063f01` — 0.011 under, on the one class the decision rests on
+  staying below. A per-row measurement is not wrong, it is a *lower bound*, and quoting a lower bound
+  as a margin is how a knife edge gets recorded as a plateau. Ask what a player accumulates across
+  boards before you quote a maximum. (The vacuous half is worth naming too: *"nothing sits between the
+  best score and the bar"* is true of every distribution ever measured.)
 - **A class label is not a class description, and the gloss is where the lie gets in.** Every §8.3
   distractor strategy starts at its textbook bucket and **widens** when that bucket runs dry —
   `treeSibling` walks outward through shared path prefixes, Placement's `structural` is an unbounded
@@ -549,6 +572,9 @@ Seeded with the ones we can predict. **Append every time one bites you.**
       packaging the CLI is real work nobody has done. A checklist item nobody can literally satisfy
       gets ticked from memory, which is the failure mode this whole list exists to prevent.)
 - [ ] No console errors in the player.
+- [ ] `README.md`'s **Status** tables updated — milestone, verb, subsystem, known gaps and Next.
+      It is the only document that says *where we are*, and a status table nobody updates is worse
+      than none: it reads as current. Any figure in it names the commit it was measured at.
 - [ ] One line appended to `CHANGELOG.md`: what changed, what's next.
 
 ---
@@ -650,20 +676,30 @@ hono's, and **seven of the seventeen (verb, strategy) pairs are re-derived corre
 on either repo**. A candidate
 satisfies several predicates at once and which one *chose* it was settled by a quota.
 
-**The direction ADR-0020 left open is closed, by measurement rather than by machinery**
-(**[ADR-0021](./docs/decisions/0021-a-gate-heuristic-is-a-guess-that-needs-no-graph.md)**). Scoring
-Archaeology's subtree hint as a guess on the **Placement** board — the work that ADR left behind —
-was blocked as written, because `build.ts` runs Placement first (ADR-0019 decision 7 needs it to), so
-neither verb can see the other at the moment it would have to. Scored anyway, off `atlas.json`: the
-subtree hint **fires zero times on both repos** (best 0.600 here, 0.727 on hono, against a 0.78 bar
-with nothing in the gap). ADR-0020's "100%-precise on 9 boards" was true and was **not a grade** —
-recall is what F1 weighs and a subtree picks one or two of a six-file key. All three arms were
-scored, not only the new one: `neighbour` fires zero too, and **`companion` beats band A on 3 of this
-repo's 40 Placement boards and 3 of hono's 54**. It is accepted rather than gated on the rule
-`gate.ts` had been applying since M2 without writing down — **a gate heuristic is a guess a player
-could run knowing nothing about the repo**, which is why `directImporters` was always excluded and
-why the co-change hint is too. The guard that *would* close it is designed in full in that ADR and
-deliberately not built; a canary in `tests/atlas/` holds the structure-blind arm under the bar.
+**The direction ADR-0020 left open is scored**
+(**[ADR-0021](./docs/decisions/0021-a-gate-heuristic-is-a-guess-that-needs-no-graph.md)**), **and the
+answer moved the problem rather than closing it.** Scoring Archaeology's subtree hint as a guess on
+the **Placement** board — the work that ADR left behind — is not implementable as written: `build.ts`
+runs Placement first (ADR-0019 decision 7 needs it to), so neither verb can see the other at the
+moment it would have to. Scored off `atlas.json` anyway, **on a clean clone of `a063f01`** and of
+hono at `cf78528`: the subtree hint **fires zero times on both repos** — best 0.600 / 0.727 single-row
+and **0.769 / 0.526** for the union of every hint about one commit, so the margin under the bar is
+**0.011**, not the 0.18 the single-row number suggests. ADR-0020's "100%-precise on 9 boards" was not
+a grade: recall is what F1 weighs and a subtree picks one or two of a six-file key. All three arms
+were scored, not only the new one — `neighbour` fires zero too, and **pooled hints decide 3 of this
+repo's 40 Placement boards and 3 of hono's 54** (`companion` alone: 3 and **1**). A canary in
+`tests/atlas/` holds the structure-blind arm under the bar, scoring the single row *and* the union.
+
+**Accepting the co-change arm rested on a premise the player's own code refutes, and a post-ship
+review found it.** The argument was that running the guess needs a relation the player must have
+*learned*. It does not: `main.ts` builds `openBoards` only from `coChangeTies` challenges, so an open
+**Placement** board suppresses no wire, and `ties.ts` draws every pair an answered Companion reveal
+named — over a map §9 keeps visible behind the scrim, in the file whose own comment calls that *"the
+map's `Ctrl+F`"*. Measured with **only the wires a player can see**, the guess still beats band A on
+**3 of this repo's 40 boards** (0 of hono's, whose subjects carry no Companion board). So on the
+bootstrap repo it is a lookup. **The exposure is in ADR-0016's wire gate, not in `gate.ts`** — that
+gate asks whether a node carries an open board *of one verb* while the rule it states is about open
+boards — and it is the Next action.
 
 **Two classes are recorded and never spoken**, and one of them is the trap this rung walks into:
 naming Blast Radius's `coChange` is the sentence `blastRadius/reveal.ts` deleted, in the file that
@@ -730,7 +766,18 @@ repo loses a *distinct* question — svelte's deck was 61% repeats and is now 15
 where it had 138. The cost is reported rather than absorbed: `report.unprovableNodes` says how many
 nodes no question can ever lift the fog from.
 
-Next action: in rough order of size — the **overlapping Companion answer keys** in the generator; a
+Next action: **widen the wire gate past one verb.** ADR-0016 says a co-change wire is drawn only
+where neither of its files still carries an open board; `main.ts` implements that as *an open
+**Companion** board*, so a Placement board suppresses nothing, and ADR-0021 measured the consequence
+— **3 of this repo's 40 Placement boards are decided at band A by wires visible beside them**, 0 on
+hono. This is the rule-stated-in-words landmine again: the ADR said "open board" and the code asks
+about one channel. The work is to include every open board's candidates in `openBoards`, and the
+thing to measure before shipping it is **how much of the history layer survives** — a gate that
+suppresses every wire whenever any board is open would delete the layer rather than gate it, which
+is ADR-0016's own vanishing-wires failure from the other side. Count what survives, not what the gate
+emits.
+
+Then, in rough order of size — the **overlapping Companion answer keys** in the generator; a
 **co-change distractor strategy for Placement**, which §8.3 calls the *best* class of wrong answer
 and which Placement is the only verb without, and which would lower ADR-0021 decision 3's exposure at
 the source rather than gating it (it changes a shipped deck, so it wants its own measurement);

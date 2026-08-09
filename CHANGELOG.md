@@ -1887,3 +1887,48 @@ One line per iteration: what changed, and what to do next.
   (it would lower decision 3's table at the source rather than gating it); packaging **`npx ark`**;
   the **phenomenon catalogue**; and **M5**, which still needs its kill-point measured before a parser
   is written.
+
+- **A README that says where we are, and the post-ship review that made its first entry a correction.**
+  The repo had no README: `NORTH-STAR.md` says *what* we are building, `CLAUDE.md` *how* we work,
+  `CHANGELOG.md` *when* things changed and `docs/decisions/` *why* — and nothing said **where we are**.
+  `README.md` now carries the problem, the insight, the loop, the two-artifact architecture with a
+  file-by-file map, and a done/ongoing/todo status for every milestone, verb and subsystem, plus a
+  **Known gaps** section that names the things this project does *not* do (`npx ark` unbuilt, non-JS
+  repos indexing to a silhouette, `RevealNote.route` rendered nowhere, fps below budget on headless
+  raster). It is in the document map and in the **Definition of done**, because a status table nobody
+  updates is worse than none — it reads as current.
+
+  **And the adversarial consult on ADR-0021 came back with nine findings, two of which are real
+  defects in the decision rather than in its prose.** Both were verified before acting:
+
+  **The acceptance argument was refuted by the player's own code.** ADR-0021 accepted the co-change
+  exposure because running the guess *"needs a relation the player has to have learned"*. Nobody had
+  opened `src/player/`. `main.ts` builds `openBoards` from `channelOf(verb) === 'coChangeTies'`
+  **alone**, so an open **Placement** board suppresses no wire, and `ties.ts` draws every pair an
+  answered Companion reveal named — beside the open board, over the map §9 keeps visible behind the
+  scrim, in the file whose own comment calls that *"the map's `Ctrl+F`"*. Measured with **only the
+  wires a player can see**: the guess still beats band A on **3 of this repo's 40 Placement boards**
+  (0 of hono's, whose subjects carry no Companion board). So on the bootstrap repo it is a lookup, and
+  the exposure is in **ADR-0016's wire gate** — which asks about open boards *of one verb* while the
+  rule it states is about open boards. That is the rule-stated-in-words landmine, and it is the Next
+  action, with the thing to measure named: how much of the history layer survives a wider gate.
+
+  **The structure-blind margin is 0.011, not 0.18.** The subtree hint was scored one row at a time —
+  what a player does holding *one* board. Several Archaeology boards hint about the same commit, and
+  the union of the subtrees they name is still nothing but string prefixes: **21 of this repo's
+  commits carry such hints from two or more boards, and the union reaches 0.769** against a 0.78 bar
+  (5 and 0.526 on hono). Still zero firings, so the decision stands — but the canary now scores the
+  union as well as the row, and *"nothing sits between the best score and the bar"* was a sentence
+  **vacuously true of every distribution ever measured**.
+
+  Five prose defects fixed with them, four of the class this repo keeps finding: decision 3 quoted the
+  **pooled** 3-and-3 as the `companion` arm's own score when its own table says 3 and **1**; the
+  retracted "the rule was already there" claim was fixed in three files and **left standing in
+  `CLAUDE.md`**, the document every session reads first; "the one guess this file has ever declined"
+  is wrong — `window` and `directory` are declined too and both are structure-blind, so
+  structure-blindness is **necessary and never sufficient**; the test comment said ark's second-best
+  was 0.600 when it is 0.500; and the new CLAUDE.md figures named no commit, in the file whose own
+  landmine mandates it. `gate.ts` also now engages the competing rule it states — *"a guess the verb's
+  own board actually invites"* — which points the **other way** on this case.
+
+  **Next**: widen the wire gate past one verb, counting what survives rather than what the gate emits.

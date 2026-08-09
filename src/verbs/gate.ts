@@ -61,16 +61,30 @@
  *
  * The one that is structure-blind — a subtree is a string prefix, pillar 3's
  * `Ctrl+F` verbatim — is the one that never reaches the bar, and `tests/atlas/`
- * holds it there. The two that do reach it need a relation the player has to
- * have learned, so they are not this file's business: a board answered from the
- * co-change matrix was answered by *reasoning about structure*, which is the
- * second half of pillar 3's sentence rather than a violation of it. Accepted
- * with the number, not waved away — ADR-0021 has the counter-argument too.
+ * holds it there, scoring both a single hint and the union of every hint stated
+ * about one commit. The margin is **0.011**, not the 0.18 the single-row figure
+ * suggests.
  *
- * **The rule this gives a later session**: before adding a heuristic, ask
- * whether a player could run it knowing nothing about the repo. If they need
- * the graph, the matrix or the cone, it does not belong here — and if the
- * product ever *prints* one of those relations as a list, it does.
+ * The two that do reach the bar need a *relation*, so this file does not score
+ * them. **What that does not mean is that the player had to have learned it**,
+ * which is what a first version of this paragraph said and what ADR-0021's
+ * post-ship review refuted from the player's own code: `main.ts`'s `openBoards`
+ * is built only from `coChangeTies` challenges, so a **Placement** board being
+ * open suppresses no wire, and `ties.ts` — which calls a wire beside an open
+ * board *"the map's Ctrl+F"* — draws every pair an answered Companion reveal
+ * named. Measured with only the wires a player can actually see, the co-change
+ * guess still beats band A on **3 of this repo's 40 Placement boards** (0 of
+ * hono's, whose subjects carry no Companion board). On this repo it is a
+ * lookup. That is a live pillar-3 exposure in the *wire gate*, not in this
+ * file, and ADR-0021 records it with the fix it points to.
+ *
+ * **The rule this gives a later session**, and it is a bar on entry rather than
+ * a licence: if a player needs the graph, the matrix or the cone to run a
+ * guess, it does not belong here. The converse does **not** follow — `window`
+ * and `directory` are both structure-blind and both deliberately absent, for
+ * reasons written beside them — so structure-blindness is necessary and never
+ * sufficient. And if the product ever *prints* one of those relations as a
+ * list, the first half stops applying to it.
  *
  * ## Why the bar is an A, not a pass
  *
