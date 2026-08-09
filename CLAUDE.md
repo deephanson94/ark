@@ -468,7 +468,13 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - [ ] The objective is complete end to end and **actually usable**, not scaffolded.
 - [ ] `npm run test:unit` and `npm run build` pass.
 - [ ] If the indexer changed: `test:atlas` and `test:determinism` pass.
-- [ ] `npx ark index .` still works on **this repo** — the bootstrap fixture must never break.
+- [ ] `npm run index` still works on **this repo** — the bootstrap fixture must never break.
+      (**Not `npx ark index .`**, which this line said for four milestones and which has never
+      worked: `package.json` has no `bin`, and `build` typechecks the indexer with `--noEmit` rather
+      than emitting it, so there is nothing for `npx` to resolve. `npx ark` is NORTH-STAR §10's
+      intent — *"ships as `npx ark`, zero install friction"* — and it is **unbuilt**, not broken;
+      packaging the CLI is real work nobody has done. A checklist item nobody can literally satisfy
+      gets ticked from memory, which is the failure mode this whole list exists to prevent.)
 - [ ] No console errors in the player.
 - [ ] One line appended to `CHANGELOG.md`: what changed, what's next.
 
@@ -571,7 +577,7 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. ~89 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npx ark index .` produces
+sentence. ~89 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npm run index` produces
 a valid ~250 KiB atlas in ~455 ms (measured at `11c92c0`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather

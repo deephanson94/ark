@@ -499,7 +499,7 @@ it. `challenges[].candidates` and `.truth` widened from `NodeId[]` to `AtlasId[]
 a `history` variant, and `VerbId` gained `archaeology`. A v6 atlas is *readable* — every v6 member is
 a node id and still validates — but it contains no Archaeology questions, and synthesising them would
 mean inventing an answer key. The atlas is a derived artifact with a one-command rebuild
-(`npx ark index .`), so the error above is the correct outcome rather than a gap.
+(`npm run index`), so the error above is the correct outcome rather than a gap.
 
 **A save survives, and this bump tested that claim rather than repeating it.** `SAVE_VERSION` is
 independent of this number and `(verb, subject)` keys are unchanged — but a stored `proved` list now
