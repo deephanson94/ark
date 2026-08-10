@@ -41,7 +41,7 @@
 import type { Graph, AtlasId, VerbId } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
 import type { NoteFacts, NoteProse, ProvedMember } from '../verbs/index.js';
-import { VERBS, memberLabel } from '../verbs/index.js';
+import { VERBS, memberLabel, memberNoun } from '../verbs/index.js';
 import type { Liveness, Progress } from './progress.js';
 import { livePasses } from './progress.js';
 
@@ -90,6 +90,7 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
     const weights = verb.noteWeights(graph, pass.subject);
 
     const proved: ProvedMember[] = [];
+    const provedIds: AtlasId[] = [];
     for (const member of pass.proved) {
       const weight = weights.get(member);
       // **The name is resolved by prefix, not through `refById`.** This read
@@ -109,6 +110,7 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
       // there.
       if (weight === undefined) continue;
       proved.push({ label: memberLabel(graph, member), weight });
+      provedIds.push(member);
     }
     if (proved.length === 0) continue;
     // Ascending for hops (nearest first) and for counts alike: the ordering is
@@ -122,6 +124,12 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
       proved,
       farthest: Math.max(...proved.map((file) => file.weight)),
       population: weights.size,
+      // **Two nouns, because they count two different sets.** A Go package's
+      // co-change partners include Markdown, so a note can honestly prove four
+      // *packages* out of a population of *places*; one noun for both would be
+      // wrong about one of the two sentences on every such note.
+      noun: memberNoun(graph, provedIds),
+      populationNoun: memberNoun(graph, weights.keys()),
     });
   }
   notes.sort(

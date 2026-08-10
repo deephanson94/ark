@@ -6,7 +6,9 @@
  * wrong reason.
  */
 
-import type { Atlas, AtlasEdge, AtlasNode, Challenge, Lang } from '../../src/atlas/index.js';
+import type { Atlas, AtlasEdge, AtlasNode, Challenge, Graph, Lang } from '../../src/atlas/index.js';
+import type { Words } from '../../src/verbs/index.js';
+import { wordsFor } from '../../src/verbs/index.js';
 import {
   ATLAS_VERSION,
   byteCompare,
@@ -174,3 +176,43 @@ export function witnessFor(
 export function atlasWithChallenge(atlas: Atlas, overrides: Partial<Challenge> = {}): Atlas {
   return validateAtlas({ ...atlas, challenges: [challengeFor(atlas, overrides)] });
 }
+
+/**
+ * A `Words` for a test that has a graph — the same vocabulary the player uses.
+ *
+ * Tests that only need a prompt's shape can use `plainWords`, which answers
+ * "file" for everything; a test that cares what the noun *is* must build a real
+ * graph, because that is the fact the noun comes from.
+ */
+/**
+ * An atlas holding **both** kinds of node — Go packages and files.
+ *
+ * `atlasWith` derives every node's kind from its extension, which is right for
+ * a repo of files and cannot express a `dir` node. A noun is a fact about the
+ * kind, so a fixture that could not hold a package would test nothing.
+ */
+export function goAtlas(): Atlas {
+  const packages = new Set(['.', 'store', 'web']);
+  return atlasWith(
+    ['.', 'store', 'web', 'web/client.ts', 'README.md'],
+    [
+      ['.', 'store'],
+      ['web', 'store'],
+    ],
+    (node) =>
+      packages.has(node.path)
+        ? { ...node, kind: 'dir', lang: 'go', fileCount: 2 }
+        : node,
+  );
+}
+
+export function wordsOf(graph: Graph): Words {
+  return wordsFor(graph);
+}
+
+/** Every id is a file. For tests asserting a prompt's shape, not its nouns. */
+export const plainWords: Words = {
+  label: (id) => id,
+  noun: () => ({ one: 'file', many: 'files' }),
+  repo: { one: 'file', many: 'files' },
+};

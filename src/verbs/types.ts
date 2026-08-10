@@ -12,6 +12,7 @@
 
 import type { Atlas, AtlasId, Challenge, Graph, VerbId } from '../atlas/index.js';
 import type { DisclosedFact } from './disclosure.js';
+import type { Noun } from './members.js';
 
 /**
  * **Every id below is an `AtlasId`, not a `NodeId`, and none of that widening
@@ -168,6 +169,51 @@ export interface NoteFacts {
   readonly farthest: number;
   /** The size of the subject's full population **today**. Revealed, not proved. */
   readonly population: number;
+  /**
+   * What the **proved** members are — `files`, `packages`, `commits`, or
+   * `places` where they are more than one kind.
+   */
+  readonly noun: Noun;
+  /**
+   * What the full **population** is, which is a different set and can be a
+   * different word: a Go package's co-change partners include Markdown, so a
+   * note can honestly prove four packages out of a population of places.
+   */
+  readonly populationNoun: Noun;
+}
+
+/**
+ * What to call the things a prompt is about.
+ *
+ * `Verb.prompt` is pure over a challenge — it has no atlas, and until Go that
+ * cost nothing, because every member of every board was a file and every verb
+ * said so. A Go node is a **package**, so those sentences became false on every
+ * board a Go repo ships. The fix is that the caller, which does have the graph,
+ * supplies the *fact* and the verb goes on writing the *sentence* — putting the
+ * wording in the console instead is the cheap fix ADR-0020's landmine forbids.
+ */
+export interface Words {
+  /**
+   * An id's display name. Total over `AtlasId`: a node resolves to its path, a
+   * commit to its date and message. A verb asking for the wrong kind gets a
+   * wrong-looking string rather than an id, which is the honest failure — but
+   * no verb needs to, since each knows what its own subject is.
+   */
+  label(id: AtlasId): string;
+  /**
+   * The noun for a set of ids. Verbs ask for exactly the set their sentence
+   * counts — the candidates, or the subject alone — rather than being handed
+   * one noun and having to hope it is the right one.
+   */
+  noun(ids: Iterable<AtlasId>): Noun;
+  /**
+   * What *every* node in this atlas is, collectively.
+   *
+   * For a sentence about a repo-wide rule rather than about this board:
+   * Companion states the wide-commit limit, which counts **nodes touched**, and
+   * a board's own noun is not that population.
+   */
+  readonly repo: Noun;
 }
 
 export type NoteKind = 'correct' | 'missed' | 'spurious';
@@ -323,15 +369,10 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
   /** Pure and self-contained. */
   grade(challenge: C, answer: A): Grade;
   /**
-   * The wording, given a way to turn an id into its display name. Pure — the
-   * verb never sees the atlas here, only the one name it needs.
-   *
-   * Total over `AtlasId`: a node resolves to its path, a commit to its date and
-   * message. A verb asking for the wrong kind therefore gets a wrong-looking
-   * string rather than an id, which is the honest failure — but no verb needs
-   * to, since each knows what its own subject is.
+   * The wording, given the words for the things it is about. Pure — the verb
+   * never sees the atlas here, only the names and nouns it needs.
    */
-  prompt(challenge: C, labelOf: (id: AtlasId) => string): Prompt;
+  prompt(challenge: C, words: Words): Prompt;
   /**
    * Why each pick was right or wrong. On the contract rather than imported from
    * one verb's directory, which is what the console did until M4 — it reached

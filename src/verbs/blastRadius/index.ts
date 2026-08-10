@@ -21,6 +21,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
+import { counted } from '../members.js';
 import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
@@ -31,6 +32,7 @@ import type {
   SetAnswer,
   SetPhrasing,
   Verb,
+  Words,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { generateBlastRadius } from './generate.js';
@@ -40,13 +42,16 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string): Prompt {
+export function promptFor(challenge: Challenge, words: Words): Prompt {
+  // The board's own noun, not a constant. Measured on `gohugoio/hugo`, 153 of
+  // its 156 Blast Radius boards offer packages and this sentence said *files*.
+  const members = words.noun(challenge.candidates);
   return {
     title: 'blast radius',
     // "Which of these" is load-bearing: it never claims the choice set is
     // exhaustive, which is what makes a hub's sampled answer key honest.
-    question: `A breaking change lands in ${pathOf(challenge.subject)}. Which of these files depend on it — directly, or through a chain of imports?`,
-    instruction: 'Select every file that reaches it. Wrong picks cost you nothing.',
+    question: `A breaking change lands in ${words.label(challenge.subject)}. Which of these ${members.many} depend on it — directly, or through a chain of imports?`,
+    instruction: `Select every ${members.one} that reaches it. Wrong picks cost you nothing.`,
     action: 'Map its blast radius',
   };
 }
@@ -110,7 +115,7 @@ export const blastRadius: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+      `You proved ${counted(count, facts.noun)} that ` +
       `${plural(count, 'depends', 'depend')} on ${facts.subjectLabel} — ${names} — ` +
       `${facts.farthest === 1 ? 'all of them direct importers' : `the farthest ${facts.farthest} hops away`}.`;
     // The gap between what was proved and what the map shows is exactly the
@@ -119,7 +124,7 @@ export const blastRadius: Verb = {
     // NORTH-STAR §9's unprovable example.
     const revealed =
       facts.population > count
-        ? `Its full radius — ${facts.population} ${plural(facts.population, 'file', 'files')} — is revealed on your map.`
+        ? `Its full radius — ${counted(facts.population, facts.populationNoun)} — is revealed on your map.`
         : null;
     return { claim, revealed };
   },

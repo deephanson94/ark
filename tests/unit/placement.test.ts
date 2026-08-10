@@ -22,7 +22,7 @@ import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet } 
 import { spread } from '../../src/verbs/sample.js';
 import { commitSupply } from '../../src/verbs/commits.js';
 import { generateWithReport, placement } from '../../src/verbs/placement/index.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, plainWords } from '../fixtures/atlas.js';
 
 /**
  * Twenty-eight files across several directories, a few import edges.
@@ -744,7 +744,7 @@ describe('a commit subject is a place the map does not have', () => {
 
   it('asks its question in the commit’s own words', () => {
     const challenge = only(fixture([PLAIN]));
-    const prompt = placement.prompt(challenge, () => 'never used');
+    const prompt = placement.prompt(challenge, plainWords);
     expect(prompt.question).toContain(PLAIN.subject);
     expect(prompt.title).toBe('placement');
     // The certification, stated to the player rather than left in the generator.
@@ -786,6 +786,8 @@ describe('a stored pass decays with the atlas, not with the repo', () => {
       proved: [{ label: 'lib/alpha.ts', weight: 1 }],
       farthest: 1,
       population: 4,
+      noun: { one: 'file', many: 'files' },
+      populationNoun: { one: 'file', many: 'files' },
     });
     expect(prose.claim).toContain('changed in abc — "x"');
     // Never "the farthest 1 hops away" — the sentence Blast Radius's template

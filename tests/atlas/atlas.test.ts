@@ -25,7 +25,7 @@ import {
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
-import { isGameable, scoreSet } from '../../src/verbs/index.js';
+import { VERBS, isGameable, scoreSet, wordsFor } from '../../src/verbs/index.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import {
   MAPPED_SHARE,
@@ -37,7 +37,6 @@ import {
   sourceCoverage,
 } from '../../src/atlas/index.js';
 import { decidedFact, touchedFact } from '../../src/verbs/index.js';
-import { VERBS } from '../../src/verbs/index.js';
 import { placement } from '../../src/verbs/placement/index.js';
 import { TARGET_MIX as BLAST_MIX } from '../../src/verbs/blastRadius/index.js';
 import { TARGET_MIX as COMPANION_MIX } from '../../src/verbs/companion/index.js';
@@ -243,6 +242,32 @@ describe('what this map is missing (ADR-0025)', () => {
     expect(atlas.nodes.every((node) => node.kind === 'file' && node.fileCount === 1)).toBe(true);
     expect(coverage.mapped).toBe(atlas.nodes.filter((node) => canImport(node.lang)).length);
     expect(atlas.repo.nodeCount).toBe(atlas.nodes.length);
+  });
+
+  it('calls this repo’s boards files, because every node here is one', () => {
+    // The bootstrap repo is file-granular, so the noun mechanism must be a
+    // **no-op** on it — verified byte-for-byte against the pre-change rendering
+    // of all 160 prompts. This is the standing half of that: if TypeScript were
+    // ever grouped, or `memberNoun` broke, ark's own wording would move and
+    // this goes red rather than the sentences quietly changing.
+    const words = wordsFor(buildGraph(atlas));
+    expect(words.repo).toEqual({ one: 'file', many: 'files' });
+    let asked = 0;
+    for (const challenge of atlas.challenges) {
+      const prompt = VERBS[challenge.verb].prompt(challenge, words);
+      // **The noun slot, not the sentence.** A first draft searched the whole
+      // prompt for `/packages?/` and went red on a *filename* —
+      // `0026-a-go-node-is-a-package-…md` — which is this repo's own
+      // substring-is-a-position landmine, in the assertion written to check the
+      // wording. A prompt quotes paths and commit messages; only these slots
+      // are ark's own claim about what a member is.
+      const members = /Which of these (\w+)/.exec(prompt.question)?.[1];
+      expect(members, `${challenge.id}: ${prompt.question}`).toBe(
+        challenge.verb === 'archaeology' ? 'commits' : 'files',
+      );
+      if (challenge.verb !== 'archaeology') asked++;
+    }
+    expect(asked).toBeGreaterThan(20);
   });
 
   it('names a language ark could not have indexed anyway', () => {

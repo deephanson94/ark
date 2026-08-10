@@ -26,7 +26,74 @@
  */
 
 import type { AtlasId, CommitRecord, Graph } from '../atlas/index.js';
+import type { Words } from './types.js';
 import { commitAt, nodeAt } from '../atlas/index.js';
+
+/** A singular and a plural, for a sentence that has to count something. */
+export interface Noun {
+  readonly one: string;
+  readonly many: string;
+}
+
+const FILE: Noun = { one: 'file', many: 'files' };
+const PACKAGE: Noun = { one: 'package', many: 'packages' };
+const COMMIT: Noun = { one: 'commit', many: 'commits' };
+/**
+ * What a board of more than one kind is called.
+ *
+ * *Place* is this product's own word for a node — ADR-0018 is titled *"a
+ * subject is a place or an event"* — rather than a term invented for the
+ * sentence. It is needed because a mixed board is the **normal** case on a Go
+ * repo, not an edge case: 151 of `gohugoio/hugo`'s 156 Companion boards and 118
+ * of its 121 Placement boards hold Go packages *and* files, because a commit
+ * touches both. Only Blast Radius is reliably uniform, and for a structural
+ * reason — only Go imports Go, so a package's cone holds packages.
+ */
+const PLACE: Noun = { one: 'place', many: 'places' };
+
+/**
+ * What to call these ids on screen — `files`, `packages`, `commits`, or
+ * `places` when the set is more than one kind.
+ *
+ * **The verb writes the sentence; this supplies the fact.** Wording belongs to
+ * the verb (ADR-0020), and *what kind of thing is this id* is a question about
+ * the atlas that `Verb.prompt` cannot answer — it is pure over a challenge and
+ * a lookup, with no graph. So the lookup grew a second question rather than the
+ * console growing a vocabulary, which is the cheap fix this repo's landmines
+ * forbid.
+ *
+ * Until Go there was one answer and every verb hard-coded it, which was true
+ * and became **false on every board a Go repo ships**: 153 of hugo's and 35 of
+ * prometheus's Blast Radius boards asked *"which of these **files** depend on
+ * it"* about a list of packages.
+ *
+ * Keyed on `(kind, lang)` rather than on `kind` alone, because `dir` is a
+ * *shape* and `package` is Go's name for it. A later language that groups by
+ * directory and calls it something else adds a row here and changes nothing
+ * about who asks.
+ */
+export function memberNoun(graph: Graph, ids: Iterable<AtlasId>): Noun {
+  let seen: Noun | null = null;
+  for (const id of ids) {
+    const found = nounOf(graph, id);
+    if (seen === null) seen = found;
+    else if (seen !== found) return PLACE;
+  }
+  return seen ?? PLACE;
+}
+
+function nounOf(graph: Graph, id: AtlasId): Noun {
+  const ref = graph.refById.get(id);
+  if (ref === undefined) return COMMIT;
+  const node = nodeAt(graph, ref);
+  if (node.kind !== 'dir') return FILE;
+  return node.lang === 'go' ? PACKAGE : PLACE;
+}
+
+/** `4 files`, `1 package`. The count and its noun, agreeing. */
+export function counted(count: number, noun: Noun): string {
+  return `${count} ${count === 1 ? noun.one : noun.many}`;
+}
 
 /**
  * A commit, as the player sees it: when it landed and what it said.
@@ -56,7 +123,43 @@ export function commitLabel(commit: CommitRecord): string {
  */
 export function memberLabel(graph: Graph, id: AtlasId): string {
   const ref = graph.refById.get(id);
-  if (ref !== undefined) return nodeAt(graph, ref).path;
+  if (ref !== undefined) return pathLabel(nodeAt(graph, ref).path);
   const commit = commitAt(graph, id);
   return commit === null ? id : commitLabel(commit);
+}
+
+/**
+ * A node's path as a sentence can carry it.
+ *
+ * The repo root is `.` — the only path that names a real place and reads as
+ * punctuation. `spf13/cobra` is one flat Go package at the root, so its prompts
+ * said *"changed alongside ."*. The path stays, because it is what the row and
+ * the map agree on and it is what sorts; the gloss is what makes it a noun
+ * phrase.
+ */
+export function pathLabel(path: string): string {
+  return path === '.' ? '. (the root package)' : path;
+}
+
+/**
+ * The vocabulary for one atlas: how to name an id, and what to call a set.
+ *
+ * One factory rather than each caller assembling its own, because there are
+ * two — the console and the inspector — and a rule that lives twice diverges.
+ * That is not hypothetical here: the inspector hard-coded Blast Radius's button
+ * text until M4 while the console was already verb-blind, and the seam held in
+ * one file and failed in the one nobody thought about.
+ */
+export function wordsFor(graph: Graph): Words {
+  // Computed once per atlas, not per prompt: it is a fold over every node, and
+  // `prompt()` is called on every render.
+  const repo = memberNoun(
+    graph,
+    graph.atlas.nodes.map((node) => node.id),
+  );
+  return {
+    label: (id) => memberLabel(graph, id),
+    noun: (ids) => memberNoun(graph, ids),
+    repo,
+  };
 }

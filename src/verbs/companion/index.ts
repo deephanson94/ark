@@ -32,6 +32,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
+import { counted } from '../members.js';
 import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
   GenerateOptions,
@@ -42,6 +43,7 @@ import type {
   SetAnswer,
   SetPhrasing,
   Verb,
+  Words,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { indexCoChange } from './cochange.js';
@@ -52,7 +54,7 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string): Prompt {
+export function promptFor(challenge: Challenge, words: Words): Prompt {
   const evidence = challenge.evidence;
   const bar =
     evidence.kind === 'coChange'
@@ -60,18 +62,19 @@ export function promptFor(challenge: Challenge, pathOf: (id: NodeId) => string):
       : 'in the same commit';
   const wide = evidence.kind === 'coChange' ? evidence.wideLimit : 0;
   const atMost = evidence.kind === 'coChange' ? evidence.atMost : 1;
+  const members = words.noun(challenge.candidates);
   return {
     title: 'companion',
     // "Which of these" is load-bearing, exactly as it is for Blast Radius: it
     // never claims the choice set is exhaustive, which is what lets a file with
     // eighty partners ship a six-file answer key honestly.
-    question: `Which of these files have changed alongside ${pathOf(challenge.subject)} ${bar}?`,
+    question: `Which of these ${members.many} have changed alongside ${words.label(challenge.subject)} ${bar}?`,
     // The rule is stated with its actual number rather than described. An
     // earlier draft said "commits touching a large fraction of the repo", which
     // is false in both directions: the limit is absolute, so on a small repo it
     // admits a commit touching a quarter of the files and on a monorepo it
     // excludes an ordinary feature landing.
-    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} files at once are ignored — they couple everything to everything. Wrong picks cost you nothing.`,
+    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} ${words.repo.many} at once are ignored — they couple everything to everything. Wrong picks cost you nothing.`,
     action: 'Map what changes with it',
   };
 }
@@ -134,12 +137,12 @@ export const companion: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+      `You proved ${counted(count, facts.noun)} that ` +
       `${plural(count, 'changes', 'change')} with ${facts.subjectLabel} — ${names} — ` +
       `the strongest sharing ${facts.farthest} ${plural(facts.farthest, 'commit', 'commits')}.`;
     const revealed =
       facts.population > count
-        ? `It has changed with ${facts.population} ${plural(facts.population, 'file', 'files')} in all — the other ${facts.population - count} revealed to you, never proved.`
+        ? `It has changed with ${counted(facts.population, facts.populationNoun)} in all — the other ${facts.population - count} revealed to you, never proved.`
         : null;
     return { claim, revealed };
   },

@@ -2486,3 +2486,37 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: the noun, then M5's Python half — a *history* language, the map and the three git verbs
   and never Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was.
+
+- **A board is asked in the noun its members actually are.** ADR-0026 shipped Go at package
+  granularity and left the player calling every package a *"file"* — *"A breaking change lands in
+  `hugolib`. Which of these **files** depend on it?"*, where `hugolib` is 95 of them. The boards were
+  correct; the noun was a false claim about the reader's own repo, which is the cost ADR-0025
+  decision 5's whole mechanism exists never to pay.
+
+  **`Verb.prompt` has no atlas**, so it cannot tell a package from a file, and the cheap fix — put
+  the sentence in the console, which does — is what ADR-0020's landmine forbids. So the caller
+  supplies the **fact** and the verb keeps writing the **sentence**: `Words` carries a label, a
+  set-to-noun function and the repo-wide noun. It takes a *set* because a verb's sentences count
+  different populations and only the verb knows which — Archaeology's question is about commits while
+  its instruction is about its subject (*"inside this package's lifetime"*), and one noun per board
+  would be wrong about one of them on every Archaeology board a Go repo ships.
+
+  **A mixed board is the majority, not a fallback**, which is what decided the vocabulary: 151 of
+  hugo's 156 Companion boards and 118 of its 121 Placement ones hold packages *and* files, because a
+  commit touches both. So there is a fourth word and it is one the product already owns — **place**,
+  from ADR-0018's *"a subject is a place or an event"*. `truth` sets are much more uniform (Blast
+  Radius's are **100%** on both repos: only Go imports Go, so a package's cone holds packages), which
+  is why a note carries two nouns and can honestly say *"you proved 4 packages"* out of a population
+  of *places*. `.` now reads as `. (the root package)`, one label rule rather than a display
+  exception.
+
+  **All 160 of ark's prompts and 216 of hono's are character-identical to before** — every node there
+  is a file, so every noun resolves to the word that was hard-coded. The first run of that comparison
+  was a **vacuous pass**: both sides were the same v9-validator error, because the atlases predated
+  ADR-0026's bump. It gates on 160 and 216 rendered rows now. And the atlas test written to guard the
+  wording went red on a *filename* — `0026-a-go-node-is-a-package-….md` — which is this repo's own
+  substring-is-a-position landmine, in the assertion written to check for false claims; it reads the
+  noun slot now, not the sentence.
+
+  **Next**: **M5's Python half** — a *history* language, the map and the three git verbs and never
+  Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was (ADR-0026 decision 1).
