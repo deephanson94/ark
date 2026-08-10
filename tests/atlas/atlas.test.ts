@@ -14,6 +14,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Atlas } from '../../src/atlas/index.js';
 import {
   buildGraph,
+  canGradeImports,
   canImport,
   dependents,
   isChallengeable,
@@ -515,7 +516,13 @@ describe('challenges', () => {
     for (const challenge of atlas.challenges.filter((c) => c.verb === 'blastRadius')) {
       for (const id of challenge.candidates) {
         const node = nodeAt(graph, refOf(graph, id));
-        expect(canImport(node.lang), `${challenge.id} offers ${node.path}`).toBe(true);
+        // **`canGradeImports`, not `canImport`.** `docs/atlas-format.md` §3.6
+        // and ADR-0028 both say the choice set is the *narrower* predicate, and
+        // this assertion kept the wider one for a milestone — a Python node
+        // leaking into a Blast Radius board would have passed the only
+        // integration test of that contract. Unreachable on ark, which has no
+        // Python, which is exactly how a stale assertion survives.
+        expect(canGradeImports(node.lang), `${challenge.id} offers ${node.path}`).toBe(true);
       }
     }
   });

@@ -59,6 +59,11 @@ So the accuracy argument for tree-sitter is worth **zero measured points on Pyth
 cost is the same as it was for Go: **7.1× slower** on django (6,764 ms against 956, against a 10 s
 index budget), and the **first runtime dependency** this project would have.
 
+**That table is about import *statements* and nothing else, which §8 shows was load-bearing.** The
+other arm — `import_module(…)` and `__import__(…)` **calls** — is compared against no second
+instrument at all, because ADR-0024's probe found them with the same regex shape this scanner used.
+Two instruments sharing one blindness agree perfectly.
+
 **Decision 1**: Python's scanner is hand-rolled, ~300 lines. The condition that reverses it is
 ADR-0026's, unchanged, and it has now failed to be met twice.
 
@@ -158,8 +163,8 @@ board asks in the noun ADR-0027 already had.
 Go's import path *is* a location. Python's is a name resolved against a runtime list. Ark cannot run
 anything (pillar 6), so the roots are read off the repo's own layout: **the repo root, every
 directory holding a `pyproject.toml`/`setup.py`/`setup.cfg`, and a `src/` beside one when the walk
-actually saw Python under it.** flask discovers six roots — its own, `src`, and the four example
-projects that carry their own manifests; django discovers one.
+actually saw Python under it.** flask discovers six — its own, `src`, **three** example projects
+carrying their own manifests, and a `src/` beside one of those; django discovers one.
 
 | form | how it resolves | fires on flask / django |
 |---|---|---|
@@ -169,7 +174,7 @@ projects that carry their own manifests; django discovers one.
 | a package with no `__init__.py` (PEP 420) | the module itself draws no edge; its submodules still do | 0 / 0 |
 | two roots both answering | `probable`, per ADR-0003 | 0 / 0 |
 | a relative import climbing above the repo root | `unresolved` | 0 / 0 |
-| `importlib.import_module(expr)`, `__import__(expr)` | `unresolved`, always recorded | 2 / 7 |
+| `importlib.import_module(…)`, `import_module(…)`, `__import__(…)` | a literal argument resolves; anything else is `unresolved`, always recorded | **2 / 79** (49 computed, 30 literal) |
 
 **The submodule rule is the branch that earns its place** — 1,490 of django's 10,492 internal
 resolutions, 14.2%. `from django.db import models` depends on `django/db/__init__.py` *and* on
@@ -289,20 +294,24 @@ repos ship instead is 1,048 questions about their source.
 | sdp | 49 | 267 ms | 5.4 | — |
 | flask | 91 | 659 ms | 7.2 | — |
 | hono | 425 | 1,768 ms | 4.2 | — |
-| hugo | 1,242 | 6,139 ms | 4.9 | — |
-| **django** | **3,035** | **16,284 ms** | **5.4** | **10,000 ms** |
+| hugo | 1,242 | 6.4–7.8 s | ~5.7 | — |
+| **django** | **3,035** | **17.6–18.6 s** | **~5.9** | **10,000 ms** |
 
-`npm run budget` with `ARK_BUDGET_REPO` pointed at django prints
-`warn index @ real repo 17706 ms (Django, 3035 files) ceiling 10000 ms` — a separate run from the
-table's 16,284 ms, and the ~9% spread between them is this container's, not the repo's. **Said out
-loud rather than absorbed**, per the working agreement. Two things about it:
+**Every figure here is a range, because this container's run-to-run spread on them is ±25%** — three
+`buildIndex` runs on django read 17,186 / 17,839 / 17,641 ms, `npm run budget` read 17,645 and
+17,706, and one hugo run read 28,927 ms against a 6,786 ms neighbour and is discarded as contention.
+Quoting a single one of those as *the* number is how the first draft of this section came to divide
+one instrument's numerator by another's denominator. **Said out loud rather than absorbed**, per the
+working agreement. Two things about it:
 
-- **It is a scale breach, not a Python one.** Profiled: walk 3,106 ms, `pyroot` context 10 ms,
-  scan + resolve **1,076 ms**, git 2,414 ms, history 230 ms, regions 211 ms, **layout 6,895 ms**,
-  elevation 21 ms, validate 46 ms, serialise 18 ms. The scanner is 6% of it and the force-directed
-  layout is 39%. hugo's layout is 2,156 ms of 6,139 at 1,242 nodes — the same share, at half the
-  scale.
-- **The per-file rate is inside its own ceiling's intent and outside its number**: 5.4 ms/node
+- **It is a scale breach, not a Python one.** Phase profile: walk 3,626 ms, `pyroot` context 16 ms,
+  scan + resolve **1,155 ms**, git 2,148 ms, history 201 ms, regions 211 ms, **layout 7,056 ms**,
+  elevation 20 ms, validate 45 ms, serialise 17 ms. The scanner is ~6% and the force-directed layout
+  is ~40%. Those phases sum to **14.5 s of the ~17.6 s total**; the missing ~3 s is node
+  construction, the origin vote, the commit projection and **generation over four verbs**, none of
+  which the probe instruments — stated rather than left as an unexplained gap. hugo's layout is
+  2,785 ms of ~6.8 s, which is also ~40%, so the shape is the same at half the scale.
+- **The per-node rate is inside its own ceiling's intent and outside its number**: ~5.9 ms/node
   against the 5.00 ms/file row, on a repo 1.5× the 2,000-file reference scale the 10 s ceiling is
   written for. django is simply the largest repo ark has ever generated a deck for.
 
@@ -327,6 +336,104 @@ Old indexer against new, from clean clones:
 
 ---
 
+## 8. Post-ship review — the blind spot was in the arm the document was proudest of
+
+An adversarial pass against the merged commit, every finding re-derived before being accepted. The
+through-line is this document's own decision 6 — *"every import site that does not place leaves
+something on `unresolved`"* — which was the sentence §1.1 leaned on hardest and is where the defects
+were, **on the repo this document measures, in the spelling that repo uses most**.
+
+### 8.1 The canonical spelling of a computed import was invisible — 70 of django's 79 call sites
+
+`IMPORT_CALL` matched `importlib.import_module(` and `__import__(` and **not** the bare
+`import_module(` that follows `from importlib import import_module` — which is django's house style.
+Measured with the shipped scanner: **79 call sites on django where 9 were recorded**, of which **49
+are computed** (a missing taint each) and **30 carry a string literal** (a missing *edge* each,
+including three real ones into `django/conf/locale/*/formats.py`). `django/apps/config.py` alone —
+the app-loading heart — carried six invisible sites and shipped with `unresolved: []`.
+
+It is the *silently dropped import* landmine, in the file whose header quotes it. Two things made it
+survive: flask's two computed sites are `__import__(`, which the old regex **did** match, so the
+control repo passed; and ADR-0024's probe used the same prefixed shape, so §4's probe-versus-shipped
+agreement was **two instruments sharing one blindness**. The corrected figures are in §3 and §4, and
+the correction runs against the direction that flatters — the rate got *worse*.
+
+The bare spelling is only recognised when the file actually imports `import_module` from
+`importlib`; one of django's 71 bare sites fails that test, and calling a locally-defined function an
+unresolved import would be inventing a dependency.
+
+### 8.2 A fourth outcome nobody declared: the empty verdict list
+
+`fromTarget` returned `[]` when the base was a **namespace** package and none of the imported names
+resolved to modules — no edge, no external, no `unresolved`, nothing for `build.ts`'s loop to record.
+The absolute arm guarded it (`out.length > 0 ? out : [unresolved]`) and **the relative arm did not**,
+which is this repo's *the bug you already fixed is still there, one branch down* shape. Latent on
+both measured repos — flask's `src/flask/sansio/` is a PEP 420 package and every one of its names
+happens to resolve — and reachable on the first namespace-heavy repo. `fromTarget` cannot return
+empty now.
+
+### 8.3 Four legal statement forms the 3,011-file corpus does not contain
+
+`from a.b import(c)`, `from x import*`, `from a . b import c`, and a one-line compound
+(`if True: import os`). All legal, all confirmed by `ast`, all read as **nothing** — and `import a . b`
+read as an import of `a`, which is a *wrong* target rather than a missing one. **Zero instances in
+flask or django**, so the comparison in §1 could not see any of them.
+
+That is §1.1's lesson arriving a second time and pointing the same way: a corpus proves a scanner
+correct **only about the shapes the corpus contains**. The suite-detected backslash continuation was
+the first instance; these are the next four. The compound-statement rule names the seven suite
+keywords rather than splitting on any depth-0 colon, because `x: int = 1` would otherwise export a
+name called `int`.
+
+### 8.4 A rule that lived twice and had already diverged
+
+`docs/atlas-format.md` §3.6 and this document both say a Blast Radius choice set is
+`GRADED_IMPORT_LANGS`; `tests/atlas/atlas.test.ts` — the only *integration* test of that contract —
+still asserted `canImport`, the wider predicate. A Python node leaking into a choice set would have
+passed it. Unreachable on ark, which has no Python, which is exactly how a stale assertion survives a
+milestone. Fixed in the same commit as this section.
+
+### 8.5 Ancestor `__init__.py` edges: a decision, now that it has a measurement
+
+Python executes every parent package on import, so `from django.db import models` really does depend
+on `django/__init__.py`, and §3's own argument for the submodule rule — *"dropping either is a
+missing edge"* — condemns the omission one level up. This document did not mention it, which makes
+it *a failure to think of it* rather than a decision. Priced: **flask +7 pairs (×1.04), django
++5,221 (×1.51)**, taking django from 3.35 to 5.07 edges per node.
+
+**Refused, and recorded.** Not on the density — 5.07 is inside the range of every repo ark ships —
+but because the edge carries no information: *every* Python file transitively imports something under
+`django.`, so `django/__init__.py` becomes a node whose cone is the repository. That is true, it is
+true of every Python repo equally, and it is what would decide elevation, regions and the layout on a
+repo already 1.8× over the index ceiling (§6). It is the same objection ADR-0026 made to Go's
+intra-package clique edges, at a smaller multiple. Python never grades, so nothing about an answer
+key turns on it; what turns on it is whether the map reads truer, and a universal hub does not.
+**What would reverse it**: a measurement showing the map reads better with them, or a language whose
+ancestor packages are not universal.
+
+### 8.6 The rest
+
+- **`git+https://…` parsed as a distribution called `git`**, so `import git` — GitPython — would have
+  been called *external* and had its taint removed. An undercount costs an `unresolved`; an
+  over-count invents an external, and this was the second direction. No such line in flask or django.
+- **§6 divided one instrument's numerator by another's denominator** — a layout time from the profile
+  run over a total from the budget run — and called the result 39%. Corrected, with the container's
+  ±25% spread stated, in §6.
+- **"the four example projects that carry their own manifests"** is three manifests and a `src/`
+  beside one. Six roots either way.
+- A doc comment describing `eligibleRefs` was left stacked on `ungradedRefs` when the latter was
+  added, leaving the former undocumented and the paragraph attached to the wrong function.
+- On a pure-Python repo `tracedRadius` is empty forever — no Blast Radius pass can exist — so the
+  full-import-radius unlock (ADR-0008 decision 1) is a mechanic no Python-repo player can ever fire.
+  Nothing misrenders; it is a quantity newly pinned at an extreme, and it is written down here rather
+  than discovered later.
+
+**Ten findings, and the two that mattered were both decision 6.** Nothing in the suite, the atlas or
+the three-instrument comparison could see either: one lived in the arm no second instrument covered,
+the other in a branch no measured repo takes.
+
+---
+
 ## Decision
 
 1. **Python's scanner is hand-rolled**, scored against tree-sitter and against Python's own `ast` the
@@ -345,9 +452,12 @@ Old indexer against new, from clean clones:
 5. **Import roots are read off the repo's layout and never guessed.** Manifest directories, a `src/`
    beside one, and the repo root. What only `sys.path` knows stays `unresolved` — including
    django's `tests/`, which is a real in-repo dependency ark declines to invent (§3).
-6. **Every import site that does not place leaves something on `unresolved`**, including the
-   computed `import_module(expr)` arm Go does not have. A file that hides a dependency and still
-   looks fully resolved is the one thing guardrail 4 cannot survive.
+6. **Every import site that does not place leaves something on `unresolved`**, including all three
+   spellings of the computed arm Go does not have. A file that hides a dependency and still looks
+   fully resolved is the one thing guardrail 4 cannot survive — and §8.1 and §8.2 are what this
+   decision cost before a review measured it, so the decision now carries the shape of its own
+   failure: **an arm no second instrument covers is not verified**, and a verdict function that can
+   return an empty list has a fourth outcome nobody declared.
 7. **A language's kill-point figure is re-measured with the shipped instrument, not inherited from
    the probe.** Here the shipped resolver beat the probe on rate and moved the deck by 0.1 points,
    which is ADR-0024 §4.1's finding confirmed by an independent instrument rather than restated

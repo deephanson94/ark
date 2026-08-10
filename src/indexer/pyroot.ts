@@ -241,6 +241,16 @@ export function resolvePyImport(
 }
 
 /** The module itself, plus any imported name that is a module of its own. */
+/**
+ * The module itself, plus any imported name that is a module of its own.
+ *
+ * **Never empty.** A namespace directory whose imported names are not modules
+ * placed *nothing* — no edge, no external, no `unresolved` — so a relative
+ * `from . import missing` inside a PEP 420 package was a silently dropped
+ * import, which is the one thing guardrail 4 cannot survive. The absolute arm
+ * guarded this and the relative one did not, which is this repo's own *the bug
+ * you already fixed is still there, one branch down* shape.
+ */
 function fromTarget(
   context: PyContext,
   base: string,
@@ -252,7 +262,7 @@ function fromTarget(
   if (found === null) return [{ kind: 'unresolved' }];
   if (found !== 'namespace') out.push({ kind: 'internal', path: found.path, confidence });
   out.push(...submodules(context, base, names, confidence));
-  return out;
+  return out.length > 0 ? out : [{ kind: 'unresolved' }];
 }
 
 function submodules(
@@ -287,11 +297,23 @@ function submodules(
  */
 const REQUIREMENT = /^([A-Za-z0-9][A-Za-z0-9._-]*)/;
 
+/**
+ * A VCS or URL requirement names no distribution this rule can read.
+ *
+ * `git+https://github.com/x/y` parses as a dependency called **`git`** under
+ * the rule above, which would then call `import git` — GitPython — *external*
+ * and **remove a taint**. That is the unsafe direction: an undercount costs an
+ * `unresolved`, an over-count invents an external.
+ */
+function namesNoDistribution(line: string): boolean {
+  return line.includes('://') || line.startsWith('git+') || line.includes('@ ');
+}
+
 export function parseRequirements(source: string): string[] {
   const names: string[] = [];
   for (const raw of source.split('\n')) {
     const line = raw.split('#')[0]?.trim() ?? '';
-    if (line.length === 0 || line.startsWith('-')) continue;
+    if (line.length === 0 || line.startsWith('-') || namesNoDistribution(line)) continue;
     const match = REQUIREMENT.exec(line);
     if (match?.[1] !== undefined) names.push(normaliseDistribution(match[1]));
   }
@@ -302,7 +324,9 @@ export function parseManifestDependencies(source: string): string[] {
   const names: string[] = [];
   const quoted = (body: string): void => {
     for (const item of body.matchAll(/["']([^"']+)["']/g)) {
-      const match = REQUIREMENT.exec(item[1]?.trim() ?? '');
+      const entry = item[1]?.trim() ?? '';
+      if (namesNoDistribution(entry)) continue;
+      const match = REQUIREMENT.exec(entry);
       if (match?.[1] !== undefined) names.push(normaliseDistribution(match[1]));
     }
   };

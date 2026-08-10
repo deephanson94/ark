@@ -414,22 +414,6 @@ export function sampleByDistance(
 }
 
 /**
- * Which nodes may appear in a choice set at all.
- *
- * A `.md` or `.json` file cannot import anything, so asking whether it depends
- * on the subject is not a distractor — it is padding, and padding makes a
- * question easier. §8.3's claim is that a question is exactly as good as its
- * wrong answers, so a wrong answer that could never have been right is worse
- * than no wrong answer. They stay on the map; they stay out of the choice set.
- *
- * **`canGradeImports`, not `canImport`** — the two were one predicate until
- * Python, which is parsed and mapped and may never grade a question
- * (ADR-0024 decision 2). A Python file is excluded from this set as a
- * *subject* and as a *candidate* alike: its own cone is unsound, and offering
- * it as a wrong answer would certify a non-dependence the seven computed
- * `import_module(expr)` sites make unknowable.
- */
-/**
  * Nodes the scanner **parses** and whose imports may not grade a question.
  *
  * Distinct from the complement of `eligibleRefs`, which also holds terrain, and
@@ -447,6 +431,21 @@ function ungradedRefs(atlas: Atlas): Set<NodeRef> {
   return ungraded;
 }
 
+/**
+ * Which nodes may appear in a choice set at all.
+ *
+ * A `.md` or `.json` file cannot import anything, so asking whether it depends
+ * on the subject is not a distractor — it is padding, and padding makes a
+ * question easier. §8.3's claim is that a question is exactly as good as its
+ * wrong answers, so a wrong answer that could never have been right is worse
+ * than no wrong answer. They stay on the map; they stay out of the choice set.
+ *
+ * **`canGradeImports`, not `canImport`** — the two were one predicate until
+ * Python, which is parsed and mapped and may never grade a question (ADR-0024
+ * decision 2). A Python file is excluded here as a *candidate* and by
+ * `ungradedRefs` as a *subject*: offering one as a wrong answer would certify a
+ * non-dependence the computed `import_module(…)` sites make unknowable.
+ */
 function eligibleRefs(atlas: Atlas): Set<NodeRef> {
   const eligible = new Set<NodeRef>();
   for (const [ref, node] of atlas.nodes.entries()) if (canGradeImports(node.lang)) eligible.add(ref);

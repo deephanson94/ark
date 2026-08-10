@@ -136,7 +136,7 @@ offered (ADR-0020).
 |---|---|---|
 | ES-module import scanner | ✅ | Build-free, no language server. TS/JS, one node per file. |
 | Go scanner + `go.mod` resolution | ✅ | Hand-rolled, ~200 lines, **zero runtime dependencies** — same 6,013/190 import sites as tree-sitter *and* as `go/parser`, 0 of 942 files disagreeing, 6.2× faster (ADR-0026 §1). One node per **package**: hugo `44da0860` is 193 packages holding 906 files, 6.61 edges each, 456 challenges, 0 unresolved sites. |
-| Python scanner + `sys.path`-free resolution | ✅ | Hand-rolled, ~300 lines, **zero runtime dependencies** — same 675/12,052 import sites as tree-sitter *and* as Python's own `ast`, 0 of 3,011 files disagreeing, 7.1× faster (ADR-0028 §1). A node is a **file**. Roots are read off the repo's layout, never `sys.path`. A *history* language: `canGradeImports` refuses Blast Radius by **language**, so `pallets/flask` `6a2f545b` is 91 nodes, 193 edges, 17 regions and **118 challenges of which 0 are Blast Radius**. |
+| Python scanner + `sys.path`-free resolution | ✅ | Hand-rolled, ~300 lines, **zero runtime dependencies** — same 675/12,052 import **statement** sites as tree-sitter *and* as Python's own `ast`, 0 of 3,011 files disagreeing, 7.1× faster (ADR-0028 §1) — the *call* arm was covered by no second instrument and was wrong until a review measured it (§8.1). A node is a **file**. Roots are read off the repo's layout, never `sys.path`. A *history* language: `canGradeImports` refuses Blast Radius by **language**, so `pallets/flask` `6a2f545b` is 91 nodes, 193 edges, 17 regions and **118 challenges of which 0 are Blast Radius**. |
 | Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Both sides of that ratio are counts of **files** since ADR-0026 — `mapped` counted *nodes*, which is a category error once a node is a package. **All five repos ADR-0025 refused now ship**: Go returned hugo and cobra, Python returns django, flask and system-design-primer, and that document's *"the refusal will resolve itself as languages land"* is closed. Its reach is bounded by a **list** of languages — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
@@ -173,12 +173,13 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   ADR-0025 refused now ship **1,048** challenges about their own source between them — but every
   other language still gets a map of its documentation and, when that map is a sliver of the repo,
   no deck at all.
-- **`django/django` breaches the index budget: 16.3–17.7 s at 3,035 nodes against a 10 s ceiling.**
-  Measured at ADR-0028 §6 and **not** the Python scanner, which is 1.1 s of it: the force-directed
-  layout is **6.9 s (39%)**, and it is the same share of hugo's 6.1 s at half the scale. The
-  per-node rate is 5.4 ms against a 5.00 ms/file row, on a repo 1.5× the 2,000-file reference scale
-  the ceiling is written for. Fixing it is a `layout.ts` change with its own determinism risk and it
-  wants its own ADR. The atlas is 2,982 KiB against a 5,120 KiB ceiling, so nothing else is close.
+- **`django/django` breaches the index budget: 17.6–18.6 s at 3,035 nodes against a 10 s ceiling.**
+  Measured at ADR-0028 §6 and **not** the Python scanner, which is 1.2 s of it: the force-directed
+  layout is **~7.1 s, ~40%**, and hugo's is ~40% of its ~6.8 s at half the scale. The per-node rate
+  is ~5.9 ms against a 5.00 ms/file row, on a repo 1.5× the 2,000-file reference scale the ceiling
+  is written for. Every figure there is a range because this container's spread on them is ±25%.
+  Fixing it is a `layout.ts` change with its own determinism risk and it wants its own ADR. The
+  atlas is 2,985 KiB against a 5,120 KiB ceiling, so nothing else is close.
 - **`UNREAD` is a list, and anything not on it is invisible — silently.** This is the residual half
   of the Markdown-map defect, and it is not hypothetical: a **Terraform** repo
   (`terraform-aws-modules/terraform-aws-vpc`) shipped **64 challenges over 24 Markdown files with

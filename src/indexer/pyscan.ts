@@ -19,7 +19,9 @@
  *     statement.** `importlib.import_module(expr)` and `__import__(expr)` name a
  *     module with an expression, so this scanner has the `null` arm `GoImportRef`
  *     does not — and it is the arm ADR-0024 §4.1 found poisoning 83.7% of
- *     django's Blast Radius subjects from **seven sites**. That is why Python is
+ *     django's Blast Radius subjects — from **79 call sites**, of which 49 are
+ *     computed; the *seven* that figure was first taken from were the ones a
+ *     prefixed-only regex could see (ADR-0028 §8.1). That is why Python is
  *     a *history* language (ADR-0024 decision 2): the arm exists, it is
  *     recorded, and guardrail 4 acts on it.
  *  2. **Masking Python needs the prefix and the triple quote.** `rb'''…'''` is
@@ -265,7 +267,18 @@ function statementsOf(masked: string): Statement[] {
 const IDENTIFIER = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 const DOTTED = /^[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*$/u;
 
-const IMPORT_CALL = /\b(?:importlib\s*\.\s*import_module|__import__)\s*\(/g;
+/**
+ * The three spellings of *"name a module with an expression"*.
+ *
+ * **The bare one was missing and it is django's house style**: `from importlib
+ * import import_module` at the top, then `import_module(name)` everywhere. 71
+ * call sites on django against the 7 the prefixed form finds — 31 of them with a
+ * *literal* argument, so they were missing **edges** as well as taints. Both of
+ * ADR-0024's instruments used the prefixed regex, so the probe and the shipped
+ * scanner agreed by sharing one blindness, which is why the site count matched
+ * and the arm was still wrong.
+ */
+const IMPORT_CALL = /\b(importlib\s*\.\s*import_module|import_module|__import__)\s*\(/g;
 const STRING_ARGUMENT = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*[,)]/;
 
 export function scanPyModule(source: string): PyFacts {
@@ -276,10 +289,16 @@ export function scanPyModule(source: string): PyFacts {
   for (const statement of statementsOf(masked)) {
     const trimmed = statement.text.trim();
     const offset = statement.at + statement.text.indexOf(trimmed[0] ?? '');
-    if (trimmed.startsWith('import ') || trimmed === 'import') {
-      pushPlainImports(imports, trimmed, offset);
-    } else if (trimmed.startsWith('from ') || trimmed.startsWith('from.')) {
-      pushFromImport(imports, trimmed, offset);
+    // `if True: import os` is one statement carrying another. Only the compound
+    // *keywords* open one, which is what keeps this off `x: int = 1` — a colon
+    // at depth 0 is an annotation far more often than a suite header, and
+    // splitting on it blindly would read `int = 1` as an export named `int`.
+    const suite = /^(?:if|elif|else|try|except|finally|for|while|with|def|class|async)\b[^:]*:[ \t]*(\S.*)$/.exec(trimmed);
+    const head = suite?.[1] ?? trimmed;
+    if (head.startsWith('import ') || head === 'import') {
+      pushPlainImports(imports, head, offset);
+    } else if (head.startsWith('from ') || head.startsWith('from.')) {
+      pushFromImport(imports, head, offset);
     }
     if (statement.indent === 0) pushExports(exports, trimmed);
   }
@@ -289,9 +308,20 @@ export function scanPyModule(source: string): PyFacts {
   // `null` arm — **recorded, never dropped**, because a file that hides a
   // dependency and still looks fully resolved is the one thing guardrail 4
   // cannot survive (CLAUDE.md).
+  // The **bare** spelling is only `importlib`'s if this file imported it. A
+  // locally-defined `import_module()` is somebody else's function, and calling
+  // it an unresolved import would be inventing a dependency — the direction
+  // ADR-0003 exists to refuse. One site of django's 71 fails this test.
+  // (`from importlib import import_module as im` then `im(x)` is missed, and
+  // that is the same undercount every alias in this file takes.)
+  const importsImportModule = imports.some(
+    (reference) => reference.module === 'importlib' && reference.names.includes('import_module'),
+  );
+
   IMPORT_CALL.lastIndex = 0;
   let call: RegExpExecArray | null;
   while ((call = IMPORT_CALL.exec(masked)) !== null) {
+    if (call[1] === 'import_module' && !importsImportModule) continue;
     const after = call.index + call[0].length;
     // The masked text has no string bodies left, so a literal argument has to
     // be read out of the **source**. Its extent is the same in both, because
@@ -313,9 +343,13 @@ export function scanPyModule(source: string): PyFacts {
 
 /** `import a.b as x, c` — one ref per comma-separated clause. */
 function pushPlainImports(into: PyImportRef[], statement: string, at: number): void {
+  // `import a . b` is legal; the spaces are stripped per clause below.
   const body = statement.slice('import'.length);
   for (const clause of body.split(',')) {
-    const name = clause.trim().split(/\s+/)[0] ?? '';
+    // Collapse the spaces *around dots* first, then take the first token — the
+    // other way round, `import a . b` yields `a`, which is a **wrong** target
+    // rather than a missing one.
+    const name = clause.replace(/\s*\.\s*/g, '.').trim().split(/\s+/)[0] ?? '';
     if (name.length === 0) continue;
     if (!DOTTED.test(name)) continue;
     into.push({ level: 0, module: name, names: [], at, raw: `import ${name}` });
@@ -334,8 +368,12 @@ function pushFromImport(into: PyImportRef[], statement: string, at: number): voi
     // leading run counts, and Python spells level 3 exactly this way.
   }
   const afterDots = rest.slice(i);
-  const importAt = afterDots.search(/(^|[\s)])import(\s|$)/);
-  const module = (importAt === -1 ? afterDots : afterDots.slice(0, importAt)).trim();
+  // `\b` rather than `(\s|$)` after the keyword: `from a.b import(c)` and
+  // `from x import*` are both legal Python and both were read as nothing.
+  const importAt = afterDots.search(/(^|[\s)])import\b/);
+  // Whitespace inside a dotted path is legal too — `from a . b import c` — and
+  // `DOTTED` rejects it, which dropped the statement in silence.
+  const module = (importAt === -1 ? afterDots : afterDots.slice(0, importAt)).replace(/\s+/g, '');
   if (level === 0 && module.length === 0) return;
   if (module.length > 0 && !DOTTED.test(module)) return;
   const names: string[] = [];

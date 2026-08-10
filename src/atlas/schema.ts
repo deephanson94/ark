@@ -113,8 +113,8 @@ export function canImport(lang: Lang): boolean {
  * strain. ADR-0024 decision 2 makes Python a **history** language: its imports
  * are parsed, resolved and drawn — they shape the layout, the regions and the
  * elevation, which is what *a true map* means — and they may never grade a
- * question, because seven computed `import_module(expr)` sites taint 83.7% of
- * django's blast subjects and no parser fixes it (ADR-0024 §4.1).
+ * question, because computed `import_module(…)` sites taint 83.7% of django's
+ * blast subjects and no parser fixes it (ADR-0024 §4.1).
  *
  * Merging the two again is not a tidy-up: it either withdraws every Python
  * repo's deck (`mapped` reads 0 and ADR-0025 clause 2 refuses it — over a *full*

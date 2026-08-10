@@ -148,6 +148,18 @@ describe('Python absolute imports', () => {
     expect(verdicts('main.py', { module: '_thread', names: [] }, ctx)).toEqual(['external:_thread']);
   });
 
+  it('never returns an empty verdict list, however little placed', () => {
+    // The fourth outcome nobody declared: a namespace directory whose imported
+    // names are not modules placed **nothing** — no edge, no external, no
+    // `unresolved` — so `build.ts`'s loop over the verdicts recorded silence.
+    // The absolute arm guarded it and the relative arm did not.
+    const ctx = context(['ns/mod.py']);
+    expect(verdicts('ns/mod.py', { level: 1, module: '', names: ['missing'] }, ctx)).toEqual([
+      'unresolved',
+    ]);
+    expect(verdicts('ns/mod.py', { module: 'ns', names: ['missing'] }, ctx)).toEqual(['unresolved']);
+  });
+
   it('leaves the computed arm unresolved rather than dropping the site', () => {
     expect(verdicts('main.py', { module: null, names: [] }, context(['main.py']))).toEqual([
       'unresolved',
@@ -199,6 +211,19 @@ describe('Python dependency declarations', () => {
     expect(parseRequirements('# a comment\n-r other.txt\nselenium==4.1  # pinned\n\npytest\n')).toEqual([
       'selenium',
       'pytest',
+    ]);
+  });
+
+  it('names no distribution for a VCS or URL requirement', () => {
+    // `git+https://…` parses as a dependency called **git** under the name
+    // rule, which would call `import git` — GitPython — external and *remove a
+    // taint*. An undercount costs an `unresolved`; an over-count invents an
+    // external, which is the direction this whole file refuses.
+    expect(parseRequirements('git+https://github.com/x/y#egg=y\nhttps://example.com/z.whl\nclick\n')).toEqual([
+      'click',
+    ]);
+    expect(parseManifestDependencies('dependencies = ["click", "y @ git+https://a/b"]')).toEqual([
+      'click',
     ]);
   });
 
