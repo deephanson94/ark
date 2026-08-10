@@ -1200,10 +1200,14 @@ parallax, and loses from inside it. **P4 stands: the walkable avatar waits for t
 
 CI runs every suite on push and PR, including a three-platform check that the same commit yields a
 byte-identical atlas, and a headless browser smoke test that plays a challenge, reloads the page,
-turns the world and fails on any console error. **There is no Pages deploy** — `pages.yml` is
+turns the world and fails on any console error. **There is no Pages deploy yet** — `pages.yml` is
 deleted, not disabled, and **[ADR-0015](./docs/decisions/0015-pages-is-not-deployed-while-the-repo-is-private.md)**
 says why and gives the one-line restore: it failed on every run it ever had, because the repo is
-private and Pages there needs a paid plan. Its zero-challenge guard was not migrated because
+private and Pages there needs a paid plan. **[ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)
+is that reversal in progress**: the prep is shipped (a `LICENSE`, which `package.json` claimed since
+M0 and no file granted) and the flip is the owner's, with an ordered checklist in its §5 — restore
+`pages.yml` **after** the repo is public and Pages is switched on, never before, because a workflow
+that must fail until an unrelated switch is thrown is exactly what ADR-0015 deleted. Its zero-challenge guard was not migrated because
 `test:atlas` (`> 20` on a fresh build) and `test:e2e` (which actually plays a question) already hold
 it more strongly — checked by mutation, not assumed.
 

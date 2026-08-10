@@ -2713,3 +2713,39 @@ One line per iteration: what changed, and what to do next.
   unbuilt is the inspector line, the gate's wiring and its tests.
 
   **Next**: build it.
+
+- **Prep for going public.** The trigger is GitHub's 2,000 CI/CD minutes, free for public repos —
+  and the first thing worth doing was measuring where they go, because *"we are out of minutes"*
+  without the table makes going public look like the only fix. Billed from a real run: **17 minutes
+  for 3½ minutes of compute**, of which **10 — 59% — is one macOS job that runs for 15 seconds**,
+  because macOS bills at 10× on a private repo and every job rounds up to a whole minute. Trimming
+  the matrix would buy the same minutes; it was offered and **declined**, correctly, since the
+  minutes go free anyway and ADR-0006's cross-platform guarantee is worth keeping at its tightest.
+  Recorded in the ADR so a later session reading that table does not think the trim was forgotten.
+
+  **The one real defect the prep found is that there was no `LICENSE` file.** `package.json` has said
+  `"license": "MIT"` since M0, and a manifest field is metadata where the file is the grant — so the
+  repo would have gone public reading *all rights reserved* to everyone who cloned it. Everything
+  else was clean and was checked rather than assumed: no tracked file with a secret-shaped name, no
+  added line across **130 commits** matching `ghp_` / `github_pat_` / `sk-…` / `AKIA…` / private-key
+  headers / Slack or Bearer tokens, two author identities, and `.claude/settings.json` holding a
+  model name and a hook path. What that does *not* cover is written down too: a pattern scan finds
+  secrets that look like secrets.
+
+  **`pages.yml` is deliberately not restored yet**, and that is the whole shape of
+  **[ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)**. Restoring it
+  while the repo is private puts a workflow on master that fails on every run — the permanently-red
+  check that gets normalised into background noise, which is the exact defect ADR-0015 deleted the
+  file to stop. So the flip is an **ordered checklist** (§5): visibility, then Pages → *GitHub
+  Actions* (a separate switch that making a repo public does not throw), then the one-line restore,
+  then **read the run on master for both workflows**, then move README's Known-gaps row. Written down
+  rather than remembered, which is ADR-0029's lesson applied to somebody else's checklist.
+
+  **Two costs are named rather than discovered later.** The name goes out before it is settled and
+  NORTH-STAR's header says not to do that — accepted on ADR-0029's own distinction, since a public
+  repo is weaker than an npm publish and `private: true` stays. And the documents name a prior
+  project of the owner's **19 times across four files**, with details about its internals; that is
+  theirs to publish or redact, and it is written down because *"nobody thought about it"* and *"we
+  decided that was fine"* look identical afterwards.
+
+  **Next**: the owner flips; then steps 3–5.
