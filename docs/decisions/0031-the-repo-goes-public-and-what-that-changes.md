@@ -1,7 +1,7 @@
 # ADR-0031 — The repo goes public, and the flip is a checklist rather than a switch
 
-- **Status**: accepted — **prep shipped; the visibility flip itself is the owner's action and has not
-  happened.** See §5.
+- **Status**: accepted — **the repo is public as of `1581916d`'s day; the deploy is being brought up.**
+  See §5 for the checklist and §6 for what its first run found.
 - **Date**: 2026-08-10
 - **Supersedes the precondition of**: [ADR-0015](./0015-pages-is-not-deployed-while-the-repo-is-private.md)
   — *"publishing returns the day the repo is public"*
@@ -109,8 +109,9 @@ line.
 Ordered, because two of these only work once the one above has happened:
 
 1. **Owner**: Settings → General → Danger Zone → *Change visibility* → Public.
-2. **Owner**: Settings → Pages → Source: **GitHub Actions**. (Pages is not enabled by making a repo
-   public; it is a separate switch, and skipping it makes step 3 red.)
+2. ~~**Owner**: Settings → Pages → Source: **GitHub Actions**.~~ **Not a manual step after all** —
+   see §6. `actions/configure-pages` takes an `enablement` input that creates the Pages site from
+   the workflow, using the `pages: write` permission it already declares.
 3. Restore the workflow — ADR-0015's own line, from the commit that deleted it:
    `git show a50462b:.github/workflows/pages.yml > .github/workflows/pages.yml`, then align its
    hard-coded `node-version: '22'` with `ci.yml`'s `env.NODE_VERSION` so the two cannot drift.
@@ -121,8 +122,43 @@ Ordered, because two of these only work once the one above has happened:
    place.
 
 **This list is written down instead of remembered for the reason ADR-0029 exists**: an item nobody
-can execute gets ticked from memory. Steps 1 and 2 are the owner's and cannot be scripted; steps 3–5
-are checkable and should not be claimed until step 4 has actually been read.
+can execute gets ticked from memory. Step 1 is the owner's and cannot be scripted; the rest are
+checkable and should not be claimed until step 4 has actually been read.
+
+---
+
+## 6. Step 4 earned its place on the first run, and step 2 stopped existing
+
+The restore was merged as `1581916d` and **the Pages run failed in 20 seconds**:
+
+```
+##[error]Get Pages site failed. Please verify that the repository has Pages enabled and
+configured to build using GitHub Actions, or consider exploring the `enablement` parameter
+for this action. Error: Not Found
+```
+
+That is step 2 unperformed, and it is the outcome this checklist predicted — which is the point of
+having written step 4 as *read the run* rather than *the deploy will work*. The build job itself had
+already succeeded: it printed `publishing ark @ 1581916d70d6 — 171 nodes, 545 edges, 160 challenges`,
+so the atlas was real and the zero-challenge guard passed. Only the site did not exist.
+
+**The error message names the fix and it is better than the manual step.**
+`actions/configure-pages` takes an `enablement` input — visible in the failing log as
+`enablement: false`, its default — which creates the Pages site over the API using the `pages: write`
+permission this workflow already declares. Setting it deletes step 2 from the checklist entirely.
+
+That is worth more than the twenty seconds it saves. **A manual toggle in repository settings is an
+instruction nothing checks and nobody can execute from here** — the exact shape ADR-0029 turned into
+a script, reappearing one layer out as a step in this document's own list. A workflow that provisions
+what it needs is one fewer thing to remember, and it means a fork or a re-created repository works
+without anybody knowing this happened.
+
+**A warning in the same log, recorded and not acted on**: `actions/checkout@v4`,
+`actions/setup-node@v4` and `actions/configure-pages@v5` all target Node 20, which GitHub has
+deprecated and is force-running on Node 24. It is a warning today and it applies to `ci.yml`
+identically, so it is one change across both workflows rather than a fix smuggled into this one — and
+it is precisely the rot ADR-0015 predicted for a file kept on disk unrun, arriving on the workflow
+that *was* run. `README.md`'s Known gaps carries it.
 
 ---
 
@@ -143,6 +179,9 @@ are checkable and should not be claimed until step 4 has actually been read.
    conclude the trim was forgotten.
 5. **`pages.yml` is restored *after* the flip, not with this change** (§5). A workflow that must fail
    until an unrelated switch is thrown is the thing ADR-0015 deleted.
+6. **A workflow provisions what it needs.** `configure-pages` enables the Pages site itself rather
+   than the checklist carrying *"go and click this"* (§6). An instruction nothing checks is the
+   defect ADR-0029 is about, and it had reappeared here as a step in this document's own list.
 
 ---
 

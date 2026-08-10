@@ -227,6 +227,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **Map interaction is below its fps budget on headless software rasterisation** (45/33/43 fps at p95
   against a ≥ 50 target). That is a floor, not a desktop GPU number; it needs re-measuring on real
   hardware before anyone acts on it.
+- **GitHub Actions still targets Node 20 in both workflows.** `actions/checkout@v4`,
+  `actions/setup-node@v4` and `actions/configure-pages@v5` are all being force-run on Node 24 with a
+  deprecation warning. A warning today, and one change across `ci.yml` and `pages.yml` rather than a
+  fix smuggled into whichever one is being touched — ADR-0031 §6, where it surfaced.
 - **No Pages deploy — until the repo is public and Pages is switched on.** `pages.yml` was deleted
   rather than disabled, so a red X on this repo means something (ADR-0015). Restoring it is one line
   and it is **step 3 of [ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)

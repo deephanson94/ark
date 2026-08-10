@@ -75,7 +75,20 @@ jobs:
             if (a.challenges.length === 0) { console.error("no challenges — refusing to publish"); process.exit(1); }
           '
 
+      # **`enablement` creates the Pages site if it does not exist**, using the
+      # `pages: write` permission this workflow already declares. Without it the
+      # first run dies at this step with *"Get Pages site failed … verify that
+      # the repository has Pages enabled"* — which is what happened on
+      # `1581916d`, read from the log rather than guessed.
+      #
+      # It is set because the alternative is a manual toggle in repository
+      # settings that nothing checks and nobody can execute from here: exactly
+      # the shape ADR-0029 turned into a script, and ADR-0031's own checklist
+      # had it as a step. A workflow that provisions what it needs is one fewer
+      # instruction to remember.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/player
