@@ -17,6 +17,11 @@ publishing is a decision about the name rather than about the packaging.
 
 ---
 
+**MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
+promise, the name is a placeholder with known collisions, and the interesting reading is
+[`docs/decisions/`](./docs/decisions/) — 31 ADRs, each carrying the measurement that decided it, plus
+the ones recording what the measurement got wrong afterwards.
+
 ## The problem
 
 Onboarding onto an unfamiliar codebase is one of the highest-frequency, lowest-support activities in
@@ -82,7 +87,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 30 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 31 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -222,8 +227,11 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **Map interaction is below its fps budget on headless software rasterisation** (45/33/43 fps at p95
   against a ≥ 50 target). That is a floor, not a desktop GPU number; it needs re-measuring on real
   hardware before anyone acts on it.
-- **No Pages deploy.** Deleted rather than disabled, so a red X on this repo means something
-  (ADR-0015).
+- **No Pages deploy — until the repo is public and Pages is switched on.** `pages.yml` was deleted
+  rather than disabled, so a red X on this repo means something (ADR-0015). Restoring it is one line
+  and it is **step 3 of [ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)
+  §5**, deliberately after the flip: a workflow that must fail until an unrelated switch is thrown is
+  the thing ADR-0015 deleted this file to stop. This row is true until that deploy is green.
 - **Duplicate-answer-key twins are still never mentioned to the player — but the decision is taken
   and it is now *unbuilt* rather than *undecided*** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
   `cone(A) = cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two
@@ -326,7 +334,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 30 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 31 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves
