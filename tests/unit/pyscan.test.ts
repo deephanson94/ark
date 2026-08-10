@@ -117,6 +117,56 @@ describe('the Python scanner records what it cannot evaluate', () => {
     const facts = scanPyModule('mod = __import__(import_name)\n');
     expect(facts.imports.filter((r) => r.module === null)).toHaveLength(1);
   });
+
+  it('records the **bare** spelling, which is django’s and was invisible', () => {
+    // `from importlib import import_module` then `import_module(name)`: 71 call
+    // sites on django against the 7 the prefixed form finds, 31 of them with a
+    // literal argument — so this was missing *edges* as well as taints. Both of
+    // ADR-0024's instruments used the prefixed regex, which is why the probe and
+    // the shipped scanner agreed by sharing one blindness.
+    const facts = scanPyModule('from importlib import import_module\n\nm = import_module(name)\n');
+    expect(facts.imports.filter((r) => r.module === null)).toHaveLength(1);
+    expect(sites('from importlib import import_module\nm = import_module("pkg.sub")\n')).toContain(
+      'pkg.sub',
+    );
+  });
+
+  it('does not read somebody else’s `import_module()` as an import', () => {
+    // The bare name is only `importlib`'s if this file imported it. Calling a
+    // locally-defined function an unresolved import invents a dependency, which
+    // is the direction ADR-0003 exists to refuse.
+    const facts = scanPyModule('def import_module(x):\n    return x\n\nm = import_module(thing)\n');
+    expect(facts.imports.filter((r) => r.module === null)).toEqual([]);
+  });
+});
+
+describe('the Python scanner reads the statement forms a corpus did not contain', () => {
+  // None of these occurs in flask or django, so the 3,011-file comparison against
+  // tree-sitter and `ast` could not see any of them. All four are legal Python.
+  it('reads `import` with no space before the paren or the star', () => {
+    expect(sites('from a.b import(c)\n')).toEqual(['a.b :: c']);
+    expect(sites('from x import*\n')).toEqual(['x :: *']);
+  });
+
+  it('reads whitespace inside a dotted path', () => {
+    expect(sites('from a . b import c\n')).toEqual(['a.b :: c']);
+    // The clause is collapsed around dots *before* the first token is taken —
+    // the other order yields `a`, which is a wrong target rather than a missing
+    // one.
+    expect(sites('import a . b\n')).toEqual(['a.b']);
+  });
+
+  it('reads an import in a one-line compound statement', () => {
+    expect(sites('if True: import os\n')).toEqual(['os']);
+    expect(sites('try: import json\nexcept ImportError: pass\n')).toEqual(['json']);
+  });
+
+  it('does not split an annotated assignment on its colon', () => {
+    // The reason the suite rule names the compound keywords instead of
+    // splitting on any depth-0 colon: `x: int = 1` would become `int = 1` and
+    // export a name called `int`.
+    expect(scanPyModule('total: int = 1\n').exports).toEqual(['total']);
+  });
 });
 
 describe('the Python scanner reads public top-level names', () => {

@@ -642,6 +642,24 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   that lived three times had already diverged twice. **The instrument that found #3 and #4 is the
   merge-commit reproduction** — neither was reachable on the branch's own tree, and both would have
   been a red CI.
+- **An arm no second instrument covers is not verified, however many instruments the table has.**
+  Python's scanner was scored against tree-sitter *and* against Python's own `ast` — 0 of 3,011 files
+  disagreeing, three instruments, the same counts to the digit — and the arm that was **wrong** was
+  the one none of them looked at. `IMPORT_CALL` matched `importlib.import_module(` and missed the
+  bare `import_module(` that follows `from importlib import import_module`, which is **django's house
+  style**: 79 call sites where 9 were recorded, 49 missing taints and **30 missing edges**. ADR-0024's
+  probe used the same prefixed shape, so the probe and the shipped scanner agreed *by sharing one
+  blindness*, and the control repo passed because flask's two computed sites happen to be
+  `__import__(`. Worse, the missing unresolveds **flattered the resolution rate**, so the ADR's
+  proudest sentence — *"the shipped resolver is better than the probe that decided the verdict"* —
+  was manufactured by the defect it was hiding. **When a comparison covers one arm of a union, say so
+  in the sentence that quotes it**, and treat the uncovered arm as unmeasured rather than as agreed.
+- **A function returning a list has an outcome nobody declares: the empty one.** `resolvePyImport`
+  had three documented verdicts and a fourth undocumented behaviour — return `[]` — which
+  `build.ts`'s `for (const verdict of …)` turned into *silence*: no edge, no external, no
+  `unresolved`. The absolute branch guarded it and the branch four lines up did not, which is this
+  repo's *the bug you already fixed is still there* shape with no fix having preceded it. **If a
+  verdict function returns a collection, assert it is non-empty at the source**, not at each caller.
 - **A corpus of 3,011 real files is not a substitute for adversarial fixtures, and the direction runs
   both ways.** Python's scanner was scored against tree-sitter and against Python's own `ast` on
   flask and django — 0 files disagreeing — and a unit fixture then found a live defect the corpus
@@ -945,7 +963,9 @@ which zero are Blast Radius**; `django/django` `c9eb16a87e` is 3,035 nodes and 1
 `donnemartin/system-design-primer` ships 57. Both scanners are hand-rolled and tree-sitter has now
 been scored against **two** languages and bought **zero measured points** on either: identical site
 counts to tree-sitter *and* to Python's own `ast` (flask 675, django 12,052), **0 of 3,011 files
-disagreeing**, 7.1× faster, no runtime dependency. **If a third language comes out level, it is
+disagreeing**, 7.1× faster, no runtime dependency. **That comparison is about import *statements*
+and the qualifier is load-bearing** — the `import_module(…)` *call* arm was covered by no second
+instrument, because ADR-0024's probe shared the same regex shape, and it was wrong (ADR-0028 §8.1). **If a third language comes out level, it is
 NORTH-STAR §7.2's strategy that needs rewriting, not the exception.**
 
 The mechanism is a **predicate split**, and it is the thing to understand before touching any of it.
@@ -959,20 +979,22 @@ candidate pool, and it refuses by **language rather than by taint** on purpose �
 subjects and 819 of django's 976 would be refused by guardrail 4 anyway, so leaving it to taint
 would make *whether a language has a deck* depend on how dynamic one repo is.
 
-**The kill point was re-measured with the shipped instrument and the verdict held harder.** django
-now resolves at **99.1%** — better than the probe that decided it (98.6%) — and the share of blast
-subjects whose closure is tainted moves by **0.1 points**, 84.0% → 83.9%. Position beats rate,
-confirmed by a second instrument that disagrees about the rate and agrees about the deck.
-**A language ships on its deck, not on its map, and not on its resolution rate.**
+**The kill point was re-measured with the shipped instrument and the verdict held.** django resolves
+at **98.58%** against the probe's 98.6%, and the share of blast subjects whose closure is tainted is
+**83.7%** against 84.0%. Position beats rate, confirmed by a second instrument.
+**A language ships on its deck, not on its map, and not on its resolution rate.** *This paragraph
+first said 99.1% and called the shipped resolver better than the probe — which was the blind spot in
+§8.1 flattering the rate, in the sentence the change was proudest of.*
 
 **All five repos ADR-0025 refused now ship** — Go returned hugo and cobra, Python returns django,
 flask and system-design-primer — so that document's *"the refusal will resolve itself as languages
 land"* is closed. None of the 315 withdrawn questions came back; what the five ship instead is
 **1,048** questions about their own source.
 
-**`django/django` breaches the index budget and it is said out loud: 16.3–17.7 s at 3,035 nodes
-against a 10 s ceiling.** It is **not** the Python scanner (1.1 s of it) — the force-directed layout
-is **6.9 s, 39%**, the same share as hugo's at half the scale. `README.md` Known gaps carries it with
+**`django/django` breaches the index budget and it is said out loud: 17.6–18.6 s at 3,035 nodes
+against a 10 s ceiling.** It is **not** the Python scanner (1.2 s of it) — the force-directed layout
+is **~7.1 s, ~40%**, and hugo's is ~40% of its ~6.8 s at half the scale. Every figure there is a
+range, because this container's run-to-run spread on them is ±25%. `README.md` Known gaps carries it with
 the phase breakdown; fixing it is a `layout.ts` change with its own determinism risk and wants its
 own ADR.
 

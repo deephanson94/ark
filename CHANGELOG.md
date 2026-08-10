@@ -2621,3 +2621,54 @@ One line per iteration: what changed, and what to do next.
   **Next**: the **duplicate-answer-key twins** — `cone(A) = cone(B)` is a true derived fact that by
   ADR-0011 decision 3 must be *shown* and never proved, so it wants a decision about where before
   any code, and it wants the count of how many twins each repo actually has first.
+
+- **The Python half's post-ship review: the blind spot was in the arm the ADR was proudest of.** An
+  adversarial pass found ten things; the two that mattered are both ADR-0028's decision 6 — *"every
+  import site that does not place leaves something on `unresolved`"* — which is the sentence §1.1
+  leaned on hardest.
+
+  **`IMPORT_CALL` matched `importlib.import_module(` and missed the bare `import_module(`** that
+  follows `from importlib import import_module`, which is **django's house style**: **79 call sites
+  where 9 were recorded**, 49 missing taints and **30 missing edges**, including three real ones into
+  `django/conf/locale/*/formats.py`. `django/apps/config.py` — the app-loading heart — carried six
+  invisible sites and shipped with `unresolved: []`. Two things hid it: flask's two computed sites
+  are `__import__(`, which the old regex *did* match, so the control repo passed; and **ADR-0024's
+  probe used the same prefixed shape**, so §4's probe-versus-shipped agreement was two instruments
+  sharing one blindness. And the missing unresolveds **flattered the rate**, so the sentence *"the
+  shipped resolver is better than the probe that decided the verdict — 99.1% against 98.6%"* was
+  manufactured by the defect it was hiding. Corrected: **1.42% unresolved against the probe's 1.4%**,
+  and the deck number that decides M5 is **83.7% against 84.0%** — the same conclusion, taken level
+  rather than ahead.
+
+  **`fromTarget` could return an empty list** — a namespace package whose imported names are not
+  modules placed nothing at all — and `build.ts`'s loop turned that into silence. The absolute branch
+  guarded it and the relative branch four lines up did not.
+
+  **Four legal statement forms the corpus does not contain**: `from a.b import(c)`,
+  `from x import*`, `from a . b import c` and `if True: import os`. Zero instances in flask or
+  django, so the 3,011-file comparison could not see them — and `import a . b` read as an import of
+  `a`, a *wrong* target rather than a missing one. That is §1.1's own lesson arriving a second time.
+
+  **A rule that lived twice had already diverged**: `docs/atlas-format.md` §3.6 and ADR-0028 both say
+  a choice set is `GRADED_IMPORT_LANGS`, and `tests/atlas/` — the only integration test of that
+  contract — still asserted the wider `canImport`. Unreachable on ark, which has no Python.
+
+  **Ancestor `__init__.py` edges are now a decision rather than an omission.** Python executes every
+  parent package on import, and §3's own argument for the submodule rule condemns dropping them.
+  Priced — flask +7 pairs, **django +5,221 (×1.51)**, 3.35 → 5.07 edges/node — and **refused**,
+  because every Python file transitively imports something under `django.`, so `django/__init__.py`
+  becomes a node whose cone is the repository: true, true of every Python repo equally, and it would
+  decide elevation, regions and layout. ADR-0026's objection to Go's clique edges, at a smaller
+  multiple.
+
+  Also: `git+https://…` parsed as a distribution called **git**, which would have called
+  `import git` external and *removed* a taint; §6 divided one instrument's numerator by another's
+  denominator and called the layout 39% (it is ~40%, and every figure there is now a range, because
+  this container's spread is ±25%); and a doc comment describing `eligibleRefs` was left stacked on
+  `ungradedRefs`. **ark, hono, hugo, cobra and prometheus are byte-identical throughout.**
+
+  **Next**: the **duplicate-answer-key twins** — measured across five repos and **more common than
+  anyone assumed**: 5 classes over 11 nodes on ark (15.5% of subjects with a cone), 8 over 33 on
+  hono, 22 over 93 on prometheus (**32.3%**, largest class 25 — `discovery/*`, all interchangeable to
+  the import graph). It earns a surface; what it needs first is the leak measurement, because naming
+  a twin hands over the *non*-dependents a player already certified on its sibling's board.
