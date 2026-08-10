@@ -75,20 +75,19 @@ jobs:
             if (a.challenges.length === 0) { console.error("no challenges — refusing to publish"); process.exit(1); }
           '
 
-      # **`enablement` creates the Pages site if it does not exist**, using the
-      # `pages: write` permission this workflow already declares. Without it the
-      # first run dies at this step with *"Get Pages site failed … verify that
-      # the repository has Pages enabled"* — which is what happened on
-      # `1581916d`, read from the log rather than guessed.
+      # **`enablement: true` was tried here and cannot work — do not add it back.**
+      # It creates the Pages site over the API, which needs `administration:
+      # write`; the workflow `GITHUB_TOKEN` cannot be granted that, so the call
+      # returns *"Create Pages site failed. Error: Resource not accessible by
+      # integration"* (`0032249c`). `pages: write` is enough to *deploy* to a
+      # site and not to *create* one.
       #
-      # It is set because the alternative is a manual toggle in repository
-      # settings that nothing checks and nobody can execute from here: exactly
-      # the shape ADR-0029 turned into a script, and ADR-0031's own checklist
-      # had it as a step. A workflow that provisions what it needs is one fewer
-      # instruction to remember.
+      # So enabling Pages is a manual step in repository settings — Settings →
+      # Pages → Source: **GitHub Actions** — and ADR-0031 §5 carries it as step
+      # 2. A branch that cannot succeed is worse than no branch (CLAUDE.md), and
+      # this comment is here so the next reader does not re-derive the same
+      # plausible fix from the same error message's own suggestion.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/player
