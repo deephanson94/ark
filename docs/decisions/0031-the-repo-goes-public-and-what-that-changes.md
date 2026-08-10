@@ -109,9 +109,9 @@ line.
 Ordered, because two of these only work once the one above has happened:
 
 1. **Owner**: Settings → General → Danger Zone → *Change visibility* → Public.
-2. ~~**Owner**: Settings → Pages → Source: **GitHub Actions**.~~ **Not a manual step after all** —
-   see §6. `actions/configure-pages` takes an `enablement` input that creates the Pages site from
-   the workflow, using the `pages: write` permission it already declares.
+2. **Owner**: Settings → Pages → Source: **GitHub Actions**. Pages is not enabled by making a repo
+   public; it is a separate switch, and skipping it makes step 3 red. **This step was deleted and
+   then restored** — §6.1 is the mistake and why it was a mistake.
 3. Restore the workflow — ADR-0015's own line, from the commit that deleted it:
    `git show a50462b:.github/workflows/pages.yml > .github/workflows/pages.yml`, then align its
    hard-coded `node-version: '22'` with `ci.yml`'s `env.NODE_VERSION` so the two cannot drift.
@@ -122,8 +122,8 @@ Ordered, because two of these only work once the one above has happened:
    place.
 
 **This list is written down instead of remembered for the reason ADR-0029 exists**: an item nobody
-can execute gets ticked from memory. Step 1 is the owner's and cannot be scripted; the rest are
-checkable and should not be claimed until step 4 has actually been read.
+can execute gets ticked from memory. Steps 1 and 2 are the owner's and cannot be scripted; the
+rest are checkable and should not be claimed until step 4 has actually been read.
 
 ---
 
@@ -142,23 +142,36 @@ having written step 4 as *read the run* rather than *the deploy will work*. The 
 already succeeded: it printed `publishing ark @ 1581916d70d6 — 171 nodes, 545 edges, 160 challenges`,
 so the atlas was real and the zero-challenge guard passed. Only the site did not exist.
 
-**The error message names the fix and it is better than the manual step.**
+### 6.1 The error message suggested a fix, the fix was taken, and it could not work
+
 `actions/configure-pages` takes an `enablement` input — visible in the failing log as
-`enablement: false`, its default — which creates the Pages site over the API using the `pages: write`
-permission this workflow already declares. Setting it deletes step 2 from the checklist entirely.
+`enablement: false`, its default — and the error text recommends *"consider exploring the
+`enablement` parameter"*. It was set to `true`, with an argument that reads well: **a manual toggle
+in repository settings is an instruction nothing checks and nobody can execute from here**, the shape
+ADR-0029 turned into a script, reappearing as a step in this document's own list.
 
-That is worth more than the twenty seconds it saves. **A manual toggle in repository settings is an
-instruction nothing checks and nobody can execute from here** — the exact shape ADR-0029 turned into
-a script, reappearing one layer out as a step in this document's own list. A workflow that provisions
-what it needs is one fewer thing to remember, and it means a fork or a re-created repository works
-without anybody knowing this happened.
+**It cannot work, and the next run said so** (`0032249c`, 18 seconds):
 
-**A warning in the same log, recorded and not acted on**: `actions/checkout@v4`,
-`actions/setup-node@v4` and `actions/configure-pages@v5` all target Node 20, which GitHub has
-deprecated and is force-running on Node 24. It is a warning today and it applies to `ci.yml`
-identically, so it is one change across both workflows rather than a fix smuggled into this one — and
-it is precisely the rot ADR-0015 predicted for a file kept on disk unrun, arriving on the workflow
-that *was* run. `README.md`'s Known gaps carries it.
+```
+##[warning]Get Pages site failed. Error: Not Found
+##[error]Create Pages site failed. Error: Resource not accessible by integration
+```
+
+*Creating* a Pages site is an `administration: write` operation, and the workflow `GITHUB_TOKEN`
+cannot be granted that permission at all. `pages: write` is enough to **deploy to** a site and not to
+**create** one — a distinction the error message's own suggestion does not make.
+
+**The mistake is worth more than the fix.** A plausible remedy was taken from an error message
+without checking whether the mechanism it named could act, and it was written into this document as a
+decision in the same commit. That is the *impossibility-argument* landmine inverted: not an unchecked
+claim that something cannot be done, but an unchecked claim that it can. What would have caught it in
+advance is one question — *which permission does creating a Pages site require, and can
+`GITHUB_TOKEN` hold it?* — and what did catch it is step 4, again, on consecutive runs.
+
+`enablement` is removed, step 2 is restored to the checklist, and `pages.yml` carries a comment
+saying not to add it back and why, because the same error message will make the same suggestion to
+the next reader.
+
 
 ---
 
@@ -179,7 +192,11 @@ that *was* run. `README.md`'s Known gaps carries it.
    conclude the trim was forgotten.
 5. **`pages.yml` is restored *after* the flip, not with this change** (§5). A workflow that must fail
    until an unrelated switch is thrown is the thing ADR-0015 deleted.
-6. **A workflow provisions what it needs.** `configure-pages` enables the Pages site itself rather
+6. **Enabling Pages stays a manual step, because it provably cannot be automated from here**
+   (§6.1). `enablement: true` was tried, is refused by the token's permissions, and is removed with
+   a comment in the workflow telling the next reader not to re-derive it from the same error
+   message.
+
    than the checklist carrying *"go and click this"* (§6). An instruction nothing checks is the
    defect ADR-0029 is about, and it had reappeared here as a step in this document's own list.
 
