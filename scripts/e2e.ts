@@ -612,30 +612,54 @@ async function main(): Promise<number> {
       const wireTarget = wireTargets[0];
       let wireTargetPath = '';
       let wireHit: { x: number; y: number } | null = null;
-      // Three at most: each attempt is a full grid sweep of mouse moves, and the
-      // point is to not depend on one candidate rather than to try them all.
-      for (const candidate of wireTargets.slice(0, 3)) {
-        wireTargetPath = pathById.get(candidate.subject) ?? '';
-        for (let row = 1; row < 26 && wireHit === null; row++) {
-          for (let column = 1; column < 40 && wireHit === null; column++) {
-            const x = box.x + (box.width * column) / 40;
-            const y = box.y + (box.height * row) / 26;
-            await page.mouse.move(x, y);
-            if ((await page.locator('.inspector-path').count()) === 0) continue;
-            if ((await page.locator('.inspector-path').innerText()).trim() !== wireTargetPath) continue;
-            wireHit = { x, y };
-          }
-        }
-        if (wireHit !== null) {
-          wirePlayed = candidate;
-          break;
+      //
+      // **Sweep once, then choose from what the sweep found — never the other
+      // way round.** The previous version picked its three largest candidates
+      // up front and swept the grid looking for each, which is a prediction
+      // about where a 40×26 scan will land: at fit scale a small node is about
+      // a pixel and the grid's points are 36 apart, so a perfectly valid
+      // candidate is simply invisible to it. It went red on an ordinary commit
+      // — ark indexes itself, so the deck moves under this step every time —
+      // with "never appeared under the cursor grid" for all three.
+      //
+      // One pass, recording every path the inspector actually reports, then
+      // intersect with the candidate list. Now it can only fail when *no*
+      // eligible subject is reachable at all, which is a real finding rather
+      // than a coincidence of sizes.
+      const reachable = new Map<string, { x: number; y: number }>();
+      for (let row = 1; row < 26; row++) {
+        for (let column = 1; column < 40; column++) {
+          const x = box.x + (box.width * column) / 40;
+          const y = box.y + (box.height * row) / 26;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-path').count()) === 0) continue;
+          const path = (await page.locator('.inspector-path').innerText()).trim();
+          if (!reachable.has(path)) reachable.set(path, { x, y });
         }
       }
+      for (const candidate of wireTargets) {
+        const path = pathById.get(candidate.subject) ?? '';
+        const at = reachable.get(path);
+        if (at === undefined) continue;
+        wireTargetPath = path;
+        wireHit = at;
+        wirePlayed = candidate;
+        break;
+      }
+      if (wireHit === null) {
+        wireTargetPath = pathById.get(wireTarget?.subject ?? '') ?? '(none)';
+      }
+      process.stdout.write(
+        `e2e: grid reached ${reachable.size} nodes; ${wireTargets.length} companion-only candidates\n`,
+      );
 
       if (wireTarget === undefined) {
         failures.push({ what: 'wires', detail: 'no companion-only subject in this atlas to play' });
       } else if (wireHit === null) {
-        failures.push({ what: 'wires', detail: `${wireTargetPath} never appeared under the cursor grid` });
+        failures.push({
+          what: 'wires',
+          detail: `none of the ${wireTargets.length} companion-only subjects was reachable by the grid (best was ${wireTargetPath}); the grid reached ${reachable.size} nodes`,
+        });
       } else {
         await page.mouse.click(wireHit.x, wireHit.y);
         await page.locator('.inspector-action').click();
@@ -1116,13 +1140,37 @@ async function main(): Promise<number> {
       `e2e: walking surveyed ${surveyedBeforeWalk} → ${surveyedAfterWalk}\n`,
     );
 
-    // Turning. The one control that makes this egocentric rather than a dolly.
+    // Turning, and then walking *after* turning — which is the case a playtest
+    // broke the build on. `hero.ts` and `camera.ts` held two different bases for
+    // one heading, so at 90° the hero walked out of its own camera: the figure
+    // vanished and the city receded as you approached it. The unit suite pins
+    // the bases; this pins the player-visible half, that the picture keeps
+    // changing when you turn and then move.
     await page.keyboard.down('e');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
     await page.keyboard.up('e');
     await page.waitForTimeout(250);
-    if ((await hashCanvas()) === walked) {
+    const turned = await hashCanvas();
+    if (turned === walked) {
       failures.push({ what: 'world', detail: 'holding e turned nothing' });
+    }
+    await page.keyboard.down('w');
+    await page.waitForTimeout(900);
+    await page.keyboard.up('w');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(SHOT_DIR, 'world-turned.png') });
+    const afterTurnWalk = (await page.locator('.hud-detail').innerText()).trim();
+    if ((await hashCanvas()) === turned) {
+      failures.push({ what: 'world', detail: 'walking after a turn moved nothing' });
+    }
+    // And the world is still populated after turning off the arrival heading:
+    // the basis bug emptied the frame, which a pixel hash alone cannot tell
+    // from a legitimate change of scene.
+    if (Number(/(\d+) towers/.exec(afterTurnWalk)?.[1] ?? '0') <= 0) {
+      failures.push({
+        what: 'world',
+        detail: `turning and walking emptied the world: ${afterTurnWalk}`,
+      });
     }
 
     // ADR-0009's D1 again: the flat map is one keystroke away from here too.

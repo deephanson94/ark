@@ -45,12 +45,38 @@ import type { NodeRef } from '../../atlas/index.js';
 import type { Bounds } from '../camera.js';
 import type { Scene, SceneEdge, SceneNode } from '../scene.js';
 
-/** World units of height per elevation layer (ADR-0013). */
-export const RISE = 15;
-/** Minimum tower height, so an elevation-0 file is still a thing you walk past. */
-export const BASE_HEIGHT = 4.5;
-/** How wide a road is drawn. Narrow enough to read as a line, wide enough to be ground. */
-export const ROAD_WIDTH = 2.2;
+/**
+ * World units of height per elevation layer (ADR-0013).
+ *
+ * **A rendering constant, like the orbit's own `rise`, and it had to come
+ * down.** ADR-0013 froze what elevation *means* — one layer up is twice as
+ * depended-upon — not how many world units a layer is worth. At 14, ark's
+ * tallest file stood 105 units over streets a measured 12–19 units wide: a
+ * 6:1 canyon, which is not a city anyone can read from inside. At 6 the same
+ * file is 47 units and the eye clears most of the skyline. The *ordering* is
+ * untouched, which is the only thing the height channel claims — the same
+ * argument the footprint scalar rests on, one axis over.
+ */
+export const RISE = 6;
+/**
+ * Minimum tower height.
+ *
+ * 57% of this repo's files sit at elevation 0 (ADR-0032 §3.1), so this is the
+ * height of *most of the city* and not an edge case. Tall enough that a street
+ * has walls and the eye can read a block; low enough that the elevation-1 step
+ * above it is unmistakable, because that step is the claim ADR-0013 makes.
+ */
+export const BASE_HEIGHT = 5;
+/**
+ * How wide a road is drawn.
+ *
+ * Narrow. The first value was 2.2 and at a hub — where a dozen edges converge —
+ * a dozen overlapping quads merged into one grey plate the size of a square,
+ * which reads as pavement rather than as twelve dependencies. A road is a line
+ * on the ground, and the thing that must stay countable is how many of them
+ * there are.
+ */
+export const ROAD_WIDTH = 1.1;
 /**
  * Ground area per unit of the map's glyph radius. See the header — this is the
  * constant that makes the city walkable without touching what size *means*.

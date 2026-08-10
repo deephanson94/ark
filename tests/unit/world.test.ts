@@ -15,6 +15,8 @@ import { NEAR, clipToNear, follow, project, toView } from '../../src/player/worl
 import { FOOTPRINT_SCALE, buildWorld, near } from '../../src/player/world/build.js';
 import { HERO_RADIUS, WALK_SPEED, step, wrapAngle } from '../../src/player/world/hero.js';
 import { DEFAULT_ORBIT, project as projectOrbit } from '../../src/player/orbit.js';
+import { horizonY } from '../../src/player/world/render.js';
+import { EYE_PITCH as RIG_PITCH, createWorldMode } from '../../src/player/world/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 const VIEW: Viewport = { width: 800, height: 600 };
@@ -86,6 +88,54 @@ describe('the world camera', () => {
     expect(eye.x).toBeCloseTo(0, 6);
     const hero = toView(eye, 0, 0, 0);
     expect(hero.forward).toBeGreaterThan(0);
+  });
+
+  /**
+   * **The one the first suite could not see, and a playtest could.**
+   *
+   * `hero.ts` walks along `(sin ψ, −cos ψ)` and `toView` projected onto a
+   * *different* axis. The two agree exactly when `dx · sin ψ = 0` — headings 0°
+   * and 180°, or a point straight down the Y axis — and every assertion written
+   * about this camera used one of those. So a turn to any other heading walked
+   * the hero out of its own camera: at 90° a point ten units *ahead* computed as
+   * ten units **behind**, the figure vanished, and the city swung away as you
+   * walked toward it. This repo's degenerate-fixture landmine, freshly made.
+   *
+   * Every case below runs at a heading where the mistake does not cancel.
+   */
+  it('agrees with the hero about which way is forward, at every heading', () => {
+    for (const degrees of [0, 30, 45, 90, 135, 180, 225, 270, 315]) {
+      const facing = (degrees * Math.PI) / 180;
+      // Where one second of walking forward actually takes the hero.
+      const ahead = step({ x: 0, y: 0, facing }, { forward: 1, strafe: 0, turn: 0, running: false }, 1, []);
+      const eye = follow({ x: 0, y: 0, facing }, 30, 20, -0.2, 1);
+      const view = toView(eye, ahead.x, ahead.y, 0);
+      expect(view.forward, `facing ${degrees}°: walking forward went behind the camera`).toBeGreaterThan(0);
+      // And it is *straight* ahead: no sideways drift, or the camera would
+      // swing as you walked a straight line.
+      expect(Math.abs(view.right), `facing ${degrees}°: forward drifted sideways`).toBeLessThan(1e-6);
+    }
+  });
+
+  it('puts a strafe on the camera’s right, at every heading', () => {
+    for (const degrees of [0, 30, 90, 135, 200, 315]) {
+      const facing = (degrees * Math.PI) / 180;
+      const right = step({ x: 0, y: 0, facing }, { forward: 0, strafe: 1, turn: 0, running: false }, 1, []);
+      const eye = follow({ x: 0, y: 0, facing }, 30, 20, -0.2, 1);
+      const view = toView(eye, right.x, right.y, 0);
+      expect(view.right, `facing ${degrees}°: strafing right went left on screen`).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the hero on screen at every heading', () => {
+    // The player-visible form of the same defect: the figure rendered behind
+    // its own camera and disappeared for a 70° arc either side of east and west.
+    for (let degrees = 0; degrees < 360; degrees += 15) {
+      const facing = (degrees * Math.PI) / 180;
+      const eye = follow({ x: 120, y: -80, facing }, 46, 33, -0.52, 1.05);
+      const projected = project(eye, VIEW, 120, -80, 0);
+      expect(projected, `facing ${degrees}°: the hero is behind its own camera`).not.toBeNull();
+    }
   });
 });
 
@@ -225,5 +275,88 @@ describe('the world model', () => {
       );
       expect(found.includes(tower)).toBe(gap <= 1 + tower.footprint);
     }
+  });
+});
+
+describe('the pitch convention', () => {
+  // Written because a session talked itself into believing the sign was
+  // inverted, changed it, and broke a working camera — `toView`, `horizonY` and
+  // the doc comment had all agreed. A wrong sign is a perfectly legal camera, so
+  // the type system cannot see it and only a picture or an assertion can. These
+  // are the assertions; the picture is `test:e2e`.
+  it('looks up when pitch is positive and down when it is negative', () => {
+    const ahead = (pitch: number): number =>
+      project(eyeAt(0, 0, 0, pitch), VIEW, 0, -100, 0)?.point.y ?? Number.NaN;
+    // A patch of ground 100 units ahead of an eye 20 units up sits below the
+    // centre line when level. Tipping *down* to face it brings it up the
+    // screen; tipping up pushes it further down and out of frame.
+    expect(ahead(0)).toBeGreaterThan(VIEW.height / 2);
+    expect(ahead(-0.5)).toBeLessThan(ahead(0));
+    expect(ahead(0.5)).toBeGreaterThan(ahead(0));
+  });
+
+  it('raises the horizon up the screen as the eye tips down', () => {
+    expect(horizonY(eyeAt(0, 0, 0, 0), VIEW)).toBeCloseTo(VIEW.height / 2, 6);
+    expect(horizonY(eyeAt(0, 0, 0, -0.5), VIEW)).toBeLessThan(VIEW.height / 2);
+    expect(horizonY(eyeAt(0, 0, 0, 0.5), VIEW)).toBeGreaterThan(VIEW.height / 2);
+  });
+
+  it('is the sign the third-person rig actually uses', () => {
+    // The rig's own constant, so "we look down" is checked against the shipped
+    // value rather than against a number retyped into a test.
+    const eye = follow({ x: 0, y: 0, facing: 0 }, 46, 33, RIG_PITCH, 1.05);
+    expect(eye.pitch).toBeLessThan(0);
+    expect(horizonY(eye, VIEW)).toBeLessThan(VIEW.height / 2);
+  });
+});
+
+describe('the mode holds its own state', () => {
+  const scene = prepare(
+    atlasWith(
+      ['src/a.ts', 'src/b.ts', 'src/core/hub.ts'],
+      [
+        ['src/a.ts', 'src/core/hub.ts'],
+        ['src/b.ts', 'src/core/hub.ts'],
+      ],
+    ),
+  );
+
+  it('stops walking the moment a modal takes the keyboard', () => {
+    // A whole grade can be mouse-only, so releasing on the *next* keydown never
+    // fires — measured in a playtest as the hero surveying 51 → 65 buildings
+    // behind an open challenge panel.
+    const mode = createWorldMode();
+    mode.enter(scene, null);
+    mode.keyDown('w');
+    mode.advance(0);
+    expect(mode.advance(500)).toBe(true);
+    const walking = mode.hero();
+    mode.releaseAll();
+    expect(mode.advance(1000)).toBe(false);
+    expect(mode.hero()).toEqual(walking);
+  });
+
+  it('will not let you walk off into an unmapped void', () => {
+    // Twelve seconds of running reached `0 towers · 0 roads · 0 beacons` on an
+    // unbounded plane, which reads as a broken product rather than a finished
+    // one. The world has the atlas's edges because the layout does.
+    const mode = createWorldMode();
+    mode.enter(scene, null);
+    mode.keyDown('s');
+    mode.keyDown('shift');
+    mode.advance(0);
+    for (let frame = 1; frame <= 2000; frame++) mode.advance(frame * 16);
+    const hero = mode.hero();
+    expect(hero).not.toBeNull();
+    const span = Math.max(
+      scene.bounds.maxX - scene.bounds.minX,
+      scene.bounds.maxY - scene.bounds.minY,
+    );
+    // Bounded, and bounded by something related to the map rather than by a
+    // number: thirty seconds of running is far enough to leave any atlas.
+    expect(Math.abs(hero?.x ?? 0)).toBeLessThan(span + 1000);
+    expect(Math.abs(hero?.y ?? 0)).toBeLessThan(span + 1000);
+    const world = buildWorld(scene);
+    expect(hero?.y ?? 0).toBeLessThanOrEqual(world.bounds.maxY + 141);
   });
 });

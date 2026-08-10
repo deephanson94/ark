@@ -714,6 +714,7 @@ function start(scene: Scene, root: HTMLElement): void {
     const placeless = nextPlacelessChallenge();
     const stats = world.draw(context, {
       viewport,
+      chrome,
       fog,
       questions: unanswered,
       chronicleLit: placeless !== null,
@@ -1021,20 +1022,6 @@ function start(scene: Scene, root: HTMLElement): void {
     { passive: false },
   );
 
-  const MOVEMENT_KEYS = [
-    'w',
-    'a',
-    's',
-    'd',
-    'q',
-    'e',
-    'Shift',
-    'ArrowUp',
-    'ArrowDown',
-    'ArrowLeft',
-    'ArrowRight',
-  ];
-
   /**
    * Panels that are about the *map* and are wrong at street level.
    *
@@ -1074,8 +1061,7 @@ function start(scene: Scene, root: HTMLElement): void {
   // A tab that loses focus keeps no key down. Without this, alt-tabbing mid
   // stride leaves the hero walking into a wall until you come back.
   window.addEventListener('blur', () => {
-    if (!world.isActive()) return;
-    for (const key of MOVEMENT_KEYS) world.keyUp(key);
+    world.releaseAll();
   });
 
   window.addEventListener('keydown', (event) => {
@@ -1095,7 +1081,7 @@ function start(scene: Scene, root: HTMLElement): void {
       // A key held when the console opened would otherwise still be held when it
       // closes, and the hero would walk off on its own. Releasing everything is
       // the cheap fix and it is the right one: a modal takes the keyboard.
-      if (world.isActive()) for (const key of MOVEMENT_KEYS) world.keyUp(key);
+      if (world.isActive()) world.releaseAll();
       return;
     }
     if (event.key.toLowerCase() === 'g') {
@@ -1114,7 +1100,15 @@ function start(scene: Scene, root: HTMLElement): void {
         event.preventDefault();
         const challenge =
           focus.kind === 'chronicle' ? nextPlacelessChallenge() : challengeFor(focus.tower.node);
-        if (challenge !== null) challengePanel.open(challenge);
+        // **Drop the keyboard here, not on the next keydown.** A whole grade can
+        // be mouse-only — pick rows, submit, close — so a `w` held at the moment
+        // Enter was pressed kept the hero walking and surveying behind the
+        // scrim, measured at 51 → 65 surveyed during one panel. The modal takes
+        // the keyboard the instant it opens.
+        if (challenge !== null) {
+          world.releaseAll();
+          challengePanel.open(challenge);
+        }
         return;
       }
       if (world.keyDown(event.key)) {

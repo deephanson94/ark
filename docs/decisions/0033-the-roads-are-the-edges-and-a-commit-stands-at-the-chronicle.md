@@ -185,6 +185,73 @@ this is what that day produced.
 
 ---
 
+## 8.1 What a playtest found, and what a suite could not
+
+The world was handed to an independent agent with one question — *is this worth
+playing?* — and instructions not to be polite. It rated the walking layer **3/10**, called it
+*"a tech demo bolted onto a game that already exists and is better without it"*, and was right about
+three defects. All three are fixed; the rating is recorded because it is the honest reading and
+because §9's first bullet is the reason it cannot yet be answered properly.
+
+**One heading, two bases — the defect that made every judgement about "does this feel good"
+worthless.** `hero.ts` walks along forward `(sin ψ, −cos ψ)`; `toView` projected onto a *different*
+axis, `flat = −(dx·sin ψ + dy·cos ψ)`. The two agree exactly when `dx · sin ψ = 0` — heading 0° or
+180°, or a point straight down the Y axis — and **every assertion ever written about this camera used
+one of those**. At any other heading the hero walked out of its own view: at 90° a point ten units
+ahead computed as ten units *behind*, so the figure vanished and the city receded as you approached
+it. Turning is the control you use most, so this fired within a minute of anyone playing.
+
+That is this repo's degenerate-fixture landmine, freshly made, in a suite written the same day that
+had *twenty-one* passing assertions about this module. The regression tests now run at nine headings
+and assert the two bases agree; the e2e turns and then walks, and checks the world is still populated
+afterwards, because a pixel hash cannot tell an emptied frame from a changed one.
+
+**Two smaller ones, both real.** A movement key held when the challenge panel opened stayed held —
+a grade can be entirely mouse-driven, so the "release on the next keydown" path never ran, and the
+hero walked and *surveyed* behind the scrim (measured at 51 → 65 surveyed during one panel). And
+there was no boundary: twelve seconds of running reached `0 towers · 0 roads · 0 beacons` on an
+unbounded grey plane, which reads as a broken product rather than a finished one. The world has the
+atlas's edges now, as a clamp rather than a fence.
+
+**The two verdicts that are not bugs are the ones that matter**, and neither is fixable by a commit:
+*you never see more than a local neighbourhood at once, where the flat map shows the repo's whole
+shape in one frame*, and *walking a street did not teach anything a two-second glance at the flat map
+had not*. `docs/prior-art.md` §2 predicted exactly that — 3D wins from outside a structure and loses
+from inside it — and it is what S1 exists to measure. **This ADR does not claim otherwise.**
+
+## 8.2 The visual pass, and what it cost to make the thing legible
+
+The first build was unreadable, and the fixes are all *rendering* constants with the same shape of
+argument: the ordering a channel claims is preserved exactly, and only the scalar moves.
+
+- **The rig.** 6.5 units up and 16 back is a chest-height cinematic camera, and in a quarter whose
+  files sit a measured 12–19 units apart it frames the inside of one wall. **46 back and 33 up, tipped
+  0.52 rad down**, puts the ground plan in frame — and the ground plan is where the import graph is
+  drawn. Still egocentric, still perspective, and further out than the phrase "hero POV" suggests;
+  that is a compromise with legibility and is named as one.
+- **`RISE` 14 → 6.** ADR-0013 froze what elevation *means*, not its world units. At 14, ark's tallest
+  file stood 105 units over an 18-unit street: a 6:1 canyon nobody can read from inside.
+- **Roads 2.2 → 1.1 units wide, and quieter.** At a hub a dozen edges converged into one grey plate
+  the size of a square, which reads as pavement rather than as twelve dependencies.
+- **The district wash** — a low-alpha disc of the region's own colour on the ground under each file,
+  so overlapping members of one region pool into a quarter. It is the flat map's principal legibility
+  device (colour as neighbourhood) surviving the trip into the world, and it is derived: a `Region`
+  is label propagation over the same graph.
+- **The figure**, 1.9 units → 4.4 drawn, plus a ground ring at its collision radius. At the new boom
+  a person-sized marker is 26 pixels at the foot of a tower. Nothing in this product asserts human
+  scale; the figure is a marker for *where you are standing* and has to be findable. The collision
+  radius did not move, so what you can squeeze through is unchanged.
+- **Painter's order by a tower's *near face*, not its centre**, since a wide tower's face stands a
+  whole footprint closer than its middle — keying on the centre painted roads across buildings.
+
+One thing worth recording as a **non**-finding: a session convinced itself the pitch sign was
+inverted, "fixed" it, and reddened its own new test. `toView`, `horizonY` and the doc comment had
+agreed all along. A wrong sign is a legal camera, so nothing but a picture or an assertion can see
+it — there are assertions now, and the claim that it was broken was withdrawn rather than quietly
+dropped.
+
+---
+
 ## 9. What this does not answer, and what would
 
 - **S1 is unrun.** `docs/experiments/0001` §8 lists two things still blocking it: the matched repos
@@ -204,6 +271,10 @@ this is what that day produced.
 - **`npm run raster` has never measured this renderer**, and P1′ is owner-only. The world's frame
   cost is unmeasured on real hardware; django's 10,162 roads at `VIEW_DISTANCE` are the case to
   watch.
+- **A playtest rates the walking layer 3/10 and says it teaches nothing the flat map does not**
+  (§8.1). That is one tester, on one repo, with the defects above live for part of the run — but it
+  is the same conclusion `docs/prior-art.md` §2 reaches from the literature, and the honest position
+  is that **the burden is on the world to earn its place and it has not yet.** S1 is how it would.
 - **`VIEW_DISTANCE` is 620 and was not measured.** It is a legibility and cost knob picked by eye,
   which is the thing this document spends §5 refusing to do — recorded so the next session does not
   read it as derived.

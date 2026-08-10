@@ -2849,3 +2849,41 @@ One line per iteration: what changed, and what to do next.
   **Next**: run `docs/experiments/0001`. Its §8 has two blockers, and ADR-0033 §4 has the sharpest
   problem in the whole rung — the minimap draws the same edges the world does, so it must be in both
   arms or neither, and telling world from inset needs a third condition.
+
+- **The world, made legible — and a playtest that found the defect the suite could not.** An
+  independent agent played it and rated the walking layer **3/10**: *"a tech demo bolted onto a game
+  that already exists and is better without it."* Three of its findings were real and are fixed.
+
+  **One heading, two bases.** `hero.ts` walks along `(sin ψ, −cos ψ)`; `toView` projected onto a
+  different axis. They agree exactly when `dx · sin ψ = 0` — heading 0° or 180° — and **every
+  assertion ever written about that camera used one of them**, twenty-one of them, written the same
+  day. At any other heading the hero walked out of its own view: at 90° a point ten units ahead
+  computed as ten *behind*, the figure vanished, and the city receded as you walked toward it. The
+  degenerate-fixture landmine, freshly made. Regression tests run at nine headings; the e2e now turns
+  and *then* walks, and checks the world is still populated, because a pixel hash cannot tell an
+  emptied frame from a changed one. Also fixed: a movement key held when the challenge panel opened
+  kept the hero walking and surveying behind the scrim (a grade can be all mouse, so "release on the
+  next keydown" never ran), and the world had no edge — twelve seconds of running reached `0 towers ·
+  0 roads · 0 beacons` on an unbounded plane.
+
+  **The visual pass**, all rendering constants, each preserving the ordering its channel claims. The
+  rig moved from a chest-height 6.5/16 — which frames the inside of one wall in a quarter whose files
+  sit 12–19 units apart — to 33 up and 46 back tipped 0.52 down, which puts the ground plan in frame,
+  and the ground plan is where the import graph is drawn. `RISE` 14 → 6, because ark's tallest file
+  stood 105 units over an 18-unit street. Roads 2.2 → 1.1 wide and quieter, because a dozen edges at
+  a hub merged into one grey plate. A **district wash** on the ground under each file in its region's
+  colour, so the flat map's colour-as-neighbourhood survives the trip into the world. The figure 1.9
+  → 4.4 units drawn with a ground ring, since a person-sized marker is 26 pixels at that boom.
+  Painter's order now keys on a tower's near face, not its centre.
+
+  Recorded as a **non**-finding: this session convinced itself the pitch sign was inverted, changed
+  it, and reddened its own new test — the code and the comment had agreed all along. The claim is
+  withdrawn and the convention now has assertions.
+
+  Unrelated, and fixed because it went red: the e2e's wires step predicted which node a 40×26 cursor
+  grid would land on, and at fit scale a small node is about a pixel. It sweeps once and chooses from
+  what it found now.
+
+  **Next**: unchanged — run `docs/experiments/0001`. The playtest's two non-bug verdicts (you see
+  only a local neighbourhood; walking taught nothing the flat map had not) are exactly what
+  `docs/prior-art.md` §2 predicts, and exactly what S1 exists to measure.

@@ -43,7 +43,18 @@ export interface Eye {
   readonly z: number;
   /** Radians. 0 faces −Y (north on the flat map). */
   readonly yaw: number;
-  /** Radians. Positive looks up. */
+  /**
+   * Radians. **Positive looks up; the third-person rig therefore runs
+   * negative.**
+   *
+   * Nothing asserted this until a session convinced itself the sign was
+   * inverted, "fixed" it, and reddened its own new test — `toView` and
+   * `horizonY` had agreed with each other and with this comment the whole time.
+   * The type is `number` and a wrong sign is a legal camera, so the mistake was
+   * only ever visible in a picture or in an assertion. There are assertions now
+   * (`tests/unit/world.test.ts`), in both halves: where a ground point lands,
+   * and where the horizon sits.
+   */
   readonly pitch: number;
   /** Vertical field of view, radians. */
   readonly fov: number;
@@ -72,9 +83,18 @@ export function toView(eye: Eye, x: number, y: number, z: number): ViewPoint {
   const dz = z - eye.z;
   const cos = Math.cos(eye.yaw);
   const sin = Math.sin(eye.yaw);
-  // yaw 0 ⇒ forward is −Y, right is +X.
-  const right = dx * cos - dy * sin;
-  const flat = -(dx * sin + dy * cos);
+  // **These two lines are `hero.ts`'s basis, and they must stay that way.**
+  // A heading names one pair of axes: forward `(sin ψ, −cos ψ)` and right
+  // `(cos ψ, sin ψ)`, and this is the projection of `d` onto each. The first
+  // version wrote a *different* rotation that happens to coincide when
+  // `dx · sin ψ = 0` — heading 0° or 180°, or a point straight down the Y axis
+  // — which is where every assertion about this camera had been written. At any
+  // other heading the hero walked out of its own view: at 90° a point ten units
+  // ahead computed as ten behind, so the figure vanished and the city swung away
+  // as you approached it. Two bases for one heading, which is the shape of
+  // nearly every defect this repo has had to fix twice.
+  const right = dx * cos + dy * sin;
+  const flat = dx * sin - dy * cos;
   const cp = Math.cos(eye.pitch);
   const sp = Math.sin(eye.pitch);
   return { right, forward: flat * cp + dz * sp, up: dz * cp - flat * sp };

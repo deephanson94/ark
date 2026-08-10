@@ -63,7 +63,17 @@ export const TURN_SPEED = 2.0;
  * body was the size of a block.
  */
 export const HERO_RADIUS = 1.2;
-export const HERO_HEIGHT = 1.9;
+/**
+ * How tall the figure is **drawn**. Not the collision radius, and not a claim.
+ *
+ * 1.9 was a person against a building, and at the rig's 46-unit boom that is
+ * about 26 pixels — a smudge at the foot of a tower, which is not something you
+ * can find on screen. Nothing in this product asserts human scale; the figure
+ * is a marker for *where you are standing*, and it has to be findable at a
+ * glance. The collision radius is unchanged, so what you can walk through is
+ * exactly what it was.
+ */
+export const HERO_HEIGHT = 4.4;
 
 export interface Obstacle {
   readonly x: number;

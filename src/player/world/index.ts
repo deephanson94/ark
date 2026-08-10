@@ -9,6 +9,7 @@
 
 import type { NodeRef } from '../../atlas/index.js';
 import type { Viewport } from '../camera.js';
+import type { Box } from '../labels.js';
 import type { Fog } from '../fog.js';
 import type { Scene, SceneNode } from '../scene.js';
 import type { Eye } from './camera.js';
@@ -22,25 +23,34 @@ import type { Focus, WorldFrameStats } from './render.js';
 import { drawWorldFrame } from './render.js';
 
 /**
- * Third-person rig: behind, a little above, tipped a little down.
+ * Third-person rig: behind and well above, tipped down onto the streets.
  *
- * Sized against `HERO_HEIGHT`, not chosen in isolation — the eye sits at about
- * three times a person's height and trails by about eight, which puts the body
- * at roughly a tenth of the screen and still lets you see over the nearest
- * elevation-0 building rather than into it. A rig that stood much higher would
- * be an orbit with extra steps, which is the thing this rung is not.
+ * **The first rig was a chest-height cinematic camera and it did not work.** At
+ * 6.5 units up and 16 back, a dense quarter fills the frame with the inside of
+ * one wall: the screenshots showed a red slab across the middle, labels floating
+ * over nothing, and the hero clipped off the bottom edge. Ark's layout is dense
+ * by measurement (ADR-0032 §3.1 — a median 12–19 units between files), so a
+ * camera *in* the street sees a street and nothing else.
+ *
+ * Standing further back and looking down puts the **ground plan** in frame, and
+ * the ground plan is where the import graph is drawn. It is still egocentric —
+ * the body is on screen, the view turns with it, and everything is a perspective
+ * projection with things shrinking as they recede — but it can see a
+ * neighbourhood rather than a wall. `docs/prior-art.md` §2's finding is that 3D
+ * wins from *outside* a structure and loses from inside it; this is as far
+ * inside as legibility allows, which is a compromise and is named as one.
  */
-const EYE_DISTANCE = 16;
+const EYE_DISTANCE = 46;
 /** Never closer than this, or the body fills the screen in a tight alley. */
-const EYE_MIN_DISTANCE = 6;
+const EYE_MIN_DISTANCE = 18;
 /** How far clear of a wall the eye keeps. */
 const EYE_CLEARANCE = 1.4;
-const EYE_HEIGHT = 6.5;
-const EYE_PITCH = -0.19;
+const EYE_HEIGHT = 33;
+export const EYE_PITCH = -0.52;
 const FOV = 1.05;
 
 /** How close you must be to a tower's edge for its board to be openable. */
-export const INTERACT_RANGE = 12;
+export const INTERACT_RANGE = 14;
 /**
  * How close counts as having looked at a building.
  *
@@ -57,6 +67,8 @@ const MAX_STEP_SECONDS = 0.05;
 
 export interface WorldDraw {
   readonly viewport: Viewport;
+  /** Where the DOM panels stand, so labels are not drawn underneath them. */
+  readonly chrome: readonly Box[];
   readonly fog: Fog;
   readonly questions: ReadonlySet<NodeRef>;
   /** Whether any commit-subject board is still unanswered. */
@@ -75,6 +87,16 @@ export interface WorldMode {
   /** True if the key was the world's to handle. */
   keyDown(key: string): boolean;
   keyUp(key: string): boolean;
+  /**
+   * Drop every held key.
+   *
+   * A modal takes the keyboard, and a key that was down when it opened is still
+   * down when it closes — so the hero kept walking, sliding and *surveying*
+   * behind the challenge panel, measured at 51 → 65 surveyed during one
+   * mouse-only grade. The shell's first attempt released on the next
+   * **keydown**, which never comes when the whole grade is clicks.
+   */
+  releaseAll(): void;
   /** Integrate to `nowMs`. True if anything changed and the frame is dirty. */
   advance(nowMs: number): boolean;
   draw(context: CanvasRenderingContext2D, input: WorldDraw): WorldStats;
@@ -198,6 +220,10 @@ export function createWorldMode(): WorldMode {
       return true;
     },
 
+    releaseAll() {
+      held.clear();
+    },
+
     keyUp(key) {
       if (world === null) return false;
       const lower = key.toLowerCase();
@@ -218,6 +244,7 @@ export function createWorldMode(): WorldMode {
       // a 3,035-node repo would find for us otherwise.
       const reach = HERO_RADIUS + 40;
       hero = step(hero, walk, seconds, near(world, hero.x, hero.y, reach).map(asObstacle));
+      hero = withinShore(hero, world);
       return true;
     },
 
@@ -234,6 +261,7 @@ export function createWorldMode(): WorldMode {
         questions: input.questions,
         chronicleLit: input.chronicleLit,
         focus: focusOf(input.questions, input.chronicleLit),
+        chrome: input.chrome,
       });
       const litOnMinimap = drawMinimap(context, {
         world,
@@ -274,6 +302,30 @@ const WORLD_KEYS = new Set([
   'arrowleft',
   'arrowright',
 ]);
+
+/**
+ * How far past the outermost file you may walk before the world stops you.
+ *
+ * There is nothing out there. A playtest walked for twelve seconds and reached
+ * `0 towers · 0 roads · 0 labels · 0 beacons` — an unbounded grey plane with no
+ * wall, no message and no way back, which is a worse failure than a wall
+ * because it looks like the product is broken rather than finished. The atlas
+ * has edges because the layout does; the world should have the same ones.
+ *
+ * A clamp rather than a fence: you slide along the edge instead of stopping
+ * dead, the same way you slide along a building.
+ */
+const SHORE = 140;
+
+function withinShore(hero: Hero, world: World): Hero {
+  const { bounds } = world;
+  // The chronicle stands outside the north edge, so the shore has to reach it
+  // or the one landmark that is not a file would be unreachable.
+  const north = Math.min(bounds.minY, world.chronicle.y - world.chronicle.radius) - SHORE;
+  const x = Math.min(bounds.maxX + SHORE, Math.max(bounds.minX - SHORE, hero.x));
+  const y = Math.min(bounds.maxY + SHORE, Math.max(north, hero.y));
+  return x === hero.x && y === hero.y ? hero : { ...hero, x, y };
+}
 
 function asObstacle(tower: Tower): { x: number; y: number; radius: number } {
   return { x: tower.node.x, y: tower.node.y, radius: tower.footprint };

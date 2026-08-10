@@ -23,6 +23,7 @@
 
 import type { NodeRef } from '../../atlas/index.js';
 import type { Point, Viewport } from '../camera.js';
+import type { Box } from '../labels.js';
 import type { Fog } from '../fog.js';
 import { visibilityOf } from '../fog.js';
 import { INK, regionColor, regionSilhouette, regionWash } from '../palette.js';
@@ -45,6 +46,15 @@ export interface WorldFrameInput {
   readonly chronicleLit: boolean;
   /** What pressing the interact key would open, if anything. */
   readonly focus: Focus | null;
+  /**
+   * Screen rectangles of the DOM panels standing over the canvas.
+   *
+   * The same fact `draw.ts` takes for the same reason: the renderer cannot see
+   * siblings of the canvas, so a label placed under the HUD is drawn, counted,
+   * and invisible. The world's first pass did not take it and put `cli.ts`
+   * underneath the repo name.
+   */
+  readonly chrome: readonly Box[];
 }
 
 export type Focus = { readonly kind: 'tower'; readonly tower: Tower } | { readonly kind: 'chronicle' };
@@ -69,11 +79,46 @@ export const VIEW_DISTANCE = 620;
 const ROAD_CHOP = 34;
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-const SKY_TOP = '#070a10';
-const SKY_HORIZON = '#141c2b';
-const GROUND = '#0c1017';
+/**
+ * Sky, horizon and ground.
+ *
+ * The first palette put a near-black ground under near-black sky, and `fadeAt`
+ * then blended distant towers toward *black* rather than toward air — so
+ * distance read as "unlit" instead of as "far". Fog needs something to fade
+ * into. The horizon band is the lightest thing in the scene for that reason,
+ * and the ground is a shade above the sky's top so the plane reads as a
+ * surface catching light rather than as a hole.
+ */
+const SKY_TOP = '#0a1018';
+const SKY_HORIZON = '#31405a';
+const GROUND = '#161d28';
+const GROUND_FAR = '#222c3b';
+
+/**
+ * Paint order among primitives at the same depth.
+ *
+ * Explicit, because the first version tie-broke on `kind.localeCompare`, which
+ * is alphabetical and therefore meaningless: it would have painted a district
+ * wash *over* the roads drawn on it. Order is a claim about layering and wants
+ * to be written down as one.
+ */
+const RANK = { wash: 0, road: 1, chronicle: 2, tower: 3, hero: 4 } as const;
 
 type Prim =
+  /**
+   * A district's colour, on the ground, under everything.
+   *
+   * The one piece of ground ink that is not an edge — and it is still derived:
+   * a disc centred on a real node, in that node's region hue, at low alpha, so
+   * overlapping members of one region reinforce into a coloured quarter and the
+   * boundary between two regions is where their washes stop overlapping. It
+   * asserts nothing a region does not already assert (`Region` comes from label
+   * propagation over the same graph), and it is what makes *where am I* an
+   * answerable question at street level. Without it a walker sees grey ground
+   * and coloured walls, and the flat map's principal legibility device — colour
+   * as neighbourhood — does not survive the trip into the world.
+   */
+  | { kind: 'wash'; depth: number; tower: Tower; fade: number }
   | { kind: 'road'; depth: number; a: ViewPoint; b: ViewPoint; fade: number; dashed: boolean }
   | { kind: 'tower'; depth: number; tower: Tower; fade: number }
   | { kind: 'chronicle'; depth: number; fade: number }
@@ -115,7 +160,16 @@ export function drawWorldFrame(
       // an edge, so only reject when the whole footprint is behind.
       if (centre.forward < -tower.footprint * 2) continue;
     }
-    prims.push({ kind: 'tower', depth: centre.forward, tower, fade: fadeAt(distance) });
+    const fade = fadeAt(distance);
+    // **Sorted by the tower's nearest point, not its centre.** A wide tower's
+    // near face stands a whole footprint closer than its middle, so keying on
+    // the centre paints roads that pass *in front of* the face underneath it —
+    // pale lines running across a building, which is what the second visual
+    // pass showed. Painter's order over objects of different sizes has to use
+    // the nearest extent or the big ones sort as if they were thin.
+    const depth = centre.forward - tower.footprint;
+    prims.push({ kind: 'wash', depth: centre.forward, tower, fade });
+    prims.push({ kind: 'tower', depth, tower, fade });
     towersDrawn++;
   }
 
@@ -132,12 +186,16 @@ export function drawWorldFrame(
 
   // Far to near. The tie-break keeps two primitives at identical depth in a
   // fixed order, so a frame never flickers between two equally-valid paintings.
-  prims.sort((a, b) => b.depth - a.depth || a.kind.localeCompare(b.kind));
+  prims.sort((a, b) => b.depth - a.depth || RANK[a.kind] - RANK[b.kind]);
 
   let beaconsDrawn = 0;
   const labelled: { tower: Tower; at: Point; ppu: number; lit: boolean }[] = [];
 
   for (const prim of prims) {
+    if (prim.kind === 'wash') {
+      drawWash(context, prim.tower, eye, viewport, prim.fade);
+      continue;
+    }
     if (prim.kind === 'road') {
       strokeRoad(context, prim, viewport, eye);
       continue;
@@ -165,7 +223,7 @@ export function drawWorldFrame(
     }
   }
 
-  const labelsDrawn = drawLabels(context, labelled, viewport);
+  const labelsDrawn = drawLabels(context, labelled, viewport, input.chrome);
 
   return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn };
 }
@@ -189,22 +247,31 @@ function drawSkyAndGround(
   viewport: Viewport,
 ): void {
   const horizon = horizonY(eye, viewport);
-  const sky = context.createLinearGradient(0, 0, 0, Math.max(1, horizon));
+  const top = Math.max(0, Math.min(viewport.height, horizon));
+
+  const sky = context.createLinearGradient(0, 0, 0, Math.max(1, top));
   sky.addColorStop(0, SKY_TOP);
   sky.addColorStop(1, SKY_HORIZON);
   context.fillStyle = sky;
-  context.fillRect(0, 0, viewport.width, Math.max(0, horizon));
+  context.fillRect(0, 0, viewport.width, top);
 
-  context.fillStyle = GROUND;
-  context.fillRect(0, Math.max(0, horizon), viewport.width, viewport.height - Math.max(0, horizon));
+  // The ground is graded from the horizon down: far ground is nearly the sky's
+  // colour and near ground is darker, which is the cue that says *this plane
+  // recedes* on a surface with no texture of its own to shrink.
+  const floor = context.createLinearGradient(0, top, 0, viewport.height);
+  floor.addColorStop(0, GROUND_FAR);
+  floor.addColorStop(1, GROUND);
+  context.fillStyle = floor;
+  context.fillRect(0, top, viewport.width, viewport.height - top);
 
-  // A haze band at the horizon, so distance reads as distance rather than as a
-  // hard cut where `VIEW_DISTANCE` bites.
-  const haze = context.createLinearGradient(0, Math.max(0, horizon), 0, Math.max(0, horizon) + 120);
-  haze.addColorStop(0, 'rgba(20, 28, 43, 0.95)');
-  haze.addColorStop(1, 'rgba(20, 28, 43, 0)');
+  // A glow sitting on the horizon line itself, so the two planes meet in air
+  // rather than at a hard seam.
+  const haze = context.createLinearGradient(0, top - 90, 0, top + 130);
+  haze.addColorStop(0, 'rgba(74, 96, 132, 0)');
+  haze.addColorStop(0.42, 'rgba(74, 96, 132, 0.55)');
+  haze.addColorStop(1, 'rgba(74, 96, 132, 0)');
   context.fillStyle = haze;
-  context.fillRect(0, Math.max(0, horizon), viewport.width, 120);
+  context.fillRect(0, top - 90, viewport.width, 220);
 }
 
 /** 1 near, 0 at the view distance. Everything multiplies its alpha by this. */
@@ -212,6 +279,46 @@ function fadeAt(distance: number): number {
   const start = VIEW_DISTANCE * 0.45;
   if (distance <= start) return 1;
   return Math.max(0, 1 - (distance - start) / (VIEW_DISTANCE - start));
+}
+
+/**
+ * A district's colour pooled on the ground under one file.
+ *
+ * A ground circle under perspective is an ellipse, and the honest way to draw
+ * one is to project points around it rather than to place a screen-space
+ * ellipse — the second is right only when the camera looks straight down, which
+ * is the one angle this view never uses. Ten points is enough that the edge
+ * reads as curved and few enough to run over every visible tower every frame.
+ */
+const WASH_POINTS = 10;
+const WASH_RADIUS = 30;
+
+function drawWash(
+  context: CanvasRenderingContext2D,
+  tower: Tower,
+  eye: Eye,
+  viewport: Viewport,
+  fade: number,
+): void {
+  const ring: ViewPoint[] = [];
+  for (let i = 0; i < WASH_POINTS; i++) {
+    const angle = (i / WASH_POINTS) * Math.PI * 2;
+    ring.push(
+      toView(
+        eye,
+        tower.node.x + Math.cos(angle) * WASH_RADIUS,
+        tower.node.y + Math.sin(angle) * WASH_RADIUS,
+        0,
+      ),
+    );
+  }
+  const clipped = clipRing(ring, viewport, eye);
+  if (clipped === null) return;
+  tracePolygon(context, clipped);
+  context.fillStyle = regionWash(tower.node.regionIndex, 1);
+  context.globalAlpha = fade * 0.16;
+  context.fill();
+  context.globalAlpha = 1;
 }
 
 // ---- roads ----------------------------------------------------------------
@@ -296,7 +403,9 @@ function strokeRoad(
   context.lineTo(b.point.x - nx * halfB, b.point.y - ny * halfB);
   context.lineTo(a.point.x - nx * halfA, a.point.y - ny * halfA);
   context.closePath();
-  context.fillStyle = prim.dashed ? 'rgba(140, 160, 190, 0.20)' : 'rgba(150, 172, 205, 0.34)';
+  // Quiet on purpose. A road is ground, and at this density a bright one reads
+  // as a scratch across whatever building happens to stand behind it.
+  context.fillStyle = prim.dashed ? 'rgba(176, 198, 230, 0.16)' : 'rgba(198, 220, 250, 0.30)';
   context.globalAlpha = prim.fade;
   context.fill();
   context.globalAlpha = 1;
@@ -320,7 +429,7 @@ function faceShade(a: ViewPoint, b: ViewPoint): number {
   const span = Math.hypot(dx, dz);
   if (span < 1e-6) return 0.5;
   // How side-on the face is: |cross(normal, view)| collapses to this in 2D.
-  return 0.34 + 0.5 * Math.abs(dx / span);
+  return 0.30 + 0.72 * Math.abs(dx / span);
 }
 
 function drawTower(
@@ -420,7 +529,11 @@ function clipQuad(
   viewport: Viewport,
   eye: Eye,
 ): Point[] | null {
-  const input = [a, b, c, d];
+  return clipRing([a, b, c, d], viewport, eye);
+}
+
+/** The same, for a convex ring of any length. */
+function clipRing(input: readonly ViewPoint[], viewport: Viewport, eye: Eye): Point[] | null {
   const out: ViewPoint[] = [];
   for (let i = 0; i < input.length; i++) {
     const current = input[i] as ViewPoint;
@@ -589,10 +702,18 @@ function drawHero(
   // A shadow, so the body reads as standing on the ground rather than floating
   // over it — the one cue a flat-shaded figure on a flat plane has nothing else
   // to give.
-  context.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  context.fillStyle = 'rgba(0, 0, 0, 0.5)';
   context.beginPath();
-  context.ellipse(foot.point.x, foot.point.y, HERO_RADIUS * ppu * 0.85, HERO_RADIUS * ppu * 0.34, 0, 0, Math.PI * 2);
+  context.ellipse(foot.point.x, foot.point.y, HERO_RADIUS * ppu * 1.5, HERO_RADIUS * ppu * 0.6, 0, 0, Math.PI * 2);
   context.fill();
+  // A ring on the ground at the body's own radius: the one mark that says
+  // *this is you* at any distance, and it doubles as the collision footprint
+  // made visible, so what you can squeeze through is legible rather than felt.
+  context.strokeStyle = 'rgba(255, 236, 190, 0.85)';
+  context.lineWidth = Math.max(1, ppu * 0.16);
+  context.beginPath();
+  context.ellipse(foot.point.x, foot.point.y, HERO_RADIUS * ppu, HERO_RADIUS * ppu * 0.4, 0, 0, Math.PI * 2);
+  context.stroke();
 
   const tall = foot.point.y - head.point.y;
   const headRadius = Math.max(1.2, tall * 0.14);
@@ -636,6 +757,7 @@ function drawLabels(
   context: CanvasRenderingContext2D,
   candidates: { tower: Tower; at: Point; ppu: number; lit: boolean }[],
   viewport: Viewport,
+  chrome: readonly Box[],
 ): number {
   context.font = LABEL_FONT;
   context.textAlign = 'center';
@@ -650,6 +772,17 @@ function drawLabels(
     const text = candidate.tower.node.label;
     const half = context.measureText(text).width / 2 + 4;
     const y = at.y - 8;
+    if (
+      chrome.some(
+        (box) =>
+          at.x + half > box.left &&
+          at.x - half < box.left + box.width &&
+          y > box.top &&
+          y - 15 < box.top + box.height,
+      )
+    ) {
+      continue;
+    }
     const clash = placed.some(
       (other) => Math.abs(other.y - y) < 15 && Math.abs(other.x - at.x) < other.half + half,
     );
