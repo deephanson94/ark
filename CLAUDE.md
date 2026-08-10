@@ -882,6 +882,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   believable**, which is the always-reads-good instrument in a new costume, and the cap was a
   performance guard nobody remembered writing. A table over repos of different sizes is a claim that
   the instrument scaled; say what it sampled, or do not sample.
+- **A glyph radius is not a ground area, and nothing in the type system knows the difference.** The
+  world took `radiusFor(loc)` — the flat map's disc radius, drawn at whatever screen scale the camera
+  holds — as the footprint a building occupies on the ground. Measured, that leaves **88.5% of this
+  repo's towers and 52.2% of hono's with no body-width gap to their nearest neighbour**: the city is
+  one solid mass, the camera stands inside a wall, and the first screenshots were a green rectangle.
+  Both quantities are "how big is this file" in world units, both are `number`, and one is a symbol
+  while the other is a place you cannot walk. The fix is a **uniform** scalar, which keeps the only
+  thing the size channel actually claims (the ordering) — but the lesson is the unexamined step:
+  **when you reuse a number in a new dimension, ask what it was measuring in the old one.**
 - **A design document for a new layer is not covered by the landmines the old layers paid for.**
   ADR-0032 designed a walkable world in which *"a lit stone you can interact with"* is a node with an
   open board — and **Placement's subject is a commit**, which has no `layout` and nowhere to stand:
@@ -954,7 +963,8 @@ npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run test:pack          # ~30 s — pack, install outside the repo, run `ark index` and `ark play`
 npm run budget             # print measured budgets, fail over ceiling
-npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3)
+npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
+                           #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
 ```
 
@@ -1080,6 +1090,18 @@ Press **`o`** for the orbit view: every file a column standing on its 2D footing
 `elevation`, drag to turn the world. `o` again returns to the flat map, and straight down reproduces
 it to the pixel *at the same heading*. Still zero runtime dependencies.
 
+**Press `g` to walk it** (**[ADR-0033](./docs/decisions/0033-the-roads-are-the-edges-and-a-commit-stands-at-the-chronicle.md)**)
+— a third-person hero in a city where a file is a building, its height is `elevation`, and **the
+roads on the ground are the import edges**, which is the decision that supersedes ADR-0032's
+*"featureless plane"* and answers its §9.1. A commit-subject board has no `layout` and is answered at
+**one chronicle** outside the map, because putting its marker among the files it touched would be
+Placement's answer key drawn on the ground. Walking past a building **surveys** it, through the map's
+own recorder. Three views over one atlas now, and X,Y are still frozen. **The world is a mode, not
+the arrival state, and that is S1 rather than taste** — `docs/experiments/0001` is unrun, so nothing
+here may claim walking teaches better. **P4 was released by the owner** and ADR-0009 carries the
+dated note; the sequence there is the point, since it was first proposed against a description of
+half the gate.
+
 **The map turns between challenges**, by the golden angle, as the console closes
 (**[ADR-0017](./docs/decisions/0017-the-map-turns-between-challenges.md)**) — because map-derived
 spatial memory is orientation-locked and a north-up-forever map trains exactly the alignment-specific
@@ -1196,8 +1218,9 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. ~95 KiB of JS, zero runtime dependencies, first paint ~400 ms. `npm run index` produces
-a valid 299.9 KiB atlas in ~430 ms (measured at `e6fe5e4`).
+sentence. **112 KiB of JS** (95 before the walkable world), zero runtime dependencies, first paint
+**332 ms** measured by `test:e2e`. `npm run index` produces a valid **338.5 KiB** atlas in **691 ms**
+(measured at `1827ff93`, the commit this branch was cut from).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
@@ -1267,14 +1290,16 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **close ADR-0032 §9's three redesign findings before any rung-3 code is written.** Rung 3
-is *designed, reviewed and sent back*, which is a different state from designed — the world model has
-**no import edges in it** (so it would teach *near = coupled*, the fallacy `treeSibling` exists to
-punish), a **commit** subject has no `layout` and nowhere to stand on 25% of ark's deck and **77% of
-django's**, and stage A — the cheap falsifying test the whole staging was built around — cannot run
-against an orthographic camera with `MIN_PITCH = 0.18`. **P4 is not decided and no decision may be
-asked for on it until it is put accurately**: it has two legs, the Trace verb *and* the orbit's own
-measured results, and all three documents described one. Then **build ADR-0030's twin surface** — the
+Next action: **run `docs/experiments/0001`.** The walkable world ships (ADR-0033), which turns S1 from
+a gate on a thing that does not exist into a gate on a thing that does — and **nothing in the product
+may claim the world teaches better until it runs**, which is why the flat map is still the arrival
+state. Two blockers first, both in that document's §8: the two matched repos are still a TODO, and a
+two-arm design cannot detect *"orbit beats both"*, which is what `docs/prior-art.md` predicts.
+**And the sharpest problem is ADR-0033 §4**: the minimap draws the same import edges the world does,
+so a player may be reading topology off a 2D inset drawn over a 3D scene — it must be in both arms or
+neither, and separating world from inset needs a third condition. Then **region arches in the world**,
+which are unbuilt because ADR-0032 §9.6 refuses the obvious derivation. Then **build ADR-0030's twin
+surface** — the
 decision, the gate and the leak measurement are done; the code is not — an inspector line in the
 *revealed* register, its gate wired to the deck (*no member of the class still carries an unanswered
 board*), and its tests. Then the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60

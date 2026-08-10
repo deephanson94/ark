@@ -49,6 +49,8 @@ import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
 import type { Ties } from './ties.js';
 import { NO_TIES, tiesNamedBy } from './ties.js';
+import type { WorldMode } from './world/index.js';
+import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
@@ -220,6 +222,17 @@ function start(scene: Scene, root: HTMLElement): void {
   // knowledge. Turning the world is an *addition*, one keystroke away and one
   // keystroke back.
   let orbit: Orbit | null = null;
+  /**
+   * The walkable world (ADR-0033), entered with `g` and left with `g` or Escape.
+   *
+   * Third of three views over one atlas and the last of ADR-0009's rungs. It is
+   * a **mode**, not the arrival state: D1's promise is that the fitted overview
+   * survives and stays a keystroke away, and `docs/experiments/0001` has not
+   * been run, so nothing here may become the default. `enter` takes the flat
+   * map's selection as the place to stand, which is §3.4's fast travel — pick
+   * on the map, walk from there.
+   */
+  const world: WorldMode = createWorldMode();
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
   /**
@@ -293,8 +306,18 @@ function start(scene: Scene, root: HTMLElement): void {
     return pick(scene, world.x, world.y, camera.scale);
   };
 
+  /**
+   * `progress.surveyed` as a set.
+   *
+   * Kept beside the record rather than derived at the call site because the
+   * walk asks "have I seen this?" for every building in reach, every frame —
+   * `Array.includes` over 3,035 nodes at 60 Hz is the shape of an O(n) trap
+   * django would find for us.
+   */
+  let surveyedIds = new Set<NodeId>(loadProgress(store, saveKey).surveyed);
   const remember = (next: Progress): void => {
     progress = next;
+    surveyedIds = new Set(next.surveyed);
     fog = deriveFog(progress, liveness, shore);
     tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
     retie();
@@ -433,6 +456,28 @@ function start(scene: Scene, root: HTMLElement): void {
     const bucket = challengesById.get(node.id);
     if (bucket === undefined || bucket.length === 0) return null;
     return bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null;
+  };
+
+  /**
+   * The next board whose subject is **not** a node, in tier order.
+   *
+   * ADR-0033 decision 2: a commit has no `layout` and therefore nowhere to
+   * stand, so the walkable world serves these from the chronicle rather than
+   * from a place. Placing a commit's marker among the files it touched would be
+   * Placement's own answer key drawn on the ground — the leak that decision
+   * exists to refuse.
+   *
+   * `!isNodeId` rather than `isCommitId`, deliberately: a future id kind with
+   * no `layout` should land here rather than silently vanish from the world,
+   * which is the *subject-is-not-a-node* landmine met with the lesson learned.
+   */
+  const nextPlacelessChallenge = (): Challenge | null => {
+    const open = scene.atlas.challenges.filter(
+      (challenge) =>
+        !isNodeId(challenge.subject) &&
+        !selector.answered.has(answerKey(challenge.verb, challenge.subject)),
+    );
+    return [...open].sort(challengeOrder)[0] ?? null;
   };
 
   const describe = (node: SceneNode | null): void => {
@@ -657,7 +702,117 @@ function start(scene: Scene, root: HTMLElement): void {
     invalidate();
   }
 
+  /**
+   * One frame of the walkable world, plus the two things drawn over it.
+   *
+   * The prompt and the control hint are painted on the **canvas** rather than
+   * added to the DOM chrome, because they belong to a mode: a DOM panel would
+   * have to be created, hidden, shown and measured into `chrome`, and every one
+   * of those is a place for the two views to disagree about what is on screen.
+   */
+  function drawWorld(): void {
+    const placeless = nextPlacelessChallenge();
+    const stats = world.draw(context, {
+      viewport,
+      fog,
+      questions: unanswered,
+      chronicleLit: placeless !== null,
+    });
+    const focus = world.focus(unanswered, placeless !== null);
+    drawWorldChrome(context, viewport, focus, placeless);
+    hud.update(
+      coverage(fog, scene.nodes.length),
+      'world',
+      // Measured, not asserted — the same rule the map's `peaksDrawn` and
+      // `tiesDrawn` are here for. `roads` is the one to watch: ADR-0033's whole
+      // argument is that the ground carries the import graph, so a frame that
+      // draws zero roads is that argument silently not shipping.
+      `${stats.towersDrawn} towers · ${stats.roadsDrawn} roads · ${stats.labelsDrawn} labels · ${stats.beaconsDrawn} beacons`,
+      openQuestions,
+      unanswered.size,
+      // North is north: the minimap is north-up and the world does not turn
+      // under the walker, so the compass has one thing to say and says it.
+      NORTH,
+    );
+  }
+
+  function drawWorldChrome(
+    target: CanvasRenderingContext2D,
+    view: { width: number; height: number },
+    focus: ReturnType<WorldMode['focus']>,
+    placeless: Challenge | null,
+  ): void {
+    target.save();
+    target.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace';
+    target.textAlign = 'center';
+    if (focus !== null) {
+      // The chronicle names what it would open using the **verb's** own label
+      // for its subject, which is the same string the guide already shows —
+      // the shell asks *what is this called* and never *what is it about*
+      // (ADR-0027). Writing "a commit" here instead would be the console
+      // guessing at a noun, which is the mistake ADR-0027 exists to prevent.
+      const subject =
+        placeless === null
+          ? null
+          : (VERBS[placeless.verb as keyof typeof VERBS]?.subjectLabel(
+              scene.graph,
+              placeless.subject,
+            ) ?? null);
+      const label =
+        focus.kind === 'chronicle'
+          ? `Enter — the chronicle${subject === null ? '' : ` · ${subject}`}`
+          : `Enter — ${focus.tower.node.label}`;
+      const width = target.measureText(label).width + 26;
+      const x = view.width / 2;
+      const y = view.height - 84;
+      target.fillStyle = 'rgba(8, 12, 18, 0.86)';
+      target.fillRect(x - width / 2, y - 20, width, 28);
+      target.strokeStyle = 'rgba(126, 214, 214, 0.7)';
+      target.lineWidth = 1;
+      target.strokeRect(x - width / 2, y - 20, width, 28);
+      target.fillStyle = '#e6edf7';
+      target.fillText(label, x, y);
+    }
+    // Bottom centre, clear of the minimap on the left and the guide on the
+    // right. The first version put it bottom-right, underneath the guide panel,
+    // which is the chrome-collision the map solves with `measureChrome` — the
+    // world paints on the canvas instead, so it has to keep its own distance.
+    target.textAlign = 'center';
+    target.fillStyle = 'rgba(124, 135, 152, 0.9)';
+    target.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+    target.fillText(
+      'WASD move · Q/E turn · shift run · enter open · g map',
+      view.width / 2,
+      view.height - 22,
+    );
+    target.restore();
+  }
+
   function frame(): void {
+    if (world.isActive()) {
+      // A walk is continuous, so this view drives itself: `advance` integrates
+      // real elapsed time and says whether anything moved. It is the one place
+      // in the player that redraws without an event, and it stops the moment
+      // the keys are released rather than spinning a frame budget on a still
+      // picture.
+      if (world.advance(performance.now())) {
+        dirty = true;
+        // Walking past a building is looking at it. The flat map surveys on a
+        // click; this is the same act with legs, through the same recorder, so
+        // the fog cannot end up with two definitions of "seen" (ADR-0011).
+        const fresh = world
+          .surveyable()
+          .filter((node) => !surveyedIds.has(node.id))
+          .map((node) => node.id);
+        if (fresh.length > 0) remember(recordSurvey(progress, fresh));
+      }
+      if (dirty) {
+        dirty = false;
+        drawWorld();
+      }
+      requestAnimationFrame(frame);
+      return;
+    }
     if (turning !== null) {
       const elapsed = performance.now() - turning.startedAt;
       applyBearing(bearingDuring(turning.from, turning.to, elapsed, turning.ms), turning.pivot);
@@ -751,6 +906,11 @@ function start(scene: Scene, root: HTMLElement): void {
   };
 
   canvas.addEventListener('pointerdown', (event) => {
+    // A walk owns the pointer for looking, not for panning a map that is not on
+    // screen. Nothing here has a meaning in the world view yet — mouse-look is
+    // deliberately not wired, because the keyboard turn is enough to walk with
+    // and a pointer-lock gesture is a decision of its own.
+    if (world.isActive()) return;
     dragging = true;
     turningDrag = event.shiftKey;
     moved = 0;
@@ -760,6 +920,7 @@ function start(scene: Scene, root: HTMLElement): void {
   });
 
   canvas.addEventListener('pointermove', (event) => {
+    if (world.isActive()) return;
     if (dragging) {
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
@@ -835,6 +996,10 @@ function start(scene: Scene, root: HTMLElement): void {
     'wheel',
     (event) => {
       event.preventDefault();
+      // The world has no zoom: the eye is a body's eye, and a scroll wheel that
+      // pushed it through a wall would be a camera control in a view whose one
+      // claim is that you are standing somewhere.
+      if (world.isActive()) return;
       const factor = Math.exp(-event.deltaY * 0.0015);
       // In orbit, zoom about the viewport centre rather than the pointer.
       // `zoomAt` keeps the world point *under the cursor* fixed, and it works
@@ -856,6 +1021,63 @@ function start(scene: Scene, root: HTMLElement): void {
     { passive: false },
   );
 
+  const MOVEMENT_KEYS = [
+    'w',
+    'a',
+    's',
+    'd',
+    'q',
+    'e',
+    'Shift',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+  ];
+
+  /**
+   * Panels that are about the *map* and are wrong at street level.
+   *
+   * The inspector says "click a landmark, hover to see what imports it", which
+   * describes a mouse on a map; the legend sits exactly where the minimap goes.
+   * Hidden rather than rebuilt for the world, because a second inspector is a
+   * second place for the two views to disagree about what a node is — and this
+   * repo's landmine about a rule living twice has been paid for four times.
+   */
+  const mapOnlyPanels = [legend, inspector.root];
+
+  function enterWorld(): void {
+    landTurn();
+    for (const panel of mapOnlyPanels) panel.style.display = 'none';
+    // Standing where the map was looking. `selected` is the flat map's own
+    // pick, so the two views agree about where "here" is without the world
+    // needing to know how a selection was made.
+    world.enter(scene, selected);
+    measureChrome();
+    invalidate();
+  }
+
+  function leaveWorld(): void {
+    world.exit();
+    for (const panel of mapOnlyPanels) panel.style.removeProperty('display');
+    // The flat map is not re-framed on the way out, for the same reason the
+    // orbit is not: a camera the player moved is theirs, and spatial memory
+    // lives in the frame they left.
+    measureChrome();
+    invalidate();
+  }
+
+  window.addEventListener('keyup', (event) => {
+    if (world.keyUp(event.key)) invalidate();
+  });
+
+  // A tab that loses focus keeps no key down. Without this, alt-tabbing mid
+  // stride leaves the hero walking into a wall until you come back.
+  window.addEventListener('blur', () => {
+    if (!world.isActive()) return;
+    for (const key of MOVEMENT_KEYS) world.keyUp(key);
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && challengePanel.isOpen()) {
       challengePanel.close();
@@ -865,7 +1087,44 @@ function start(scene: Scene, root: HTMLElement): void {
       notebook.close();
       return;
     }
-    if (challengePanel.isOpen() || notebook.isOpen()) return;
+    if (event.key === 'Escape' && world.isActive()) {
+      leaveWorld();
+      return;
+    }
+    if (challengePanel.isOpen() || notebook.isOpen()) {
+      // A key held when the console opened would otherwise still be held when it
+      // closes, and the hero would walk off on its own. Releasing everything is
+      // the cheap fix and it is the right one: a modal takes the keyboard.
+      if (world.isActive()) for (const key of MOVEMENT_KEYS) world.keyUp(key);
+      return;
+    }
+    if (event.key.toLowerCase() === 'g') {
+      // ADR-0033. In from wherever the map has selected — §3.4's fast travel,
+      // so crossing django to reach one file is a click and not a commute —
+      // and out to the flat map, which stays the arrival state and is never
+      // more than this one keystroke away (ADR-0009 D1).
+      if (world.isActive()) leaveWorld();
+      else enterWorld();
+      return;
+    }
+    if (world.isActive()) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        const focus = world.focus(unanswered, nextPlacelessChallenge() !== null);
+        if (focus === null) return;
+        event.preventDefault();
+        const challenge =
+          focus.kind === 'chronicle' ? nextPlacelessChallenge() : challengeFor(focus.tower.node);
+        if (challenge !== null) challengePanel.open(challenge);
+        return;
+      }
+      if (world.keyDown(event.key)) {
+        // Arrows scroll the page and space would too; a walk owns them while it
+        // is running.
+        event.preventDefault();
+        invalidate();
+      }
+      return;
+    }
     if (event.key === 'f') {
       // Fit *at the current heading*, never back to north: `f` answers "show me
       // all of it", and a fit that also straightened the map would quietly undo

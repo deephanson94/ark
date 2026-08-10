@@ -27,6 +27,9 @@ import {
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { VERBS, isGameable, scoreSet, wordsFor } from '../../src/verbs/index.js';
+import { prepare } from '../../src/player/scene.js';
+import { FOOTPRINT_SCALE, buildWorld } from '../../src/player/world/build.js';
+import { HERO_RADIUS } from '../../src/player/world/hero.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
 import {
   MAPPED_SHARE,
@@ -1027,3 +1030,80 @@ describe('challenges', () => {
 // atlas size and index time conflates "is this correct" with "is this within
 // its means", and the second question needs a report a human reads, not a
 // green tick. See scripts/budget.ts.
+
+/**
+ * The walkable world, over the real graph (ADR-0033).
+ *
+ * These live here rather than in `tests/unit/world.test.ts` for a reason a
+ * mutation found: the unit fixture's edges are all short, so *"a road for every
+ * edge"* passed there against a build that silently dropped every edge over 200
+ * units. The fixture could not express the defect. This repo's own graph can.
+ */
+describe('the walkable world stands on the real atlas', () => {
+  it('lays exactly one road per edge, at whatever length the layout gives', () => {
+    const scene = prepare(atlas);
+    const world = buildWorld(scene);
+    expect(world.roads).toHaveLength(atlas.edges.length);
+    // The population, so the equality is not satisfied by two empty lists — and
+    // the *long* ones specifically, which is the class the unit fixture lacks
+    // and the class that exercises the painter's chopping in `render.ts`.
+    //
+    // Measured on this repo at `1827ff93`: 545 roads, lengths 13.8 / 55.9 /
+    // 118.5 / 209.7 (min, median, p90, max), of which **412 are longer than the
+    // 34-unit chop**. The bars are an order below those, because the assertion
+    // is *"this graph has long-range edges at all"* and not a fingerprint of
+    // one commit's layout — ark indexes itself, so a tight bar here would go
+    // red on somebody else's unrelated change.
+    const longest = Math.max(...world.roads.map((road) => road.length));
+    const chopped = world.roads.filter((road) => road.length > 34).length;
+    expect(world.roads.length, 'no roads at all').toBeGreaterThan(100);
+    expect(longest, `longest road ${longest.toFixed(1)}`).toBeGreaterThan(100);
+    expect(chopped, `roads longer than the chop: ${chopped}`).toBeGreaterThan(50);
+  });
+
+  it('gives every node a tower whose footprint is the map’s own radius', () => {
+    const scene = prepare(atlas);
+    const world = buildWorld(scene);
+    expect(world.towers).toHaveLength(atlas.nodes.length);
+    for (const tower of world.towers) {
+      expect(tower.footprint).toBeCloseTo(tower.node.radius * FOOTPRINT_SCALE, 9);
+    }
+    // What the scalar was chosen for: the fraction of the repo with no
+    // body-width gap to its nearest neighbour. Unscaled it is 88.5% here and
+    // 52.2% on hono, which is a solid block rather than a city. The bar is
+    // loose because ark indexes itself and the layout moves every commit; the
+    // measured value at `1827ff93` is 3.3%.
+    let blocked = 0;
+    for (const a of world.towers) {
+      let clearance = Number.POSITIVE_INFINITY;
+      for (const b of world.towers) {
+        if (a.ref === b.ref) continue;
+        const gap =
+          Math.hypot(a.node.x - b.node.x, a.node.y - b.node.y) - a.footprint - b.footprint;
+        if (gap < clearance) clearance = gap;
+      }
+      if (clearance < HERO_RADIUS * 2) blocked++;
+    }
+    const share = blocked / world.towers.length;
+    expect(share, `${(share * 100).toFixed(1)}% of towers have no walkable gap`).toBeLessThan(0.15);
+  });
+
+  it('has somewhere to answer every board whose subject is not a node', () => {
+    // ADR-0033 decision 2 in the form that matters: the fraction of the deck a
+    // node-only world could not serve. On this repo it is a quarter and on
+    // django it is 77%, which is why the chronicle exists. If this ever reads
+    // zero the assertion has stopped testing anything — hence the floor.
+    const placeless = atlas.challenges.filter((challenge) => !isNodeId(challenge.subject));
+    expect(placeless.length, 'no commit-subject board in the deck at all').toBeGreaterThan(5);
+    const scene = prepare(atlas);
+    const world = buildWorld(scene);
+    // Every one of them is served from one landmark, and that landmark stands
+    // outside the map — never among the files a commit touched, which would be
+    // Placement's own answer key drawn on the ground.
+    expect(world.chronicle.y).toBeLessThan(scene.bounds.minY);
+    for (const tower of world.towers) {
+      const gap = Math.hypot(tower.node.x - world.chronicle.x, tower.node.y - world.chronicle.y);
+      expect(gap).toBeGreaterThan(world.chronicle.radius + tower.footprint);
+    }
+  });
+});

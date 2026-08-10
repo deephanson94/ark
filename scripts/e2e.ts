@@ -1056,6 +1056,83 @@ async function main(): Promise<number> {
       failures.push({ what: 'orbit', detail: `o did not return to the flat map: ${backDetail}` });
     }
 
+    // ---- the walkable world (ADR-0033) ----------------------------------
+    //
+    // Same discipline as the orbit above: a canvas hash gates every claim,
+    // because "the view changed" is the one thing a screenshot cannot assert
+    // and `npm run raster` printed plausible nonsense twice before it had a
+    // gate. Three things have to be true, and each is checked by a *measured*
+    // value rather than by the absence of an error — entering changes the
+    // picture, walking changes it again, and the ground carries roads, which is
+    // the entire argument of ADR-0033 decision 1.
+    const beforeWorld = await hashCanvas();
+    await page.keyboard.press('g');
+    await page.waitForTimeout(300);
+    const inWorld = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'world.png') });
+    const worldDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: world → ${worldDetail}\n`);
+    if (inWorld === beforeWorld) {
+      failures.push({ what: 'world', detail: 'pressing g changed nothing on the canvas' });
+    }
+    // ADR-0033 decision 1: the roads *are* the import edges, and a world that
+    // draws none teaches topology as proximity — the `treeSibling` fallacy with
+    // legs. A count of zero here is that regression, silently.
+    const roadsDrawn = Number(/(\d+) roads/.exec(worldDetail)?.[1] ?? '0');
+    if (roadsDrawn <= 0) {
+      failures.push({ what: 'world', detail: `the ground carried no roads: ${worldDetail}` });
+    }
+    const towersDrawn = Number(/(\d+) towers/.exec(worldDetail)?.[1] ?? '0');
+    if (towersDrawn <= 0) {
+      failures.push({ what: 'world', detail: `nothing was standing on the plane: ${worldDetail}` });
+    }
+
+    // Walking. `surveyed` must rise, because walking past a building is looking
+    // at it — the mechanic that makes an unexplored world navigable rather than
+    // a city of unnamed shapes. Read off the HUD, which is the same counter the
+    // map's own survey step reads.
+    const surveyedBeforeWalk = Number(
+      /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+    );
+    await page.keyboard.down('w');
+    await page.waitForTimeout(2600);
+    await page.keyboard.up('w');
+    await page.waitForTimeout(250);
+    const walked = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'world-walked.png') });
+    if (walked === inWorld) {
+      failures.push({ what: 'world', detail: 'holding w moved nothing — the hero does not walk' });
+    }
+    const surveyedAfterWalk = Number(
+      /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+    );
+    if (surveyedAfterWalk <= surveyedBeforeWalk) {
+      failures.push({
+        what: 'world',
+        detail: `walking surveyed nothing: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+      });
+    }
+    process.stdout.write(
+      `e2e: walking surveyed ${surveyedBeforeWalk} → ${surveyedAfterWalk}\n`,
+    );
+
+    // Turning. The one control that makes this egocentric rather than a dolly.
+    await page.keyboard.down('e');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('e');
+    await page.waitForTimeout(250);
+    if ((await hashCanvas()) === walked) {
+      failures.push({ what: 'world', detail: 'holding e turned nothing' });
+    }
+
+    // ADR-0009's D1 again: the flat map is one keystroke away from here too.
+    await page.keyboard.press('g');
+    await page.waitForTimeout(250);
+    const outDetail = (await page.locator('.hud-detail').innerText()).trim();
+    if (outDetail.includes('world')) {
+      failures.push({ what: 'world', detail: `g did not return to the flat map: ${outDetail}` });
+    }
+
     // ---- Placement: a question with no place on the map -----------------
     //
     // ADR-0018's liveness gate. Placement's subject is a commit, so it is

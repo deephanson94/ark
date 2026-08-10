@@ -2816,3 +2816,36 @@ One line per iteration: what changed, and what to do next.
   with §9.1 — a minimap that draws the edges the world lacks is a finding, not a fix.
 
   **Next**: close §9's three redesign items before any rung-3 code, then ADR-0030's twin surface.
+
+- **Rung 3 built: a hero walks the repo.** Press `g`. ADR-0033, which supersedes ADR-0032's central
+  decision and answers four of its nine review findings. The owner released **P4** — both legs, after
+  it was put accurately — and **S1 is untouched**, so the world ships as a *mode*: the flat map is
+  still the arrival state and nothing claims walking teaches better, because nothing has measured it.
+
+  **The roads are the edges.** ADR-0032 said the ground carried nothing; §9.1 found that this left
+  topology visible only as proximity, which is a spring-embedder artifact and the exact fallacy
+  `treeSibling` exists to punish. A road is an import, same endpoints, same coordinates — asserted as
+  an *equality* in both suites, because a world with extra roads invents geography and one with fewer
+  is the defect coming back. **A commit stands at the chronicle**, one obelisk outside the map, since
+  25% of ark's deck and 77% of django's has a subject with no `layout`; putting its marker among the
+  files it touched would be Placement's own answer key drawn on the ground. **A perspective camera**,
+  beside the orbit's orthographic one rather than replacing it — the suite asserts both directions,
+  that doubling the distance halves the size here and changes a column's height by nothing there.
+
+  **Three defects the pictures found that no assertion would have.** The hero was 11 units tall in a
+  world whose median gap is 12–19 — a person taller than the city. It was drawn last, so walking
+  behind a building pasted the figure on its wall. And the camera walked *through* buildings, because
+  the footprint was `radiusFor(loc)` unchanged: measured, that is **88.5% of this repo's towers and
+  52.2% of hono's with no body-width gap to their nearest neighbour**. A glyph radius is not a ground
+  area. A uniform ×0.4 — the knee, both neighbours named — takes ark to 3.3% and keeps §9.7's
+  monotonicity exactly.
+
+  **Walking past a building surveys it**, through the same recorder the map's click uses, so the fog
+  has one definition of "seen". Measured in the e2e: a 2.6 s walk takes ark from 66 to 69 surveyed.
+  The minimap is **north-up**, against ADR-0032 §3.5 — a turning minimap is a route instrument and a
+  fixed one is a survey instrument, which is what ark teaches. ~1,150 lines, zero new runtime
+  dependencies, Canvas 2D.
+
+  **Next**: run `docs/experiments/0001`. Its §8 has two blockers, and ADR-0033 §4 has the sharpest
+  problem in the whole rung — the minimap draws the same edges the world does, so it must be in both
+  arms or neither, and telling world from inset needs a third condition.

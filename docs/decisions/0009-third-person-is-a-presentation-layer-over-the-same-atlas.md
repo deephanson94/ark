@@ -1,7 +1,8 @@
 # ADR-0009 — Third person is a presentation layer over the same atlas, and it is blocked
 
-- **Status**: **accepted in principle — rungs 0–2 shipped; rung 3 designed, reviewed and sent back,
-  2026-08-10.** The decision is that this direction is *allowed* and on what terms. **Both owner's
+- **Status**: **accepted in principle — rungs 0–3 shipped, 2026-08-10.** Rung 3 was designed,
+  reviewed, sent back, redesigned and built in one session; **P4 released by the owner, S1 still
+  open and still gating *ship* rather than *build*.** The decision is that this direction is *allowed* and on what terms. **Both owner's
   notes are authority, the later one qualifying the earlier**; the title's "and it is blocked" and
   the Direction paragraph's *"the status line stays as it is"* are both older than this line and are
   superseded by it. This line originally read "blocked, and not scheduled …
@@ -363,7 +364,11 @@ the owner's judgement is that it is not the thing. That is a fact about the prod
 
 **What is *proposed* and needs the owner's word:**
 
-1. **P4 — and this proposal is WITHDRAWN, because it described half the gate.** P4 has two legs:
+1. **P4 — WITHDRAWN as put, then RELEASED by the owner once it was put accurately.** See the
+   2026-08-10 (second) note below. What follows is the withdrawal, kept because the sequence is the
+   point: a gate described as half of itself, withdrawn, restated in full, and only then decided.
+
+   P4 has two legs:
    the Trace verb (M6) must exist, **and** *"the orbit's own measured results"* must be in — the
    08-07 note above says both. The first version of this paragraph named only Trace, and argued the
    release on the ground that *"P4's concern is recall and 0001 measures recall"*. That answers
@@ -392,6 +397,30 @@ the owner's judgement is that it is not the thing. That is a fact about the prod
 - **Pillar 4.** Not suspended. If ark's layout does not read as a place at eye level, ADR-0032 §6
   stage A is designed to find that out for a day's work, and the answer is that rung 3 stops — not
   that the layout moves.
+
+### Owner's note — 2026-08-10 (second): P4 is released, and S1 is not
+
+**Recorded by a session, quoting the owner.** The note above withdrew a proposal to release P4
+because all three documents had described only one of its two legs. It was then put in full — *the
+Trace verb (M6) must exist, **and** the orbit's own measured results must be in* — and the owner
+answered:
+
+> *"I think you can take fable findings and continue building the 3d world + hero view in this
+> session."*
+
+**P4 is released.** The avatar is built without the Trace verb and without a measurement of the
+orbit. That is a real weakening of a gate, taken deliberately by the person this ADR says may take
+it, against an accurate description of what was being weakened.
+
+**S1 is not released and is not touched.** `docs/experiments/0001` has not been run, so
+[ADR-0033](./0033-the-roads-are-the-edges-and-a-commit-stands-at-the-chronicle.md) ships the world as
+a **mode**: the flat map remains the arrival state, `g` enters and leaves, and nothing in the product
+claims that walking teaches better — because nothing has measured it. *"It beats the flat map on
+measured recall, or it does not ship"* is unchanged in force and now gates a thing that exists, which
+is a better position to measure from than a thing that does not.
+
+**D1–D3 and the invariant are untouched.** X and Y are frozen, the world is a rendering of the atlas,
+and the fitted overview is one keystroke away in both directions.
 
 ### The first experiment is the fly-through, not the avatar
 

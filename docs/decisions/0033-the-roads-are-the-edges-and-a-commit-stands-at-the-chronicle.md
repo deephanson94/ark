@@ -1,0 +1,228 @@
+# ADR-0033 — The roads are the edges, and a commit stands at the chronicle
+
+- **Status**: **accepted and built.** Rung 3 ships as a mode: press `g`.
+- **Date**: 2026-08-10
+- **Supersedes**: [ADR-0032](./0032-the-walkable-world-is-a-city-on-a-plane.md) §3.2's central decision
+  (*"the ground is a featureless plane. It carries no information, and that is the point"*), and
+  answers §9.1, §9.2, §9.3 and §9.7. Everything else in ADR-0032 stands and is the design this
+  implements.
+- **Under**: [ADR-0009](./0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) — the
+  invariant, D1–D3, and S1. **P4 is released by the owner**, in their own words, and the release is
+  recorded there rather than assumed here.
+
+---
+
+## 1. What the owner decided, and what it does not decide
+
+> *"I think you can take fable findings and continue building the 3d world + hero view in this
+> session."*
+
+ADR-0009 reserves gate decisions to the human, and this is one. It releases **P4** — both legs, the
+Trace verb *and* the orbit's own measured results, described in full before being released rather
+than after (ADR-0032 §9.5 is the reason that sentence is here).
+
+It does **not** release **S1**. `docs/experiments/0001` has not been run, so the world ships as a
+*mode you enter*, never as the arrival state: the flat map is still what a player lands in, still
+what `f` and `o` return to, and the world is one keystroke away in both directions. Nothing in the
+product yet claims that walking teaches better, because nothing has measured it.
+
+---
+
+## 2. Decision 1 — the roads are the edges
+
+ADR-0032 decided the ground carried nothing, reasoning that any atlas field pressed into terrain
+would be invented geography wearing a derived label. That reasoning is still right about *terrain*
+and was wrong about the ground: §9.1 found that the resulting model named towers, colour, arches,
+badges and fog and **never an import edge**, so the only topology a walker could read was
+*proximity* — a spring-embedder artifact, and precisely the fallacy the `treeSibling` distractor
+class exists to punish. Pillar 4 is *geography **is** topology*. That world was geography minus it.
+
+**A road is an edge.** Same two endpoints, same coordinates, no routing, no bundling, no smoothing.
+`buildWorld` asserts the equality rather than an inclusion, in `tests/unit/world.test.ts` and again
+over the real atlas: a world with extra roads is inventing geography and one with fewer is §9.1
+coming back. The plane now carries exactly what the flat map's edge layer carries and not one claim
+more — and walking along a dependency is the thing you do with your legs, which is what the rung was
+for.
+
+The e2e counts `roadsDrawn` on a real frame for the same reason the map counts `peaksDrawn`: a
+liveness gate, because a rendering path that never fires is code and comments asserting a behaviour
+the product does not have.
+
+### 2.1 What this does *not* fix
+
+It does not answer whether a walker reads the topology off the **world** or off the **minimap**,
+which draws the same edges in 2D. That is §4's problem and it is a real one.
+
+---
+
+## 3. Decision 2 — a commit stands at the chronicle, and nowhere else
+
+ADR-0032 §9.2: a "lit stone you can interact with" is *a node carrying an unanswered board*, and
+**Placement's subject is a commit** — no node, no `layout`, nowhere to be. Measured: **40 of 160
+boards on ark (25%), 54 of 216 on hono, 121 of 456 on hugo, 274 of 358 on django (77%)**. A world
+that serves only nodes serves a quarter to three quarters of nothing.
+
+The obvious fix is a **wrong answer key drawn as scenery**. Put a commit's marker among the files it
+touched and you have rendered Placement's own truth on the ground, permanently, for anyone who walks
+past. Guardrail 4's cousin: the board would still be gradeable and the answer would be free.
+
+So there is **one chronicle**, an obelisk standing outside the map at
+`((minX + maxX) / 2, minY − 90)`, and every board whose subject is not a node is answered there. Its
+position is a function of the **bounds** and of nothing else, asserted in both suites, and it is
+checked to stand clear of every tower. It says *commits are answered here* and says nothing whatever
+about which files any of them touched.
+
+**The cost, stated rather than absorbed**: commit boards have *a* place, not *their own* place. A
+player learns where the chronicle is; they do not learn where a commit is, because a commit is not
+anywhere. That is honest about what a commit is, and it is worse than what a node gets.
+
+The shell selects these with `!isNodeId(challenge.subject)` rather than `isCommitId`, deliberately: a
+future id kind with no `layout` lands at the chronicle instead of silently vanishing from the world.
+That is the *subject-is-not-a-node* landmine met with the lesson learned rather than paid for again.
+
+---
+
+## 4. Decision 3 — a perspective camera, and the orbit keeps its orthographic one
+
+ADR-0032 §9.3: `orbit.ts` is orthographic — `right * camera.scale`, `away * sin(pitch) * scale`, no
+divide — and `MIN_PITCH = 0.18` clamps the tilt about ten degrees above horizontal. "Eye height" is
+not a state that camera can express, and an orthographic grazing view draws every tower at
+**identical width regardless of distance**, which is a field of poles whatever the layout is. Stage
+A could have failed for a reason that had nothing to do with the map.
+
+So `src/player/world/camera.ts` is a second projector with a real divide, and the orbit is untouched
+— looking straight down still reproduces the flat map to the pixel, which only an orthographic
+projection can do. The unit suite asserts the difference in both directions: doubling the distance
+**halves** the on-screen size here, and changes a column's height by **nothing** there. Asserting the
+new behaviour without the control would have left *"we replaced the camera"* unproven.
+
+Clipping happens in **view space, before the divide**, because after it the information needed to
+clip is exactly what the divide destroyed: a point behind the eye divides by a negative number and
+lands on screen mirrored, as though in front. On a plane covered in roads that is not a corner case
+— the road you are standing on has one end behind you almost always.
+
+---
+
+## 5. Decision 4 — the footprint is the map's radius times a constant, and the constant was measured
+
+ADR-0032 §3.3 wanted a footprint cap keyed to **local** nearest-neighbour spacing. §9.7 refused it:
+that makes rendered size a function of neighbourhood crowding, so two files of equal `loc` render at
+different sizes and the flat map's size channel stops being monotone.
+
+The first build therefore used `radiusFor(loc)` unchanged — and **that is not walkable**. Measured:
+
+| | towers | ×1 | ×0.6 | ×0.5 | ×0.45 | **×0.4** | ×0.35 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ark | 182 | **88.5%** | 40.7% | 20.9% | 14.3% | **3.3%** | 2.2% |
+| hono | 425 | **52.2%** | 21.4% | 11.8% | 8.2% | **6.1%** | 3.3% |
+
+*Share of towers with no body-width gap to their nearest neighbour, measured at `1827ff93` and hono
+`7075369e`.* At ×1 the city is one solid mass with the camera inside it, which is exactly what the
+first screenshots showed: a wall filling the frame and the hero invisible behind it.
+
+A **uniform** scalar fixes it and satisfies §9.7 exactly — equal `loc` still gives equal size,
+greater `loc` still gives greater size, and the *ordering* is the only thing the size channel claims.
+0.4 is the knee with both neighbours named (14.3% → 3.3% on ark; flat below it on both repos), not a
+number chosen by eye. The unexamined step in the first build was treating `radiusFor`, which is a
+**glyph** radius the flat map draws at whatever screen scale it likes, as ground area.
+
+---
+
+## 6. Decision 5 — the minimap is north-up, against ADR-0032 §3.5
+
+That section adopted the owner's minimap and said it turns with the player, naming the cost. Building
+it settled the trade the other way.
+
+A minimap that turns is a **route** instrument: it tells you what is ahead. A north-up one is a
+**survey** instrument, and survey knowledge — relative position, global layout, which node is the hub
+— is what ark teaches (`docs/prior-art.md` §2, §4.4). It also resolves the tension §9.8 raised with
+ADR-0017: the **fixed frame lives on the minimap and the varied viewpoints live in the world**, so
+the player gets both instead of losing one to the other. Heading is not lost; the hero's arrow
+carries it, which is the standard way of showing a heading against a fixed frame.
+
+It draws the edges, and §4 above is why that is stated rather than quietly done.
+
+---
+
+## 7. Decision 6 — walking past a building is looking at it
+
+The flat map surveys a node when you click it. Fog withholds a **label** until a node is surveyed —
+which is right, and which makes an unexplored world a city of unnamed shapes rather than a mystery.
+
+So proximity surveys, through `recordSurvey`, the same recorder the click uses. Two definitions of
+"seen" in one product is the shape of nearly every defect this repo has had to fix twice.
+
+`SURVEY_RANGE` (22) is wider than `INTERACT_RANGE` (12) because seeing a name and answering a
+question are different acts and the first should be cheaper — and narrow enough that crossing the map
+does not survey the map. Measured in the e2e: a 2.6-second walk takes ark from **66 to 69 surveyed**,
+which is the liveness gate on this decision.
+
+**This makes exploration mean something mechanically**, which is the closest thing rung 3 has to an
+answer for *"why walk?"* — and it is not evidence that walking teaches better. S1 is.
+
+---
+
+## 8. What is built, and what the first frames showed
+
+`src/player/world/` — `camera.ts` (projection, clipping, the follow rig), `hero.ts` (a body and its
+collisions), `build.ts` (the fold from atlas to world), `render.ts` (one painter's list, far to near),
+`minimap.ts`, `index.ts` (the mode). ~1,150 lines, **zero new runtime dependencies**, Canvas 2D.
+
+Three defects the pictures found that no assertion would have:
+
+1. **The hero was 11 units tall** in a world whose median nearest-neighbour gap is 12–19 and whose
+   elevation-0 building is 4.5 — a person taller than most of the city and as wide as the street. It
+   is 1.9 now, and the numbers in `hero.ts` are sized against each other rather than chosen.
+2. **The hero was drawn last**, so walking behind a building pasted the figure onto its wall. A body
+   is an object in the world and sorts like one; it is a primitive in the same depth list.
+3. **The camera walked through buildings.** The boom now shortens when a footprint stands between the
+   eye and the hero, tested against the same circles `hero.ts` collides with — a camera that used a
+   different shape from the body would clip on one and not the other.
+
+Only the third was a design error; the other two were the kind of thing that is invisible until
+somebody looks. ADR-0032 §6 called stage A *"a day's work to find out if this is worth doing"*, and
+this is what that day produced.
+
+---
+
+## 9. What this does not answer, and what would
+
+- **S1 is unrun.** `docs/experiments/0001` §8 lists two things still blocking it: the matched repos
+  are a TODO, and a two-arm design cannot detect *"orbit beats both"*, which is what the evidence
+  actually predicts. **No claim that the world teaches better may be made until it runs.**
+- **§4's confound is live and is the sharpest thing here.** The minimap draws the edges the world
+  draws. If a player reads topology off the inset, the honest conclusion is that the 2D map was doing
+  the work — which is what S1 has to be able to see. The minimap must therefore be in **both arms or
+  neither**, and if it is in both, a third condition (world without minimap) is the only way to tell.
+- **ADR-0032 §9.4 stands.** Nothing here measures the orbit, and ADR-0009's *"the walkable avatar is
+  gated behind the fly-through's measured results"* is now satisfied by the owner's release rather
+  than by a measurement. That is a real weakening and it is named as one.
+- **§9.6 is unbuilt.** Region arches are not in this build at all: 118 of django's 175 centroids have
+  their nearest node in a *different* region, so an arch would stand in someone else's street.
+  Districts are unmarked in the world, which is a legibility gap and a smaller lie than a misplaced
+  landmark.
+- **`npm run raster` has never measured this renderer**, and P1′ is owner-only. The world's frame
+  cost is unmeasured on real hardware; django's 10,162 roads at `VIEW_DISTANCE` are the case to
+  watch.
+- **`VIEW_DISTANCE` is 620 and was not measured.** It is a legibility and cost knob picked by eye,
+  which is the thing this document spends §5 refusing to do — recorded so the next session does not
+  read it as derived.
+
+---
+
+## Alternatives rejected
+
+**Edges as arcs overhead, like the map's co-change wires.** Rejected because the ground is where a
+walker looks and an arch you cannot walk under teaches nothing about where you may go. The ember-arc
+channel stays available for co-change, which is not built here.
+
+**A commit marker among the files it touched.** Refused as a wrong answer key rendered as scenery
+(§3). This is the one alternative in this document that had to be refused rather than merely
+weighed.
+
+**One chronicle stone per commit, laid out by date.** More place-like, and it makes date order a
+thing you can read off the ground — which is a `Ctrl+F` on a board whose rows already print dates.
+The single obelisk claims nothing.
+
+**Mouse-look.** Not wired. It needs pointer lock, which is a decision about capturing the player's
+cursor and belongs in its own change; the keyboard turn is enough to walk with.
