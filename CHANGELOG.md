@@ -2585,3 +2585,39 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: packaging **`npx ark`** — NORTH-STAR §10's stated intent, unbuilt for five milestones,
   and the one item in the Definition of done nobody can literally satisfy.
+
+- **`npx ark` is a script, not a checkbox.** NORTH-STAR §10 has sold the indexer as *"ships as `npx
+  ark`, zero install friction"* since M0 and it had never worked: `package.json` had no `bin`, and
+  `build` typechecks the indexer with `--noEmit` rather than emitting it. That part is ordinary
+  unfinished work. What is not ordinary is that **the Definition of done listed it as a box to
+  tick**, for four milestones — and a session ago it was *corrected* to say "this has never worked",
+  which is honest and left the list one item shorter and still unverifiable. So the fix is not that
+  the box became tickable. **The box is a script**, `npm run test:pack`, and CI runs it.
+
+  **Three of the four changes were found by packing the tarball and running it, not by reasoning.**
+  npm installs a `bin` as a **symlink**, so `pathToFileURL(process.argv[1]).href ===
+  import.meta.url` — correct in every mode this repo had ever run — is false for every *installed*
+  copy: `main` never runs, nothing prints, and the process exits **0**, which is a packaged CLI that
+  looks like it worked and writes no atlas. And `PLAYER_DIST` was the bare relative `'dist/player'`,
+  so `ark play ~/your/repo` looked for the player in **your** working directory. Both resolve
+  properly now — `realpathSync` on both sides of the entry test, and the package root found by
+  walking up to the nearest `package.json`, which is `src/indexer/` → the repo from source and
+  `dist/cli/indexer/` → the installed package from the emitted tree. One rule, both modes.
+
+  **The check is mutation-tested and its fixture's size is a gate.** Remove `bin`, remove
+  `dist/player` from `files`, restore the naive entry-point compare, restore the relative
+  `PLAYER_DIST` — each goes red. And the first fixture was four files, which indexes to a perfectly
+  valid atlas with **zero** challenges, so asserting nodes and edges alone would have passed with
+  the whole of `src/verbs/` missing from the tarball; it is a hub with nine dependents over five
+  commits now, and asserts a real deck.
+
+  **What is done is the packaging; what is left is the name.** `ark` collides with *ARK: Survival
+  Evolved*, ARK Invest, ark.io and KDE's `ark`, and NORTH-STAR's own header says to check npm before
+  anything public — so `private: true` stays and the documents say *"pack it and install it"* rather
+  than `npx ark`. Writing the registry command into a README before that decision would be this
+  session's own defect committed again, one layer out. Verified past `test:pack` the way a reader
+  would: `npm pack`, `npm i -g`, then `ark index` and `ark play` from an unrelated directory.
+
+  **Next**: the **duplicate-answer-key twins** — `cone(A) = cone(B)` is a true derived fact that by
+  ADR-0011 decision 3 must be *shown* and never proved, so it wants a decision about where before
+  any code, and it wants the count of how many twins each repo actually has first.

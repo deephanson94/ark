@@ -1,0 +1,23 @@
+{
+  // The **emitted** indexer. `tsconfig.json` typechecks everything with
+  // `--noEmit`; this one produces `dist/cli/`, which is what `package.json`'s
+  // `bin` points at and what `npx ark` actually runs.
+  //
+  // The player is deliberately absent. It is browser code, checked separately
+  // with `types: []` (see `tsconfig.player.json`), and nothing under
+  // `src/indexer`, `src/verbs` or `src/atlas` imports it — the wall NORTH-STAR
+  // §7 draws between the two halves is what makes this file a three-line
+  // `include` rather than an exclusion list.
+  "extends": "./tsconfig.json",
+  "include": ["src/atlas", "src/indexer", "src/verbs"],
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist/cli",
+    // Nobody imports ark as a library, so declarations are bytes in a tarball
+    // that no consumer reads.
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  }
+}

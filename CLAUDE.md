@@ -114,7 +114,8 @@ The pyramid, fastest first. It will grow; keep it ordered by cost.
 | `npm run test:unit` | Verb `grade()` functions, F1 scoring, graph queries, distractor generator | < 5 s | **Every change** |
 | `npm run test:atlas` | Indexer produces a schema-valid atlas for this repo; no dangling edges; every `challenge.truth ⊆ candidates` | < 15 s | Every change touching the indexer |
 | `npm run test:determinism` | Index this repo twice → **byte-identical** output | < 30 s | Every change touching the indexer |
-| `npm run build` | TS compile + bundle | < 5 s | Every change |
+| `npm run build` | TS compile + bundle + emit the CLI | < 5 s | Every change |
+| `npm run test:pack` | Pack the tarball, install it **outside this checkout**, run `ark index` and `ark play` | ~30 s | Every change to packaging, the CLI, or the player's build. *CI runs it on every push* |
 | `npm run test:e2e` | Headless playthrough: load atlas, render map, answer a challenge, see a grade | minutes | Big changes only — **ask first locally.** *CI runs it on every push* (the `player smoke test` job), so it is never actually unrun on a pushed commit |
 
 **Rules:**
@@ -875,12 +876,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 - [ ] `npm run test:unit` and `npm run build` pass.
 - [ ] If the indexer changed: `test:atlas` and `test:determinism` pass.
 - [ ] `npm run index` still works on **this repo** — the bootstrap fixture must never break.
-      (**Not `npx ark index .`**, which this line said for four milestones and which has never
-      worked: `package.json` has no `bin`, and `build` typechecks the indexer with `--noEmit` rather
-      than emitting it, so there is nothing for `npx` to resolve. `npx ark` is NORTH-STAR §10's
-      intent — *"ships as `npx ark`, zero install friction"* — and it is **unbuilt**, not broken;
-      packaging the CLI is real work nobody has done. A checklist item nobody can literally satisfy
-      gets ticked from memory, which is the failure mode this whole list exists to prevent.)
+- [ ] If packaging, the CLI or the player's build changed: `npm run test:pack`. **This line used to
+      say `npx ark index .` and that had never worked** — `package.json` had no `bin` and `build`
+      typechecked the indexer with `--noEmit` — so a checklist item nobody could literally satisfy
+      got ticked from memory for four milestones, which is the failure mode this whole list exists
+      to prevent. It works now (ADR-0029), and the fix is not that the box became tickable: it is
+      that **the box is a script**. `test:pack` packs the real tarball, installs it outside this
+      checkout and runs `ark index` and `ark play` there, because every path bug this catches is
+      invisible from inside a repo that has a `dist/player` sitting at its working directory. CI runs
+      it on every push.
 - [ ] No console errors in the player.
 - [ ] `README.md`'s **Status** reflects what is now true — milestone, verb, subsystem, Known gaps and
       Next — and ideally moved in the commit that changed it rather than here. It is the only
@@ -896,11 +900,14 @@ Seeded with the ones we can predict. **Append every time one bites you.**
 ```bash
 npm run dev                # player dev server (pick a free port; don't assume)
 npm run play -- <path>     # index ANY repo and serve it — needs `npm run build` once
+ark index <path>           # the packaged CLI, once installed (ADR-0029). **Not `npx ark`** —
+ark play  <path>           #   the package is private and unpublished; `npm pack` then install it
 npm run index              # index this repo → atlas.json  (the bootstrap fixture)
-npm run build              # typecheck + bundle
+npm run build              # typecheck + bundle + emit the CLI
 npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
+npm run test:pack          # ~30 s — pack, install outside the repo, run `ark index` and `ark play`
 npm run budget             # print measured budgets, fail over ceiling
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3)
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
@@ -919,6 +926,16 @@ CI installs its own Chromium and needs no variable.
 ---
 
 ## Current state
+
+**`ark` runs as an installed command** (**[ADR-0029](./docs/decisions/0029-npx-ark-is-a-script-not-a-checkbox.md)**)
+— `bin` → an emitted `dist/cli/`, the built player in `files`, and `npm run test:pack` packs the real
+tarball, installs it **outside this checkout** and runs `ark index` and `ark play` there. That last
+clause is the design: both real defects were invisible from inside a repo. npm installs a `bin` as a
+**symlink**, so the entry-point test `pathToFileURL(argv[1]) === import.meta.url` was false for every
+installed copy and `main` never ran — silently, exiting **0**; and `dist/player` was a bare relative
+path resolved against *your* working directory. **`npx ark` off the registry is still not a thing**:
+the package is `private` and `ark` is a placeholder with four known collisions, so what is left is a
+naming decision rather than packaging work, and the documents say *"pack it and install it"*.
 
 **M5 is delivered.** Its Python half ships
 (**[ADR-0028](./docs/decisions/0028-python-is-mapped-and-never-graded.md)**) as ADR-0024 decision 2
@@ -1193,11 +1210,13 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: packaging **`npx ark`** — NORTH-STAR §10's stated intent, unbuilt for five milestones,
-and the item in the Definition of done nobody can literally satisfy. Then the **duplicate-answer-key
-twins**, which are a design question (where is a *shown* fact shown?) before they are code, and the
-**phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the
-atom that would let anything *transfer* to another repo and the other half of risk #1.
+Next action: the **duplicate-answer-key twins** — `cone(A) = cone(B)` is a true derived fact that by
+ADR-0011 decision 3 must be *shown* and never proved, so it wants a decision about **where** before
+any code, and it wants the count of how many twins each of the five repos actually has **first**: if
+it is two on ark and none elsewhere, the honest answer may be that it does not earn a surface, and
+that is a finding worth writing down rather than a feature. Then the **phenomenon catalogue**, a
+repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that would let anything
+*transfer* to another repo and the other half of risk #1.
 
 **Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
 they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and

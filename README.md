@@ -6,12 +6,14 @@
 Point it at any repo. Learn its architecture by proving you understand it.
 
 ```bash
-npm install
-npm run build            # once
+npm install && npm run build   # once
 npm run play -- /path/to/repo
 ```
 
-*(`ark` is a placeholder name with known collisions — see [`NORTH-STAR.md`](./NORTH-STAR.md).)*
+Or as an installed command — `npm pack` then `npm i -g ./ark-0.1.0.tgz`, and `ark play
+/path/to/repo` works from anywhere. **Not from the npm registry**: the package is unpublished and
+`ark` is a placeholder name with known collisions (see [`NORTH-STAR.md`](./NORTH-STAR.md)), so
+publishing is a decision about the name rather than about the packaging.
 
 ---
 
@@ -80,7 +82,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 28 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 29 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -144,7 +146,7 @@ offered (ADR-0020).
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
 | Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
-| `npx ark` packaging | ⬜ | **Stated intent, unbuilt** — see gaps. |
+| `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | The atom that would let anything transfer; risk #1's other half. |
 | Third-person walkable world | ⬜ | Intended destination, gated and unscheduled (ADR-0009). |
 
@@ -152,9 +154,19 @@ offered (ADR-0020).
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
-- **`npx ark` does not work.** `package.json` has no `bin` and `build` typechecks the indexer with
-  `--noEmit` rather than emitting it. Use `npm run play -- <path>`. Packaging is real work nobody has
-  done.
+- **`ark` is not on the npm registry**, so `npx ark` resolves to somebody else's package. The
+  packaging works — pack the tarball and `ark index` / `ark play` run from anywhere — and what is
+  left is a *naming* decision: `ark` collides with ARK: Survival Evolved, ARK Invest, ark.io and
+  KDE's `ark`, and NORTH-STAR's header says to check npm before anything public. `private: true`
+  stays until that is settled.
+- ~~**`npx ark` does not work at all.**~~ **Fixed** (**[ADR-0029](./docs/decisions/0029-npx-ark-is-a-script-not-a-checkbox.md)**).
+  It had never worked, and the Definition of done had carried it as a tickable box for four
+  milestones — so the fix is not that the box became tickable, it is that **the box is a script**.
+  Two real defects, both found by packing and running rather than by reasoning: npm installs a `bin`
+  as a **symlink**, so the entry-point test `pathToFileURL(argv[1]) === import.meta.url` was false for
+  every installed copy and `main` never ran — silently, exiting **0**; and `dist/player` was a bare
+  relative path, resolved against *your* repo's working directory. Four mutations of the check each
+  go red.
 - **A Rust, Ruby or Java repo's *source* is still not on the map.** Go and Python are on it since
   **[ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)** and
   **[ADR-0028](./docs/decisions/0028-python-is-mapped-and-never-graded.md)** — the five repos
@@ -216,20 +228,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Packaging `npx ark`** — NORTH-STAR §10 sells the indexer as *"zero install friction"* and it has
-never worked: `package.json` has no `bin`, and `build` typechecks the indexer with `--noEmit` rather
-than emitting it, so the Definition of done has carried an item nobody can literally satisfy for five
-milestones · then the **duplicate-answer-key twins**, which want a decision about *where* a shown
-fact is shown before any code (see gaps) · then the **phenomenon catalogue**, the repo-independent
-vocabulary that is the only thing that would let anything *transfer* to another repo, and the other
-half of risk #1.
+The **duplicate-answer-key twins**, which want a decision about *where* a shown fact is shown before
+any code (see gaps) · then the **phenomenon catalogue**, the repo-independent vocabulary that is the
+only thing that would let anything *transfer* to another repo, and the other half of risk #1 · and
+one measurement only a human can take: **`npm run raster` on real hardware**, on a *turned* map.
 
-*(Five items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
 exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as
 ADR-0025; **Go's absence from the map**, the largest of the three rows that defect left behind,
-shipped as ADR-0026; and **M5's Python half** shipped as ADR-0028, which closes M5.)*
+shipped as ADR-0026; **M5's Python half** shipped as ADR-0028, which closes M5; and **`npx ark`**
+shipped as ADR-0029.)*
 
 ---
 
@@ -237,9 +247,12 @@ shipped as ADR-0026; and **M5's Python half** shipped as ADR-0028, which closes 
 
 ```bash
 npm run play -- <path>     # index any repo and serve it (needs `npm run build` once)
+ark index <path>           # the same, once the packed tarball is installed (ADR-0029)
+ark play  <path>           #   — `npm pack && npm i -g ./ark-0.1.0.tgz`; not on the registry
 npm run dev                # play this repo
 npm run index              # index this repo → atlas.json (the bootstrap fixture)
-npm run build              # typecheck + bundle
+npm run build              # typecheck + bundle + emit the CLI
+npm run test:pack          # pack the tarball, install it outside the repo, run it
 
 npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
@@ -300,7 +313,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 28 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 29 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

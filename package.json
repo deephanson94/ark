@@ -2,6 +2,14 @@
   "name": "ark",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "ark": "dist/cli/indexer/cli.js"
+  },
+  "files": [
+    "dist/cli",
+    "dist/player",
+    "NORTH-STAR.md"
+  ],
   "description": "A game that teaches you the shape of an unfamiliar codebase by making you map it.",
   "type": "module",
   "license": "MIT",
@@ -12,7 +20,10 @@
     "dev": "npm run index:player && vite",
     "index": "tsx src/indexer/cli.ts .",
     "index:player": "tsx src/indexer/cli.ts . --out src/player/public/atlas.json --quiet",
-    "build": "tsc --noEmit && tsc -p tsconfig.player.json --noEmit && npm run index:player && vite build",
+    "build": "tsc --noEmit && tsc -p tsconfig.player.json --noEmit && npm run index:player && vite build && npm run build:cli",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "prepack": "npm run build",
+    "test:pack": "tsx scripts/pack-check.ts",
     "budget": "tsx scripts/budget.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
