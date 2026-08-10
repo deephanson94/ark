@@ -22,6 +22,7 @@
 
 import type { Atlas, Challenge, Graph, NodeId, NodeRef } from '../../atlas/index.js';
 import {
+  idOf,
   byteCompare,
   dependencies,
   dependentRoutes,
@@ -32,6 +33,7 @@ import {
 } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal as VerbReveal, RevealNote as VerbRevealNote } from '../types.js';
 import { directoryOf } from '../paths.js';
+import { counted, memberNoun } from '../members.js';
 
 export type { NoteKind };
 
@@ -140,7 +142,10 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
     radius: reached.size,
     // The console used to write this sentence itself, which meant it knew what
     // a blast radius was. It belongs to the verb that sampled the key.
-    summary: `Its full blast radius is ${reached.size} file${reached.size === 1 ? '' : 's'} — now drawn on the map.`,
+    // The radius's own noun, from the graph this function already has: a Go
+    // package's cone holds packages, and saying "files" of it was false on 153
+    // of hugo's 156 boards.
+    summary: `Its full blast radius is ${counted(reached.size, memberNoun(graph, [...reached.keys()].map((ref) => idOf(graph, ref))))} — now drawn on the map.`,
     // Pass or fail. The sentence above promises the map draws it, and
     // guardrail 6 forbids a wrong answer taking that away.
     unlocks: 'importRadius',

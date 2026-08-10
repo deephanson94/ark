@@ -49,10 +49,11 @@ import type {
   SetAnswer,
   SetPhrasing,
   Verb,
+  Words,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { decidedFact, touchedFact, widthFact } from '../disclosure.js';
-import { commitLabel } from '../members.js';
+import { commitLabel, counted } from '../members.js';
 import { generatePlacement } from './generate.js';
 import { revealOf } from './reveal.js';
 
@@ -60,16 +61,19 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function promptFor(challenge: Challenge, _pathOf: (id: NodeId) => string): Prompt {
+export function promptFor(challenge: Challenge, words: Words): Prompt {
   const evidence = challenge.evidence;
   const message = evidence.kind === 'commit' ? evidence.subject : '';
   const date = evidence.kind === 'commit' ? evidence.date : '';
+  // A commit touches whatever it touches, so this board is the most mixed of
+  // the four: 118 of hugo's 121 hold Go packages *and* files.
+  const members = words.noun(challenge.candidates);
   return {
     title: 'placement',
-    // The commit's own words, quoted. `pathOf` is unused here and that is the
-    // shape of the verb rather than an omission: the subject is an event, so
-    // there is no path to substitute.
-    question: `On ${date} a commit landed: "${message}". Which of these files did it change?`,
+    // The commit's own words, quoted. `words.label` is unused here and that is
+    // the shape of the verb rather than an omission: the subject is an event,
+    // so there is no path to substitute.
+    question: `On ${date} a commit landed: "${message}". Which of these ${members.many} did it change?`,
     // "Which of these" is load-bearing exactly as it is for the other two verbs:
     // it never claims the choice set is exhaustive, which is what lets a
     // twenty-file commit ship a six-file answer key honestly. The second
@@ -77,7 +81,7 @@ export function promptFor(challenge: Challenge, _pathOf: (id: NodeId) => string)
     // commit provably did not touch, which is the invariant stated to the
     // player rather than kept in the generator.
     instruction:
-      'Every other file on this board was untouched by that commit. ' +
+      `Every other ${members.one} on this board was untouched by that commit. ` +
       'Wrong picks cost you nothing.',
     action: 'Place a commit',
   };
@@ -150,14 +154,14 @@ export const placement: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${count} ${plural(count, 'file', 'files')} that ` +
+      `You proved ${counted(count, facts.noun)} that ` +
       `${plural(count, 'changed', 'changed')} in ${facts.subjectLabel} — ${names}.`;
     // The gap between what was proved and what the commit touched is exactly
     // what sampling left out (ADR-0018), and naming it as *revealed* is what
     // keeps the sentence above honest.
     const revealed =
       facts.population > count
-        ? `It touched ${facts.population} indexed files in all — the other ${facts.population - count} revealed to you, never proved.`
+        ? `It touched ${counted(facts.population, facts.populationNoun)} in all — the other ${facts.population - count} revealed to you, never proved.`
         : null;
     return { claim, revealed };
   },

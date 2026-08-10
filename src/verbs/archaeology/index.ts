@@ -48,6 +48,7 @@
 import type { AtlasId, Challenge, Graph, NodeId } from '../../atlas/index.js';
 import { commitAt, commitIdFor, isCommitId, isNodeId, nodeAt } from '../../atlas/index.js';
 import { gradeSet } from '../score.js';
+import { counted } from '../members.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -57,6 +58,7 @@ import type {
   SetAnswer,
   SetPhrasing,
   Verb,
+  Words,
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { decidedByNothing, touchedFact } from '../disclosure.js';
@@ -67,10 +69,15 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function promptFor(challenge: Challenge, labelOf: (id: AtlasId) => string): Prompt {
+export function promptFor(challenge: Challenge, words: Words): Prompt {
+  // Its members are commits and its **subject** is a place — the one verb that
+  // needs both nouns, and the reason `Words.noun` takes a set rather than the
+  // caller handing down a single word for the board.
+  const members = words.noun(challenge.candidates);
+  const subject = words.noun([challenge.subject]);
   return {
     title: 'archaeology',
-    question: `Which of these commits changed ${labelOf(challenge.subject)}?`,
+    question: `Which of these ${members.many} changed ${words.label(challenge.subject)}?`,
     // Two claims, and both are the invariant stated to the player rather than
     // kept in the generator. "Which of these" never asserts the choice set is
     // exhaustive, which is what lets a file touched twelve times ship a
@@ -80,7 +87,7 @@ export function promptFor(challenge: Challenge, labelOf: (id: AtlasId) => string
     // visible: the board is not a trick about dates, so guessing by date is not
     // a strategy the question invites.
     instruction:
-      "Every other commit here landed inside this file's lifetime and left it untouched. " +
+      `Every other commit here landed inside this ${subject.one}'s lifetime and left it untouched. ` +
       'Wrong picks cost you nothing.',
     action: 'Dig up its history',
   };
@@ -170,7 +177,7 @@ export const archaeology: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join('; ');
     const claim =
-      `You proved ${count} ${plural(count, 'commit', 'commits')} that ` +
+      `You proved ${counted(count, facts.noun)} that ` +
       `${plural(count, 'changed', 'changed')} ${facts.subjectLabel} — ${names}.`;
     // The gap between what was proved and what the history holds is exactly what
     // sampling left out, and naming it as *revealed* is what keeps the sentence

@@ -24,7 +24,7 @@ import {
 } from '../../src/verbs/blastRadius/index.js';
 import { DEFAULT_GENERATE_OPTIONS, isGameable, blastRadius } from '../../src/verbs/index.js';
 import { truthCap } from '../../src/verbs/sample.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, wordsOf } from '../fixtures/atlas.js';
 
 /** A chain `f0 → f1 → … → fN` plus `spare` unattached files to pad choice sets. */
 function chain(length: number, spare: number): Atlas {
@@ -387,7 +387,7 @@ describe('the verb object', () => {
     const challenge = generateBlastRadius(atlas)[0];
     expect(challenge).toBeDefined();
     if (challenge === undefined) return;
-    const prompt = blastRadius.prompt(challenge, (id) => pathOf(atlas, id));
+    const prompt = blastRadius.prompt(challenge, wordsOf(buildGraph(atlas)));
     expect(prompt.question).toContain('depend on it');
     expect(prompt.question).toContain(pathOf(atlas, challenge.subject));
     expect(prompt.question).not.toMatch(/will need to change/i);

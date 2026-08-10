@@ -22,7 +22,7 @@
 
 import type { AtlasId, Challenge } from '../atlas/index.js';
 import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
-import { VERBS, bandFor, memberLabel } from '../verbs/index.js';
+import { VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -67,6 +67,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
    * any verb asks.
    */
   const labelOf = (id: AtlasId): string => memberLabel(scene.graph, id);
+  // The same vocabulary the inspector uses, so the button that opens a question
+  // and the question itself cannot disagree about what its answers are.
+  const words = wordsFor(scene.graph);
 
   const close = (): void => {
     open = null;
@@ -81,7 +84,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
   function renderQuestion(challenge: Challenge): void {
     const verb = VERBS[challenge.verb];
-    const prompt = verb.prompt(challenge, labelOf);
+    const prompt = verb.prompt(challenge, words);
     const picked = new Set<AtlasId>();
 
     // Sorted by the label, which means alphabetically for files and — because a
@@ -156,7 +159,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     done.addEventListener('click', close);
 
     body.replaceChildren(
-      header(verb.prompt(challenge, labelOf).title, challenge.difficulty),
+      header(verb.prompt(challenge, words).title, challenge.difficulty),
       el('h2', 'console-question', [reveal.subject]),
       score,
       // `evidence` is assembled from the measured result inside `grade()`, so

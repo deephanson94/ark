@@ -29,6 +29,9 @@ import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 import { VERBS, commitLabel } from '../src/verbs/index.js';
 import { storageKeyFor } from '../src/player/save.js';
 import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
+// The player's own label rule, not a second copy of it: `node.path` is what
+// this map used, which is the same string only while no node is the repo root.
+import { pathLabel } from '../src/verbs/index.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ATLAS_OUT = join(ROOT, 'src/player/public/atlas.json');
@@ -114,7 +117,7 @@ async function main(): Promise<number> {
   // spaces — so an unnormalised label matches a file path and never a commit,
   // which is a board of twenty rows silently matching none of them.
   const labelById = new Map(
-    [...atlas.nodes.map((node) => [node.id, rendered(node.path)] as const)].concat(
+    [...atlas.nodes.map((node) => [node.id, rendered(pathLabel(node.path))] as const)].concat(
       atlas.history.commits.map(
         (commit) => [commitIdFor(commit.sha), rendered(commitLabel(commit))] as const,
       ),

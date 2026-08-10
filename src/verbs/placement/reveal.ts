@@ -17,11 +17,11 @@
  */
 
 import type { Atlas, Challenge, Graph, NodeId, NodeRef } from '../../atlas/index.js';
-import { byteCompare, commitAt, nodeAt, readWitness } from '../../atlas/index.js';
+import { byteCompare, commitAt, idOf, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
 import { textSubject } from '../gate.js';
 import { nameTokens } from '../paths.js';
-import { commitLabel } from '../members.js';
+import { commitLabel, counted, memberNoun } from '../members.js';
 
 const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
 
@@ -151,15 +151,21 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
 
   notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || byteCompare(a.label, b.label));
 
-  // How many indexed files the commit touched, against how many were on the
+  // How many indexed nodes the commit touched, against how many were on the
   // board. The gap is exactly what sampling left out, and naming it is what
   // keeps "which of these" a fair question (ADR-0008's argument, reused).
   const shown = challenge.truth.length;
   const total = commit.files.length;
+  // Everything the commit touched, not just what this board showed — the
+  // sentence counts that set, so it takes its noun from that set.
+  const touchedNoun = memberNoun(
+    graph,
+    commit.files.map((ref) => idOf(graph, ref)),
+  );
   const summary =
     total > shown
-      ? `${commit.sha} touched ${total} indexed files in all — ${total - shown} more than this board asked about.`
-      : `That is every indexed file ${commit.sha} touched.`;
+      ? `${commit.sha} touched ${counted(total, touchedNoun)} in all — ${total - shown} more than this board asked about.`
+      : `That is every indexed ${touchedNoun.one} ${commit.sha} touched.`;
 
   return {
     subject: commitLabel(commit),

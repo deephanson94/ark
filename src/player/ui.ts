@@ -16,7 +16,7 @@ import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.
 import { guideExhausted, notesEmpty, questsLine } from './empty.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
-import { VERBS } from '../verbs/index.js';
+import { VERBS, wordsFor } from '../verbs/index.js';
 import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
@@ -370,7 +370,7 @@ export function createInspector(
         // verb-blindness held, and the inspector's did not. Nothing in the test
         // suite noticed; it was visible in the e2e screenshot.
         const action = el('button', 'inspector-action', [
-          answered ? 'Ask it again' : VERBS[challenge.verb].prompt(challenge, (id) => id).action,
+          answered ? 'Ask it again' : VERBS[challenge.verb].prompt(challenge, wordsFor(scene.graph)).action,
         ]);
         action.type = 'button';
         action.addEventListener('click', () => onChallenge(challenge));

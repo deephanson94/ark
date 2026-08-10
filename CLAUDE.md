@@ -568,6 +568,22 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   did not move and did not need to; the sentence that needed to move was *"there is none in this
   set"*, which is a fact about the set being quoted as a fact about the world. **A gap in eleven
   samples is a gap in eleven samples.**
+- **The wording of a claim is a claim, and it goes stale when the *thing* changes rather than when the
+  sentence does.** Package granularity shipped with 0 wrong answer keys and 0 invariant violations —
+  and every board a Go repo served said *"which of these **files** depend on it"* about a list of
+  directories. Nothing in the generator, the grader or the atlas was wrong; the noun was, on 100% of
+  a Go repo's boards, and no suite could see it because no suite asserted on a sentence. **When you
+  change what a node *is*, grep the user-visible strings for the old word** — not the readers of the
+  field, which the compiler finds, but the prose, which it cannot. And the honest fix has a shape:
+  the caller supplies the *fact* and the verb keeps writing the *sentence*, because moving the
+  sentence to the caller is the cheap fix the panel landmine already forbids.
+- **A vocabulary needs a word for the case you assumed was the exception.** *"Name the kind"* looks
+  complete until you count: a commit touches whatever it touches, so **151 of hugo's 156 Companion
+  boards and 118 of its 121 Placement boards hold two kinds at once** — mixed is the majority, not a
+  fallback. Blast Radius is the one verb that is reliably uniform, and for a structural reason (only
+  Go imports Go), which is exactly the kind of accident that makes a rule look total when it is not.
+  **Count the shapes before choosing the words.**
+
 - **Two checks that read the atlas cannot see a hole in the atlas, and the third one found two wrong
   answer keys.** M5's Go work shipped with three verifications: no two nodes for one package (0 — and
   *unreadable* as anything but 0, since node paths are unique and a board never holds its subject);
@@ -905,6 +921,15 @@ same-package distractor slots on hugo's 156 boards, prometheus's 63 and cobra's,
 move**: old indexer against new on clean clones of ark `837970f2` and hono `7075369e`, `challenges`
 is **byte-identical** and so is everything else bar the new `fileCount` field.
 
+**A board is asked in the noun its members actually are**
+(**[ADR-0027](./docs/decisions/0027-a-board-is-asked-in-the-noun-its-members-are.md)**) — `files`,
+`packages`, `commits`, or `places` where a board holds more than one kind, which on the history verbs
+is the **majority** shape rather than a fallback (151 of hugo's 156 Companion boards, 118 of its 121
+Placement ones). `Verb.prompt` has no atlas, so the caller supplies the fact and the verb keeps
+writing the sentence — putting it in the console is the cheap fix ADR-0020 forbids. All 160 of ark's
+prompts and 216 of hono's are **character-identical** to before, gated on 160 and 216 rendered rows
+after the first version of that comparison passed vacuously on two identical validator errors.
+
 **M2, M3 and M4 are delivered; the first three rungs toward the third-person world are shipped.**
 §13's M4 is *Companion, Placement, Archaeology* and **all three ship**, with
 [ADR-0019](./docs/decisions/0019-archaeology-asks-a-place-what-happened-to-it.md) built rather than
@@ -1109,9 +1134,7 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **the noun** — the player calls every Go package a *"file"* on every board it ships
-(153 on hugo, 34 on prometheus), which `Verb.prompt`'s atlas-free signature cannot currently fix;
-then **M5's Python half** — a *history* language, the map and the three git verbs and never
+Next action: **M5's Python half** — a *history* language, the map and the three git verbs and never
 Blast Radius (ADR-0024 decision 2), which is a smaller product than the roadmap implies and needs its
 own measurement; score it against tree-sitter the way Go was scored before writing a scanner. Then, in
 rough order of size, packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the

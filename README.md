@@ -80,7 +80,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 26 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 27 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -189,13 +189,13 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   fact the player already had. The three tests that asserted its shape now assert the sentence
   instead — including the two whose real claim was *a history-graded verb shows no import evidence*,
   which the empty array could never have caught.
-- **The player calls every Go package a "file".** *"Which of these **files** depend on it"*,
-  *"Which of these **files** have changed alongside"*, *"You proved N **files**"* — false of all 153
-  of `gohugoio/hugo`'s and 34 of `prometheus/prometheus`'s Go boards, and `spf13/cobra` renders its
-  root package as `.` in a prompt. `Verb.prompt(challenge, labelOf)` has no atlas, so it cannot tell
-  a package from a file; the fix is a contract change across four verbs and the console, and wording
-  belongs to the verb rather than to the console that would be the cheap place for it. The boards are
-  correct — this is the *noun*. ADR-0026 Consequences.
+- ~~**The player calls every Go package a "file".**~~ **Fixed**
+  (**[ADR-0027](./docs/decisions/0027-a-board-is-asked-in-the-noun-its-members-are.md)**). A board is
+  asked in the noun its members actually are — `files`, `packages`, `commits`, or `places` where they
+  are more than one kind, which on the history verbs is the **majority** shape (151 of hugo's 156
+  Companion boards). The caller supplies the fact and the verb keeps writing the sentence; `.` now
+  reads as `. (the root package)`. All 160 of ark's prompts and 216 of hono's are
+  **character-identical** to before.
 - **A Go package's identity is inferred where a file's is recorded.** git records renames of files,
   never of directories, so a `dir` node's `originPath` is the directory a **strict majority** of its
   members came from — measured, 7 of hugo's 193 packages and 28 of prometheus's 123 ship with one.
@@ -211,8 +211,6 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**The noun** — the player calls every Go package a *"file"* (see gaps); it is a contract change across
-four verbs and the console, and it is the first thing a Go repo's player sees · then
 **M5's Python half** — the map and the three git verbs, never Blast Radius (ADR-0024 decision 2). The
 kill point is already measured and the verdict is unconditional; what is unbuilt is the scanner, the
 `sys.path`-free resolution, and the decision about what a Python node *is* (a file, almost certainly —
@@ -294,7 +292,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 26 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 27 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

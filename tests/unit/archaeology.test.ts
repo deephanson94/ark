@@ -717,6 +717,8 @@ describe('what a pass is worth', () => {
       proved: [{ label: '2026-01-05  aa0000000001  "start the loop"', weight: 1 }],
       farthest: 1,
       population: 9,
+      noun: { one: 'commit', many: 'commits' },
+      populationNoun: { one: 'commit', many: 'commits' },
     });
     expect(prose.claim).toContain('1 commit that changed src/core/engine.ts');
     expect(prose.claim).not.toContain('hops');

@@ -16,7 +16,7 @@ import { VERBS, channelOf } from '../../src/verbs/index.js';
 import { companion, generateWithReport, indexCoChange } from '../../src/verbs/companion/index.js';
 import { ASSUMED_MIN_CO_CHANGE } from '../../src/verbs/companion/cochange.js';
 import { DEFAULT_HISTORY_LIMITS, buildHistory } from '../../src/indexer/history.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, plainWords } from '../fixtures/atlas.js';
 
 /** Every channel the contract allows. A verb declaring anything else is a typo
  *  the type system catches at build time and this catches in a fixture. */
@@ -272,7 +272,7 @@ describe('grading and wording', () => {
   const challenge = generateWithReport(atlas).challenges[0] as Challenge;
 
   it('states the bar and the wide-commit rule with their real numbers', () => {
-    const prompt = companion.prompt(challenge, (id) => id);
+    const prompt = companion.prompt(challenge, plainWords);
     if (challenge.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
     expect(prompt.question).toContain(`${challenge.evidence.minCount} separate commit`);
     // The number, not a characterisation of it: "a large fraction of the repo"
@@ -534,7 +534,7 @@ describe('the instruction states the certification it can actually make', () => 
     const challenge = generateWithReport(atlas).challenges[0] as Challenge;
     if (challenge.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
     expect(challenge.evidence.atMost).toBe(1);
-    expect(companion.prompt(challenge, (id) => id).instruction).toContain('at most once');
+    expect(companion.prompt(challenge, plainWords).instruction).toContain('at most once');
   });
 
   it('raises the claim with the bound when the cap did bite', () => {
@@ -561,8 +561,8 @@ describe('the instruction states the certification it can actually make', () => 
     expect(challenge).toBeDefined();
     if (challenge?.evidence.kind !== 'coChange') throw new Error('expected coChange evidence');
     expect(challenge.evidence.atMost).toBe(4);
-    expect(companion.prompt(challenge, (id) => id).instruction).toContain('at most 4 times');
-    expect(companion.prompt(challenge, (id) => id).instruction).not.toContain('at most once');
+    expect(companion.prompt(challenge, plainWords).instruction).toContain('at most 4 times');
+    expect(companion.prompt(challenge, plainWords).instruction).not.toContain('at most once');
   });
 });
 

@@ -25,6 +25,7 @@ export type {
   NoteWeights,
   ProvedMember,
   Prompt,
+  Words,
   Reveal,
   RevealChannel,
   RevealNote,
@@ -66,7 +67,8 @@ export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths
 export { retain, spread, truthCap } from './sample.js';
 export type { CommitSkip, CommitSupply, EligibleCommit } from './commits.js';
 export { commitSupply } from './commits.js';
-export { commitLabel, memberLabel } from './members.js';
+export { commitLabel, counted, memberLabel, memberNoun, pathLabel, wordsFor } from './members.js';
+export type { Noun } from './members.js';
 export type { DisclosedFact, RelationId } from './disclosure.js';
 export {
   accumulate,
