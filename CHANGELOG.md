@@ -2749,3 +2749,40 @@ One line per iteration: what changed, and what to do next.
   decided that was fine"* look identical afterwards.
 
   **Next**: the owner flips; then steps 3–5.
+
+- **The repo is public and the player is live at <https://deephanson94.github.io/ark/>.** The trigger
+  was CI minutes, and the first thing worth doing was measuring where they went: **17 billed minutes
+  for 3½ minutes of compute**, of which **10 — 59% — was one macOS job that runs for 15 seconds**, at
+  a 10× multiplier with per-job rounding-up. Trimming the matrix would have bought the same minutes
+  and was declined, correctly, since they go free anyway and ADR-0006's cross-platform guarantee is
+  worth keeping tight. **[ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)**.
+
+  **The one real defect the prep found was that there was no `LICENSE` file.** `package.json` has
+  said `"license": "MIT"` since M0; a manifest field is metadata and the file is the grant, so the
+  repo would have gone public reading *all rights reserved*. The rest was clean and checked rather
+  than assumed — no secret-shaped filenames, no added line across 130 commits matching the usual
+  token patterns, two author identities — and what that does *not* cover is written down too.
+
+  **Four Pages runs, and every one was read.** Not enabled → a fix that could not work → the revert →
+  green. The middle one is the lesson and it is a new landmine: `enablement: true` was taken from the
+  failing action's **own suggested remedy** without asking whether `GITHUB_TOKEN` could act on it.
+  Creating a Pages site needs `administration: write`, which a workflow token can never hold;
+  `pages: write` **deploys to** a site and does not **create** one. It is the impossibility-argument
+  landmine inverted — not an unchecked claim that something cannot be done, but an unchecked claim
+  that it can — and it is easier to fall for because the source is the tool's own error text. ADR-0031
+  §6.1 records it rather than editing it out, and `pages.yml` carries a comment telling the next
+  reader not to re-derive it from the same message.
+
+  Step 4 of that checklist — *read the run, both workflows, on the commit that landed* — is the only
+  reason none of the three failures was reported as a success. It is the step this repo added after
+  reporting CI green three times over a workflow that had never once passed.
+
+  **What is verified and what is not**: GitHub reported the deployment successful and evaluated the
+  URL, which is the instrument that decides whether a deploy happened. The page has not been fetched
+  from this container — the agent proxy refuses `github.io` — so *"the site serves the player"* rests
+  on the same `dist/player` artefact that `test:pack` and `test:e2e` exercise directly. A strong
+  chain, and not the same as having loaded the page.
+
+  **Next**: build ADR-0030's twin surface. Also open, and recorded rather than fixed: both workflows
+  target Node 20 on actions GitHub has deprecated, which is one change across `ci.yml` and
+  `pages.yml`.
