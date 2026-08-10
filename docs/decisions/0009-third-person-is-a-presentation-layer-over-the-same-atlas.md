@@ -1,7 +1,7 @@
 # ADR-0009 — Third person is a presentation layer over the same atlas, and it is blocked
 
-- **Status**: **accepted in principle — partly opened, 2026-08-07.** The decision is that this
-  direction is *allowed* and on what terms. This line originally read "blocked, and not scheduled …
+- **Status**: **accepted in principle — rungs 0–2 shipped; rung 3 designed and gated, 2026-08-10.**
+  The decision is that this direction is *allowed* and on what terms. This line originally read "blocked, and not scheduled …
   cannot be earlier than after M5"; the owner has since opened rungs 0–2 and the orbit view has
   merged. **Read the [Owner's note](#owners-note--2026-08-07-the-rung-ladder-and-what-it-does-and-does-not-open)
   before acting on anything below** — it says exactly what is open, what it cost, and what is still
@@ -329,6 +329,62 @@ What this does **not** open:
   that no study in this literature has ever measured retained structural knowledge after the tool
   was taken away. The experiment design is now a blocking precondition on the *next* rung of this
   direction rather than on the last one, and nothing further merges until it is written.
+
+### Owner's note — 2026-08-10: the destination is restated, and what it opens
+
+**Recorded by a session, quoting the owner, under the clause above — an agent may propose and may
+not decide. Everything below marked *proposed* awaits the owner's confirmation in their own words.**
+
+The owner, after being shown the orbit view and the evidence in `docs/prior-art.md`:
+
+> *"im imaging something like Link walking in the World of Zelda. exploring the world (which is the
+> repo). currently it's not really a moving 3rd party view."*
+>
+> *"note that our final motivation is to let players explore any repos and understand it easily.
+> gamify it."*
+>
+> *"I want a hero exploring a world POV."*
+
+**This is a restatement of NORTH-STAR §9's Direction note, not a new decision** — the destination has
+been on record since 2026-08-07. What is new is that the orbit view now exists and has been seen, and
+the owner's judgement is that it is not the thing. That is a fact about the product, and this ADR's
+§P4 has to answer it rather than the other way round.
+
+**What is recorded as settled by the owner:**
+
+- The intended final form is a **third-person figure moving through the world**, not an exocentric
+  orbit. The orbit is not the destination.
+- The motivation is stated as **comprehension plus engagement across arbitrary repositories** —
+  *"explore any repos and understand it easily; gamify it"* — which is broader than S1's recall-only
+  criterion and is why `docs/experiments/0001-…` measures both, with recall still the gate.
+
+**What is *proposed* and needs the owner's word:**
+
+1. **P4 — the avatar is gated on the Trace verb (M6), which does not exist.** The evidence behind P4
+   is about **recall**, and `docs/experiments/0001-…` measures recall directly at stage D. So the
+   proposal is that **P4 is released and its concern is discharged by S1 instead** — the gate moves
+   from *"a verb that makes walking worthwhile must exist first"* to *"walking must be shown to teach
+   at least as well"*. That is a real weakening of a gate and it is named as one rather than folded
+   in. **Only the owner may make it.**
+2. **S1's merge half is discharged, its ship half is not.** `docs/experiments/0001-…` is now
+   committed, which is what this ADR requires before third-person code merges. The experiment has
+   **not been run** and nothing may ship on it. If the owner intends to ship regardless of the
+   result, the honest form is a further dated note here saying so — not an experiment quietly skipped
+   (§6 of that document).
+3. **P1′ stands and is owner-only.** `npm run raster` on real hardware. 45/33/43 fps remains a
+   headless software floor, and **no claim about interaction performance may be made from it.**
+
+**What is untouched:**
+
+- **The invariant.** X,Y stay frozen; the world is a rendering of the atlas.
+  [ADR-0032](./0032-the-walkable-world-is-a-city-on-a-plane.md) is the design that satisfies it, and
+  its central decision — *the ground is a featureless plane, and everything standing on it is
+  derived* — exists precisely so that a walkable world invents no geography.
+- **D1–D3.** The fitted overview stays one keypress away and stays the arrival state; ADR-0006's
+  no-transcendentals rule carries into any Z derivation.
+- **Pillar 4.** Not suspended. If ark's layout does not read as a place at eye level, ADR-0032 §6
+  stage A is designed to find that out for a day's work, and the answer is that rung 3 stops — not
+  that the layout moves.
 
 ### The first experiment is the fly-through, not the avatar
 
