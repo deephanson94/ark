@@ -219,23 +219,26 @@ describe('the walk tallies unreadable source', () => {
       'cmd/root.go': 'package main\n',
       'cmd/flags.go': 'package main\n',
       'setup.py': 'x = 1\n',
+      'lib.rs': 'fn main() {}\n',
       'run.sh': 'echo hi\n',
       'logo.png': 'not really a png\n',
       'config.yml': 'a: 1\n',
     });
-    // **Go is scanned since M5**, so its files are indexed and are not
-    // unreadable. That is decision 6 of ADR-0025 doing its job in the direction
-    // it was written for: a language arriving in `SCANNED` leaves `UNREAD` in
-    // the same commit, and this fixture is where the move is visible.
+    // **Go and Python are scanned since M5**, so their files are indexed and
+    // are not unreadable. That is decision 6 of ADR-0025 doing its job in the
+    // direction it was written for: a language arriving in `SCANNED` leaves
+    // `UNREAD` in the same commit, and this fixture is where the move is
+    // visible — it has gone red twice now, once per language.
     expect(result.files.map((f) => f.path)).toEqual([
       'README.md',
       'cmd/flags.go',
       'cmd/root.go',
+      'setup.py',
       'src/main.ts',
     ]);
     // Sorted by language, which is what the atlas stores and the validator checks.
     expect(result.unreadable).toEqual([
-      { lang: 'Python', count: 1 },
+      { lang: 'Rust', count: 1 },
       { lang: 'Shell', count: 1 },
     ]);
   });
@@ -246,9 +249,10 @@ describe('the walk tallies unreadable source', () => {
     // counted after being indexed.
     const result = await tree({
       'a.rs': 'fn main() {}\n',
-      'b.py': 'x = 1\n',
+      'b.rb': 'x = 1\n',
       'c.png': 'x\n',
       'd.ts': 'export const d = 1;\n',
+      'e.py': 'x = 1\n',
     });
     const unsupported = result.skipped.find((s) => s.reason === 'unsupported')?.count ?? 0;
     const unreadable = result.unreadable.reduce((total, u) => total + u.count, 0);

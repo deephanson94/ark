@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 9**
+**Schema version: 11**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 10,
+  "version": 11,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -130,7 +130,7 @@ Full reasoning: [ADR-0011](decisions/0011-progress-is-keyed-to-the-repo-and-note
 | `path` | `string` | Current repo-relative POSIX path. Display and lookup — **not** identity. |
 | `originPath` | `string` | Earliest path git knows the file by. Equals `path` with no history. |
 | `kind` | `"file" \| "dir"` | One file, or a directory standing for the source files in it. See below. `"symbol"` is still reserved for semantic zoom. |
-| `lang` | `Lang` | `ts \| tsx \| js \| jsx \| mjs \| cjs \| go \| json \| md \| other`. |
+| `lang` | `Lang` | `ts \| tsx \| js \| jsx \| mjs \| cjs \| go \| py \| json \| md \| other`. |
 | `fileCount` | `number` | Files on disk this node stands for. `1` for a `file` node, always. |
 | `loc` | `number` | Physical lines, summed over the members. |
 | `bytes` | `number` | File size, summed over the members. |
@@ -490,9 +490,13 @@ hub — the files left out are not on the board, and the prompt says "which of t
 files". The reasoning, and why the prompt promises dependence rather than required change:
 [ADR-0008](decisions/0008-truth-is-unbounded-and-the-prompt-promises-dependence.md).
 
-Choice sets contain only nodes whose `lang` is in `IMPORTING_LANGS`. A `.md` or `.json` file cannot
-import anything, so offering one as a wrong answer makes the question easier rather than harder —
-padding is not a distractor (NORTH-STAR §8.3).
+Choice sets contain only nodes whose `lang` is in `GRADED_IMPORT_LANGS`. That excludes terrain — a
+`.md` or `.json` file cannot import anything, so offering one as a wrong answer makes the question
+easier rather than harder, and padding is not a distractor (NORTH-STAR §8.3). Since v11 it **also**
+excludes Python, which the scanner does parse: its imports shape the map and never grade a board
+([ADR-0028](decisions/0028-python-is-mapped-and-never-graded.md)). `IMPORTING_LANGS` is the wider
+set and is what `report.unreadable`'s ratio counts against; the two were one predicate until Python
+made them different questions.
 
 A challenge is also refused when a **structure-blind heuristic** would earn band A on it: "select
 every candidate in the subject's directory", or "select every candidate sharing a name token". That
@@ -581,15 +585,28 @@ field says why; the map, regions, history and layout are all present and valid a
 
 ## 4. Compatibility
 
-`version` is `10`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `11`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v10, got v9 — reindex required
+atlas.version: this build reads atlas v11, got v10 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v10 → v11 is one new `Lang` member and no new field.** `Lang` gains `py`, so an atlas written by
+this build can carry a value a v10 validator refuses — which is the whole of the incompatibility and
+is why the bump is required even though nothing was added or renamed. A migration is possible in
+principle (a v10 atlas is a valid v11 atlas) and is refused for the reason every bump since ADR-0010
+refuses one: the missing information is on a filesystem the player may not touch, and `npm run index`
+is cheaper than a migration that has to be kept correct forever.
+
+Cost, measured byte-for-byte through the real serialiser on clean clones of ark `abc8549` and hono
+`7075369e`: **zero**. Every section — nodes, edges, regions, history, report *and* challenges — is
+byte-identical to the v10 output; only the version integer changes. The same holds for
+`gohugoio/hugo`, `spf13/cobra` and `prometheus/prometheus`, which is the check saying a language
+arriving on the map moved nothing that was already on it.
 
 **v9 → v10 has no migration either, and it could not have one.** `nodes[].fileCount` is a new
 required field, `repo.fileCount` is renamed to `repo.nodeCount`, `NodeKind` gains `dir` and `Lang`

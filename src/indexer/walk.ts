@@ -36,6 +36,13 @@ export const SCANNED: ReadonlyMap<string, Lang> = new Map([
   ['.mjs', 'mjs'],
   ['.cjs', 'cjs'],
   ['.go', 'go'],
+  // Python. `.pyi` is a stub and `.pyw` a Windows entry point; both are real
+  // repo content with real history, and both are parsed by the same scanner —
+  // a stub's imports are its module's imports. `pyroot.ts` resolves a module
+  // name to at most one of them, in Python's own finder order.
+  ['.py', 'py'],
+  ['.pyi', 'py'],
+  ['.pyw', 'py'],
 ]);
 
 /** Extensions we map but do not parse — they are still part of the terrain. */
@@ -72,9 +79,10 @@ export const UNREAD: ReadonlyMap<string, string> = new Map([
   // the same commit that adds the language to `SCANNED`, and a unit test
   // asserts the two tables are disjoint — an extension in both would be indexed
   // *and* counted as missing, which is the one thing this trio must never do.
-  ['.py', 'Python'],
-  ['.pyi', 'Python'],
-  ['.pyw', 'Python'],
+  // `.py`, `.pyi` and `.pyw` were here until M5's Python half, and left in the
+  // same commit that added them to `SCANNED` — decision 6 of ADR-0025, and the
+  // disjointness unit test is what makes forgetting it a red suite rather than
+  // a repo counted as both mapped and missing.
   ['.rb', 'Ruby'],
   ['.rake', 'Ruby'],
   ['.rs', 'Rust'],

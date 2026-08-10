@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 10;
+export const ATLAS_VERSION = 11;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -70,23 +70,66 @@ export type NodeRef = number;
 /** A `YYYY-MM-DD` calendar date in the committer's local zone, as git reports it. */
 export type IsoDate = string;
 
-export type Lang = 'ts' | 'tsx' | 'js' | 'jsx' | 'mjs' | 'cjs' | 'go' | 'json' | 'md' | 'other';
+export type Lang =
+  | 'ts'
+  | 'tsx'
+  | 'js'
+  | 'jsx'
+  | 'mjs'
+  | 'cjs'
+  | 'go'
+  | 'py'
+  | 'json'
+  | 'md'
+  | 'other';
 
 /**
  * Languages the scanner parses for imports. Sorted.
  *
  * The complement — `json`, `md`, `other` — is terrain: mapped, sized and
- * clustered like everything else, but structurally inert. A file that cannot
- * import anything cannot be a wrong answer worth offering, which is why the
- * challenge generator uses this to decide who may appear in a choice set.
+ * clustered like everything else, but structurally inert.
+ *
+ * **This is the question `coverage.ts` asks: is this file mapped source?** It is
+ * *not* the question the Blast Radius generator asks — see `canGradeImports`
+ * below, which was the same predicate until Python.
  *
  * Kept next to `Lang` rather than in the indexer because it is a fact about the
  * enum, and both sides of the wall need it.
  */
-export const IMPORTING_LANGS: readonly Lang[] = ['cjs', 'go', 'js', 'jsx', 'mjs', 'ts', 'tsx'];
+export const IMPORTING_LANGS: readonly Lang[] = ['cjs', 'go', 'js', 'jsx', 'mjs', 'py', 'ts', 'tsx'];
 
 export function canImport(lang: Lang): boolean {
   return IMPORTING_LANGS.includes(lang);
+}
+
+/**
+ * Languages whose import graph may carry an **answer key**. Sorted, and a
+ * strict subset of `IMPORTING_LANGS`.
+ *
+ * **One predicate used to answer both questions, and Python is where they come
+ * apart.** *Is this file mapped source?* and *may this file be a Blast Radius
+ * subject or wrong answer?* are the same question for TypeScript and for Go, so
+ * `canImport` served both for five milestones with two readers and no sign of
+ * strain. ADR-0024 decision 2 makes Python a **history** language: its imports
+ * are parsed, resolved and drawn — they shape the layout, the regions and the
+ * elevation, which is what *a true map* means — and they may never grade a
+ * question, because seven computed `import_module(expr)` sites taint 83.7% of
+ * django's blast subjects and no parser fixes it (ADR-0024 §4.1).
+ *
+ * Merging the two again is not a tidy-up: it either withdraws every Python
+ * repo's deck (`mapped` reads 0 and ADR-0025 clause 2 refuses it — over a *full*
+ * map, with the HUD saying *"None of this repository's 2,928 source files are
+ * on this map"*, which is the false claim ADR-0025 decision 5 exists to
+ * prevent), or it ships a Blast Radius deck ADR-0024 measured as dead.
+ *
+ * It is a rule about a **language**, which is the coarsest grain ADR-0020's
+ * *withhold by class, never by row* admits: nothing about which node, which
+ * board or which row is consulted.
+ */
+export const GRADED_IMPORT_LANGS: readonly Lang[] = ['cjs', 'go', 'js', 'jsx', 'mjs', 'ts', 'tsx'];
+
+export function canGradeImports(lang: Lang): boolean {
+  return GRADED_IMPORT_LANGS.includes(lang);
 }
 
 /**

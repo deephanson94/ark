@@ -6,7 +6,14 @@
  * pure functions over that data.
  */
 
-export { ATLAS_VERSION, IMPORTING_LANGS, VERB_IDS, canImport } from './schema.js';
+export {
+  ATLAS_VERSION,
+  GRADED_IMPORT_LANGS,
+  IMPORTING_LANGS,
+  VERB_IDS,
+  canGradeImports,
+  canImport,
+} from './schema.js';
 export type {
   Atlas,
   AtlasEdge,
