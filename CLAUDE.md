@@ -874,6 +874,22 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the measurements were already right. **Re-read the prose against the table, not against the
   intention** — and treat any sentence of the form "the product does not have X" as a claim needing
   the same evidence as "the product has X".
+- **A probe that samples produces a table where the small rows are exact and the large ones are
+  fiction.** ADR-0032's §3.1 measured nearest-neighbour spacing across four repos with a loop capped
+  at `Math.min(N, 400)` nodes. ark (171) and hono (425, barely) reproduced **to the digit**; hugo's
+  maximum was 45% low and django's minimum — the cell §3.3 reasons from — was wrong in the direction
+  that made the design look safer. **The exactness of the small rows is what makes the large ones
+  believable**, which is the always-reads-good instrument in a new costume, and the cap was a
+  performance guard nobody remembered writing. A table over repos of different sizes is a claim that
+  the instrument scaled; say what it sampled, or do not sample.
+- **A design document for a new layer is not covered by the landmines the old layers paid for.**
+  ADR-0032 designed a walkable world in which *"a lit stone you can interact with"* is a node with an
+  open board — and **Placement's subject is a commit**, which has no `layout` and nowhere to stand:
+  25% of ark's deck, 77% of django's. That is the *subject-is-not-a-node* landmine, the one that
+  produced nine defects across the player when Placement shipped, arriving in prose a milestone later
+  with nothing to type-check it. Design documents are where this class of defect is **cheapest** to
+  find and where nothing will find it for you: before writing a layer, walk this list and ask which
+  entries are about a shape the new layer also has.
 
 ---
 
@@ -1251,13 +1267,21 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **build ADR-0030's twin surface**. The decision, the gate and the leak measurement are
-done; the code is not — an inspector line in the *revealed* register, its gate wired to the deck
-(*no member of the class still carries an unanswered board*), and its tests. Then the **phenomenon
-catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
-would let anything *transfer* to another repo and the other half of risk #1. Then **django's index
-budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of it the force-directed layout (ADR-0028 §6),
-which is a `layout.ts` change with its own determinism risk and wants its own ADR.
+Next action: **close ADR-0032 §9's three redesign findings before any rung-3 code is written.** Rung 3
+is *designed, reviewed and sent back*, which is a different state from designed — the world model has
+**no import edges in it** (so it would teach *near = coupled*, the fallacy `treeSibling` exists to
+punish), a **commit** subject has no `layout` and nowhere to stand on 25% of ark's deck and **77% of
+django's**, and stage A — the cheap falsifying test the whole staging was built around — cannot run
+against an orthographic camera with `MIN_PITCH = 0.18`. **P4 is not decided and no decision may be
+asked for on it until it is put accurately**: it has two legs, the Trace verb *and* the orbit's own
+measured results, and all three documents described one. Then **build ADR-0030's twin surface** — the
+decision, the gate and the leak measurement are done; the code is not — an inspector line in the
+*revealed* register, its gate wired to the deck (*no member of the class still carries an unanswered
+board*), and its tests. Then the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60
+structural phenomena, which is the atom that would let anything *transfer* to another repo and the
+other half of risk #1. Then **django's index budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of
+it the force-directed layout (ADR-0028 §6), which is a `layout.ts` change with its own determinism
+risk and wants its own ADR.
 
 **Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
 they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and

@@ -158,7 +158,7 @@ offered (ADR-0020).
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | The atom that would let anything transfer; risk #1's other half. |
-| Third-person walkable world | ⬜ | Intended destination, gated and unscheduled (ADR-0009). |
+| Third-person walkable world | 🟡 | **Designed, reviewed, and sent back** (ADR-0032 + `docs/experiments/0001`). Intended destination and still gated by ADR-0009; §9 of that ADR is what an adversarial review left standing, and it is redesign rather than correction — the world model has **no edges in it**, 25–77% of every deck has a **commit** subject with nowhere to stand, and the cheap falsifying test cannot run on an orthographic camera. No code, and none should be written against §§1–8 alone. |
 
 ### Known gaps — things this project does *not* do
 
@@ -251,12 +251,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Build ADR-0030's twin surface** — the decision, the gate and the measurement are done and the code
-is not: an inspector line, its wiring to the deck, and its tests · then the **phenomenon catalogue**,
-the repo-independent vocabulary that is the only thing that would let anything *transfer* to another
-repo, and the other half of risk #1 · then **django's index budget** (17.6–18.6 s against 10 s; the
-layout is ~40% of it, ADR-0028 §6) · and one measurement only a human can take: **`npm run raster` on
-real hardware**, on a *turned* map.
+**Close ADR-0032 §9 before any rung-3 code** — three of its nine findings are redesign, not
+correction: the world model has no import edges in it (which would teach *near = coupled*, the
+fallacy `treeSibling` exists to punish), a commit-subject board has nowhere to stand on 25% of ark's
+deck and **77% of django's**, and stage A's eye-height test cannot work against an orthographic
+camera with `MIN_PITCH = 0.18`. **P4 is not decided** and no decision may be asked for until it is put
+accurately — it has two legs and all three documents described one · then **build ADR-0030's twin
+surface**, whose decision, gate and measurement are done and whose code is not: an inspector line, its
+wiring to the deck, and its tests · then the **phenomenon catalogue**, the repo-independent vocabulary
+that is the only thing that would let anything *transfer* to another repo, and the other half of
+risk #1 · then **django's index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it,
+ADR-0028 §6) · and one measurement only a human can take: **`npm run raster` on real hardware**, on a
+*turned* map.
 
 *(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor

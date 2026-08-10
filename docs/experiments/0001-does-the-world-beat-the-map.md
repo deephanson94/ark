@@ -1,6 +1,9 @@
 # Experiment 0001 — Does the world beat the map?
 
-- **Status**: **designed, not run.** Committing this clears the half of ADR-0009's S1 that gates
+- **Status**: **designed, not run — and revised after review.** Four defects were found in the
+  first draft, including a tier-3 item using the exact wording ADR-0008 removed from the product.
+  Two structural problems remain open and are listed in §8: the matched repos are still a TODO, and
+  the two-arm design cannot measure the outcome `docs/prior-art.md` predicts. Committing this clears the half of ADR-0009's S1 that gates
   *merging*; the half that gates *shipping* needs the experiment actually run.
 - **Date**: 2026-08-10
 - **Discharges**: [ADR-0009](../decisions/0009-third-person-is-a-presentation-layer-over-the-same-atlas.md)
@@ -55,7 +58,13 @@ So the criterion is **extended, not relaxed**, and both halves are pre-registere
 | | measure | how |
 |---|---|---|
 | **M1 — comprehension** | recall of structure, one day later | §4's quiz, scored blind |
-| **M2 — engagement** | challenges attempted in a fixed 20-minute session, and voluntary session length when the timer is removed | instrumented by the player |
+| **M2 — engagement** | challenges attempted **within the fixed 20 minutes**, and self-reported willingness to continue | instrumented by the player, plus one intake-style question |
+
+**Exposure stays fixed at 20 minutes for both arms.** The first draft also measured *"voluntary
+session length when the timer is removed"* — which destroys M1's only control, because voluntary
+exposure is exactly the quantity the world is hypothesised to increase, so a world that teaches less
+per minute could pass the recall gate on time-on-task alone. And `docs/prior-art.md` §4.3.9 is blunt
+about the other half: *"A 3D world will produce a spike. The spike is not evidence."*
 
 **M1 is the gate. M2 is reported and cannot substitute for it.** A world that is more fun and teaches
 less is a worse product than a map that is duller and teaches more, and ADR-0009 exists to stop the
@@ -70,7 +79,10 @@ would go to the owner as a decision rather than being folded into a pass.
 **Between subjects.** Once you have mapped a repo in one mode your knowledge of it is contaminated
 for the other, so nobody sees the same repo twice and nobody sees both modes on one repo.
 
-- **n ≥ 6 per arm, 12 total, recruited from outside the project.** This disqualifies the author and
+- **n ≥ 6 per arm, 12 participants, each seeing exactly one mode**, recruited from outside the
+  project. **Between subjects throughout**: the first draft said this and then described a crossover
+  in §7 (*"two 20-minute sessions … each"*), which is a different experiment with a different n and a
+  paired analysis. One participant, one repo, one mode, one quiz. This disqualifies the author and
   anyone who has read this repository — which is the clause that makes S1 hard and is not negotiable,
   because the whole construct is *knowledge of a codebase you did not already know*.
 - **Two matched repos**, neither seen by any participant. Matched on node count within ~20%, on
@@ -97,10 +109,20 @@ So the instrument is scored in three tiers, and only the third discriminates:
    regions.
 2. **Topology**: given six files, rank them by how many things depend on them. Scored by rank
    correlation against the atlas.
-3. **Coupling — the discriminating tier**: *"a breaking change lands in X; which of these eight files
-   break?"* over files the participant was **never asked about during the session**, and *"which two
-   of these files always change together?"*. Scored with the same F1 the product grades by, so the
-   number is commensurable with a played board.
+3. **Coupling — the discriminating tier**: *"a change lands in X; which of these eight files
+   **depend on it**, directly or through a chain of imports?"* over files the participant was
+   **never asked about during the session**, and *"which two of these files **change together most
+   often**?"*. Scored with the same F1 the product grades by, so the number is commensurable with a
+   played board.
+
+   > **Both wordings were wrong in the first draft and are corrected here rather than quietly.** It
+   > asked *"which of these files **break**"* — which is the exact phrasing NORTH-STAR §6.1's
+   > 2026-08-07 amendment removed **from the product**, because import reachability overapproximates
+   > required change and the old wording *"would mark players wrong on files that provably need no
+   > change"* (ADR-0008). Scored against atlas truth it would have done precisely that, **inside the
+   > instrument that gates the milestone**. And *"always change together"* claims universality where
+   > the co-change matrix records frequency — Companion's own prompt says *most often*. A quiz may
+   > not make claims the product refuses to make.
 
 Tier 3 items are drawn from the atlas by the same generator the deck uses, with the subjects the
 participant actually played **excluded**, so the quiz measures transferred structure rather than
@@ -141,8 +163,34 @@ not an experiment quietly not run, and not one run and then reinterpreted.
 
 ## 7. What this costs
 
-Twelve participants, two 20-minute sessions plus a next-day quiz each. The expensive part is
+Twelve participants, one 20-minute session and one next-day quiz each. The expensive part is
 recruitment from outside the project, and it is the same wall NORTH-STAR risk #1's transfer playtest
 has never got over — that experiment has also never been run, and this one is deliberately shaped so
 that **running it answers a large part of risk #1 as a side effect**: tier 3 over unseen subjects is
 a transfer measure whether the arms differ or not.
+
+---
+
+## 8. What review left open
+
+Corrected above: the between-subjects/crossover contradiction, the voluntary-exposure measure that
+destroyed the control, and both tier-3 wordings — one of which asked the question ADR-0008 removed
+from the product for marking players wrong.
+
+**Still open, and blocking a run:**
+
+- **The matched repos are a TODO.** *"Two repos of similar size must be chosen and named here before
+  recruiting"* — and naming them is the hard part, not a formality: tier 3's dependence item needs a
+  repo in `GRADED_IMPORT_LANGS` (a Python repo ships **no** Blast Radius boards at all, ADR-0028),
+  node counts within ~20%, real history, and neither seen by any of twelve people. A decision is not
+  a delivery; this design cannot be run until the two are named.
+- **Two arms cannot measure the thing the evidence predicts.** `docs/prior-art.md` §2's finding is
+  that *exocentric* 3D wins and *egocentric* loses — to exocentric. Map-versus-world cannot see
+  "orbit beats both", and ADR-0009 gates the avatar on *the orbit's own measured results*, which no
+  arm here produces. A third arm is the repair and it is 50% more recruiting on the constraint that
+  already makes S1 hard.
+- **The quiz is per-participant, not fixed.** Excluding the subjects each person played makes every
+  quiz different, and played sets will differ **systematically by arm** — walking reaches different
+  subjects than the map does — so arm means would be computed over systematically different items.
+  S1 asked for *"a fixed recall quiz"*. Either fix the item set and accept some overlap with played
+  subjects, or stratify; the first draft did neither and did not notice it had deviated.

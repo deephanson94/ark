@@ -1,7 +1,10 @@
 # ADR-0009 — Third person is a presentation layer over the same atlas, and it is blocked
 
-- **Status**: **accepted in principle — rungs 0–2 shipped; rung 3 designed and gated, 2026-08-10.**
-  The decision is that this direction is *allowed* and on what terms. This line originally read "blocked, and not scheduled …
+- **Status**: **accepted in principle — rungs 0–2 shipped; rung 3 designed, reviewed and sent back,
+  2026-08-10.** The decision is that this direction is *allowed* and on what terms. **Both owner's
+  notes are authority, the later one qualifying the earlier**; the title's "and it is blocked" and
+  the Direction paragraph's *"the status line stays as it is"* are both older than this line and are
+  superseded by it. This line originally read "blocked, and not scheduled …
   cannot be earlier than after M5"; the owner has since opened rungs 0–2 and the orbit view has
   merged. **Read the [Owner's note](#owners-note--2026-08-07-the-rung-ladder-and-what-it-does-and-does-not-open)
   before acting on anything below** — it says exactly what is open, what it cost, and what is still
@@ -360,14 +363,18 @@ the owner's judgement is that it is not the thing. That is a fact about the prod
 
 **What is *proposed* and needs the owner's word:**
 
-1. **P4 — the avatar is gated on the Trace verb (M6), which does not exist.** The evidence behind P4
-   is about **recall**, and `docs/experiments/0001-…` measures recall directly at stage D. So the
-   proposal is that **P4 is released and its concern is discharged by S1 instead** — the gate moves
-   from *"a verb that makes walking worthwhile must exist first"* to *"walking must be shown to teach
-   at least as well"*. That is a real weakening of a gate and it is named as one rather than folded
-   in. **Only the owner may make it.**
-2. **S1's merge half is discharged, its ship half is not.** `docs/experiments/0001-…` is now
-   committed, which is what this ADR requires before third-person code merges. The experiment has
+1. **P4 — and this proposal is WITHDRAWN, because it described half the gate.** P4 has two legs:
+   the Trace verb (M6) must exist, **and** *"the orbit's own measured results"* must be in — the
+   08-07 note above says both. The first version of this paragraph named only Trace, and argued the
+   release on the ground that *"P4's concern is recall and 0001 measures recall"*. That answers
+   neither leg: half of P4 is content-shaped (*does any question in the product need walking?*), and
+   the recall evidence behind the other half is **comparative** — egocentric loses *to exocentric* —
+   which a two-arm map-versus-world experiment structurally cannot measure. **No decision is asked
+   for on P4 until it is put accurately.** ADR-0032 §9.4 and §9.5.
+2. **S1's merge half is discharged, its ship half is not.** `docs/experiments/0001-…` is committed
+   (at `e3a930f`; this sentence first said "now committed" while the file was still untracked), which
+   is what this ADR requires before third-person code merges — though §8 of that document lists two
+   things still blocking a run. The experiment has
    **not been run** and nothing may ship on it. If the owner intends to ship regardless of the
    result, the honest form is a further dated note here saying so — not an experiment quietly skipped
    (§6 of that document).

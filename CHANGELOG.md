@@ -2786,3 +2786,33 @@ One line per iteration: what changed, and what to do next.
   **Next**: build ADR-0030's twin surface. Also open, and recorded rather than fixed: both workflows
   target Node 20 on actions GitHub has deprecated, which is one change across `ci.yml` and
   `pages.yml`.
+
+- **Rung 3, designed and then sent back.** ADR-0032 (the walkable world), `docs/experiments/0001`
+  (the S1 design ADR-0009 has recorded as in breach since the orbit merged without one), and a dated
+  owner's note on ADR-0009 quoting the owner's restatement of the destination. No code, by design.
+  ADR-0032's central decision came from measuring rather than arguing — nearest-neighbour spacing is
+  a median 12–19 units on all four measured repos while the span runs 475 to 1,049, so **spacing is
+  the invariant and world size is not**, and ark is a dense city on flat ground rather than a
+  landscape. That dissolves the pillar-4 problem: the ground is a featureless plane, which asserts
+  nothing and cannot be wrong, and everything standing on it is already computed.
+
+  **Then it was attacked, which is what "proposed" was for, and §9 is what did not survive.** Six
+  figures corrected in place — three cells of §3.1's table were measured by a probe capped at
+  `Math.min(N, 400)` nodes, so ark and hono reproduced to the digit and the two large repos did not,
+  which is exactly how the bad column was findable. Three findings are **redesign**: the world model
+  names monoliths, colour, arches, stones, badges and fog and **never an import edge**, so it would
+  teach *near = coupled*, the fallacy `treeSibling` exists to punish; a **commit** subject has no
+  `layout` and therefore nowhere to stand, on 25% of ark's boards and **77% of django's**; and stage
+  A — the cheap falsifying test the whole staging was built around — cannot run, because `orbit.ts`
+  is orthographic with `MIN_PITCH = 0.18` and an orthographic grazing view draws a field of poles
+  whatever the layout is. The two paragraphs this ADR was proudest of are two of the three.
+
+  **P4's proposed release is withdrawn.** It has two legs — the Trace verb *and* the orbit's own
+  measured results — and all three documents, plus the session's own explanation to the owner,
+  described only the first. No decision may be asked for on it until it is put accurately.
+
+  §3.5 is the owner's minimap, adopted and marked as postdating the review: it is the only element
+  that keeps a survey view co-present with the egocentric one, and it is the decision most entangled
+  with §9.1 — a minimap that draws the edges the world lacks is a finding, not a fix.
+
+  **Next**: close §9's three redesign items before any rung-3 code, then ADR-0030's twin surface.
