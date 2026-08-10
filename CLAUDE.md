@@ -394,6 +394,17 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   described a shape the document did not propose: as decisions accumulate, **the baseline moves, and
   rows measured before the last decision are measuring a dead design.** Re-run the whole table
   against the final baseline before quoting any of it.
+- **An error message's suggested remedy is a hypothesis, not a fix, and taking it is the
+  impossibility landmine inverted.** `actions/configure-pages` failed with *"verify that the
+  repository has Pages enabled … or consider exploring the `enablement` parameter"*, so `enablement:
+  true` was set, shipped, and written into ADR-0031 as a **decision** in the same commit. It cannot
+  work: *creating* a Pages site is an `administration: write` operation and the workflow
+  `GITHUB_TOKEN` cannot be granted that permission at all — `pages: write` deploys to a site and does
+  not create one, a distinction the suggestion does not make. This repo's usual failure is an
+  unchecked claim that something **cannot** be done; this is the same shape pointed the other way,
+  and it is easier to fall for because the source is the tool's own error text. One question would
+  have caught it — *which permission does this need, and can the token hold it?* What did catch it
+  was reading the next run, which is a slower instrument than a question.
 - **A different instrument is not drift.** ADR-0019 "corrected" a recorded 0 to 16 — issue numbers on
   this repo's commits — and cited the measured-constant landmine while doing it. The 0 was right. The
   sixteen `#N` references are all `Merge pull request #N` subjects, and `git log --name-status`
@@ -1204,10 +1215,14 @@ turns the world and fails on any console error. **There is no Pages deploy yet**
 deleted, not disabled, and **[ADR-0015](./docs/decisions/0015-pages-is-not-deployed-while-the-repo-is-private.md)**
 says why and gives the one-line restore: it failed on every run it ever had, because the repo is
 private and Pages there needs a paid plan. **[ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)
-is that reversal in progress**: the prep is shipped (a `LICENSE`, which `package.json` claimed since
-M0 and no file granted) and the flip is the owner's, with an ordered checklist in its §5 — restore
-`pages.yml` **after** the repo is public and Pages is switched on, never before, because a workflow
-that must fail until an unrelated switch is thrown is exactly what ADR-0015 deleted. Its zero-challenge guard was not migrated because
+closed it**: the repo is public, it has the `LICENSE` `package.json` claimed since M0 and no file
+granted, and the player deploys to **<https://deephanson94.github.io/ark/>** from `master` on every
+push. Four Pages runs to get there and **every one was read**, which is the only reason none was
+reported as a success: not enabled, then a fix that could not work, then the revert, then green. The
+one that could not work is the lesson — `enablement: true` was taken from the failing action's own
+suggested remedy without asking whether `GITHUB_TOKEN` could act on it, and *creating* a Pages site
+needs `administration: write`, which it can never hold. `pages: write` **deploys to** a site and does
+not **create** one. Its zero-challenge guard was not migrated because
 `test:atlas` (`> 20` on a fresh build) and `test:e2e` (which actually plays a question) already hold
 it more strongly — checked by mutation, not assumed.
 

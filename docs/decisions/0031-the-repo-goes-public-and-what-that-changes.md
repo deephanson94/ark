@@ -1,7 +1,7 @@
 # ADR-0031 — The repo goes public, and the flip is a checklist rather than a switch
 
-- **Status**: accepted — **the repo is public as of `1581916d`'s day; the deploy is being brought up.**
-  See §5 for the checklist and §6 for what its first run found.
+- **Status**: accepted — **done.** The repo is public, the deck deploys to
+  <https://deephanson94.github.io/ark/>, and §5's checklist is closed. §6 is what its runs found.
 - **Date**: 2026-08-10
 - **Supersedes the precondition of**: [ADR-0015](./0015-pages-is-not-deployed-while-the-repo-is-private.md)
   — *"publishing returns the day the repo is public"*
@@ -119,7 +119,7 @@ Ordered, because two of these only work once the one above has happened:
    before you claim they passed*, which this repo learned by reporting CI green three times while
    `pages.yml` had failed on every run it ever had.
 5. Move `README.md`'s **No Pages deploy** row out of Known gaps and put the deployed URL in its
-   place.
+   place. ✅ — the row is gone and the link is the first thing the README offers.
 
 **This list is written down instead of remembered for the reason ADR-0029 exists**: an item nobody
 can execute gets ticked from memory. Steps 1 and 2 are the owner's and cannot be scripted; the
@@ -247,3 +247,32 @@ histories to keep in step, and the private one still burns the minutes.
   `NORTH-STAR.md`, this document and the `bin` name — NORTH-STAR's header notes deliberately that the
   product name appears in no *filename*, so a rename is never a file move. It gets more expensive
   once the URL is in circulation.
+
+---
+
+## 7. The checklist closed, and what the last run actually said
+
+Step 2 was performed by the owner; the workflow was then dispatched against `master` at `b1801b2f`
+rather than waiting for a push, so the thing being tested was the tree that had just been corrected.
+**Run 6, `workflow_dispatch`, 52 seconds, `conclusion: success`** — both jobs, every step:
+
+```
+publishing ark @ b1801b2fc8bb
+  171 nodes, 545 edges, 160 challenges
+…
+Reported success!
+Evaluated environment url: https://deephanson94.github.io/ark/
+```
+
+**What is verified and what is not, because the two are different.** GitHub's deployment reported
+success and evaluated the URL, which is the instrument that decides whether a deploy happened. The
+page has **not** been fetched from this container — the agent proxy refuses `github.io` — so *"the
+site serves the player"* rests on the same artefact `upload-pages-artifact` took from `dist/player`,
+which `npm run test:pack` and `npm run test:e2e` both exercise directly. That is a strong chain and
+it is not the same as having loaded the page, and this document says which one it has.
+
+**Four runs to get here, and every one of them was read.** Run 3 failed because Pages was not
+enabled; run 4 failed because the fix for run 3 could not work (§6.1); run 5 was the merge of the
+revert, still before the toggle; run 6 is green. Step 4 — *read the run* — is the only reason none of
+those was reported as a success, and it is the step this repo added after reporting CI green three
+times over a workflow that had never once passed.

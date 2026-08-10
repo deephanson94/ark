@@ -5,6 +5,11 @@
 
 Point it at any repo. Learn its architecture by proving you understand it.
 
+**[Play it in your browser →](https://deephanson94.github.io/ark/)** — ark's map of ark, rebuilt
+from `master` on every push. No install, and nothing of yours is read.
+
+To point it at your own code:
+
 ```bash
 npm install && npm run build   # once
 npm run play -- /path/to/repo
@@ -231,11 +236,6 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `actions/setup-node@v4` and `actions/configure-pages@v5` are all being force-run on Node 24 with a
   deprecation warning. A warning today, and one change across `ci.yml` and `pages.yml` rather than a
   fix smuggled into whichever one is being touched — ADR-0031 §6, where it surfaced.
-- **No Pages deploy — until the repo is public and Pages is switched on.** `pages.yml` was deleted
-  rather than disabled, so a red X on this repo means something (ADR-0015). Restoring it is one line
-  and it is **step 3 of [ADR-0031](./docs/decisions/0031-the-repo-goes-public-and-what-that-changes.md)
-  §5**, deliberately after the flip: a workflow that must fail until an unrelated switch is thrown is
-  the thing ADR-0015 deleted this file to stop. This row is true until that deploy is green.
 - **Duplicate-answer-key twins are still never mentioned to the player — but the decision is taken
   and it is now *unbuilt* rather than *undecided*** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
   `cone(A) = cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two
@@ -292,6 +292,11 @@ locale-dependent git output in one assertion — every one of which would silent
 across sessions, which is the mechanic the whole product rests on.
 
 ## Try it on
+
+The deployed player at **<https://deephanson94.github.io/ark/>** is this repo indexed by itself — the bootstrap
+fixture NORTH-STAR §11 makes v1's only target, and the one codebase whose map this project can vouch
+for. It publishes from `master` on every push and it indexes **nothing else**: a workflow that
+accepted a repo URL would be the first crack in pillar 5.
 
 **`honojs/hono`** is the best third-party TypeScript target — **425 nodes, 1,067 edges, 2.51
 edges/node** at `7075369e`, 216 challenges, 142 of 425 nodes unprovable. For **Go**, try
