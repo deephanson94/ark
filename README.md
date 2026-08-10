@@ -82,7 +82,7 @@ simultaneously possible.
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 29 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 30 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -224,15 +224,27 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hardware before anyone acts on it.
 - **No Pages deploy.** Deleted rather than disabled, so a red X on this repo means something
   (ADR-0015).
-- **Duplicate-answer-key twins are never mentioned to the player.** `cone(A) = cone(B)` is a true
-  derived fact with nowhere to be shown yet.
+- **Duplicate-answer-key twins are still never mentioned to the player — but the decision is taken
+  and it is now *unbuilt* rather than *undecided*** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
+  `cone(A) = cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two
+  hats"*, and it is **common**: 15.5% of ark's blast-eligible subjects are in a twin class, 15.2% of
+  hono's, 8.6% of hugo's and **32.3% of prometheus's**, whose largest class is 25 interchangeable
+  `discovery/*` packages. The hypothesis this row was written under — *two on ark and none elsewhere*
+  — is retired. Naming a twin is a **Ctrl+F-grade leak** and not in the obvious direction: the answer
+  keys provably cannot overlap (ADR-0012 tiles the windows), but a passed board certifies its
+  *distractors* as non-dependents of the twin too, which decides **4 of the 12 twin pairs that could
+  carry it**, best 0.923 against a 0.78 bar. So the rule is *name a class only when no member of it
+  still carries an unanswered board*, in the inspector and never on the map. What is unbuilt is the
+  line, the gate's wiring and its tests.
 
 ### Next
 
-The **duplicate-answer-key twins**, which want a decision about *where* a shown fact is shown before
-any code (see gaps) · then the **phenomenon catalogue**, the repo-independent vocabulary that is the
-only thing that would let anything *transfer* to another repo, and the other half of risk #1 · and
-one measurement only a human can take: **`npm run raster` on real hardware**, on a *turned* map.
+**Build ADR-0030's twin surface** — the decision, the gate and the measurement are done and the code
+is not: an inspector line, its wiring to the deck, and its tests · then the **phenomenon catalogue**,
+the repo-independent vocabulary that is the only thing that would let anything *transfer* to another
+repo, and the other half of risk #1 · then **django's index budget** (17.6–18.6 s against 10 s; the
+layout is ~40% of it, ADR-0028 §6) · and one measurement only a human can take: **`npm run raster` on
+real hardware**, on a *turned* map.
 
 *(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
@@ -314,7 +326,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 29 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 30 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

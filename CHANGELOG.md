@@ -2672,3 +2672,44 @@ One line per iteration: what changed, and what to do next.
   hono, 22 over 93 on prometheus (**32.3%**, largest class 25 — `discovery/*`, all interchangeable to
   the import graph). It earns a surface; what it needs first is the leak measurement, because naming
   a twin hands over the *non*-dependents a player already certified on its sibling's board.
+
+- **The twins: measured, decided, and deliberately unbuilt.** `README.md` has carried *"duplicate
+  answer-key twins are never mentioned to the player"* since M2 with the note that it *"needs a
+  decision about where it is shown before any code"*, and nobody had taken the measurement that would
+  decide it. **[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**
+  takes it.
+
+  **The hypothesis the row was written under is wrong.** *Two on ark and none elsewhere* would have
+  justified closing it as not worth a surface; measured, **15.5% of ark's blast-eligible subjects are
+  in a twin class, 15.2% of hono's, 8.6% of hugo's and 32.3% of prometheus's** — whose largest class
+  is **25** interchangeable `discovery/*` packages, every plugin behind one registry. And it is one of
+  the better things this repo has to say: `cone(A) = cone(B)` is the *import graph's* version of
+  NORTH-STAR §2's *"secretly one module wearing two hats"*, and a stronger claim than co-change's —
+  not *these move together* but *nothing downstream can tell these apart*. ark's own best is
+  `src/atlas/{coverage,serialize,graph}.ts`, cone **95** of 160 nodes, because all three go through
+  one barrel.
+
+  **Naming a twin is a Ctrl+F-grade leak, and not in the direction anyone looks.** The obvious worry
+  — A's key hands over B's — is *impossible by construction*: ADR-0012 tiles the windows so
+  `truth(A) ∩ truth(B) = ∅`, and ADR-0008's invariant keeps every unsampled dependent off the board,
+  so `truth(A) ∩ candidates(B) = ∅`. Measured across four repos: **0 overlaps**, the gate saying the
+  proof describes the code. The leak runs through the **wrong** answers — a passed board certifies its
+  distractors as non-dependents of the twin as well — and scored with `scoreSet` it eliminates a mean
+  of 7.5–13 of 20 candidates and **decides 4 of the 12 twin pairs that could carry it**, best
+  **0.923** against a 0.78 bar. So the rule is ADR-0020's, by class: *name a class only when no member
+  of it still carries an unanswered board*, gated on **answered** rather than passed (guardrail 6: a
+  wrong answer still sees the reveal), in the inspector and never on the map, in ADR-0011's *revealed*
+  register.
+
+  **What the gate leaves is counted, not assumed** — ADR-0016's vanishing-wires lesson met from the
+  other side, and it runs the opposite way: nothing is promised and withdrawn, the fact **arrives** as
+  boards are answered. 0 of ark's 11 members are nameable at the first frame and all 11 eventually;
+  hono 24 of 33 and prometheus 51 of 93 are nameable immediately, because their classes carry no board
+  at all.
+
+  **No surface was built and the ADR says so in its status line.** *A decision is not a delivery* —
+  this repo has a landmine about a milestone that read "delivered" for two sessions while one of its
+  three verbs existed. What is decided is where, under what gate, and in what register; what is
+  unbuilt is the inspector line, the gate's wiring and its tests.
+
+  **Next**: build it.

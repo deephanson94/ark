@@ -1232,13 +1232,13 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: the **duplicate-answer-key twins** — `cone(A) = cone(B)` is a true derived fact that by
-ADR-0011 decision 3 must be *shown* and never proved, so it wants a decision about **where** before
-any code, and it wants the count of how many twins each of the five repos actually has **first**: if
-it is two on ark and none elsewhere, the honest answer may be that it does not earn a surface, and
-that is a finding worth writing down rather than a feature. Then the **phenomenon catalogue**, a
-repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that would let anything
-*transfer* to another repo and the other half of risk #1.
+Next action: **build ADR-0030's twin surface**. The decision, the gate and the leak measurement are
+done; the code is not — an inspector line in the *revealed* register, its gate wired to the deck
+(*no member of the class still carries an unanswered board*), and its tests. Then the **phenomenon
+catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the atom that
+would let anything *transfer* to another repo and the other half of risk #1. Then **django's index
+budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of it the force-directed layout (ADR-0028 §6),
+which is a `layout.ts` change with its own determinism risk and wants its own ADR.
 
 **Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
 they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and
@@ -1328,10 +1328,17 @@ The `tracedRadius` member leak ADR-0016 recorded as open is **closed**: the radi
 question and by nothing else. It was a divergence from ADR-0008 decision 1 rather than an open
 question — measured at 26 of 40 boards exposable, all recovering their key byte-exact, before.
 
-Still open, and it is a design question rather than a defect: **the twins a duplicate answer key
-drops are never mentioned to the player**. `cone(A) = cone(B)` is a true derived fact and by ADR-0011
-decision 3 it must be *shown*, never proved — so it wants a decision about where it is shown before
-any code. And one measurement only a human can take: **`npm run raster` on real hardware** —
+**The twins are decided and unbuilt** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**),
+which is a different state from the one this paragraph described for four milestones. `cone(A) =
+cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two hats"* and it is
+**common** — 15.5% of ark's blast-eligible subjects, 15.2% of hono's, **32.3% of prometheus's**,
+whose largest class is 25 interchangeable `discovery/*` packages — so the hypothesis that it might not
+earn a surface is retired. Naming a twin is a **Ctrl+F-grade leak in the direction nobody looks**:
+the keys provably cannot overlap (ADR-0012 tiles the windows, measured 0 overlaps), but a passed
+board certifies its *distractors* as non-dependents of the twin, which decides **4 of the 12 twin
+pairs that could carry it** — best 0.923 against a 0.78 bar. The rule is *name a class only when no
+member still carries an unanswered board*, in the inspector, never on the map. **No surface was
+built, and this paragraph must not be edited into saying one was.** And one measurement only a human can take: **`npm run raster` on real hardware** —
 45/33/43 fps is a headless software floor, ADR-0009's P1′ gates the renderer on it, and it should now
 be measured on a *turned* map, since oblique headings are the normal case and were never what it
 sampled.
