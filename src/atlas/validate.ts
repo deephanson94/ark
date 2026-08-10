@@ -139,7 +139,19 @@ function describe(value: unknown): string {
 // sections
 // ---------------------------------------------------------------------------
 
-const LANGS: readonly Lang[] = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'go', 'json', 'md', 'other'];
+const LANGS: readonly Lang[] = [
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'mjs',
+  'cjs',
+  'go',
+  'py',
+  'json',
+  'md',
+  'other',
+];
 const NODE_KINDS: readonly NodeKind[] = ['file', 'dir'];
 const EDGE_KINDS: readonly EdgeKind[] = ['import', 'reexport', 'dynamic', 'type', 'require'];
 const CONFIDENCES: readonly Confidence[] = ['certain', 'probable'];

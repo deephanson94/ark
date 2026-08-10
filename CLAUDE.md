@@ -641,6 +641,26 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   that lived three times had already diverged twice. **The instrument that found #3 and #4 is the
   merge-commit reproduction** — neither was reachable on the branch's own tree, and both would have
   been a red CI.
+- **A corpus of 3,011 real files is not a substitute for adversarial fixtures, and the direction runs
+  both ways.** Python's scanner was scored against tree-sitter and against Python's own `ast` on
+  flask and django — 0 files disagreeing — and a unit fixture then found a live defect the corpus
+  could not: a backslash-continued `from pkg import \` read as an import of nothing. Re-running the
+  whole comparison after the fix changed **no** file on either repo. That is the *count how many
+  times a branch fires* rule met from the other side: a branch nothing exercises can still be wrong,
+  and the corpus that proves a scanner correct proves it correct **only about the shapes the corpus
+  contains**. The mirror finding is in the same measurement: the *comparison harness* needed three
+  corrections to tree-sitter's side before it agreed (a node identity check, a
+  `future_import_statement` node type, and that node spelling its module in the grammar), and every
+  one of them made **tree-sitter** look wrong. **An instrument built to judge your code is not
+  exempt from being judged first.**
+- **A test that asserts an absence passes whether or not the rule exists.** The end-to-end check for
+  *"a Python repo ships no Blast Radius board"* was written over a five-file fixture, which has too
+  few candidates to build a choice set **in any language** — so deleting `canGradeImports` reddened
+  one assertion out of two and this one sat there reading as evidence. The fix is a counterfactual
+  rather than a measurement: build the **same 19-file dependency shape twice**, once in `.py` and
+  once in `.ts`, and assert the TypeScript tree ships boards while the Python one ships none. When
+  you assert that something does not happen, **make something else that does happen prove the
+  apparatus was running.**
 - **A path in a language you have just added can be dead in a way the language's own shape hides.**
   Go's masker skipped recording rune-literal bodies as string literals, with a comment explaining that
   a rune can never be an import path. True, and the branch is unreachable: the import scan only ever
@@ -900,6 +920,45 @@ CI installs its own Chromium and needs no variable.
 
 ## Current state
 
+**M5 is delivered.** Its Python half ships
+(**[ADR-0028](./docs/decisions/0028-python-is-mapped-and-never-graded.md)**) as ADR-0024 decision 2
+decided it: a **history** language — the map and the three git verbs and **never Blast Radius**.
+`pallets/flask` `6a2f545b` is **91 nodes, 193 edges, 17 regions, 11 peaks and 118 challenges of
+which zero are Blast Radius**; `django/django` `c9eb16a87e` is 3,035 nodes and 10,162 edges;
+`donnemartin/system-design-primer` ships 57. Both scanners are hand-rolled and tree-sitter has now
+been scored against **two** languages and bought **zero measured points** on either: identical site
+counts to tree-sitter *and* to Python's own `ast` (flask 675, django 12,052), **0 of 3,011 files
+disagreeing**, 7.1× faster, no runtime dependency. **If a third language comes out level, it is
+NORTH-STAR §7.2's strategy that needs rewriting, not the exception.**
+
+The mechanism is a **predicate split**, and it is the thing to understand before touching any of it.
+`canImport` answered two questions — *is this mapped source?* (`coverage.ts`) and *may this grade an
+answer key?* (`blastRadius/generate.ts`) — which are the same question for TypeScript and Go and
+**opposite answers for Python**. Merge them again and you either withdraw every Python repo's deck
+(`mapped` reads 0, ADR-0025 clause 2 refuses it, and the HUD says *"None of this repository's 84
+source files are on this map"* over a **full** map) or ship the Blast Radius deck ADR-0024 measured
+as dead. `GRADED_IMPORT_LANGS` is the strict subset, it gates the **subject** as well as the
+candidate pool, and it refuses by **language rather than by taint** on purpose — 30 of flask's 32
+subjects and 819 of django's 976 would be refused by guardrail 4 anyway, so leaving it to taint
+would make *whether a language has a deck* depend on how dynamic one repo is.
+
+**The kill point was re-measured with the shipped instrument and the verdict held harder.** django
+now resolves at **99.1%** — better than the probe that decided it (98.6%) — and the share of blast
+subjects whose closure is tainted moves by **0.1 points**, 84.0% → 83.9%. Position beats rate,
+confirmed by a second instrument that disagrees about the rate and agrees about the deck.
+**A language ships on its deck, not on its map, and not on its resolution rate.**
+
+**All five repos ADR-0025 refused now ship** — Go returned hugo and cobra, Python returns django,
+flask and system-design-primer — so that document's *"the refusal will resolve itself as languages
+land"* is closed. None of the 315 withdrawn questions came back; what the five ship instead is
+**1,048** questions about their own source.
+
+**`django/django` breaches the index budget and it is said out loud: 16.3–17.7 s at 3,035 nodes
+against a 10 s ceiling.** It is **not** the Python scanner (1.1 s of it) — the force-directed layout
+is **6.9 s, 39%**, the same share as hugo's at half the scale. `README.md` Known gaps carries it with
+the phase breakdown; fixing it is a `layout.ts` change with its own determinism risk and wants its
+own ADR.
+
 **M5's Go half ships.** A Go node is a **package** — the directory, not the file
 (**[ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)**) —
 and the scanner is **hand-rolled**, against NORTH-STAR §7.2's *"v2: tree-sitter"*, on a measurement
@@ -1134,13 +1193,11 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **M5's Python half** — a *history* language, the map and the three git verbs and never
-Blast Radius (ADR-0024 decision 2), which is a smaller product than the roadmap implies and needs its
-own measurement; score it against tree-sitter the way Go was scored before writing a scanner. Then, in
-rough order of size, packaging **`npx ark`** (NORTH-STAR §10's stated intent, unbuilt — see the
-Definition of done) and the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60
-structural phenomena, which is the atom that would let anything *transfer* to another repo and the
-other half of risk #1.
+Next action: packaging **`npx ark`** — NORTH-STAR §10's stated intent, unbuilt for five milestones,
+and the item in the Definition of done nobody can literally satisfy. Then the **duplicate-answer-key
+twins**, which are a design question (where is a *shown* fact shown?) before they are code, and the
+**phenomenon catalogue**, a repo-independent vocabulary of ~30–60 structural phenomena, which is the
+atom that would let anything *transfer* to another repo and the other half of risk #1.
 
 **Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
 they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and

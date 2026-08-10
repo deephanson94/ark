@@ -2520,3 +2520,68 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: **M5's Python half** — a *history* language, the map and the three git verbs and never
   Blast Radius (ADR-0024 decision 2), scored against tree-sitter the way Go was (ADR-0026 decision 1).
+
+- **M5's Python half: mapped and never graded.** ADR-0024 decision 2 decided the shape a session
+  ago — Python is a *history* language, the map and the three git verbs and never Blast Radius — and
+  left the mechanism open. There was no concept in this codebase of an **edge that shapes the map and
+  cannot grade a question**, and there had to be: ADR-0024 §5 says what M5 buys Python is *"a true
+  map with the history deck attached to real code"*, and a true map means layout, regions and
+  elevation derived from real imports.
+
+  **The mechanism is a predicate split, and the trap was live before a line was written.**
+  `canImport` had exactly two readers and they were asking different questions —
+  `blastRadius/generate.ts` asks *may this be a subject or a wrong answer?* and `coverage.ts` asks
+  *is this mapped source?* Same question for TypeScript and Go; opposite answers for Python. Leave
+  `py` out and `mapped` reads **0** on a pure-Python repo, so ADR-0025 clause 2 refuses the deck
+  anyway *and* the HUD prints **"None of this repository's 84 source files are on this map"** over a
+  full map of 83 Python files — the false-claim cost ADR-0025 decision 5 exists never to pay. Put it
+  in and Blast Radius ships the deck ADR-0024 measured as dead. So `GRADED_IMPORT_LANGS` is the
+  strict subset, it gates the **subject** as well as the candidate pool, and it refuses by *language*
+  rather than by taint — because 30 of flask's 32 subjects and 819 of django's 976 would be refused
+  by guardrail 4 anyway, and leaving it there would make *whether a language has a deck* depend on
+  how dynamic one repo happens to be.
+
+  **Tree-sitter was scored again, as ADR-0026 decision 1 obliges, and Python was the language most
+  likely to flip it** — `from . import x`, `from ..pkg import y`, parenthesised lists, `\`
+  continuations, four string prefixes, triple quotes, and no *imports come first* rule to bound the
+  scan. It did not flip: **675 sites on flask and 12,052 on django from all three instruments**
+  (tree-sitter, the hand-rolled scanner, and Python's own `ast` where it can parse), **0 of 3,011
+  files disagreeing**, 7.1× faster, no runtime dependency. flask's 675 + 2 computed sites is
+  ADR-0024 §3's 677 to the digit, and django's 12,000 reconciles as 11,991 `ast` statements + 9 call
+  sites. Two languages scored, two refusals; a third coming out level is the point at which
+  NORTH-STAR §7.2's *strategy* needs rewriting rather than another exception.
+
+  **Which instrument found which defect is not what the table implies.** The comparison harness
+  needed **three** corrections before it agreed and every one made *tree-sitter* look wrong; the one
+  real scanner defect was found by **`ast`** — django imports a model called `Héllo` and JavaScript's
+  `\w` is ASCII-only even under `/u`, so the name was dropped in silence, one file in 3,011. A
+  **second** defect was found by neither, because no file in either repo exercises it: a
+  backslash-continued `from pkg import \` read as an import of nothing, caught by a unit fixture,
+  and re-running the whole comparison after the fix changed **no** file on either repo.
+
+  **The kill point was re-measured with the shipped instrument rather than inherited, and the
+  verdict held harder.** django resolves at **99.1%** where ADR-0024's probe got 98.6%, and the share
+  of blast subjects whose closure is tainted moves **84.0% → 83.9%**. flask goes 6.2% → 4.87%
+  unresolved and 93.3% → 93.8% tainted. Position beats rate, now confirmed by two instruments that
+  disagree about the rate and agree about the deck. flask ships **118** challenges (0 blast) against
+  ADR-0024 §5's predicted 118, and django **358** against its 374 minus the 16 blast boards decision
+  2 withdraws.
+
+  **All five repos ADR-0025 refused now ship** — Go returned hugo and cobra, Python returns django,
+  flask and `system-design-primer`, the row that document called *"the one where a reasonable person
+  could disagree"*. None of the 315 withdrawn questions came back; the five ship **1,048** questions
+  about their own source instead. Everything else is byte-identical: **ark, hono, hugo, cobra and
+  prometheus keep every section** — nodes, edges, regions, history, report *and* challenges — with
+  only the `ATLAS_VERSION` 10 → 11 integer moving, which costs zero bytes.
+
+  **A budget breach, said out loud**: `django/django` indexes in **16.3–17.7 s at 3,035 nodes**
+  against a 10 s ceiling. It is not the Python scanner (1.1 s) — the force-directed layout is 6.9 s,
+  39%, the same share as hugo's at half the scale. `README.md` Known gaps has the phase breakdown.
+  And two testing lessons went into the landmines: a corpus of 3,011 real files does not replace
+  adversarial fixtures **in either direction**, and the first draft of *"a Python repo ships no Blast
+  Radius board"* passed **vacuously** — a five-file fixture has too few candidates to build a choice
+  set in any language, so it now builds the same 19-file shape twice, in `.py` and in `.ts`, and
+  asserts the TypeScript half ships boards.
+
+  **Next**: packaging **`npx ark`** — NORTH-STAR §10's stated intent, unbuilt for five milestones,
+  and the one item in the Definition of done nobody can literally satisfy.

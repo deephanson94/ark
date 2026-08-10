@@ -25,6 +25,7 @@ import type { Atlas, Challenge, Graph, NodeRef } from '../../atlas/index.js';
 import {
   buildGraph,
   byteCompare,
+  canGradeImports,
   canImport,
   dependents,
   isChallengeable,
@@ -63,7 +64,20 @@ export type SkipReason =
    * Another subject already asks this exact answer key, and this one has no
    * dependents left over to ask a different question with. See `dedupe()`.
    */
-  | 'duplicateKey';
+  | 'duplicateKey'
+  /**
+   * Its language's import graph may not carry an answer key at all
+   * (`canGradeImports`, ADR-0024 decision 2). Python is the first: its imports
+   * are parsed, resolved and drawn on the map, and they never grade.
+   *
+   * A reason of its own rather than folding into `uncertain`, because the two
+   * are different facts with different remedies — `uncertain` is *this cone has
+   * an unresolved import*, which a better repo fixes, and this one is *no repo
+   * in this language will ever ship a board*, which only a different ADR does.
+   * Reporting them as one number is how a language's absence reads as a
+   * property of the repo in front of you.
+   */
+  | 'ungradedLanguage';
 
 export interface GenerationReport {
   readonly subjectsConsidered: number;
@@ -407,10 +421,35 @@ export function sampleByDistance(
  * question easier. §8.3's claim is that a question is exactly as good as its
  * wrong answers, so a wrong answer that could never have been right is worse
  * than no wrong answer. They stay on the map; they stay out of the choice set.
+ *
+ * **`canGradeImports`, not `canImport`** — the two were one predicate until
+ * Python, which is parsed and mapped and may never grade a question
+ * (ADR-0024 decision 2). A Python file is excluded from this set as a
+ * *subject* and as a *candidate* alike: its own cone is unsound, and offering
+ * it as a wrong answer would certify a non-dependence the seven computed
+ * `import_module(expr)` sites make unknowable.
  */
+/**
+ * Nodes the scanner **parses** and whose imports may not grade a question.
+ *
+ * Distinct from the complement of `eligibleRefs`, which also holds terrain, and
+ * the distinction is the report rather than the deck: a `.md` file is not a
+ * subject because nothing imports it (`noDependents`), and a Python file is not
+ * a subject because no Python file ever is. Folding the two together made
+ * `flask` report **91** refusals over 83 Python files, which reads as a fact
+ * about the repo instead of a fact about the language.
+ */
+function ungradedRefs(atlas: Atlas): Set<NodeRef> {
+  const ungraded = new Set<NodeRef>();
+  for (const [ref, node] of atlas.nodes.entries()) {
+    if (canImport(node.lang) && !canGradeImports(node.lang)) ungraded.add(ref);
+  }
+  return ungraded;
+}
+
 function eligibleRefs(atlas: Atlas): Set<NodeRef> {
   const eligible = new Set<NodeRef>();
-  for (const [ref, node] of atlas.nodes.entries()) if (canImport(node.lang)) eligible.add(ref);
+  for (const [ref, node] of atlas.nodes.entries()) if (canGradeImports(node.lang)) eligible.add(ref);
   return eligible;
 }
 
@@ -452,6 +491,7 @@ export function generateWithReport(
   // every assembled choice set below; this only avoids doing that work for
   // subjects that were never going to survive it.
   const tainted = taintedRefs(graph);
+  const ungraded = ungradedRefs(atlas);
 
   const cap = truthCap(options.candidateCount);
   const skipped = new Map<SkipReason, number>();
@@ -587,6 +627,17 @@ export function generateWithReport(
   let considered = 0;
 
   for (const subject of atlas.nodes.keys()) {
+    // **Before anything else, and before `considered` counts it.** A Python
+    // node is not a Blast Radius subject and not a wrong answer, by language
+    // rather than by taint — see `canGradeImports`. Leaving it to guardrail 4
+    // would be an accident that happens to hold: a Python file whose whole
+    // cone resolves would ship a board, and *whether the deck exists* would
+    // depend on how dynamic that particular repo is. `flask` has 32 such
+    // subjects and django 976.
+    if (ungraded.has(subject)) {
+      note('ungradedLanguage');
+      continue;
+    }
     const reached = radii.get(subject) ?? new Map<NodeRef, number>();
     if (reached.size === 0) {
       note('noDependents');

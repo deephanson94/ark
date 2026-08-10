@@ -48,6 +48,8 @@ import { resolveSpecifier } from './resolve.js';
 import { scanModule } from './scan.js';
 import { scanGoModule } from './goscan.js';
 import { goPackageDir, isGoMod, loadGoModules, resolveGoImport } from './gomod.js';
+import { scanPyModule } from './pyscan.js';
+import { loadPyContext, resolvePyImport } from './pyroot.js';
 import { DEFAULT_WALK_OPTIONS, walk } from './walk.js';
 import type { WalkOptions, WalkedFile } from './walk.js';
 import type { GenerationResult } from '../verbs/blastRadius/index.js';
@@ -176,6 +178,12 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     nodeKeys.filter((key) => membersByKey.get(key)?.[0]?.lang === 'go'),
   );
 
+  const pyContext = await loadPyContext({
+    root: options.root,
+    pythonPaths: walked.files.filter((file) => file.lang === 'py').map((file) => file.path),
+    onDisk: walked.onDisk,
+  });
+
   const goModules = await loadGoModules(options.root, [...walked.onDisk].filter(isGoMod));
   const goContext = {
     packages: goPackages,
@@ -246,6 +254,36 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
       continue;
     }
 
+    if (file.lang === 'py') {
+      const facts = scanPyModule(file.source);
+      pushAll(exportsByKey, from, facts.exports);
+      for (const reference of facts.imports) {
+        // **One site, several targets.** `from django.db import models` depends
+        // on `django/db/__init__.py` *and* on `django/db/models/__init__.py`;
+        // dropping either is a missing edge, which is the class ADR-0026 §4.1
+        // says no atlas-derived check can see.
+        for (const resolution of resolvePyImport(file.path, reference, pyContext)) {
+          switch (resolution.kind) {
+            case 'internal':
+              if (resolution.path === file.path) break; // `from . import x` inside `__init__.py`
+              addEdge(from, resolution.path, 'import', resolution.confidence, reference.raw);
+              break;
+            case 'external':
+              push(externalsByKey, from, resolution.name);
+              break;
+            case 'unresolved':
+              // Every site that does not place leaves something here, including
+              // the computed `import_module(expr)` arm. A silently dropped
+              // import is worse than a wrong one (CLAUDE.md), and it is the one
+              // thing guardrail 4 cannot survive.
+              push(unresolvedByKey, from, reference.raw);
+              break;
+          }
+        }
+      }
+      continue;
+    }
+
     const facts = scanModule(file.source);
     pushAll(exportsByKey, from, facts.exports);
 
@@ -293,6 +331,12 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     // Only a *grouped* node is at risk: a file node the walk dropped never
     // became a node at all, and an import pointing at it already resolves
     // `unresolved` through `onDisk`.
+    // **Python needs nothing here, and that was checked rather than assumed.**
+    // A `.py` file is its own node, so a dropped one never becomes a node at
+    // all — and `pyroot.ts` resolves a module name against the *indexed* files,
+    // so an import naming a dropped file finds nothing, falls past the stdlib
+    // and dependency tables, and lands on `unresolved`. The guard below is for
+    // *grouped* nodes, which is Go and nothing else today.
     const { key } = nodeKeyOf(file);
     if (key !== file.path && membersByKey.has(key)) {
       push(unresolvedByKey, key, `${file.path} (not read)`);
