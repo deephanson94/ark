@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * `ark index <path>` — the indexer's command line.
  *
@@ -7,10 +8,11 @@
  * are written against, and printing them is how a regression gets noticed.
  */
 
+import { existsSync, realpathSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   coverageSentence,
@@ -50,8 +52,34 @@ usage:
 "play" needs the player built once: npm run build
 `;
 
-/** Where `npm run build` puts the player. `play` serves this directory. */
-const PLAYER_DIST = 'dist/player';
+/**
+ * Where `npm run build` puts the player. `play` serves this directory.
+ *
+ * **Resolved against the package, never against the working directory.** This
+ * was `'dist/player'` — a bare relative path — for five milestones, which works
+ * exactly when you run `ark play` from inside a checkout of ark and fails
+ * everywhere else. `npx ark play ~/some/repo` runs with `cwd` at *your* repo,
+ * where `dist/player` is either absent or, worse, somebody else's build output.
+ *
+ * The package root is the nearest ancestor of this module holding a
+ * `package.json`. From source that is `src/indexer/` → the repo; from the
+ * emitted tree it is `dist/cli/indexer/` → the installed package, because
+ * `dist/` carries no manifest of its own. One rule, both modes.
+ */
+const PLAYER_DIST = join(packageRoot(), 'dist', 'player');
+
+function packageRoot(): string {
+  let directory = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    if (existsSync(join(directory, 'package.json'))) return directory;
+    const parent = dirname(directory);
+    // At the filesystem root `dirname` is a fixed point. Falling back to the
+    // module's own directory keeps the error the caller sees a *missing player*
+    // rather than a crash inside path arithmetic.
+    if (parent === directory) return dirname(fileURLToPath(import.meta.url));
+    directory = parent;
+  }
+}
 
 export function parseArgs(argv: readonly string[]): Args | null {
   const command: Command = argv[0] === 'play' ? 'play' : 'index';
@@ -368,8 +396,30 @@ export async function main(argv: readonly string[]): Promise<number> {
   return 0;
 }
 
-const entry = process.argv[1];
-if (entry !== undefined && pathToFileURL(entry).href === import.meta.url) {
+/**
+ * Is this module the program, or was it imported?
+ *
+ * **Through `realpath` on both sides, which is the whole of it.** npm installs a
+ * `bin` as a *symlink* at `node_modules/.bin/ark`, so `process.argv[1]` is that
+ * link and `import.meta.url` is the file it points at — the naive comparison is
+ * false for every installed copy. The failure is silent and total: `main` never
+ * runs, nothing is printed, and the process exits **0**, which is how a packaged
+ * CLI can look like it worked and write no atlas. Found by packing the tarball
+ * and running it, not by reading (`scripts/pack-check.ts`).
+ *
+ * `realpathSync` throws on a path that does not exist, which `argv[1]` can be
+ * under some launchers, so the whole thing is guarded rather than the compare.
+ */
+function isEntryPoint(argv1: string | undefined): boolean {
+  if (argv1 === undefined) return false;
+  try {
+    return pathToFileURL(realpathSync(argv1)).href === pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href;
+  } catch {
+    return pathToFileURL(argv1).href === import.meta.url;
+  }
+}
+
+if (isEntryPoint(process.argv[1])) {
   main(process.argv.slice(2))
     .then((code) => {
       process.exitCode = code;

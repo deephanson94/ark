@@ -54,6 +54,13 @@ jobs:
       - name: budgets
         run: npm run budget
 
+      # `npx ark` — packed, installed outside this checkout, and run. The
+      # Definition of done carried this item for five milestones while it had
+      # never worked, because nothing could check it: a bare `npm run index`
+      # proves the source runs, not the package. See scripts/pack-check.ts.
+      - name: packaged cli
+        run: npm run test:pack
+
   player:
     name: player smoke test
     runs-on: ubuntu-latest
