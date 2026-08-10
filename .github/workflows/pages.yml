@@ -1,0 +1,91 @@
+# Publish the player, indexed against this repo, to GitHub Pages.
+#
+# **Restored by ADR-0031, deleted by ADR-0015.** It failed on every run it ever
+# had, because Pages on a private repo needs a paid plan — so it was deleted
+# rather than disabled, on the ground that a permanently red check is worse than
+# a broken build because everyone agrees to ignore it. The repo is public now,
+# which is the reversal that document named. It is restored *after* the flip
+# rather than with it, for the same reason it was deleted: a workflow that must
+# fail until an unrelated switch is thrown is the defect, not the fix.
+#
+# What gets deployed is Ark's atlas of *Ark* — the bootstrap fixture NORTH-STAR
+# §11 makes the v1 target repo. That is the honest thing to host: it is a public
+# repo, so its atlas may be shared (§7), and it is the one codebase whose map we
+# can vouch for.
+#
+# Nothing here ever indexes anything else. Pillar 5 is a promise that source
+# never leaves the machine, and a workflow that accepted a repo URL would be the
+# first crack in it.
+name: Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# One place, so this workflow and `ci.yml` cannot drift onto different runtimes
+# and disagree about an atlas. The restored file hard-coded '22' inline, which
+# is exactly the rot ADR-0015 predicted for a workflow kept on disk unrun.
+env:
+  NODE_VERSION: '22'
+
+# Pages needs these; nothing else in this workflow does.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one in flight — a half-finished deploy
+# is a broken site, unlike a cancelled CI run which is merely uninformative.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The indexer reads git history — churn, co-change, rename lineage.
+          # A shallow clone would hand it a one-commit repo and every
+          # history-derived field would be quietly wrong. Same reason as ci.yml.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # `build` typechecks, indexes this repo into the player, and bundles.
+      - run: npm run build
+
+      # The deployed atlas is a fact about a commit, so say which one on the
+      # way past. If this ever prints 0 challenges, the site is a map with no
+      # game on it and the log is where that shows up.
+      - name: report what is being published
+        run: |
+          node -e '
+            const a = require("./dist/player/atlas.json");
+            console.log(`publishing ${a.repo.name} @ ${a.repo.head?.slice(0,12)}`);
+            console.log(`  ${a.nodes.length} nodes, ${a.edges.length} edges, ${a.challenges.length} challenges`);
+            if (a.challenges.length === 0) { console.error("no challenges — refusing to publish"); process.exit(1); }
+          '
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/player
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
