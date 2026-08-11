@@ -34,6 +34,7 @@ import {
   zoomAt,
 } from './camera.js';
 import { createConsole } from './challenge.js';
+import type { BoardMarks } from './draw.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Box } from './labels.js';
 import type { Fog } from './fog.js';
@@ -648,8 +649,13 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       }
       invalidate();
     },
+    // The map draws the open board (`draw.ts`'s `BoardMarks`), so a tick or a
+    // pointer move is a stale frame. One edge, carrying "something changed".
+    onBoardChanged() {
+      invalidate();
+    },
   });
-  const inspector = createInspector(scene, (challenge) => challengePanel.open(challenge));
+  const inspector = createInspector(scene, (challenge) => openBoard(challenge));
 
   /**
    * Take the player to the next landmark. Deliberately does **not** open the
@@ -670,7 +676,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
     if (node === undefined) {
-      challengePanel.open(challenge);
+      openBoard(challenge);
       return;
     }
     // Before touching the camera: a turn in flight owns `x`/`y` every frame.
@@ -871,6 +877,72 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * Recomputed, never latched: a pass can decay and a reindex can resurrect its
    * question, so a stored "you are finished" would go on lying.
    */
+  /**
+   * The open board, resolved to places the map can draw.
+   *
+   * **Both halves of `AtlasId` arrive here and neither is assumed.** A
+   * Placement subject is a commit and has no ref; an Archaeology candidate is a
+   * commit and has none either. `refById` answers for both by returning
+   * `undefined`, and the caller drops what has no place rather than this
+   * function inventing one — the chronicle is where a placeless subject is
+   * answered (ADR-0033 decision 2) and it is not a marker on the flat map.
+   */
+  function boardMarks(): BoardMarks | null {
+    const view = challengePanel.board();
+    if (view === null) return null;
+    const refOf = (id: AtlasId): NodeRef | undefined => scene.graph.refById.get(id);
+    const candidates = new Set<NodeRef>();
+    const picked = new Set<NodeRef>();
+    for (const id of view.candidates) {
+      const ref = refOf(id);
+      if (ref === undefined) continue;
+      candidates.add(ref);
+      if (view.picked.has(id)) picked.add(ref);
+    }
+    const subject = refOf(view.subject);
+    const hovered = view.hovered === null ? undefined : refOf(view.hovered);
+    return {
+      subject: subject ?? null,
+      candidates,
+      picked,
+      hovered: hovered ?? null,
+    };
+  }
+
+  /**
+   * Open a board, and put its subject somewhere the player can see it.
+   *
+   * **The markers are worth nothing under the panel.** The console is docked to
+   * the right, so a subject the camera happened to leave on that side is marked
+   * and hidden — the marking layer firing and the player seeing nothing, which
+   * is the same class of defect as a layer that never fires. Placing it at 30%
+   * of the width leaves it in the open half at every panel size this uses.
+   *
+   * Only when the subject *has* a place: Placement's is a commit, which has
+   * none, and there is nothing to pan to (ADR-0018).
+   */
+  function openBoard(challenge: Challenge): void {
+    const ref = scene.graph.refById.get(challenge.subject);
+    const node = ref === undefined ? undefined : scene.nodes[ref];
+    if (node !== undefined) {
+      landTurn();
+      const anchor = screenToWorld(camera, viewport, {
+        x: viewport.width * 0.5,
+        y: viewport.height * 0.5,
+      });
+      const wanted = screenToWorld(camera, viewport, {
+        x: viewport.width * 0.3,
+        y: viewport.height * 0.5,
+      });
+      camera = centreOn(camera, {
+        x: node.x + (anchor.x - wanted.x),
+        y: node.y + (anchor.y - wanted.y),
+      });
+    }
+    challengePanel.open(challenge);
+    invalidate();
+  }
+
   function refreshGuide(openQuestions: number): void {
     const upcoming = nextUp();
     const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
@@ -945,6 +1017,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         peaks,
         ties,
         tieFocus,
+        board: boardMarks(),
       };
       const stats =
         orbit === null
@@ -960,7 +1033,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // two claims, so it is the one more likely to be quietly false: a gate
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires`,
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
         openQuestions,
         unanswered.size,
         camera.bearing,
@@ -1006,6 +1079,13 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
 
   canvas.addEventListener('pointermove', (event) => {
     if (world.isActive()) return;
+    // Pointing at a candidate on the map points at its row, the mirror of the
+    // row pointing at the marker. One instrument, read from either end.
+    if (challengePanel.isOpen() && !dragging) {
+      const over = pickAt(localPoint(event));
+      challengePanel.setHovered(over?.id ?? null);
+      return;
+    }
     if (dragging) {
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
@@ -1061,6 +1141,16 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     if (moved > DRAG_THRESHOLD) return;
 
     const found = pickAt(localPoint(event));
+    // **With a board open, a click on the map answers it.** The scrim is
+    // pointer-transparent now, so this is where those clicks land, and the
+    // console decides whether the node is one of its candidates — the shell
+    // hands over what the pointer found and never inspects the challenge. A
+    // click on anything else does nothing rather than closing the board, which
+    // is what it used to do, silently, taking the ticks with it.
+    if (challengePanel.isOpen()) {
+      if (found !== null) challengePanel.toggle(found.id);
+      return;
+    }
     selected = found;
     if (found !== null) {
       remember(recordSurvey(progress, [found.id]));
@@ -1209,7 +1299,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // the keyboard the instant it opens.
         if (challenge !== null) {
           world.releaseAll();
-          challengePanel.open(challenge);
+          openBoard(challenge);
         }
         return;
       }
@@ -1265,7 +1355,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       const challenge = challengeFor(selected);
       if (challenge !== null) {
         event.preventDefault();
-        challengePanel.open(challenge);
+        openBoard(challenge);
       }
     }
   });

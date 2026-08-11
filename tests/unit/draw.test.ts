@@ -80,6 +80,7 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     peaks: new Set(scene.nodes.map((node) => node.ref)),
     ties: NO_TIES,
     tieFocus: null,
+    board: null,
   };
 }
 
@@ -100,5 +101,51 @@ describe('drawFrame', () => {
     );
     expect(open.labelsDrawn).toBeGreaterThan(0);
     expect(covered.labelsDrawn).toBe(0);
+  });
+});
+
+describe('the open board on the map', () => {
+  /**
+   * **The map's job during a challenge.** Three cold playtesters opened a board
+   * and found a checkbox list of paths over a dimmed map with nothing marked on
+   * it — so the only way to answer was to pattern-match on filenames, which is
+   * what `treeSibling` exists to punish. What is asserted here is that the
+   * markers are *drawn* and that they are drawn for the right nodes: the count
+   * is measured off the renderer, like `peaksDrawn`, because a marking layer
+   * that never fires is the defect it was built to fix with a comment on top.
+   */
+  // Refs into the same fixture `frameInput` builds: four nodes, no edges.
+  const [subject, one, two] = [0, 1, 2];
+
+  function drawWith(board: FrameInput['board']): number {
+    return drawFrame(stubContext(), { ...frameInput([]), board }).boardDrawn;
+  }
+
+  it('marks the subject and every candidate, and nothing else', () => {
+    const marks = drawWith({
+      subject,
+      candidates: new Set([one, two]),
+      picked: new Set([one]),
+      hovered: null,
+    });
+    // Three: the subject and its two candidates. The fourth node is on the map
+    // and is not on the board.
+    expect(marks).toBe(3);
+  });
+
+  it('draws nothing when no board is open', () => {
+    // The control. Without it, a renderer that marked every node on every frame
+    // would pass the assertion above on a four-node fixture.
+    expect(drawWith(null)).toBe(0);
+  });
+
+  it('marks the candidates of a commit-subject board, and does not invent a place for the subject', () => {
+    // Placement's subject is a commit (ADR-0018) and the shell hands `null`
+    // rather than a ref. The candidates are still files and still get marked —
+    // dropping the whole layer because the subject has no place would take the
+    // marking away from a quarter of this repo's deck.
+    expect(
+      drawWith({ subject: null, candidates: new Set([one, two]), picked: new Set(), hovered: two }),
+    ).toBe(2);
   });
 });

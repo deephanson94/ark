@@ -160,6 +160,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | **Deferred with findings** ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)). Fifteen detectors measured on five repos before designing anything: the honest size is ~5 entries, not 30–60, and its best entry — naming a cycle — is a **proof of Blast Radius's key**, deciding 109 of hugo's 156 boards at precision 1.000. ADR-0030's twin surface is its priced pilot. |
+| The board on the map | ✅ | Opening a challenge marks its **subject** and every placeable **candidate** on the map, with the tick state, and a click on a marker answers the board. The panel is docked and the scrim pointer-transparent, so the map stays readable and clickable — it used to be a dimmed, unmarked backdrop that discarded the board when clicked. **No edge is drawn between subject and candidate**: that relation is the answer and stays gated on `subjectsPassed` (ADR-0008). Half a deck's ids have no place (a Placement subject, an Archaeology candidate) and are dropped rather than positioned. |
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
 | Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
@@ -182,11 +183,9 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   *"orbit already delivers height, for all 186 nodes at once, without occlusion"*. That agrees with
   `docs/prior-art.md` §2, and **no further polish can settle it**: it is what
   `docs/experiments/0001` measures, and that is unrun.
-- **What those three found that is still open**, beyond the falsehoods fixed at `HEAD`: the map is
-  **inert during a challenge** (the board is a checkbox list of paths over a dimmed map, and clicking
-  the map discards the board) — the cold tester's single highest-leverage fix and the largest open
-  item in the product; **select-all reveals the full annotated answer key**, so a pass is farmable in
-  two clicks; **the fog is dashed-vs-solid outlines** and no tester noticed it existed; the **legend
+- **What those three found that is still open**, beyond the falsehoods and the inert map fixed at
+  `HEAD`: **select-all reveals the full annotated answer key**, so a pass is farmable in two clicks;
+  **the fog is dashed-vs-solid outlines** and no tester noticed it existed; the **legend
   clips silently** at 17 of 36 regions with five of them the same grey; **Placement is unreachable
   from the map** — 25% of a deck whose only entry point is the chronicle, in walk mode; the guide
   **serves the four lowest-difficulty boards first** and has no skip; and there is **no help key and
@@ -302,14 +301,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Make the map do work during a challenge** — light the subject, mark the candidates with their
-tick state, draw the edges the question is about, and let the player pan and zoom without the board
-being discarded. Three cold playtests rated the product 4/10 · 5/10 · 4/10 and this was the cold
-tester's single highest-leverage fix: today the board is a checkbox list of twenty paths over a
-dimmed map, so a player who has never seen the repo can only pattern-match on filenames — which is
-the failure pillar 3 exists to prevent. It collapses five separate findings (the inert map, the
-click that discards the board, the invisible fog, the unexplained size and colour channels, and the
-no-op click) into one change · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**:
+**Close the select-all exploit** (owner's decision, 2026-08-11): submit every candidate, read the
+full annotated key off the reveal, reopen the board, tick the named files — 100%, a pass, and a field
+note, in two clicks. The chosen fix is to **withhold the truth members the player did not pick when
+precision is low**, reporting them as a count; that is withholding by *board*, which is what
+ADR-0020's rule allows. **The coupling to check first, found while scoping it**: `unlocks:
+'importRadius'` draws the full cone on the map on *any* grade, deliberately, because the reveal has
+already named every member — so withholding the names alone changes nothing, and the summary
+sentence, the map unlock and the notes have to move together or the fix is theatre. Needs a measured
+threshold and its own ADR · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**:
 the matched repos are named with commits, the arms are staged with a stop rule, and the quiz is a
 fixed held-out item set (owner's decisions of 2026-08-11, recorded in ADR-0009). What is left is that
 document's §9 — **the hold-out split script** (remove k boards per verb, write the played atlas and

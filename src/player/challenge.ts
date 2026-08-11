@@ -34,17 +34,49 @@ const BAND_LABEL: Readonly<Record<string, string>> = {
   incomplete: 'not yet',
 };
 
+/**
+ * What the map needs to draw the board that is open.
+ *
+ * **Ids, never refs, and never a verb.** The console has not known what a verb
+ * asks since ADR-0027 and does not start here: it says *these ids are on the
+ * board and these are ticked*, and the shell resolves whichever of them have a
+ * place. Half of them will not — Placement's subject is a commit and
+ * Archaeology's candidates are — which is the union ADR-0018 made real and the
+ * landmine about `AtlasId` being an alias for `string`.
+ */
+export interface BoardView {
+  readonly subject: AtlasId;
+  readonly candidates: readonly AtlasId[];
+  readonly picked: ReadonlySet<AtlasId>;
+  /** The row under the pointer, so the map can answer "which one is that?". */
+  readonly hovered: AtlasId | null;
+}
+
 export interface Console {
   readonly root: HTMLElement;
   open(challenge: Challenge): void;
   close(): void;
   isOpen(): boolean;
+  /** The open, unanswered board — `null` while closed or showing a result. */
+  board(): BoardView | null;
+  /** Tick or untick from outside the panel. What a click on the map calls. */
+  toggle(id: AtlasId): void;
+  /** Point at a candidate from outside, or clear it. */
+  setHovered(id: AtlasId | null): void;
 }
 
 export interface ConsoleHandlers {
   /** Fired once per submitted answer, before the player closes the panel. */
   onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): void;
   onClose(): void;
+  /**
+   * The board's picks or pointer moved, so the frame behind is stale.
+   *
+   * The console does not draw the map and the map does not read the console:
+   * this is the one edge between them, and it carries "something changed"
+   * rather than what.
+   */
+  onBoardChanged(): void;
 }
 
 export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console {
@@ -56,6 +88,22 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
   root.hidden = true;
 
   let open: Challenge | null = null;
+  /**
+   * The live board, or `null` once it has been answered.
+   *
+   * Cleared on `renderResult` as well as on `close`, because a graded board's
+   * markers on the map would be the answer key drawn on the ground — the reveal
+   * has just named the truth set, and ADR-0008's radius rendering is the gated
+   * surface for that, not this one.
+   */
+  /** `renderQuestion`'s writer, hoisted so `toggle` can reach it. */
+  let pick: ((id: AtlasId, on: boolean) => void) | null = null;
+  let live: {
+    challenge: Challenge;
+    picked: Set<AtlasId>;
+    hovered: AtlasId | null;
+    rows: Map<AtlasId, HTMLButtonElement>;
+  } | null = null;
 
   /**
    * What to print for an id — a file's path, or a commit's date and message.
@@ -73,19 +121,28 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
   const close = (): void => {
     open = null;
+    live = null;
+    pick = null;
     root.hidden = true;
     body.replaceChildren();
     handlers.onClose();
   };
 
-  root.addEventListener('pointerdown', (event) => {
-    if (event.target === root) close();
-  });
+  // **Clicking the map no longer discards the board.** The scrim used to close
+  // on any pointerdown that reached it, and the map is *behind* the scrim — so
+  // the most natural act available during a challenge (look at the thing the
+  // question is about) threw away the answer, silently, with no confirmation.
+  // A playtester hit it doing exactly that. The scrim is now pointer-
+  // transparent (`styles.css`) so those events reach the canvas instead, and
+  // the ways out of a board are the ones that say they are: Escape, and the
+  // panel's own control.
 
   function renderQuestion(challenge: Challenge): void {
     const verb = VERBS[challenge.verb];
     const prompt = verb.prompt(challenge, words);
     const picked = new Set<AtlasId>();
+    const buttons = new Map<AtlasId, HTMLButtonElement>();
+    live = { challenge, picked, hovered: null, rows: buttons };
 
     // Sorted by the label, which means alphabetically for files and — because a
     // commit label leads with its date — chronologically for commits. That is
@@ -99,6 +156,20 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     const submit = el('button', 'console-submit', ['Submit']);
     submit.type = 'button';
     const tally = el('div', 'console-tally');
+
+    /** One writer for the tick, so a map click and a row click cannot diverge. */
+    const setPicked = (id: AtlasId, on: boolean): void => {
+      if (on) picked.add(id);
+      else picked.delete(id);
+      const button = buttons.get(id);
+      if (button !== undefined) {
+        button.classList.toggle('is-picked', on);
+        button.setAttribute('aria-pressed', String(on));
+      }
+      refresh();
+      handlers.onBoardChanged();
+    };
+    pick = setPicked;
 
     const refresh = (): void => {
       tally.textContent =
@@ -114,13 +185,20 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       button.type = 'button';
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {
-        if (picked.has(row.id)) picked.delete(row.id);
-        else picked.add(row.id);
-        const on = picked.has(row.id);
-        button.classList.toggle('is-picked', on);
-        button.setAttribute('aria-pressed', String(on));
-        refresh();
+        setPicked(row.id, !picked.has(row.id));
       });
+      // Pointing at a row points at it on the map. The panel used to highlight
+      // only the row, which is the whole complaint in one behaviour: the list
+      // and the map were two documents rather than one instrument.
+      button.addEventListener('pointerenter', () => {
+        if (live !== null) live.hovered = row.id;
+        handlers.onBoardChanged();
+      });
+      button.addEventListener('pointerleave', () => {
+        if (live !== null && live.hovered === row.id) live.hovered = null;
+        handlers.onBoardChanged();
+      });
+      buttons.set(row.id, button);
       item.append(button);
       list.append(item);
     }
@@ -145,6 +223,10 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
   }
 
   function renderResult(challenge: Challenge, grade: Grade, reveal: Reveal): void {
+    // The board is over: its markers come off the map before the reveal names
+    // the truth set.
+    live = null;
+    pick = null;
     const band = bandFor(grade.score);
     const verb = VERBS[challenge.verb];
 
@@ -230,5 +312,27 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     },
     close,
     isOpen: () => open !== null,
+    board: () =>
+      live === null
+        ? null
+        : {
+            subject: live.challenge.subject,
+            candidates: live.challenge.candidates,
+            picked: live.picked,
+            hovered: live.hovered,
+          },
+    toggle: (id) => {
+      // Only a candidate of the open board, and only while it is unanswered —
+      // the map hands in whatever the pointer found and this is where that is
+      // checked, rather than trusting the caller.
+      if (live === null || pick === null) return;
+      if (!live.challenge.candidates.includes(id)) return;
+      pick(id, !live.picked.has(id));
+    },
+    setHovered: (id) => {
+      if (live === null) return;
+      live.hovered = id !== null && live.challenge.candidates.includes(id) ? id : null;
+      handlers.onBoardChanged();
+    },
   };
 }

@@ -35,6 +35,9 @@ export interface Ink {
   readonly tieRest: string;
   /** Ring on a node that still carries an unanswered question. */
   readonly question: string;
+  readonly subject: string;
+  readonly candidate: string;
+  readonly picked: string;
   readonly text: string;
   readonly textDim: string;
 }
@@ -50,6 +53,11 @@ export const INK: Ink = {
   // Deliberately not the highlight colour: a question marker and a blast-radius
   // highlight appear at the same time and must not read as the same thing.
   question: 'rgba(126, 214, 214, 0.62)',
+  // The open board. Three inks, none of them the question ring's — a board is
+  // *this* question, and the deck's other rings are on screen at the same time.
+  subject: 'rgba(255, 214, 130, 0.95)',
+  candidate: 'rgba(186, 200, 224, 0.65)',
+  picked: 'rgba(126, 214, 214, 0.95)',
   text: '#e6edf7',
   textDim: '#7c8798',
 };
