@@ -2816,3 +2816,119 @@ One line per iteration: what changed, and what to do next.
   with §9.1 — a minimap that draws the edges the world lacks is a finding, not a fix.
 
   **Next**: close §9's three redesign items before any rung-3 code, then ADR-0030's twin surface.
+
+- **Rung 3 built: a hero walks the repo.** Press `g`. ADR-0033, which supersedes ADR-0032's central
+  decision and answers four of its nine review findings. The owner released **P4** — both legs, after
+  it was put accurately — and **S1 is untouched**, so the world ships as a *mode*: the flat map is
+  still the arrival state and nothing claims walking teaches better, because nothing has measured it.
+
+  **The roads are the edges.** ADR-0032 said the ground carried nothing; §9.1 found that this left
+  topology visible only as proximity, which is a spring-embedder artifact and the exact fallacy
+  `treeSibling` exists to punish. A road is an import, same endpoints, same coordinates — asserted as
+  an *equality* in both suites, because a world with extra roads invents geography and one with fewer
+  is the defect coming back. **A commit stands at the chronicle**, one obelisk outside the map, since
+  25% of ark's deck and 77% of django's has a subject with no `layout`; putting its marker among the
+  files it touched would be Placement's own answer key drawn on the ground. **A perspective camera**,
+  beside the orbit's orthographic one rather than replacing it — the suite asserts both directions,
+  that doubling the distance halves the size here and changes a column's height by nothing there.
+
+  **Three defects the pictures found that no assertion would have.** The hero was 11 units tall in a
+  world whose median gap is 12–19 — a person taller than the city. It was drawn last, so walking
+  behind a building pasted the figure on its wall. And the camera walked *through* buildings, because
+  the footprint was `radiusFor(loc)` unchanged: measured, that is **88.5% of this repo's towers and
+  52.2% of hono's with no body-width gap to their nearest neighbour**. A glyph radius is not a ground
+  area. A uniform ×0.4 — the knee, both neighbours named — takes ark to 3.3% and keeps §9.7's
+  monotonicity exactly.
+
+  **Walking past a building surveys it**, through the same recorder the map's click uses, so the fog
+  has one definition of "seen". Measured in the e2e: a 2.6 s walk takes ark from 66 to 69 surveyed.
+  The minimap is **north-up**, against ADR-0032 §3.5 — a turning minimap is a route instrument and a
+  fixed one is a survey instrument, which is what ark teaches. ~1,150 lines, zero new runtime
+  dependencies, Canvas 2D.
+
+  **Next**: run `docs/experiments/0001`. Its §8 has two blockers, and ADR-0033 §4 has the sharpest
+  problem in the whole rung — the minimap draws the same edges the world does, so it must be in both
+  arms or neither, and telling world from inset needs a third condition.
+
+- **The world, made legible — and a playtest that found the defect the suite could not.** An
+  independent agent played it and rated the walking layer **3/10**: *"a tech demo bolted onto a game
+  that already exists and is better without it."* Three of its findings were real and are fixed.
+
+  **One heading, two bases.** `hero.ts` walks along `(sin ψ, −cos ψ)`; `toView` projected onto a
+  different axis. They agree exactly when `dx · sin ψ = 0` — heading 0° or 180° — and **every
+  assertion ever written about that camera used one of them**, twenty-one of them, written the same
+  day. At any other heading the hero walked out of its own view: at 90° a point ten units ahead
+  computed as ten *behind*, the figure vanished, and the city receded as you walked toward it. The
+  degenerate-fixture landmine, freshly made. Regression tests run at nine headings; the e2e now turns
+  and *then* walks, and checks the world is still populated, because a pixel hash cannot tell an
+  emptied frame from a changed one. Also fixed: a movement key held when the challenge panel opened
+  kept the hero walking and surveying behind the scrim (a grade can be all mouse, so "release on the
+  next keydown" never ran), and the world had no edge — twelve seconds of running reached `0 towers ·
+  0 roads · 0 beacons` on an unbounded plane.
+
+  **The visual pass**, all rendering constants, each preserving the ordering its channel claims. The
+  rig moved from a chest-height 6.5/16 — which frames the inside of one wall in a quarter whose files
+  sit 12–19 units apart — to 33 up and 46 back tipped 0.52 down, which puts the ground plan in frame,
+  and the ground plan is where the import graph is drawn. `RISE` 14 → 6, because ark's tallest file
+  stood 105 units over an 18-unit street. Roads 2.2 → 1.1 wide and quieter, because a dozen edges at
+  a hub merged into one grey plate. A **district wash** on the ground under each file in its region's
+  colour, so the flat map's colour-as-neighbourhood survives the trip into the world. The figure 1.9
+  → 4.4 units drawn with a ground ring, since a person-sized marker is 26 pixels at that boom.
+  Painter's order now keys on a tower's near face, not its centre.
+
+  Recorded as a **non**-finding: this session convinced itself the pitch sign was inverted, changed
+  it, and reddened its own new test — the code and the comment had agreed all along. The claim is
+  withdrawn and the convention now has assertions.
+
+  Unrelated, and fixed because it went red: the e2e's wires step predicted which node a 40×26 cursor
+  grid would land on, and at fit scale a small node is about a pixel. It sweeps once and chooses from
+  what it found now.
+
+  **Next**: unchanged — run `docs/experiments/0001`. The playtest's two non-bug verdicts (you see
+  only a local neighbourhood; walking taught nothing the flat map had not) are exactly what
+  `docs/prior-art.md` §2 predicts, and exactly what S1 exists to measure.
+
+- **Navigation in the world, and the idea it had to refuse first.** The playtest's flattest complaint
+  was not a bug: *you cannot tell where to go*. Three things answer it now — a **waypoint** on the
+  guide's next subject (a chevron over it on screen, an edge arrow when off, name and distance either
+  way, bearing computed in **view space** so it stays right when the target is behind you); a **sight
+  cone on the minimap**, which is what actually binds the egocentric view to the survey one and was
+  the missing half of ADR-0033 §6; and **the guide's target winning any tie of proximity**, since a
+  playtest walked to the building the guide named and was offered its neighbour.
+
+  **Arrows on the roads are dead, and that is the interesting part.** Showing which way each
+  dependency points is the most attractive answer to *"what does walking teach that the map does
+  not"* — the flat map draws every edge undirected, and NORTH-STAR §5's tier 2 is literally that
+  question. Scored with `scoreSet`: **1.000 exact on 100% of both repos' Blast Radius boards**,
+  because ADR-0008's invariant makes a directed road network the answer set *by construction*. The
+  first run of that probe said 0.000 on 94 boards — it iterated `graph.in[ref]`, which holds edges
+  rather than refs — and a mean of exactly zero across two repos is an instrument measuring nothing,
+  erring in the direction that makes shipping look safe.
+
+  **Next**: unchanged — run `docs/experiments/0001`.
+
+- **Re-playtested: 5/10, up from 3 — and the rating moved on stability, not on fun.** Same brief,
+  same instruction not to be polite, run against the fixed build with the tree held still. All five
+  fixes verified landed with evidence rather than eyeballing. Its verdict on the rest is the one to
+  keep: *"walking is now a working, honest way to get to that modal. It is not yet a reason to prefer
+  it"*, and on whether walking teaches more than the map, *"no, not that I could find"* — with the
+  observation that **the minimap's existence is the admission**, since the north-up inset was added
+  because the 3D view could not carry survey knowledge and now does most of the *where am I* work.
+
+  Fixed from it: a **duplicate label** (the waypoint pill and the tower's own label stacked the same
+  filename), and **`o` silently swallowed** in the world — a keypress that does nothing and says
+  nothing reads as broken, so `o` now leaves for the orbit.
+
+  **A skyline was built for the void, then the reason for it was refuted by counting.** NORTH-STAR
+  risk #4 mandates showing the silhouette of unexplored regions; the flat map has since M1 and the
+  world drew *nothing* past `VIEW_DISTANCE`. But sampling 121 standing positions on both repos found
+  **no position with nothing in full view** (0 of 121, both) — the playtest's `0 towers` frames were
+  the **frustum**, not the cull: it had run to the shore and was facing away. So the response is less
+  shore (140 → 70) rather than scenery. The skyline is kept with its firing rate recorded — **10 on
+  ark, 112 on hono** — real on a repo twice the bootstrap's size, nearly dead on the bootstrap, whose
+  488-unit span fits inside one view distance. The e2e gates *"something is standing"* rather than
+  *"the skyline fired"*, because the first version of that step measured exactly **1**.
+
+  **Next**: stop polishing this rung and run `docs/experiments/0001`. Two independent playtests and
+  `docs/prior-art.md` §2 agree walking does not teach more than the map, and no further bug-fixing
+  can answer that — it is a measurement, it is designed, and it is unrun.

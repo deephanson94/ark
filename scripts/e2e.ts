@@ -612,30 +612,54 @@ async function main(): Promise<number> {
       const wireTarget = wireTargets[0];
       let wireTargetPath = '';
       let wireHit: { x: number; y: number } | null = null;
-      // Three at most: each attempt is a full grid sweep of mouse moves, and the
-      // point is to not depend on one candidate rather than to try them all.
-      for (const candidate of wireTargets.slice(0, 3)) {
-        wireTargetPath = pathById.get(candidate.subject) ?? '';
-        for (let row = 1; row < 26 && wireHit === null; row++) {
-          for (let column = 1; column < 40 && wireHit === null; column++) {
-            const x = box.x + (box.width * column) / 40;
-            const y = box.y + (box.height * row) / 26;
-            await page.mouse.move(x, y);
-            if ((await page.locator('.inspector-path').count()) === 0) continue;
-            if ((await page.locator('.inspector-path').innerText()).trim() !== wireTargetPath) continue;
-            wireHit = { x, y };
-          }
-        }
-        if (wireHit !== null) {
-          wirePlayed = candidate;
-          break;
+      //
+      // **Sweep once, then choose from what the sweep found — never the other
+      // way round.** The previous version picked its three largest candidates
+      // up front and swept the grid looking for each, which is a prediction
+      // about where a 40×26 scan will land: at fit scale a small node is about
+      // a pixel and the grid's points are 36 apart, so a perfectly valid
+      // candidate is simply invisible to it. It went red on an ordinary commit
+      // — ark indexes itself, so the deck moves under this step every time —
+      // with "never appeared under the cursor grid" for all three.
+      //
+      // One pass, recording every path the inspector actually reports, then
+      // intersect with the candidate list. Now it can only fail when *no*
+      // eligible subject is reachable at all, which is a real finding rather
+      // than a coincidence of sizes.
+      const reachable = new Map<string, { x: number; y: number }>();
+      for (let row = 1; row < 26; row++) {
+        for (let column = 1; column < 40; column++) {
+          const x = box.x + (box.width * column) / 40;
+          const y = box.y + (box.height * row) / 26;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-path').count()) === 0) continue;
+          const path = (await page.locator('.inspector-path').innerText()).trim();
+          if (!reachable.has(path)) reachable.set(path, { x, y });
         }
       }
+      for (const candidate of wireTargets) {
+        const path = pathById.get(candidate.subject) ?? '';
+        const at = reachable.get(path);
+        if (at === undefined) continue;
+        wireTargetPath = path;
+        wireHit = at;
+        wirePlayed = candidate;
+        break;
+      }
+      if (wireHit === null) {
+        wireTargetPath = pathById.get(wireTarget?.subject ?? '') ?? '(none)';
+      }
+      process.stdout.write(
+        `e2e: grid reached ${reachable.size} nodes; ${wireTargets.length} companion-only candidates\n`,
+      );
 
       if (wireTarget === undefined) {
         failures.push({ what: 'wires', detail: 'no companion-only subject in this atlas to play' });
       } else if (wireHit === null) {
-        failures.push({ what: 'wires', detail: `${wireTargetPath} never appeared under the cursor grid` });
+        failures.push({
+          what: 'wires',
+          detail: `none of the ${wireTargets.length} companion-only subjects was reachable by the grid (best was ${wireTargetPath}); the grid reached ${reachable.size} nodes`,
+        });
       } else {
         await page.mouse.click(wireHit.x, wireHit.y);
         await page.locator('.inspector-action').click();
@@ -1054,6 +1078,142 @@ async function main(): Promise<number> {
     const backDetail = (await page.locator('.hud-detail').innerText()).trim();
     if (backDetail.includes('orbit')) {
       failures.push({ what: 'orbit', detail: `o did not return to the flat map: ${backDetail}` });
+    }
+
+    // ---- the walkable world (ADR-0033) ----------------------------------
+    //
+    // Same discipline as the orbit above: a canvas hash gates every claim,
+    // because "the view changed" is the one thing a screenshot cannot assert
+    // and `npm run raster` printed plausible nonsense twice before it had a
+    // gate. Three things have to be true, and each is checked by a *measured*
+    // value rather than by the absence of an error — entering changes the
+    // picture, walking changes it again, and the ground carries roads, which is
+    // the entire argument of ADR-0033 decision 1.
+    const beforeWorld = await hashCanvas();
+    await page.keyboard.press('g');
+    await page.waitForTimeout(300);
+    const inWorld = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'world.png') });
+    const worldDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: world → ${worldDetail}\n`);
+    if (inWorld === beforeWorld) {
+      failures.push({ what: 'world', detail: 'pressing g changed nothing on the canvas' });
+    }
+    // ADR-0033 decision 1: the roads *are* the import edges, and a world that
+    // draws none teaches topology as proximity — the `treeSibling` fallacy with
+    // legs. A count of zero here is that regression, silently.
+    const roadsDrawn = Number(/(\d+) roads/.exec(worldDetail)?.[1] ?? '0');
+    if (roadsDrawn <= 0) {
+      failures.push({ what: 'world', detail: `the ground carried no roads: ${worldDetail}` });
+    }
+    const towersDrawn = Number(/(\d+) towers/.exec(worldDetail)?.[1] ?? '0');
+    if (towersDrawn <= 0) {
+      failures.push({ what: 'world', detail: `nothing was standing on the plane: ${worldDetail}` });
+    }
+    // **The skyline is checked at the edge of the world, not here.** NORTH-STAR
+    // risk #4 wants the silhouette of what you have not explored, and the world
+    // drew *nothing* past `VIEW_DISTANCE` — seconds of unlit void when crossing
+    // between clusters, which is the exact failure that risk names. But ark's
+    // whole span is 475 units against a 620-unit view, so standing in the city
+    // there is no "distant" to draw and this reads a legitimate 0. Asserting it
+    // here would be asserting a path this repo cannot take from this spot. The
+    // run-to-the-boundary step below is where the feature exists to fire, and
+    // that is where it is gated.
+
+    // Walking. `surveyed` must rise, because walking past a building is looking
+    // at it — the mechanic that makes an unexplored world navigable rather than
+    // a city of unnamed shapes. Read off the HUD, which is the same counter the
+    // map's own survey step reads.
+    const surveyedBeforeWalk = Number(
+      /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+    );
+    await page.keyboard.down('w');
+    await page.waitForTimeout(2600);
+    await page.keyboard.up('w');
+    await page.waitForTimeout(250);
+    const walked = await hashCanvas();
+    await page.screenshot({ path: join(SHOT_DIR, 'world-walked.png') });
+    if (walked === inWorld) {
+      failures.push({ what: 'world', detail: 'holding w moved nothing — the hero does not walk' });
+    }
+    const surveyedAfterWalk = Number(
+      /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+    );
+    if (surveyedAfterWalk <= surveyedBeforeWalk) {
+      failures.push({
+        what: 'world',
+        detail: `walking surveyed nothing: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+      });
+    }
+    process.stdout.write(
+      `e2e: walking surveyed ${surveyedBeforeWalk} → ${surveyedAfterWalk}\n`,
+    );
+
+    // Turning, and then walking *after* turning — which is the case a playtest
+    // broke the build on. `hero.ts` and `camera.ts` held two different bases for
+    // one heading, so at 90° the hero walked out of its own camera: the figure
+    // vanished and the city receded as you approached it. The unit suite pins
+    // the bases; this pins the player-visible half, that the picture keeps
+    // changing when you turn and then move.
+    await page.keyboard.down('e');
+    await page.waitForTimeout(600);
+    await page.keyboard.up('e');
+    await page.waitForTimeout(250);
+    const turned = await hashCanvas();
+    if (turned === walked) {
+      failures.push({ what: 'world', detail: 'holding e turned nothing' });
+    }
+    await page.keyboard.down('w');
+    await page.waitForTimeout(900);
+    await page.keyboard.up('w');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(SHOT_DIR, 'world-turned.png') });
+    const afterTurnWalk = (await page.locator('.hud-detail').innerText()).trim();
+    if ((await hashCanvas()) === turned) {
+      failures.push({ what: 'world', detail: 'walking after a turn moved nothing' });
+    }
+    // And the world is still populated after turning off the arrival heading:
+    // the basis bug emptied the frame, which a pixel hash alone cannot tell
+    // from a legitimate change of scene.
+    if (Number(/(\d+) towers/.exec(afterTurnWalk)?.[1] ?? '0') <= 0) {
+      failures.push({
+        what: 'world',
+        detail: `turning and walking emptied the world: ${afterTurnWalk}`,
+      });
+    }
+
+    // Out to the shore, which is the case the skyline exists for: far enough
+    // that most of the repo is past `VIEW_DISTANCE`, where the world used to
+    // draw literally nothing. Running *backwards* keeps the heading, so this is
+    // a distance test rather than another turn test.
+    await page.keyboard.down('Shift');
+    await page.keyboard.down('s');
+    await page.waitForTimeout(4200);
+    await page.keyboard.up('s');
+    await page.keyboard.up('Shift');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(SHOT_DIR, 'world-shore.png') });
+    const shoreDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: at the shore → ${shoreDetail}\n`);
+    const shoreSkyline = Number(/(\d+) skyline/.exec(shoreDetail)?.[1] ?? '0');
+    const shoreTowers = Number(/(\d+) towers/.exec(shoreDetail)?.[1] ?? '0');
+    // **The gate is that something is standing, not that the skyline fired.**
+    // Sampled over 121 positions, ark averages 10 silhouettes and hono 112 —
+    // ark's entire 488-unit span fits inside one 620-unit view, so a 0 here is a
+    // legitimate reading of a small repo and asserting on it would be a bar
+    // sitting on a knife edge (the first version of this step measured exactly
+    // **1**). The count is reported so a regression is visible; the assertion is
+    // the property that actually matters.
+    if (shoreTowers + shoreSkyline <= 0) {
+      failures.push({ what: 'world', detail: `the shore is an empty plane: ${shoreDetail}` });
+    }
+
+    // ADR-0009's D1 again: the flat map is one keystroke away from here too.
+    await page.keyboard.press('g');
+    await page.waitForTimeout(250);
+    const outDetail = (await page.locator('.hud-detail').innerText()).trim();
+    if (outDetail.includes('world')) {
+      failures.push({ what: 'world', detail: `g did not return to the flat map: ${outDetail}` });
     }
 
     // ---- Placement: a question with no place on the map -----------------

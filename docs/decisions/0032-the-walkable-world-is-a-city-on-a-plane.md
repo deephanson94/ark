@@ -1,9 +1,12 @@
 # ADR-0032 — The walkable world is a city on a plane, and the plane is deliberately empty
 
-- **Status**: **proposed, and substantially wrong.** No code. It was attacked before being built,
-  which is what it was for, and **§9 is what did not survive** — a measurement bug in §3.1, a world
-  model with no edges in it, a staging plan whose cheap test cannot work, and a gate described as
-  half of itself. Read §9 before acting on anything above it.
+- **Status**: **superseded in part, and built.** It was attacked before being built, which is what
+  it was for, and **§9 is what did not survive** — a measurement bug in §3.1, a world model with no
+  edges in it, a staging plan whose cheap test cannot work, and a gate described as half of itself.
+  [ADR-0033](./0033-the-roads-are-the-edges-and-a-commit-stands-at-the-chronicle.md) answers §9.1,
+  §9.2, §9.3 and §9.7 and is the design that shipped; §3.1's measurements, §3.3's scale argument and
+  §3.4's fast travel stand and are what it is built on. **Read §9 and then ADR-0033 before acting on
+  anything above them.**
 - **Date**: 2026-08-10
 - **Implements**: [ADR-0009](./0009-third-person-is-a-presentation-layer-over-the-same-atlas.md) rung
   3, under its invariant, design constraints D1–D3 and ship criterion S1; NORTH-STAR §9's *Direction*

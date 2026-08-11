@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 31 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 33 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -90,9 +90,10 @@ simultaneously possible.
 | `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES modules), `goscan`/`gomod` (Go) and `pyscan`/`pyroot` (Python) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates, groups files into nodes, and generates. |
 | `src/verbs/` | One directory per verb (`generate`, `grade`, `reveal`, distractors), plus what they share: `gate.ts` (the Ctrl+F gate), `difficulty.ts`, `score.ts` (F1), `disclosure.ts` (cross-verb facts), `sample.ts`, `paths.ts`. |
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
+| `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 31 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 33 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -125,9 +126,10 @@ map, the field notes, the deck or the selector names a verb.
 | **M6** | The expensive tier | Trace verb (real call graph) | ⬜ |
 
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
-**orbit view** (press `o`), **map rotation between challenges** (ADR-0017), a **co-change layer** on
-the map (ADR-0016), and the **negative witness** — every wrong answer carries the reason it was
-offered (ADR-0020).
+**orbit view** (press `o`), a **walkable world** (press `g` — a hero, and the roads are the import
+edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change layer** on the map
+(ADR-0016), and the **negative witness** — every wrong answer carries the reason it was offered
+(ADR-0020).
 
 ### Verbs
 
@@ -158,11 +160,30 @@ offered (ADR-0020).
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | The atom that would let anything transfer; risk #1's other half. |
-| Third-person walkable world | 🟡 | **Designed, reviewed, and sent back** (ADR-0032 + `docs/experiments/0001`). Intended destination and still gated by ADR-0009; §9 of that ADR is what an adversarial review left standing, and it is redesign rather than correction — the world model has **no edges in it**, 25–77% of every deck has a **commit** subject with nowhere to stand, and the cheap falsifying test cannot run on an orthographic camera. No code, and none should be written against §§1–8 alone. |
+| Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
 ### Known gaps — things this project does *not* do
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
+
+- **Two independent playtests say the walkable world teaches nothing the flat map does not**, rating
+  it **3/10** and then **5/10** after fixes — and the second notes that the rating moved on
+  *stability*, not on fun. That agrees with `docs/prior-art.md` §2, and **no further polish can
+  settle it**: it is what `docs/experiments/0001` measures, and that is unrun. ADR-0033 §8.1 and §8.4
+  carry both reports.
+- **Nothing has measured whether the walkable world teaches better, and it now exists.**
+  `docs/experiments/0001` is designed and unrun, so ADR-0033 ships the world as a mode and the flat
+  map stays the arrival state. The confound to design around is in ADR-0033 §4: **the minimap draws
+  the same import edges the world does**, so a player may be reading the topology off a 2D inset
+  drawn over a 3D scene — which would mean the map was doing the work all along. It has to be in both
+  arms or neither, and separating the two needs a third condition.
+- **Districts are unmarked at street level.** Region arches are designed (ADR-0032 §3.2) and
+  deliberately not built: 118 of django's 175 region centroids have their nearest node in a
+  *different* region, so an arch placed at a centroid would stand in someone else's street
+  (ADR-0032 §9.6). A legibility gap, and a smaller lie than a misplaced landmark.
+- **The world's frame cost is unmeasured.** `npm run raster` has never been pointed at it, P1′ is
+  owner-only, and django's 10,162 roads inside `VIEW_DISTANCE` are the case to watch. `VIEW_DISTANCE`
+  itself is 620 and was picked by eye, which ADR-0033 records rather than dressing up as derived.
 
 - **`ark` is not on the npm registry**, so `npx ark` resolves to somebody else's package. The
   packaging works — pack the tarball and `ark index` / `ark play` run from anywhere — and what is
@@ -251,18 +272,20 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Close ADR-0032 §9 before any rung-3 code** — three of its nine findings are redesign, not
-correction: the world model has no import edges in it (which would teach *near = coupled*, the
-fallacy `treeSibling` exists to punish), a commit-subject board has nowhere to stand on 25% of ark's
-deck and **77% of django's**, and stage A's eye-height test cannot work against an orthographic
-camera with `MIN_PITCH = 0.18`. **P4 is not decided** and no decision may be asked for until it is put
-accurately — it has two legs and all three documents described one · then **build ADR-0030's twin
-surface**, whose decision, gate and measurement are done and whose code is not: an inspector line, its
-wiring to the deck, and its tests · then the **phenomenon catalogue**, the repo-independent vocabulary
-that is the only thing that would let anything *transfer* to another repo, and the other half of
-risk #1 · then **django's index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it,
-ADR-0028 §6) · and one measurement only a human can take: **`npm run raster` on real hardware**, on a
-*turned* map.
+**Run `docs/experiments/0001`** — the world exists now, which makes S1 a thing that can be measured
+rather than a thing that gates a thing that does not exist. Its §8 lists two blockers first: the two
+matched repos are still a TODO, and a two-arm design cannot detect *"orbit beats both"*, which is what
+`docs/prior-art.md` actually predicts. **The minimap draws the same edges the world does**, so it must
+be in both arms or neither, and telling the world from the inset needs a third condition (ADR-0033 §4)
+· then **region arches in the world** — districts are unmarked at street level, and ADR-0032 §9.6 is
+why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
+their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,
+gate and measurement are done and whose code is not: an inspector line, its wiring to the deck, and
+its tests · then the **phenomenon catalogue**, the repo-independent vocabulary that is the only thing
+that would let anything *transfer* to another repo, and the other half of risk #1 · then **django's
+index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it, ADR-0028 §6) · and one measurement
+only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
+walkable world, whose frame cost has never been measured anywhere.
 
 *(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
@@ -291,6 +314,15 @@ npm run test:determinism    # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
 npm run test:e2e           # slow — headless playthrough; screenshots land in artifacts/
 ```
+
+### Keys, once the player is open
+
+| | |
+|---|---|
+| `f` / `n` | fit at the current heading · turn back to north |
+| `o` | the orbit view — every file a column, drag to turn the world |
+| **`g`** | **walk it.** WASD move, Q/E turn, shift runs, enter opens the board you are standing at, `g` or escape returns to the map |
+| `enter` | ask the selected node's question |
 
 **The determinism test is the important one.** Index the repo twice, diff the bytes. It catches
 accidental `Date.now()`, unsorted `Map` serialisation, filesystem walk order, unseeded layout and
