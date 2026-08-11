@@ -190,6 +190,13 @@ export function createHud(
   atlas: Atlas,
   onNorth: () => void,
   extra: readonly Node[] = [],
+  /**
+   * The control line. Supplied by the caller because an experiment arm
+   * (`experiment.ts`) disables the keys that would leave it, and a HUD
+   * advertising a disabled key is the broken-control failure this file's own
+   * comment below is about.
+   */
+  keyHint = 'f fit · n north · o orbit · g walk · enter ask',
 ): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
@@ -220,8 +227,9 @@ export function createHud(
   const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
   // A feature reachable only by reading the source does not exist. `f` was
-  // already undiscoverable; `o` would have shipped the same way.
-  const keys = el('div', 'hud-keys', ['f fit · n north · o orbit · enter ask']);
+  // already undiscoverable; `o` would have shipped the same way — and `g` did,
+  // for a milestone, because this line was not revisited when the world landed.
+  const keys = el('div', 'hud-keys', [keyHint]);
   const compass = createCompass(onNorth);
 
   const root = el('div', 'hud', [

@@ -37,6 +37,8 @@ import { createConsole } from './challenge.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Box } from './labels.js';
 import type { Fog } from './fog.js';
+import type { Arm } from './experiment.js';
+import { armFromSearch, keyHintFor, worldHintFor } from './experiment.js';
 import { coverage, landmarks } from './fog.js';
 import { GOLDEN_TURN, TURN_MS, bearingDuring } from './heading.js';
 import type { Orbit } from './orbit.js';
@@ -83,7 +85,18 @@ async function loadAtlas(url: string): Promise<Atlas> {
   return parseAtlas(await response.text());
 }
 
-function start(scene: Scene, root: HTMLElement): void {
+function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
+  /**
+   * **True when this session is one arm of `docs/experiments/0001`.**
+   *
+   * The design is between subjects — one participant, one mode — and until
+   * this existed nothing held that: `o`, `g` and Escape move between all three
+   * views, so a participant could put themselves in another arm with one
+   * keystroke and no record of it. `locked` is read at every place a view
+   * changes; `null` (the ordinary player, and the deployed page, which has no
+   * query string) leaves every one of them exactly as it was.
+   */
+  const locked = arm !== null;
   const canvas = document.createElement('canvas');
   canvas.className = 'map';
   const maybeContext = canvas.getContext('2d');
@@ -551,7 +564,12 @@ function start(scene: Scene, root: HTMLElement): void {
   };
   notebook.toggle.addEventListener('click', refreshNotes);
 
-  const hud = createHud(scene.atlas, () => turnTo(facingNorth(camera), null), [notebook.toggle]);
+  const hud = createHud(
+    scene.atlas,
+    () => turnTo(facingNorth(camera), null),
+    [notebook.toggle],
+    keyHintFor(arm),
+  );
 
   /**
    * Set by a grade, spent when the panel closes: **the map turns between
@@ -760,6 +778,9 @@ function start(scene: Scene, root: HTMLElement): void {
       fog,
       questions: unanswered,
       chronicleLit: placeless !== null,
+      // The one place the world arm differs from the shipping world. See
+      // `experiment.ts` for why the inset keeps everything else.
+      minimapRoads: arm !== 'world',
     });
     const focus = world.focus(unanswered, placeless !== null, target);
     drawWorldChrome(context, viewport, focus, placeless);
@@ -823,11 +844,13 @@ function start(scene: Scene, root: HTMLElement): void {
     target.textAlign = 'center';
     target.fillStyle = 'rgba(124, 135, 152, 0.9)';
     target.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
-    target.fillText(
-      'WASD move · Q/E turn · shift run · enter open · g map',
-      view.width / 2,
-      view.height - 22,
-    );
+    // **`g map` only when `g` does something.** The DOM HUD's control line is
+    // arm-aware (`keyHintFor`) and this one is painted on the canvas, so the
+    // rule lived in two places and the first version fixed one of them — an
+    // `?arm=world` screenshot showed the world's own hint still offering the
+    // way out. Same defect this file already has a comment about, one surface
+    // over.
+    target.fillText(worldHintFor(arm), view.width / 2, view.height - 22);
     target.restore();
   }
 
@@ -1115,7 +1138,7 @@ function start(scene: Scene, root: HTMLElement): void {
       notebook.close();
       return;
     }
-    if (event.key === 'Escape' && world.isActive()) {
+    if (event.key === 'Escape' && world.isActive() && !locked) {
       leaveWorld();
       return;
     }
@@ -1126,7 +1149,7 @@ function start(scene: Scene, root: HTMLElement): void {
       if (world.isActive()) world.releaseAll();
       return;
     }
-    if (event.key.toLowerCase() === 'g') {
+    if (event.key.toLowerCase() === 'g' && !locked) {
       // ADR-0033. In from wherever the map has selected — §3.4's fast travel,
       // so crossing django to reach one file is a click and not a commute —
       // and out to the flat map, which stays the arrival state and is never
@@ -1136,7 +1159,7 @@ function start(scene: Scene, root: HTMLElement): void {
       return;
     }
     if (world.isActive()) {
-      if (event.key === 'o') {
+      if (event.key === 'o' && !locked) {
         // Three views over one atlas, and the keys move between all of them.
         // `o` was silently swallowed here — a keypress that does nothing and
         // says nothing reads as a broken control rather than as a refusal.
@@ -1196,7 +1219,7 @@ function start(scene: Scene, root: HTMLElement): void {
       // this view" is a claim about the view.
       turnTo(facingNorth(camera), null);
     }
-    if (event.key === 'o') {
+    if (event.key === 'o' && !locked) {
       // One key there, the same key back. ADR-0009's D1 — the overview survives
       // — is only a real promise if leaving it costs one keystroke, so the flat
       // map is never more than `o` away and it is what the player arrives in.
@@ -1250,6 +1273,16 @@ function start(scene: Scene, root: HTMLElement): void {
   // from the save (ADR-0011 decision 2) — it is earned again, one grade at a
   // time.
   camera = fit(scene.bounds, viewport, NORTH);
+  // An arm starts *in* its view. Arriving in the flat map and being walked into
+  // the other one would give every participant a look at the control condition
+  // first, which is the contamination the between-subjects design exists to
+  // prevent — and the orbit's entry re-fit is the same one `o` does, because a
+  // camera framed for the flat map puts the tallest columns off the top edge.
+  if (arm === 'orbit') {
+    orbit = DEFAULT_ORBIT;
+    camera = fit(scene.bounds, viewport, NORTH);
+  }
+  if (arm === 'world') enterWorld();
   frame();
 }
 
@@ -1258,7 +1291,7 @@ async function main(): Promise<void> {
   if (root === null) throw new Error('missing #app');
   try {
     const atlas = await loadAtlas(ATLAS_URL);
-    start(prepare(atlas), root);
+    start(prepare(atlas), root, armFromSearch(window.location.search));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     root.replaceChildren(createError(message));

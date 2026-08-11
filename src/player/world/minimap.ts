@@ -28,8 +28,18 @@
  * It draws **edges**, and that is stated rather than hidden: ADR-0033 §4 records
  * that if a player reads topology off this inset rather than off the world, the
  * honest conclusion is that the 2D map was doing the work — which is exactly
- * what `docs/experiments/0001` has to be able to detect, and why the minimap
- * must be present in both of its arms or in neither.
+ * what `docs/experiments/0001` has to be able to detect.
+ *
+ * That section framed the repair as a binary — the inset *"must be present in
+ * both of its arms or in neither"* — and **measurement produced a third option**,
+ * which the owner took (experiment 0001 §4.3). The inset is not showing *more*
+ * topology than the world: over 121 sampled standing positions on the two
+ * experiment repos the world's own view already reaches a mean of 98.7% and
+ * 99.0% of the edge set, so the cull is not the mechanism. What the inset adds
+ * is the *projection* — the same graph, exocentric, which is where
+ * `docs/prior-art.md` §2 puts the entire measured 3D win. So `roads` is off in
+ * the world arm and the rest of the inset stays: dropping the whole thing would
+ * cost the arm its orientation support and buy a different confound.
  */
 
 import type { NodeRef } from '../../atlas/index.js';
@@ -51,6 +61,12 @@ export interface MinimapInput {
   readonly waypoint: { readonly x: number; readonly y: number } | null;
   /** The world camera's field of view, for the sight cone. */
   readonly fovRadians: number;
+  /**
+   * Whether the inset draws the import edges. False only in experiment
+   * 0001's world arm — see this file's header for why that is a third option
+   * rather than one of ADR-0033 §4's two.
+   */
+  readonly roads: boolean;
 }
 
 const SIZE = 176;
@@ -69,7 +85,7 @@ export function minimapBox(viewport: Viewport): MinimapBox {
 }
 
 export function drawMinimap(context: CanvasRenderingContext2D, input: MinimapInput): number {
-  const { world, hero, viewport, fog, questions, waypoint, fovRadians } = input;
+  const { world, hero, viewport, fog, questions, waypoint, fovRadians, roads } = input;
   const box = minimapBox(viewport);
   const bounds = world.bounds;
   const spanX = Math.max(1, bounds.maxX - bounds.minX);
@@ -117,16 +133,18 @@ export function drawMinimap(context: CanvasRenderingContext2D, input: MinimapInp
   context.fill();
   context.restore();
 
-  context.strokeStyle = 'rgba(140, 160, 190, 0.14)';
-  context.lineWidth = 0.6;
-  context.beginPath();
-  for (const road of world.roads) {
-    const a = toMap(road.from.node.x, road.from.node.y);
-    const b = toMap(road.to.node.x, road.to.node.y);
-    context.moveTo(a.x, a.y);
-    context.lineTo(b.x, b.y);
+  if (roads) {
+    context.strokeStyle = 'rgba(140, 160, 190, 0.14)';
+    context.lineWidth = 0.6;
+    context.beginPath();
+    for (const road of world.roads) {
+      const a = toMap(road.from.node.x, road.from.node.y);
+      const b = toMap(road.to.node.x, road.to.node.y);
+      context.moveTo(a.x, a.y);
+      context.lineTo(b.x, b.y);
+    }
+    context.stroke();
   }
-  context.stroke();
 
   let lit = 0;
   for (const tower of world.towers) {

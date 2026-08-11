@@ -1703,6 +1703,95 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- the experiment arms (docs/experiments/0001 §4.2) ----------------
+    //
+    // `?arm=` is the only thing making experiment 0001's between-subjects
+    // design enforceable, and every part of it is *shell wiring* — the pure
+    // half is unit-tested and the guards in `main.ts` are not reachable from a
+    // unit test at all. A lock that silently does not engage looks exactly like
+    // a lock: the participant plays, the facilitator sees a map, and nothing
+    // anywhere records that they pressed `g` in the middle of it. So this is a
+    // liveness gate on the branch, not a check that no error was thrown.
+    //
+    // The arm is identified by what the HUD's mode line **cannot** say, never
+    // by predicting what it will: the flat map's line names its *zoom level*,
+    // which is `district` at the fitted scale and `territory` further out, and
+    // the first draft of this step asserted `territory` and went red against a
+    // working lock. That is this file's own landmine — never predict what the
+    // shell will serve — arriving in the step that was added to it.
+    for (const [arm, required, forbidden] of [
+      ['map', 'nodes', ['world', 'orbit']],
+      ['world', 'world', ['orbit']],
+    ] as const) {
+      const armContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const armPage = await armContext.newPage();
+      const armErrors: string[] = [];
+      armPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') armErrors.push(message.text());
+      });
+      armPage.on('pageerror', (error: Error) => armErrors.push(String(error)));
+      try {
+        await armPage.goto(`${url}?arm=${arm}`, { waitUntil: 'networkidle' });
+        await armPage.waitForSelector('.hud-detail');
+        await armPage.waitForTimeout(300);
+        // **The arm starts in its own view**, without a keystroke. Arriving in
+        // the flat map and being walked across would show every participant the
+        // control condition first.
+        const onArrival = (await armPage.locator('.hud-detail').innerText()).trim();
+        if (!onArrival.includes(required) || forbidden.some((other) => onArrival.includes(other))) {
+          failures.push({ what: `arm=${arm}`, detail: `arrived in "${onArrival}"` });
+        }
+        // …and the keys that would leave it do nothing. `o`, `g` and Escape are
+        // three separate guards in `main.ts`; pressing all three is what makes
+        // this a test of the lock rather than of one branch of it.
+        for (const key of ['o', 'g', 'Escape']) {
+          await armPage.keyboard.press(key);
+          await armPage.waitForTimeout(160);
+        }
+        const afterKeys = (await armPage.locator('.hud-detail').innerText()).trim();
+        if (!afterKeys.includes(required) || forbidden.some((other) => afterKeys.includes(other))) {
+          failures.push({ what: `arm=${arm}`, detail: `o/g/escape left the arm: "${afterKeys}"` });
+        }
+        // A HUD advertising a key the arm has disabled is the broken-control
+        // failure `main.ts` already has a comment about.
+        const hint = (await armPage.locator('.hud-keys').innerText()).trim();
+        if (hint.includes('orbit') || (arm === 'map' && hint.includes('walk'))) {
+          failures.push({ what: `arm=${arm}`, detail: `the HUD offers a disabled key: "${hint}"` });
+        }
+        process.stdout.write(`e2e: arm=${arm} → ${afterKeys} · keys "${hint}"\n`);
+        await armPage.screenshot({ path: join(SHOT_DIR, `arm-${arm}.png`) });
+      } finally {
+        for (const error of armErrors) failures.push({ what: 'console', detail: error });
+        await armContext.close();
+      }
+    }
+
+    // **The control**: no query string is the ordinary player, and every key
+    // still works. Without this, deleting the whole feature and hard-coding a
+    // lock would pass the two arms above.
+    {
+      const openContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const openPage = await openContext.newPage();
+      try {
+        await openPage.goto(url, { waitUntil: 'networkidle' });
+        await openPage.waitForSelector('.hud-detail');
+        await openPage.keyboard.press('g');
+        await openPage.waitForTimeout(300);
+        const walked = (await openPage.locator('.hud-detail').innerText()).trim();
+        if (!walked.includes('world')) {
+          failures.push({ what: 'unlocked', detail: `g did not enter the world: "${walked}"` });
+        }
+        await openPage.keyboard.press('g');
+        await openPage.waitForTimeout(300);
+        const back = (await openPage.locator('.hud-detail').innerText()).trim();
+        if (back.includes('world')) {
+          failures.push({ what: 'unlocked', detail: `g did not leave the world: "${back}"` });
+        }
+      } finally {
+        await openContext.close();
+      }
+    }
+
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });
   } finally {
     await browser.close();

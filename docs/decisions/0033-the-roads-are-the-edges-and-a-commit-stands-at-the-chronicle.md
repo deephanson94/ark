@@ -101,6 +101,26 @@ clip is exactly what the divide destroyed: a point behind the eye divides by a n
 lands on screen mirrored, as though in front. On a plane covered in roads that is not a corner case
 — the road you are standing on has one end behind you almost always.
 
+### 4.1 The minimap confound — resolved 2026-08-11, and not by either of the two options named here
+
+§2.1 and `minimap.ts` both state the repair as a binary: the inset *"must be present in both of its
+arms or in neither."* **A third option existed and the measurement is what found it.**
+
+The account this document implies — that the inset shows *more* than the world, since the world culls
+roads at `VIEW_DISTANCE` and the inset culls nothing — is **false at these repo sizes**. Sampling 121
+standing positions over each of experiment 0001's two repos, the world's own view already reaches a
+mean of **98.7%** (graphql-js) and **99.0%** (kysely) of the edge set; the map spans are ~750 units
+against a view distance of 620. The cull is not the mechanism. What the inset adds is the
+**projection** — the same graph, exocentric, permanently on screen, which is where
+`docs/prior-art.md` §2 puts the whole measured 3D win. Stated properly, the confound is that **the
+world arm contains a small instance of the map arm.**
+
+So the owner's decision is to drop the inset's **road layer** in the world arm and keep everything
+else, which removes exactly the duplicated channel: dropping the whole inset would cost the arm its
+orientation support and buy the disorientation confound Richardson et al. 1999 report instead. Built
+as `?arm=world` in `src/player/experiment.ts`; the shipping player is untouched. Experiment 0001 §4.3
+has the table and what a win under that configuration does and does not license.
+
 ---
 
 ## 5. Decision 4 — the footprint is the map's radius times a constant, and the constant was measured
@@ -254,13 +274,18 @@ dropped.
 
 ## 9. What this does not answer, and what would
 
-- **S1 is unrun.** `docs/experiments/0001` §8 lists two things still blocking it: the matched repos
-  are a TODO, and a two-arm design cannot detect *"orbit beats both"*, which is what the evidence
-  actually predicts. **No claim that the world teaches better may be made until it runs.**
-- **§4's confound is live and is the sharpest thing here.** The minimap draws the edges the world
-  draws. If a player reads topology off the inset, the honest conclusion is that the 2D map was doing
-  the work — which is what S1 has to be able to see. The minimap must therefore be in **both arms or
-  neither**, and if it is in both, a third condition (world without minimap) is the only way to tell.
+- **S1 is unrun.** **Updated 2026-08-11**: the three things `docs/experiments/0001` §8 listed as
+  blocking it are closed — the repos are named with commits, the arms are staged with a stop rule,
+  and the quiz is a fixed held-out set. What is left is two pieces of harness and twelve
+  participants (that document's §9). **No claim that the world teaches better may be made until it
+  runs**, and the flat map stays the arrival state.
+- **§4's confound is closed by design, and neither of the two options this bullet named is the one
+  taken.** It read: *the minimap must be in **both arms or neither**, and if it is in both, a third
+  condition (world without minimap) is the only way to tell.* Measured, the account behind that was
+  wrong — the world's own view already reaches 98.7% / 99.0% of the edge set from a standing
+  position, so the inset is not showing more, it is showing the same graph in the projection the
+  prior art says wins. §4.1 has the table and the resolution: the world arm's inset keeps everything
+  but its roads.
 - **ADR-0032 §9.4 stands.** Nothing here measures the orbit, and ADR-0009's *"the walkable avatar is
   gated behind the fly-through's measured results"* is now satisfied by the owner's release rather
   than by a measurement. That is a real weakening and it is named as one.

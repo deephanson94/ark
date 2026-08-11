@@ -2989,3 +2989,64 @@ One line per iteration: what changed, and what to do next.
   two suites for one catalogue entry.** The catalogue stays deferred.
 
   **Next**: run `docs/experiments/0001`.
+
+- **S1's three structural blockers, closed — the experiment is runnable, and one of its own premises
+  was refuted by measuring it.** `docs/experiments/0001` was designed, committed and unrunnable: its
+  §8 listed the matched repos as a TODO, a two-arm design that cannot detect *"orbit beats both"*,
+  and a per-participant quiz. All three are closed and the document says what is left.
+
+  **The repos are named with commits**: `graphql/graphql-js` `9c245018` and `kysely-org/kysely`
+  `f24018c7` — 549 / 600 nodes, 3.70 / 4.13 edges each, 69 / 75 Blast Radius boards, decks of 276 and
+  300 that are *exactly balanced across the four verbs*, 500 retained commits each, 2.7 / 3.1 s to
+  index. Chosen from **31 repositories cloned at full depth and indexed**, of which 9 cleared a first
+  filter and 13 pairs sat inside §4's ~20% node bound. Three things the measurement settled that
+  taste would not: **node count alone is not a match** — the criterion as written picks `hono / zod`,
+  8.8% apart on nodes and **2.2× apart on density**, which is the quantity that decides how big a
+  cone is; **Blast supply is implied by neither size nor density** — `elysia` is a near-exact
+  structural twin of `h3` and ships **2 boards of 44 subjects**, the other 42 refused as `uncertain`;
+  and the runner-up (`effector / execa`, better matched than anything but the pick on size *and*
+  density) is demoted by **language**, at 80% against 25% TypeScript.
+
+  **The arms are staged, and the minimap confound is closed by a measurement that refuted the obvious
+  account of it.** Four structures went to the owner with their recruiting costs; the choice is
+  *stage 1 = map vs orbit (12), stage 2 = a world arm of 6 scored against stage 1's map arm, not run
+  if the orbit loses* — which is ADR-0009's own *"if the fly-through does not beat the flat map, the
+  avatar never happens"* made executable, and it also produces the *"orbit's own measured results"*
+  that P4 named and was released without. The cost of reusing a control across rounds is written down
+  rather than absorbed.
+
+  ADR-0033 §4 frames its minimap confound as a binary — the inset *"must be in both arms or in
+  neither"* — on the implicit account that the inset shows a walker **more** than the world does,
+  since `render.ts` culls roads at `VIEW_DISTANCE` and `minimap.ts` culls nothing. **Measured over
+  121 standing positions per repo, that is false**: the world's own view already reaches a mean of
+  **98.7%** and **99.0%** of the edge set, because the map spans are ~750 units against a view
+  distance of 620. The cull is not the mechanism; the **projection** is — the same graph, exocentric,
+  permanently on screen, which is where `docs/prior-art.md` §2 puts the entire measured 3D win. Stated
+  properly the confound is that **the world arm contains a small instance of the map arm**, and the
+  repair is neither of the two options the ADR named: the inset keeps everything but its **roads**.
+  Dropping it whole would buy Richardson et al.'s disorientation confound instead.
+
+  **The quiz is a fixed held-out item set** — k boards removed from the deck before recruiting, so
+  the item set is identical across arms and overlap with played subjects is zero *by construction*,
+  and the items keep the generator's certifications (guardrail 4, the Ctrl+F gate, ADR-0012,
+  ADR-0008's invariant) instead of a hand-written item's none. The one hole a hold-out does not close
+  is named: a served reveal can state an atom of a held-out key through ADR-0019's channel, so the
+  split has to be checked against `discloses`.
+
+  **Built**: `?arm=map|orbit|world` (`src/player/experiment.ts`) — because the design is
+  between-subjects and **nothing held that**: `o`, `g` and Escape move between all three views, so a
+  participant could put themselves in another arm with one keystroke and no record of it. It fixes
+  the starting mode, refuses the keys that leave it, drops the world arm's minimap roads, and keeps
+  the HUD from advertising a key it has disabled — which turned up that the HUD had never advertised
+  `g` at all, under a comment saying a feature reachable only by reading the source does not exist.
+  **No query string is the ordinary player, unchanged**, and the deployed page has none. Four mutants
+  die, including the one that drops the whole inset rather than its edges.
+
+  Also recorded: **§3 claimed M2 was "instrumented by the player" and it is not** — attempts live in
+  `selector.ts`'s session state and nothing persists them — and a new landmine, because this session's
+  own checkout of ark was **shallow**, which fails 12 of `test:atlas`'s 111 assertions with three
+  history verbs' invariant errors that read exactly like a broken generator.
+
+  **Next**: the two pieces of harness in that document's §9 — the hold-out split script (with the
+  `discloses` check, or it ships with a known leak) and M2's counter — and then twelve participants,
+  which is owner-only and the only thing S1 is now waiting on.

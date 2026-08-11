@@ -212,6 +212,13 @@ be in both arms of `docs/experiments/0001-…` or in neither**, or it confounds 
 introduced to help. It is not decided here whether it draws edges; that is downstream of §9.1's
 redesign.
 
+> **Settled 2026-08-11, and by a third option this paragraph did not contain.** It draws edges
+> (ADR-0033 decision 1 put the topology on the ground, so the inset carries it too) — and in
+> experiment 0001's world arm it draws everything *but* them. The both-or-neither framing assumed
+> the inset was showing a walker more than the world does; measured, the world's own view already
+> reaches 98.7% and 99.0% of the edge set on the two experiment repos, so what the inset adds is the
+> **projection**, not the coverage. ADR-0033 §4.1.
+
 Three constraints fall out and are decided:
 
 - **It is a rendering of the same `node.layout`**, at the same relative positions. Not a schematic,
