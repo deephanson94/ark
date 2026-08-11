@@ -1016,6 +1016,38 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   its own: its status tables are a claim about the whole tree, which no single agent is in a position
   to make.
 
+### Which model a subagent gets
+
+This is about **subagents** — `Agent`'s `model`, a workflow's `opts.model`. Your own model is the
+session's and is not yours to change.
+
+| Tier | When |
+|---|---|
+| **Sonnet** | **The default.** Well-specified implementation with clear acceptance criteria — the brief says what to build, what "done" looks like, and which command proves it. |
+| **Opus** | Genuinely tricky work: concurrency, optimisation, adversarial verify and judge passes, gnarly debugging. |
+| **Fable** | **Rare.** Only when independence from your own context is the point — adversarially reviewing your own plan, or a diff too large to re-read honestly. |
+
+**When unsure, take the cheaper tier and escalate on failure.** Failure means something checkable:
+the agent's output does not compile, does not pass the suite it was told to run, or returns a result
+a verify pass refutes. *"It feels like a hard task"* is not failure — measure, then escalate.
+
+> **This overrides the `Workflow` tool's own advice**, which says to omit `model` and inherit the
+> session's. Both rules are defensible and they disagree — inheriting means every research agent runs
+> at whatever tier the session does. Written down here so nobody has to guess which one wins, because
+> a rule that lives twice is this file's most-repeated landmine and the version in the tool
+> description is not one anybody can edit.
+
+**Fable buys you a critique of *reasoning*, and that is a narrower thing than it sounds.** A Fable
+consult designed this repo's Ctrl+F repair pass *before* it was written, reviewed it as sound, and it
+rescued **zero** boards on either repo — the mutation test found that, and nothing about a second
+opinion could have. So an independent reviewer is the right instrument for *"is this argument
+sound?"* and the wrong one for *"does this branch ever execute?"* Ask the second question with a
+measurement.
+
+**Prefer diverse lenses to a bigger model on verify passes.** Three agents told to attack a finding
+from *correctness*, *security* and *does-it-reproduce* catch failure modes three copies of one
+skeptic cannot, whatever tier they run at.
+
 ---
 
 ## Never touch

@@ -3366,3 +3366,24 @@ One line per iteration: what changed, and what to do next.
   honest player wants a second try, and that number is what prices the rule above. Then the fog
   channel with no explanation, five regions sharing a grey, the guide's missing skip, and no keyboard
   pan or zoom.
+
+- **A model tier policy for subagents, in `CLAUDE.md`'s Subagents section** (owner's, 2026-08-11).
+  Sonnet is the default for well-specified implementation; Opus for concurrency, optimisation,
+  verify/judge and gnarly debugging; Fable only where independence from the orchestrator's own context
+  is the point. When unsure, take the cheaper tier and escalate **on a checkable failure** — does not
+  compile, does not pass the suite it was told to run, or a verify pass refutes it — because *"this
+  feels hard"* is not a failure and would make the rule unfalsifiable.
+
+  Two things written down beside it rather than left to be rediscovered. It **overrides the `Workflow`
+  tool's own advice** to omit `model` and inherit the session's; both are defensible, they disagree,
+  and the tool description is not a document anybody here can edit — so the precedence is stated
+  rather than guessed, which is this file's most-repeated landmine. And **Fable buys a critique of
+  reasoning, not liveness**: the Ctrl+F repair pass was designed by a Fable consult, reviewed as
+  sound, and fired zero times on either repo. An independent reviewer answers *"is this argument
+  sound?"*; only a measurement answers *"does this branch ever execute?"*
+
+  **Next**: unchanged — run `docs/experiments/0001`. Its two remaining non-owner blockers are the
+  hold-out split script (which must check removed keys against the served deck's `discloses`, or the
+  instrument ships with a known leak) and attempt instrumentation, which now also prices ADR-0035
+  §10.4 and collides with ADR-0011 decision 2's ban on storing a cursor — an argument to make in an
+  ADR, not a field to add quietly.
