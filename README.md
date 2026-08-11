@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 33 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 34 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 33 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 34 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -159,12 +159,20 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
-| Phenomenon catalogue (transfer across repos) | ⬜ | The atom that would let anything transfer; risk #1's other half. |
+| Phenomenon catalogue (transfer across repos) | ⬜ | **Deferred with findings** ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)). Fifteen detectors measured on five repos before designing anything: the honest size is ~5 entries, not 30–60, and its best entry — naming a cycle — is a **proof of Blast Radius's key**, deciding 109 of hugo's 156 boards at precision 1.000. ADR-0030's twin surface is its priced pilot. |
 | Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
 ### Known gaps — things this project does *not* do
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
+
+- **A cycle is an answer key, and nothing may name one without a gate**
+  ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md) §4).
+  Strong connectivity is mutual reachability, so every SCC-mate of a subject *is* a transitive
+  dependent and ADR-0008's invariant forces it into the key: precision **1.000 by construction**,
+  `impure = 0` on every firing of every repo. Measured, ticking the subject's SCC decides **109 of
+  hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
+  cycles today; this is a standing constraint on anything that would.
 
 - **Two independent playtests say the walkable world teaches nothing the flat map does not**, rating
   it **3/10** and then **5/10** after fixes — and the second notes that the rating moved on
@@ -257,8 +265,11 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `actions/setup-node@v4` and `actions/configure-pages@v5` are all being force-run on Node 24 with a
   deprecation warning. A warning today, and one change across `ci.yml` and `pages.yml` rather than a
   fix smuggled into whichever one is being touched — ADR-0031 §6, where it surfaced.
-- **Duplicate-answer-key twins are still never mentioned to the player — but the decision is taken
-  and it is now *unbuilt* rather than *undecided*** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
+- ~~**Duplicate-answer-key twins are never mentioned to the player.**~~ **Built** — the inspector
+  names a class once no member still carries an unanswered Blast Radius board, in the revealed
+  register. Re-measured at `3cda64a`: ark has 8 classes / 20 members, 1 nameable at load and 8 once
+  the deck is cleared, against the 5 / 0 ADR-0030 recorded. Both halves of the gate are checked in a
+  browser. The row that follows is the decision it was built from (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
   `cone(A) = cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two
   hats"*, and it is **common**: 15.5% of ark's blast-eligible subjects are in a twin class, 15.2% of
   hono's, 8.6% of hugo's and **32.3% of prometheus's**, whose largest class is 25 interchangeable
@@ -272,7 +283,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run `docs/experiments/0001`** — the world exists now, which makes S1 a thing that can be measured
+**Run `docs/experiments/0001`** — ADR-0030's twin surface is **built**, which priced the phenomenon
+catalogue's per-entry cost at ~250 lines, one module, one gate and two suites (ADR-0034 made it the
+pilot). What is left blocking S1 is in that document's §8: the two matched repos are a TODO, and a
+two-arm design cannot detect *"orbit beats both"* — the world exists now, which makes S1 a thing that can be measured
 rather than a thing that gates a thing that does not exist. Its §8 lists two blockers first: the two
 matched repos are still a TODO, and a two-arm design cannot detect *"orbit beats both"*, which is what
 `docs/prior-art.md` actually predicts. **The minimap draws the same edges the world does**, so it must
@@ -281,8 +295,11 @@ be in both arms or neither, and telling the world from the inset needs a third c
 why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
 their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,
 gate and measurement are done and whose code is not: an inspector line, its wiring to the deck, and
-its tests · then the **phenomenon catalogue**, the repo-independent vocabulary that is the only thing
-that would let anything *transfer* to another repo, and the other half of risk #1 · then **django's
+its tests · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
+were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60
+this line used to claim — the rest measure the scanner, the norm, or an unreachable bar. Its best
+entry is an answer key: naming a cycle decides **109 of hugo's 156** Blast Radius boards with
+precision 1.000 · then **django's
 index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it, ADR-0028 §6) · and one measurement
 only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
 walkable world, whose frame cost has never been measured anywhere.

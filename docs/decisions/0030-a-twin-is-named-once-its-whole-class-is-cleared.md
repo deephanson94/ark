@@ -158,8 +158,40 @@ mean closure of 165 is the case to measure against.
 
 ---
 
+## Built — 2026-08-11
+
+**The surface exists**, at `3cda64a`+: `src/player/twins.ts` computes the classes from the graph at
+load (no atlas field — the alternatives section refuses that), `nameableClass` applies the gate, and
+the inspector draws one line in the *revealed* register. It renders, verified in a browser:
+
+> **INDISTINGUISHABLE** nothing in this repository can tell this apart from `reveal.ts`: 47 places
+> reach both of them, by the same paths.
+
+**Both halves of the gate are checked end to end**, because either alone passes against a broken
+surface: on a fresh save `src/verbs/companion/reveal.ts` says nothing while its class carries a
+board, and with every Blast Radius board answered the line appears. Three mutants die — gating per
+row instead of per class, dropping the gate, and treating empty cones as shared.
+
+**The consequences table below has drifted, as it must.** Re-measured at `3cda64a`: ark has **8
+classes / 20 members**, of which **1 class is nameable at load** and 8 once the deck is cleared —
+against the 5 classes / 0 nameable recorded when this ADR was written. So the sentence *"on ark it
+arrives late — every one of its five classes carries a board"* is **no longer true**: one arrives
+immediately. ark indexes itself; a figure about it is checkable only against the commit it was taken
+at, and the invariant is the one that survives — *the fact arrives as boards are answered, and
+nothing is promised and then taken away.*
+
+The first version of the browser check was a **dead-path landmine wearing a test's clothes**: it
+looked only at the fresh save, found that neither of the two nameable members fell under a 40×26
+grid, printed *"skipping the render check"*, and went green. A liveness gate that reports its own
+absence and passes is not a gate.
+
+---
+
 ## Consequences
 
+- ~~**This ADR ships no surface, and that is stated rather than implied.**~~ **Built, see above.**
+  The clause is kept because the reason it was written still binds: *a decision is not a delivery*,
+  and this document carried "decided, unbuilt" for four milestones before anyone built it.
 - **This ADR ships no surface, and that is stated rather than implied.** *A decision is not a
   delivery* — `CLAUDE.md` has a landmine about a milestone that read "delivered" for two sessions
   while one of its three verbs existed, and this document must not become the next instance. What is
