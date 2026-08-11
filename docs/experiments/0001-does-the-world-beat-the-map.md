@@ -132,10 +132,15 @@ history half of the deck.
 *(Measured with ark at `7a79ee5`, on full clones of the two commits above. Every figure moves if
 either repo's HEAD moves, which is why the commits are named and not the branches.)*
 
-Both are in `GRADED_IMPORT_LANGS`, so tier 3's dependence item has boards on both sides — a Python
-repo ships **no** Blast Radius at all (ADR-0028) and was never eligible. Both decks are exactly
-balanced across the four verbs, which matters more than it looks: an arm cannot be steered into one
-verb by supply, so the two arms play the same *kinds* of question in the same proportion.
+Both are written in languages in `GRADED_IMPORT_LANGS`, so tier 3's dependence item has boards on
+both sides — a Python repo ships **no** Blast Radius at all (ADR-0028) and was never eligible.
+
+Both decks come out **exactly balanced across the four verbs** — 69 × 4 and 75 × 4 — and that is not
+a coincidence worth admiring, it is the useful fact underneath: on both repos every verb is
+**cap-limited rather than supply-limited**, so the generator stopped because it had enough and not
+because it ran out. (`graphql-js` had 220 subjects with a radius and shipped 69; `kysely` 331 and
+shipped 75.) It matters because a supply-limited verb is one an arm cannot practise: `cheerio`'s deck
+is 16 / 29 / 23 / 8, and a player there plays whatever the repo happened to leave lying around.
 
 **How they were chosen, and what a size-only rule would have picked.** Thirty-one repositories were
 cloned at full depth and indexed. Nine cleared the first filter — a Blast Radius deck of ≥ 25 boards,
