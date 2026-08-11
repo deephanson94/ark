@@ -81,6 +81,7 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     ties: NO_TIES,
     tieFocus: null,
     board: null,
+    chronicleLit: false,
   };
 }
 

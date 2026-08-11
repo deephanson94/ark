@@ -43,6 +43,7 @@
 
 import type { NodeRef } from '../../atlas/index.js';
 import type { Bounds } from '../camera.js';
+import { OUTSKIRTS, chronicleAt } from '../camera.js';
 import type { Scene, SceneEdge, SceneNode } from '../scene.js';
 
 /**
@@ -137,8 +138,7 @@ export interface World {
 
 const CHRONICLE_HEIGHT = 58;
 const CHRONICLE_RADIUS = 7;
-/** How far outside the map's edge the chronicle and the spawn point stand. */
-const OUTSKIRTS = 90;
+
 
 export function buildWorld(scene: Scene): World {
   const towers: Tower[] = [];
@@ -169,9 +169,14 @@ export function buildWorld(scene: Scene): World {
 
   const bounds = scene.bounds;
   const midX = (bounds.minX + bounds.maxX) / 2;
+  // **One position, shared with the flat map.** `chronicleAt` is in `camera.ts`
+  // beside `Bounds` because both views need it and a second copy of the rule is
+  // how the two would drift apart — a player who learns where the chronicle is
+  // must find it in the same place in either view.
+  const standing = chronicleAt(bounds);
   const chronicle: Chronicle = {
-    x: midX,
-    y: bounds.minY - OUTSKIRTS,
+    x: standing.x,
+    y: standing.y,
     height: CHRONICLE_HEIGHT,
     radius: CHRONICLE_RADIUS,
   };

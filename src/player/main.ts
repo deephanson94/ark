@@ -24,6 +24,8 @@ import type { Camera, Point } from './camera.js';
 import {
   NORTH,
   centreOn,
+  chronicleAt,
+  framedBounds,
   facingNorth,
   fit,
   pan,
@@ -64,12 +66,20 @@ import {
   createGuide,
   createHud,
   createInspector,
+  createHelp,
   createLegend,
   createNotebook,
 } from './ui.js';
 import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
+/**
+ * How close a click has to land to count as the chronicle.
+ *
+ * Larger than the diamond it hits, because the diamond is 9px at any zoom and a
+ * landmark you have to hit precisely is a landmark players give up on.
+ */
+const CHRONICLE_HIT = 18;
 /** Pointer movement below this is a click, not a drag. */
 const DRAG_THRESHOLD = 4;
 
@@ -694,6 +704,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   });
 
   const legend = createLegend(scene);
+  const help = createHelp();
   root.replaceChildren(
     canvas,
     hud.root,
@@ -702,6 +713,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     guide.root,
     notebook.root,
     challengePanel.root,
+    help.root,
   );
 
   /**
@@ -1018,6 +1030,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         ties,
         tieFocus,
         board: boardMarks(),
+        chronicleLit: nextPlacelessChallenge() !== null,
       };
       const stats =
         orbit === null
@@ -1140,6 +1153,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     if (moved > DRAG_THRESHOLD) return;
 
+    // **The chronicle is clickable, which is what makes a quarter of the deck
+    // reachable from this view at all.** ADR-0033 put it in the world only; a
+    // playtester grid-clicked 333 nodes here, never found a Placement board, and
+    // had to read the bundle to learn the entry point was behind `g`. Checked
+    // before `pickAt` because it stands outside the bounds, where no node is.
+    if (!challengePanel.isOpen() && orbit === null) {
+      const placeless = nextPlacelessChallenge();
+      const at = worldToScreen(camera, viewport, chronicleAt(scene.bounds));
+      const local = localPoint(event);
+      if (Math.hypot(local.x - at.x, local.y - at.y) <= CHRONICLE_HIT) {
+        if (placeless !== null) openBoard(placeless);
+        return;
+      }
+    }
     const found = pickAt(localPoint(event));
     // **With a board open, a click on the map answers it.** The scrim is
     // pointer-transparent now, so this is where those clicks land, and the
@@ -1239,6 +1266,18 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   });
 
   window.addEventListener('keydown', (event) => {
+    // `?` — the key three playtesters pressed and got nothing from. Handled
+    // before everything else so it works in every view and with a board open,
+    // because "what am I looking at" is most wanted exactly when you are stuck.
+    if (event.key === '?') {
+      help.toggle();
+      if (world.isActive()) world.releaseAll();
+      return;
+    }
+    if (event.key === 'Escape' && help.isOpen()) {
+      help.toggle();
+      return;
+    }
     if (event.key === 'Escape' && challengePanel.isOpen()) {
       challengePanel.close();
       return;
@@ -1275,7 +1314,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         leaveWorld();
         landTurn();
         orbit = DEFAULT_ORBIT;
-        camera = fit(scene.bounds, viewport, camera.bearing);
+        camera = fit(framedBounds(scene.bounds), viewport, camera.bearing);
         invalidate();
         return;
       }
@@ -1318,7 +1357,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // Landing first so "the current heading" is the one the turn was taking
       // us to, rather than wherever it had got to this frame.
       landTurn();
-      camera = fit(scene.bounds, viewport, camera.bearing);
+      camera = fit(framedBounds(scene.bounds), viewport, camera.bearing);
       invalidate();
     }
     if (event.key === 'n') {
@@ -1348,7 +1387,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // Coming back out does **not** re-fit, because the flat map is where
       // spatial memory lives and a camera the player moved is theirs. The
       // asymmetry is the point, not an omission.
-      if (orbit !== null) camera = fit(scene.bounds, viewport, camera.bearing);
+      if (orbit !== null) camera = fit(framedBounds(scene.bounds), viewport, camera.bearing);
       invalidate();
     }
     if (event.key === 'Enter') {
@@ -1367,7 +1406,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   const observer = new ResizeObserver(() => {
     resize();
     if (!framed && viewport.width > 1 && viewport.height > 1) {
-      camera = fit(scene.bounds, viewport, camera.bearing);
+      camera = fit(framedBounds(scene.bounds), viewport, camera.bearing);
       framed = true;
     }
   });
@@ -1381,7 +1420,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // session learned, and ADR-0009's D1 overview. The heading is never restored
   // from the save (ADR-0011 decision 2) — it is earned again, one grade at a
   // time.
-  camera = fit(scene.bounds, viewport, NORTH);
+  camera = fit(framedBounds(scene.bounds), viewport, NORTH);
   // An arm starts *in* its view. Arriving in the flat map and being walked into
   // the other one would give every participant a look at the control condition
   // first, which is the contamination the between-subjects design exists to
@@ -1389,7 +1428,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // camera framed for the flat map puts the tallest columns off the top edge.
   if (arm === 'orbit') {
     orbit = DEFAULT_ORBIT;
-    camera = fit(scene.bounds, viewport, NORTH);
+    camera = fit(framedBounds(scene.bounds), viewport, NORTH);
   }
   if (arm === 'world') enterWorld();
   frame();

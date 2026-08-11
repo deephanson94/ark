@@ -88,6 +88,9 @@ export function keyHintFor(arm: Arm | null, view: View): string {
     parts.push(view === 'world' ? 'g map' : 'g walk');
   }
   parts.push(view === 'world' ? 'enter open' : 'enter ask');
+  // Always last and always present: it is the one control that explains the
+  // others, and a locked arm needs it more than an unlocked one.
+  parts.push('? help');
   return parts.join(' · ');
 }
 
@@ -102,7 +105,7 @@ export function keyHintFor(arm: Arm | null, view: View): string {
  * would have. A rule that lives twice diverges; this file is where it lives.
  */
 export function worldHintFor(arm: Arm | null): string {
-  const base = 'WASD move · Q/E turn · shift run · enter open';
+  const base = 'WASD move · Q/E turn · shift run · enter open · ? help';
   return arm === null ? `${base} · g map` : base;
 }
 

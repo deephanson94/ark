@@ -1866,6 +1866,88 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- help, and the chronicle on the flat map -------------------------
+    //
+    // Both are playtest findings with no assertion until now: three testers
+    // pressed `?` and got nothing, and one grid-clicked 333 nodes without ever
+    // reaching a Placement board, because the only entry point for a
+    // commit-subject question was in walk mode.
+    {
+      const aidContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const aidPage = await aidContext.newPage();
+      const aidErrors: string[] = [];
+      aidPage.on('pageerror', (error: Error) => aidErrors.push(String(error)));
+      aidPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') aidErrors.push(message.text());
+      });
+      try {
+        await aidPage.goto(url, { waitUntil: 'networkidle' });
+        await aidPage.waitForSelector('.hud-keys');
+
+        // `?` opens help, Escape closes it, and it names the channels a legend
+        // cannot carry — the assertion is on content, because an empty panel
+        // would satisfy "it opened".
+        await aidPage.keyboard.press('?');
+        await aidPage.waitForSelector('.help-panel', { timeout: 5000 });
+        const helpText = (await aidPage.locator('.help-panel').innerText()).trim();
+        for (const channel of ['colour', 'size', 'rings', 'the chronicle']) {
+          if (!helpText.includes(channel)) {
+            failures.push({ what: 'help', detail: `help does not explain "${channel}"` });
+          }
+        }
+        await aidPage.screenshot({ path: join(SHOT_DIR, 'help.png') });
+        await aidPage.keyboard.press('Escape');
+        await aidPage.waitForTimeout(150);
+        if (await aidPage.locator('.help-panel').isVisible()) {
+          failures.push({ what: 'help', detail: 'escape did not close help' });
+        }
+        process.stdout.write(`e2e: help → ${helpText.split('\n')[0] ?? ''}\n`);
+
+        // The chronicle. `f` first so the whole map — and the landmark standing
+        // outside its northern edge — is on screen, then click where the shared
+        // `chronicleAt` puts it and require a commit-subject board to open.
+        await aidPage.keyboard.press('f');
+        await aidPage.waitForTimeout(250);
+        const box = await aidPage.locator('canvas.map').boundingBox();
+        const placed = await aidPage.evaluate(() => {
+          const found = [...document.querySelectorAll('*')].length;
+          return found > 0;
+        });
+        if (box !== null && placed) {
+          // Sweep the top strip rather than computing the projection here: the
+          // camera's transform is the product's, and re-deriving it in the test
+          // is the "two implementations of one projection" defect `camera.ts`
+          // already carries a scar from.
+          let opened = '';
+          for (let row = 1; row < 10 && opened === ''; row++) {
+            for (let column = 1; column < 40 && opened === ''; column++) {
+              await aidPage.mouse.click(
+                box.x + (box.width * column) / 40,
+                box.y + (box.height * row) / 40,
+              );
+              if (await aidPage.locator('.console-panel').isVisible()) {
+                opened = (await aidPage.locator('.console-verb').innerText()).trim().toLowerCase();
+              }
+            }
+          }
+          if (opened === '') {
+            failures.push({
+              what: 'chronicle',
+              detail: 'no click along the top of the flat map opened a commit board',
+            });
+          } else if (opened !== 'placement' && opened !== 'archaeology') {
+            failures.push({ what: 'chronicle', detail: `the chronicle opened a ${opened} board` });
+          } else {
+            process.stdout.write(`e2e: the chronicle opened a ${opened} board\n`);
+          }
+          await aidPage.screenshot({ path: join(SHOT_DIR, 'chronicle.png') });
+        }
+      } finally {
+        for (const error of aidErrors) failures.push({ what: 'console', detail: error });
+        await aidContext.close();
+      }
+    }
+
     // ---- select-all buys nothing (ADR-0035) ------------------------------
     //
     // A playtester farmed a pass in two clicks: tick everything, read the

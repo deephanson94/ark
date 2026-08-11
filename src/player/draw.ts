@@ -13,7 +13,7 @@
 
 import type { NodeRef } from '../atlas/index.js';
 import type { Camera, Viewport } from './camera.js';
-import { worldToScreen } from './camera.js';
+import { chronicleAt, worldToScreen } from './camera.js';
 import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
 import type { Box, LabelCandidate, PlaceOptions, PlacedLabel } from './labels.js';
@@ -80,6 +80,13 @@ export interface FrameInput {
    * the shell drops those rather than this module guessing (ADR-0018).
    */
   readonly board: BoardMarks | null;
+  /**
+   * True when a commit-subject board is still unanswered, so the chronicle is
+   * lit. `null` would be wrong here: the landmark is drawn either way, because a
+   * place that appears only when it has something to offer is a place nobody
+   * learns where to find.
+   */
+  readonly chronicleLit: boolean;
 }
 
 /** The open board's places, and which of them are ticked. */
@@ -132,7 +139,7 @@ const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 const TIE_BOW = 0.16;
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus, board } =
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus, board, chronicleLit } =
     input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
@@ -434,6 +441,45 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     labelsDrawn += placed.length;
   }
 
+
+  // ---- the chronicle ----------------------------------------------------
+  //
+  // Where commit-subject boards are answered (ADR-0033 decision 2), and **it
+  // was in the walkable world only**. A playtester grid-clicked 333 nodes on
+  // this map, never found a Placement board, and had to read the shipped bundle
+  // to discover the entry point was behind `g` — 25% of this repo's deck and 77%
+  // of django's, reachable only by a key nothing advertised. Its position comes
+  // from `chronicleAt`, so both views put it in the same place.
+  //
+  // A diamond, because it is not a node and must not read as one. Drawn whatever
+  // the deck holds: a landmark that appears only when it has something to offer
+  // is one nobody learns the position of.
+  {
+    const at = worldToScreen(camera, viewport, chronicleAt(scene.bounds));
+    const side = 9;
+    context.beginPath();
+    context.moveTo(at.x, at.y - side);
+    context.lineTo(at.x + side, at.y);
+    context.lineTo(at.x, at.y + side);
+    context.lineTo(at.x - side, at.y);
+    context.closePath();
+    context.fillStyle = chronicleLit ? INK.subject : 'rgba(120, 132, 150, 0.55)';
+    context.fill();
+    if (chronicleLit) {
+      context.strokeStyle = INK.question;
+      context.lineWidth = 1.6;
+      context.setLineDash([2.5, 3.5]);
+      context.beginPath();
+      context.arc(at.x, at.y, side + 5, 0, Math.PI * 2);
+      context.stroke();
+      context.setLineDash([]);
+    }
+    context.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+    context.textAlign = 'center';
+    context.fillStyle = chronicleLit ? INK.text : INK.textDim;
+    context.fillText('the chronicle', at.x, at.y - side - 8);
+    context.textAlign = 'left';
+  }
 
   // ---- the open board ---------------------------------------------------
   //

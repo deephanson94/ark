@@ -3199,3 +3199,38 @@ One line per iteration: what changed, and what to do next.
   nobody noticed), the legend clips silently at 17 of 36 regions, **Placement is unreachable from
   the map** (25% of the deck, reachable only at the chronicle in walk mode), the guide serves the
   four lowest-difficulty boards first with no skip, and there is no help key. Then S1.
+
+- **Three more playtest findings closed, and the largest of them was a hole rather than a decision.**
+
+  **The chronicle is on the flat map.** ADR-0033 decision 2 gave commit-subject boards one place to be
+  answered — an obelisk outside the map's northern edge, positioned from the **bounds** so it says
+  *commits are answered here* and nothing about which files any of them touched. It existed **only in
+  the walkable world**. A playtester grid-clicked **333 nodes**, never met a Placement board, and had
+  to read the shipped bundle to discover the entry point was behind `g`: **25% of this repo's deck and
+  77% of django's**, reachable only by a key nothing advertised. `chronicleAt` now lives in
+  `camera.ts` beside `Bounds` and both views derive it, because two copies of that rule is how the two
+  places drift apart.
+
+  **The first version drew it off screen** — `fit` frames the *node* bounds and the chronicle stands
+  outside them, so it was drawn, clickable, and never visible. That is the marking-layer failure one
+  level up, and the e2e's sweep caught it: no click along the top of a fitted map opened a commit
+  board. `framedBounds` unions the landmark in.
+
+  **`?` opens help.** Three testers pressed it and got nothing; one measured **23 keys dead** before
+  concluding the product had none. It names the controls and — the half a colour legend cannot carry —
+  **what each of the map's channels means**: size, dashed outline, rings, dashed circle, ember arcs
+  and the diamond. Four of those five encodings had no explanation anywhere, and a tester guessed at
+  them and confirmed none.
+
+  **The legend says how many regions there are.** It clips at `max-height: 42vh` with
+  `pointer-events: none`, so there is no scrollbar to find and there cannot be one — the panel must
+  never eat a click meant for the map. A tester measured it showing **17 of 36**, silently, as the
+  only key to the map's primary channel. The title carries the count now and the list fades at the
+  cut, so a clipped list looks clipped.
+
+  Gated in the e2e: help must open, name four channels and close on Escape; and a click along the top
+  of a fitted flat map must open a **commit-subject** board. Both were unasserted before.
+
+  **Next**: the fog is still invisible (dashed-vs-solid outlines nobody noticed) and five regions
+  share a grey, which are the two remaining channel-legibility findings; the guide has no skip; there
+  is no keyboard pan or zoom. Then S1.
