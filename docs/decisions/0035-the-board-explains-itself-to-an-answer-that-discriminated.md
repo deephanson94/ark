@@ -199,3 +199,27 @@ unable to improve anything. That trade now has a measured cost on the other side
 of it and goes back to the owner rather than being decided here. **Until then,
 `README.md`'s Known gaps carries it**: a farmed pass is reachable in ~20 probes
 and the notebook will call it proved.
+
+### 9.2 A pass is always explained — a second amendment, from a second tester
+
+A cold tester hit **`C · 50% · passed`** beside *"Pick fewer and more carefully
+and every choice gets its reason"* **on the first two boards they were served**.
+One right and two wrong on a single-answer board is F1 0.5, which passes, and
+precision 0.33, which withheld. Two true sentences contradicting each other in
+one panel — the failure this repo keeps finding *between* two surfaces, managed
+here inside one.
+
+`grade.score >= PASS_THRESHOLD` now short-circuits the withholding. It is not a
+hole: `isGameable` refuses to ship a board select-all can pass, so every shipped
+board has `n > 3k` (select-all's F1 is `2k / (n + k)`), and a lone lucky pick on a
+four-of-twenty board scores 0.4. And a pass is the product's *own* definition of
+having understood the board, so refusing to explain one is the rule arguing with
+the grader.
+
+**It also found a board the generator would refuse.** `withhold.test.ts`'s
+fixture offered five candidates for a two-file key, where select-all scores
+**0.571 and passes** — a challenge `isGameable` would never issue. The fixture
+had been fine under the old rule and only surfaced when the pass clause landed on
+top of it. Eight candidates now, and the reason is in the comment: **a test
+fixture has to satisfy the invariants the generator enforces**, or it is asking
+about a board that cannot exist.

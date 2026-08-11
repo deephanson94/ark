@@ -74,7 +74,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // is false in both directions: the limit is absolute, so on a small repo it
     // admits a commit touching a quarter of the files and on a monorepo it
     // excludes an ordinary feature landing.
-    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} ${words.repo.many} at once are ignored — they couple everything to everything. ${keyRule(challenge)}`,
+    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} of the ${words.repo.many} on this map are ignored — they couple everything to everything. ${keyRule(challenge)}`,
     action: 'Map what changes with it',
   };
 }

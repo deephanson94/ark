@@ -3270,3 +3270,48 @@ One line per iteration: what changed, and what to do next.
   as a count, and colour cannot name a region when four share a swatch — Archaeology's `mentions`
   witness firing on stopwords (*"its message talks about “a”"*), `enter` doing nothing in the
   world 6 times of 6, and Escape silently ejecting you from it.
+
+- **Both testers came back and the ratings moved: first contact 4/10 → 7/10, the loop 5/10 → 6/10.**
+  All five verification claims came back **VERIFIED** by the cold tester, each with evidence rather
+  than assent: `?` is *"better than most shipped products'"*; the board's subject and 20 candidates are
+  marked on the map with tick state, a click on a marker toggles it, and clicking empty map or a
+  stranger node costs nothing; the chronicle was **found cold from its label** and opened a Placement
+  board; every prompt states its count and none calls a wrong pick free; and select-all yields no
+  candidate and a pristine reopened board. They also verified the arithmetic on nine grades by hand and
+  checked **138 history answer keys against `git show -M`, finding 0 violations** — their first pass
+  flagged 16 and every one was their own probe's fault.
+
+  **Two things they found that were mine, and one that was worse than it looked.**
+
+  **A board could say "passed" and "not explained here" in the same panel** — hit on the *first two
+  boards served*. One right and two wrong on a single-answer board is F1 0.5, which passes, and
+  precision 0.33, which withheld. `grade.score >= PASS_THRESHOLD` now short-circuits the withholding:
+  a pass is the product's own definition of having understood a board, so refusing to explain one is
+  the rule arguing with the grader. Safe because `isGameable` refuses to ship a board select-all can
+  pass, so every shipped board has `n > 3k`.
+
+  **That change immediately failed a test whose fixture was a board the generator would refuse** —
+  five candidates for a two-file key, where select-all scores 0.571 and *passes*. It had been fine
+  under the old rule. A fixture has to satisfy the invariants the generator enforces or it is asking
+  about a board that cannot exist; eight candidates now.
+
+  **And a sentence was false in a way `git show` settles in one command.** Companion promised
+  *"commits touching more than 25 files at once are ignored"*, and one board's answer key exists only
+  because a **42-file** commit is counted — ark caps on the files *on its map*, of which that commit
+  touched 22. Three of the 500 retained commits sit in that position. The cap is right; the sentence
+  described the wrong set. Also corrected: help sold **rings** as a count of dependents when the
+  channel is `bitLength` (both testers caught it — *"counting rings gives a number ~30× low"*), and
+  the HUD's *"24 surveyed"* on a fresh profile, which is the peaks granted for free.
+
+  **The largest finding is not fixed and is now the top of the list, with its measurement.** The
+  guide's first seven Blast Radius boards have `truth == the subject's complete set of direct
+  importers` — ranks 0–6 of 69 by difficulty, measured — and **hovering any node paints gold lines to
+  exactly that set**, which both the arrival tooltip and `?` teach you to do. It is not an accident:
+  `difficulty`'s surprise term is `|truth Δ direct-neighbours|`, so sorting ascending *selects for*
+  boards whose key is the naive guess. A newcomer's whole first session is answerable by pointing.
+  Fix candidates: require `surprise > 0` of a suggestion, or suppress the hover burst on a node whose
+  Blast Radius board is unanswered.
+
+  **Next**: that. Then the owner's call on first-attempt passes (README Known gaps), the fog, five
+  regions sharing a grey, `↯` and the difficulty pips having no legend, and `enter` doing nothing in
+  the world.

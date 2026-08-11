@@ -104,6 +104,7 @@
 
 import type { Challenge } from '../atlas/index.js';
 import type { Grade, Reveal } from './types.js';
+import { PASS_THRESHOLD } from './types.js';
 
 /**
  * The precision an answer must reach for the board to explain itself.
@@ -152,8 +153,21 @@ export function recallOf(grade: Grade, challenge: Challenge): number {
  * that "the map and the panel cannot disagree about what was just revealed".
  */
 export function asEarned(reveal: Reveal, grade: Grade, challenge: Challenge): Reveal {
+  // **A pass is always explained.** A playtester hit *"C · 50% · passed"* beside
+  // *"Pick fewer and more carefully"* on the first two boards they were served —
+  // one right and two wrong on a single-answer board is F1 0.5, which passes,
+  // and precision 0.33, which withheld. Two true sentences contradicting each
+  // other in one panel, which is the failure this repo keeps finding between two
+  // surfaces and here managed inside one.
+  //
+  // It is not a hole either: passing needs `F1 ≥ 0.5`, which select-all cannot
+  // reach (`isGameable` refuses to ship a board it could) and a lone lucky pick
+  // cannot either — 4 of 20 with one right is 0.4. And a pass is the product's
+  // own definition of having understood the board, so refusing to explain one is
+  // the rule arguing with the grader.
   const earned =
-    precisionOf(grade) >= REVEAL_PRECISION_BAR && recallOf(grade, challenge) >= REVEAL_RECALL_BAR;
+    grade.score >= PASS_THRESHOLD ||
+    (precisionOf(grade) >= REVEAL_PRECISION_BAR && recallOf(grade, challenge) >= REVEAL_RECALL_BAR);
   if (earned) return reveal;
   if (reveal.notes.length === 0) return reveal;
   return {

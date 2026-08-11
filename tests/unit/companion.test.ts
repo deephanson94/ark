@@ -277,7 +277,7 @@ describe('grading and wording', () => {
     expect(prompt.question).toContain(`${challenge.evidence.minCount} separate commit`);
     // The number, not a characterisation of it: "a large fraction of the repo"
     // is false in both directions because the limit is absolute.
-    expect(prompt.instruction).toContain('30 files');
+    expect(prompt.instruction).toContain('30 of the files on this map');
   });
 
   it('explains a grade in commits, never in hops', () => {

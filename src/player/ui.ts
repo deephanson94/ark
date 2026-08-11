@@ -588,8 +588,8 @@ export function createHelp(): { root: HTMLElement; toggle(): void; isOpen(): boo
   const channels = el('ul', 'help-keys', [
     ['colour', 'which region a file belongs to — a derived cluster, not its folder'],
     ['size', 'how many lines it holds'],
-    ['a dashed outline', 'you have not surveyed it yet'],
-    ['rings around it', 'how many files depend on it, through any chain'],
+    ['a dashed outline', 'you have not surveyed it yet — the tallest few are surveyed for you, so you have somewhere to start'],
+    ['rings around it', 'how load-bearing it is — each ring is another doubling of the files that depend on it, through any chain'],
     ['a dashed circle', 'it carries a question you have not answered'],
     ['ember arcs', 'these two files change together in the history'],
     ['the diamond', 'the chronicle — where questions about commits, rather than files, are answered'],

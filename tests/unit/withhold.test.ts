@@ -20,7 +20,25 @@ import { blastRadius } from '../../src/verbs/blastRadius/index.js';
 import { buildGraph, nodeIdFor } from '../../src/atlas/index.js';
 import { atlasWith, atlasWithChallenge, challengeFor } from '../fixtures/atlas.js';
 
-const PATHS = ['src/subject.ts', 'src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'];
+/**
+ * **Eight candidates for a two-file key, because a shipped board cannot let
+ * select-all pass.** `isGameable` refuses any challenge where selecting
+ * everything reaches the threshold, and select-all's F1 is `2k / (n + k)` — so
+ * `n > 3k` is the condition, and the five-candidate fixture this started with
+ * scored 0.571 and *passed*. It was a board the generator would never issue, and
+ * it only surfaced when "a pass is always explained" landed on top of it.
+ */
+const PATHS = [
+  'src/subject.ts',
+  'src/a.ts',
+  'src/b.ts',
+  'src/c.ts',
+  'src/d.ts',
+  'src/e.ts',
+  'src/f.ts',
+  'src/g.ts',
+  'src/h.ts',
+];
 const id = (path: string): string => nodeIdFor(path);
 
 /** `a` and `b` import the subject; `c`, `d`, `e` do not. */
@@ -34,7 +52,7 @@ function board(): {
   ]);
   const challenge = challengeFor(atlas, {
     subject: id('src/subject.ts'),
-    candidates: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'].map(id).sort(),
+    candidates: PATHS.slice(1).map(id).sort(),
     truth: [id('src/a.ts'), id('src/b.ts')].sort(),
   });
   const full = atlasWithChallenge(atlas, challenge);
@@ -55,11 +73,12 @@ describe('select-all does not buy the answer key', () => {
 
   it('is refused: no candidate is named at all, and the map is not unlocked', () => {
     // The exploit, exactly as the playtester ran it.
-    const all = ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'].map(id);
+    const all = PATHS.slice(1).map(id);
     const { grade, reveal: raw } = reveal(all);
-    // Precision here is 2/5 = 0.4, which is *above* the 0.308 maximum measured
-    // over 792 real boards and still below the bar — the margin is real.
-    expect(precisionOf(grade)).toBeCloseTo(0.4, 6);
+    // Precision 2/8 = 0.25, and F1 0.4 — below the pass threshold, which is what
+    // `isGameable` guarantees of every board that ships.
+    expect(precisionOf(grade)).toBeCloseTo(0.25, 6);
+    expect(grade.score).toBeLessThan(0.5);
     // Unfiltered, this is the leak: both answers named, with evidence.
     expect(names(raw)).toContain('src/a.ts');
     expect(names(raw)).toContain('src/b.ts');
@@ -76,7 +95,7 @@ describe('select-all does not buy the answer key', () => {
     expect(earned.unlocks).toBe('nothing');
     // The counts are stated rather than hidden: a silent absence leaves them
     // guessable off the tally anyway.
-    expect(earned.summary).toContain('3 against 2');
+    expect(earned.summary).toContain('6 against 2');
     expect(earned.summary).toContain('nothing is locked');
   });
 
@@ -86,7 +105,7 @@ describe('select-all does not buy the answer key', () => {
     // is *"those two are right"* on a five-candidate board and *"those six are"*
     // on a twenty. Asserted as a property rather than as a count, because it is
     // the property that matters: nothing names a candidate.
-    const all = ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'].map(id);
+    const all = PATHS.slice(1).map(id);
     const { grade, reveal: raw } = reveal(all);
     const earned = asEarned(raw, grade, open);
     for (const path of PATHS) expect(JSON.stringify(earned.notes)).not.toContain(path);
@@ -180,5 +199,39 @@ describe('one lucky pick does not farm the board either', () => {
     const earned = play([nodeIdFor('src/one.ts'), nodeIdFor('src/two.ts')]);
     expect(earned.notes.length).toBeGreaterThan(0);
     expect(earned.unlocks).toBe('importRadius');
+  });
+});
+
+describe('a pass is always explained', () => {
+  /**
+   * **Two true sentences contradicting each other in one panel.** A playtester
+   * hit `C · 50% · passed` beside *"Pick fewer and more carefully"* on the first
+   * two boards they were served: one right and two wrong on a single-answer
+   * board is F1 0.5, which passes, and precision 0.33, which withheld.
+   *
+   * Safe because `isGameable` refuses to ship any board select-all can pass —
+   * select-all's F1 is `2k/(n+k)`, so every shipped board has `n > 3k` — and a
+   * lone lucky pick on a four-of-twenty board scores 0.4.
+   */
+  const PATHS = ['src/only.ts', 'src/hit.ts', 'src/miss-a.ts', 'src/miss-b.ts', 'src/miss-c.ts'];
+  const atlas = atlasWith(PATHS, [['src/hit.ts', 'src/only.ts']]);
+  const challenge = challengeFor(atlas, {
+    subject: nodeIdFor('src/only.ts'),
+    candidates: PATHS.slice(1).map(nodeIdFor).sort(),
+    truth: [nodeIdFor('src/hit.ts')],
+  });
+  const full = atlasWithChallenge(atlas, challenge);
+  const graph = buildGraph(full);
+
+  it('explains a passing answer even when its precision is below the bar', () => {
+    const picked = ['src/hit.ts', 'src/miss-a.ts', 'src/miss-b.ts'].map(nodeIdFor);
+    const grade = blastRadius.grade(challenge, { picked });
+    expect(grade.score).toBeCloseTo(0.5, 6);
+    expect(precisionOf(grade)).toBeCloseTo(1 / 3, 6);
+    const earned = asEarned(blastRadius.reveal(full, graph, challenge, grade), grade, challenge);
+    // Passed, so the panel must not also tell them to pick more carefully.
+    expect(earned.notes.length).toBeGreaterThan(0);
+    expect(earned.summary).not.toContain('Pick fewer');
+    expect(earned.summary).not.toContain('too thin');
   });
 });
