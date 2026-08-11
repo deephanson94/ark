@@ -2079,6 +2079,159 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- the first graded attempt is the one that counts (ADR-0035 §10) ----
+    //
+    // Withholding the reveal stopped the product *handing* the key over; it did
+    // not stop a player extracting it, and §9.1 says why no reveal policy can —
+    // the grade line is itself an oracle (`Found 1 of 4` after a single pick says
+    // whether that pick was in the key) and guardrail 6 makes each probe free by
+    // design. So the *pass* is what moves, and nothing else does.
+    //
+    // A browser step and not a unit one, for a reason the mutation run made
+    // explicit: `applyGrade`'s half dies to three mutants in `tests/unit`, and
+    // the two surfaces that make the rule *honest to a player* — the sentence on
+    // a spent board, and the guide's attempt counts seeded from the record —
+    // live in `challenge.ts` and `main.ts`, where no unit test reaches. Deleting
+    // the seed reddened nothing under `tests/unit`. That is the gap this closes.
+    //
+    // The probe is a **select-all**, which is the one answer `isGameable`
+    // guarantees cannot pass on any shipped board. So the board is certainly
+    // still unanswered afterwards and its attempt is certainly spent, which is
+    // exactly the state the rule is about — no branch here depends on what the
+    // deck happened to serve.
+    {
+      const farmContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const farmPage = await farmContext.newPage();
+      const farmErrors: string[] = [];
+      farmPage.on('pageerror', (error: Error) => farmErrors.push(String(error)));
+      farmPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') farmErrors.push(message.text());
+      });
+      /** `N left · next is PATH` — the guide names its suggestion by path. */
+      const suggestion = async (): Promise<{ left: number; caption: string }> => {
+        const caption = rendered((await farmPage.locator('.guide-caption').innerText()).trim());
+        return { left: Number(/^(\d+) left/.exec(caption)?.[1] ?? '0'), caption };
+      };
+      try {
+        // A fresh save, because the whole point is what the *first* answer does.
+        await farmPage.goto(url, { waitUntil: 'networkidle' });
+        await farmPage.waitForSelector('.guide-action');
+        const before = await suggestion();
+        await farmPage.locator('.guide-action').click();
+        await farmPage.waitForTimeout(400);
+        if (!(await farmPage.locator('.console-panel').isVisible())) {
+          await farmPage.keyboard.press('Enter');
+        }
+        await farmPage.waitForSelector('.choice-button', { timeout: 5000 });
+        // **The rule is stated before the answer, not after it.** A player who
+        // learns it from its consequence has been tricked, and `keyRule` is the
+        // only surface a fresh board has for saying so.
+        const fresh = rendered((await farmPage.locator('.console-panel').innerText()).trim());
+        if (!fresh.includes('first answer')) {
+          failures.push({
+            what: 'first attempt',
+            detail: 'a fresh board never says the first answer is the one that counts',
+          });
+        }
+        if (fresh.includes('answered this board before')) {
+          failures.push({
+            what: 'first attempt',
+            detail: 'a fresh board claims it has already been answered',
+          });
+        }
+        for (const button of await farmPage.locator('.choice-button').all()) await button.click();
+        await farmPage.locator('.console-submit').click();
+        await farmPage.waitForSelector('.console-score', { timeout: 5000 });
+        const band = rendered((await farmPage.locator('.console-score').innerText()).trim());
+        // The control for everything below: select-all must not have passed, or
+        // the board leaves the deck and the assertions measure `answered`
+        // instead of the rule. `isGameable` promises this; asserting it is what
+        // stops a generator change turning this whole step vacuous.
+        if (!band.includes('not yet')) {
+          failures.push({
+            what: 'first attempt',
+            detail: `select-all scored "${band}" — a board isGameable should have refused`,
+          });
+        }
+        await farmPage.locator('.console-footer .console-submit').click();
+        await settle();
+
+        // **Reopen the *same* board, in the same session.** The graded subject is
+        // still selected, so `Enter` — the ask key — serves its bucket again, and
+        // the board is certainly still in it because select-all cannot pass. The
+        // first draft did this after the reload and could not: a reload selects
+        // nothing, so the inspector was empty and the step reported a missing
+        // control rather than a missing sentence. Never reach for a door the
+        // shell has not opened.
+        await farmPage.keyboard.press('Enter');
+        await farmPage.waitForTimeout(400);
+        const reopened = await (async (): Promise<boolean> => {
+          if (await farmPage.locator('.console-panel').isVisible()) return true;
+          // A placeless subject (a Placement commit) leaves nothing selected, so
+          // the inspector is the other door. Tried rather than predicted.
+          for (const button of await farmPage.locator('.inspector-action').all()) {
+            if (await button.isVisible()) {
+              await button.click();
+              await farmPage.waitForTimeout(300);
+              if (await farmPage.locator('.console-panel').isVisible()) return true;
+            }
+          }
+          return false;
+        })();
+        if (!reopened) {
+          // Saying so beats passing quietly: the assertions below are the point
+          // of the step and an absent panel makes all of them vacuous.
+          failures.push({
+            what: 'first attempt',
+            detail: `could not reopen the spent board (guide said "${before.caption}")`,
+          });
+        } else {
+          const spent = rendered((await farmPage.locator('.console-panel').innerText()).trim());
+          // **The spent board says so before the second answer**, which is the
+          // surface no unit test reaches. It is the same board — same subject,
+          // still unanswered — so this is not a claim about what the shell chose.
+          if (!spent.includes('answered this board before')) {
+            failures.push({
+              what: 'first attempt',
+              detail: `a spent board does not say so: "${spent.slice(0, 200)}"`,
+            });
+          }
+          // Guardrail 6: the notebook keeps one answer; the board is not closed.
+          if (!spent.toLowerCase().includes('nothing is locked')) {
+            failures.push({
+              what: 'first attempt',
+              detail: 'a spent board does not say it is still open — guardrail 6',
+            });
+          }
+          await farmPage.screenshot({ path: join(SHOT_DIR, 'first-attempt.png') });
+          await farmPage.keyboard.press('Escape');
+          await farmPage.waitForTimeout(200);
+        }
+
+        // **Then the reload**, which is the half only this step can see.
+        // `attempts` is session state; the farm it stops is not a within-session
+        // trick — probe today, come back tomorrow — so the record has to carry it
+        // across a reload and `main.ts` has to seed the ranking from it.
+        await farmPage.reload({ waitUntil: 'networkidle' });
+        await farmPage.waitForSelector('.guide-action');
+        await farmPage.waitForTimeout(300);
+        const after = await suggestion();
+        if (after.left > 1 && after.caption === before.caption) {
+          failures.push({
+            what: 'first attempt',
+            detail: `after a reload the guide still offers the spent board (${after.caption})`,
+          });
+        }
+        process.stdout.write(
+          `e2e: select-all → ${band}; reopened board ${reopened ? 'states the rule' : 'MISSING'}; ` +
+            `guide "${before.caption}" → after reload "${after.caption}"\n`,
+        );
+      } finally {
+        for (const error of farmErrors) failures.push({ what: 'console', detail: error });
+        await farmContext.close();
+      }
+    }
+
     // ---- the experiment arms (docs/experiments/0001 §4.2) ----------------
     //
     // `?arm=` is the only thing making experiment 0001's between-subjects

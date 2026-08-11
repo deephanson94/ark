@@ -1,7 +1,9 @@
 # ADR-0035 — The board explains itself to an answer that discriminated
 
-- **Status**: **accepted, built, and amended the same day — §3's second bullet was false and a
-  playtester farmed the deck through it.** See §9.
+- **Status**: **accepted, built, and amended twice the same day.** §3's second
+  bullet was false and a playtester farmed the deck through it (§9); and §7's
+  first rejected alternative is now the decision, because no reveal policy can
+  close what §9.1 describes (§10).
 - **Date**: 2026-08-11
 - **Decided by**: the owner, from three options put with their costs.
 - **Bears on**: NORTH-STAR §9 (field notes claim only what was proved), guardrail 6
@@ -132,11 +134,14 @@ is reachable by picking **fewer** things, which is the behaviour the board wants
 
 ## 7. Alternatives rejected
 
-- **Record the first attempt's score as the pass.** Smaller, and touches
-  ADR-0011's save rather than the reveal. Rejected by the owner: it makes a retry
-  pointless, which cuts against guardrail 6's spirit more than withholding does —
-  a retry that cannot improve anything is closer to a lockout than a reveal that
-  declines to explain.
+- ~~**Record the first attempt's score as the pass.**~~ **NO LONGER REJECTED —
+  this is now the decision, see §10.** Smaller, and touches ADR-0011's save
+  rather than the reveal. Rejected here by the owner: it makes a retry pointless,
+  which cuts against guardrail 6's spirit more than withholding does — a retry
+  that cannot improve anything is closer to a lockout than a reveal that declines
+  to explain. §9.1 then showed that withholding *cannot* close the farm on its
+  own, and §10.1 shows the objection was narrower than it read: a retry keeps the
+  reveal, the map unlock and the fog, and loses one notebook entry.
 - **Accept it.** NORTH-STAR §7.1 argues this way about `truth` sitting in the
   atlas in plaintext (*"anyone who opens devtools to cheat has opted out"*). It
   does not transfer: this is not devtools, it is the UI's own affordance, and the
@@ -196,9 +201,9 @@ a pass proof of understanding, which is what NORTH-STAR §9 wants of a field not
 **The only thing that closes that is recording the pass from the first attempt** —
 the alternative §7 rejected on the owner's instruction, because it makes a retry
 unable to improve anything. That trade now has a measured cost on the other side
-of it and goes back to the owner rather than being decided here. **Until then,
-`README.md`'s Known gaps carries it**: a farmed pass is reachable in ~20 probes
-and the notebook will call it proved.
+of it and goes back to the owner rather than being decided here.
+
+**It went back, and the owner reversed §7. See §10 — this is built.**
 
 ### 9.2 A pass is always explained — a second amendment, from a second tester
 
@@ -223,3 +228,103 @@ had been fine under the old rule and only surfaced when the pass clause landed o
 top of it. Eight candidates now, and the reason is in the comment: **a test
 fixture has to satisfy the invariants the generator enforces**, or it is asking
 about a board that cannot exist.
+
+---
+
+## 10. Amendment, same day: the pass is decided by the first graded attempt
+
+- **Status**: accepted and built. **This reverses §7's first rejected
+  alternative**, on the owner's instruction, after §9.1 measured the other side
+  of the trade it was rejected on.
+
+§9.1 is the argument and it is short: **the grade line is itself an oracle**.
+`Found 1 of 4` after a single pick says whether that pick was in the key, a
+non-zero score says the same, and guardrail 6 makes each probe free *by design*.
+Partial credit over a set **is** a Mastermind oracle, so a determined player
+establishes the whole key in one probe per candidate — ~20 on a standard board —
+whatever the reveal does. No reveal policy can close that, which is why §2's rule
+was never going to be enough on its own.
+
+So `Progress.attempted` records the `(verb, subject)` keys that have been graded
+at least once, and `applyGrade` writes a pass **only on the first**. Everything
+else is untouched: the score, the reveal (ADR-0035 §9.2 explains any passing
+answer), `unlocks`, the map's radius, `surveyed`, and the board's own
+availability.
+
+### 10.1 Why this is not guardrail 6's lockout, and where the tension really is
+
+Guardrail 6 is *"no score penalty, no fail state, no lockout"*, and this is none
+of the three: the board opens, the picks tick, the grade computes, the reveal
+fires, the cone draws. What changes is what the **notebook** records.
+
+§7 rejected this on the owner's instruction, in these words: *"it makes a retry
+pointless, which cuts against guardrail 6's spirit more than withholding does."*
+That objection is real and it is **narrower than it reads** — a retry keeps the
+reveal, which the same tester who found the exploit called the best thing in the
+product, and it keeps the map unlock and the `surveyed` half of the fog. What it
+loses is one field-note entry. Against that: without the rule, **every** field
+note is obtainable in ~20 free probes, and NORTH-STAR §9 says the
+proved-versus-shown distinction *is* the product. A notebook that certifies
+persistence is worth less than one that certifies nothing, because it claims to
+certify understanding.
+
+The honest summary is a trade between two readings of guardrail 6, and the owner
+took the one that keeps the notebook true.
+
+### 10.2 The rule is stated before the answer, twice
+
+**A rule the player learns from its consequence is a trap**, and this one is
+invisible until it has already cost something. Two surfaces:
+
+- `keyRule` — every verb's prompt, every board: *"Your first answer is the one
+  your notebook keeps; nothing is locked either way."* The second clause is
+  guardrail 6 and is literally true of the code beside it.
+- `challenge.ts`'s `REANSWER_LINE`, on a board that is already spent, **before
+  the answer and again beside the grade**. The second placement is not
+  decoration: without it a retry can read `S · 100% · exact` over a notebook that
+  records nothing, which is two true surfaces contradicting each other — the
+  failure §9.2 was the amendment for, and the one this repo keeps finding
+  *between* two states.
+
+`wording.test.ts` holds the first and `test:e2e` holds the second, because the
+sentence is the whole mitigation for §10.1's cost.
+
+### 10.3 What the mutation run found, and it is the reason there is an e2e step
+
+Three mutants of `applyGrade` die under `tests/unit`: dropping the `first`
+clause, recording the attempt before reading it (the off-by-one whose comment
+sits in that function), and keying `attempted` on the subject alone. Four more
+die in `save.ts` — the field has to *persist*, because the farm is not a
+within-session trick.
+
+**A fifth mutant survived everything.** `main.ts` seeds the selector's attempt
+counts from `progress.attempted` at load, because the guide's outermost rank key
+is `attempts` and a restored session that starts them at zero opens by offering
+the one board in the deck with nothing left to give. Deleting the seed reddened
+**no test under `tests/unit`** — it is shell wiring, and no unit test reaches it.
+That is what the e2e step is for, and it is the same lesson as this repo's
+*count how many times the branch fires*: the unit suite covering three quarters
+of a rule looks exactly like a unit suite covering it.
+
+The e2e probes with a **select-all**, which is the one answer `isGameable`
+guarantees cannot pass on a shipped board — so the board is certainly still
+unanswered and its attempt certainly spent, and no branch of the step depends on
+what the deck happened to serve. It asserts the *reload*, which is the only place
+the seed is distinguishable from `noteAttempt`.
+
+### 10.4 What is still not closed
+
+**The score line still tells a probing player whether a pick was in the key**,
+and it must: a player who cannot see why they scored what they scored has been
+handed a verdict, which is the defect `howScored` exists to fix. So the oracle is
+not removed, it is **made worthless** — running it now costs the board's pass, so
+the information it yields buys a better *reading* of the board and never a
+notebook entry.
+
+**And nothing measures how often an honest player wants a second attempt.** That
+is the same gap §8 records: attempts are session state and nothing persists a
+*count*, only the fact. The number to want is *what fraction of boards a
+first-time player would pass on a second try* — if it is large, §10.1's cost is
+larger than argued here, and the mitigation to reach for is a better first
+attempt (a clearer prompt, a cheaper way to look around before committing)
+rather than a second pass.

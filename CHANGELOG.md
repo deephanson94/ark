@@ -3315,3 +3315,54 @@ One line per iteration: what changed, and what to do next.
   **Next**: that. Then the owner's call on first-attempt passes (README Known gaps), the fog, five
   regions sharing a grey, `↯` and the difficulty pips having no legend, and `enter` doing nothing in
   the world.
+
+- **The tour stops opening with the boards the map already answers, and a pass is earned once.** Two
+  fixes, both from the same cold playtest, both about the first twenty minutes teaching the graph
+  rather than teaching a trick.
+
+  **Map-answerable boards are reordered, not refused.** Hovering a node paints gold lines to every
+  direct importer (ADR-0008 decision 1, deliberately), so a board whose `truth` *is* that set is
+  answerable by pointing. Measured on clean clones: **7 of graphql-js's 69 Blast Radius boards, 6 of
+  kysely's 75, 13 of hono's 54, 5 of ark's 40 — and every one among the ten easiest**, so ascending
+  difficulty served the whole opening run from exactly that set. `gate.ts` declines to refuse the
+  guess for a stated reason (§8.4 prices it; the progression needs easy rungs), so the lever is the
+  *order*: `Rank.naive` above difficulty, below tier. The mutant that ranks it below difficulty dies.
+
+  **And the pass now comes from the first graded attempt** ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
+  §10, the owner reversing that document's own §7). §9.1's argument is why withholding the reveal was
+  never going to be enough on its own: the grade line **is** a Mastermind oracle — `Found 1 of 4`
+  after one pick says whether that pick was in the key — and guardrail 6 makes each probe free by
+  design, so ~20 probes bought a pass and a field note reading *"You proved…"* whatever the reveal
+  did. `Progress.attempted` is on the record and `applyGrade` writes a pass only the first time.
+  Everything else is untouched: score, reveal, `unlocks`, the map radius, `surveyed`, and the board's
+  own availability — so this is not guardrail 6's lockout, it is one notebook entry against every
+  notebook entry being free.
+
+  **Two surfaces state it before the answer**, because a rule learned from its consequence is a trap:
+  `keyRule` on every board (*"Your first answer is the one your notebook keeps; nothing is locked
+  either way"*) and `challenge.ts`'s `REANSWER_LINE` on a spent one, **before the answer and again
+  beside the grade** — without the second, a retry reads `S · 100% · exact` over a notebook that
+  records nothing, which is the two-true-surfaces failure §9.2 was already an amendment for.
+
+  **The mutation run is the finding worth keeping.** Five mutants die under `tests/unit` — dropping
+  the `first` clause, recording the attempt before reading it, keying `attempted` on the subject
+  alone, and two in `save.ts` (the field has to *persist*, since the farm is not a within-session
+  trick). A **sixth survived everything**: `main.ts` seeds the selector's attempt counts from
+  `progress.attempted` at load, because `attempts` is the guide's outermost rank key and a restored
+  session starting them at zero opens by offering the one board with nothing left to give. Deleting
+  the seed reddened **no unit test at all** — it is shell wiring. Hence a `test:e2e` step that probes
+  with a **select-all** (the one answer `isGameable` guarantees cannot pass, so no branch depends on
+  what the deck served) and asserts across a **reload**, which is the only place the seed is
+  distinguishable from `noteAttempt`. A unit suite covering three quarters of a rule looks exactly
+  like one covering it.
+
+  Also: `progress.test.ts`'s *"stores no understood set"* enumerated every field, so adding
+  `attempted` reddened it — and the **stricter assertion was the suspect**, not the code. ADR-0011
+  decision 2's rule is *`understood` is never stored*; a key list is a claim the contract never made.
+  This repo's own landmine, arriving on its own suite.
+
+  **Next**: run `docs/experiments/0001` (owner-only: twelve participants). Then the hold-out split
+  script and M2's attempt instrumentation, which §10.4 now also needs — nothing measures how often an
+  honest player wants a second try, and that number is what prices the rule above. Then the fog
+  channel with no explanation, five regions sharing a grey, the guide's missing skip, and no keyboard
+  pan or zoom.

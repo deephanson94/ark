@@ -256,3 +256,56 @@ describe('a commit subject survives a round trip', () => {
     expect(parseProgress(JSON.stringify(surveyed)).surveyed).toEqual(['n:0123456789ab']);
   });
 });
+
+/**
+ * `attempted` — the field that makes the first-attempt rule survive a reload
+ * (ADR-0035 §10).
+ *
+ * It has to persist, and that is the only reason it is on the record at all: the
+ * farm the rule closes is not a within-session trick. Probe a board today, come
+ * back tomorrow with the answer, and a session-scoped counter has forgotten. So
+ * this is the file where the rule either holds or quietly does not.
+ */
+describe('attempted survives a round trip', () => {
+  it('keeps the keys a session spent, so tomorrow’s retry is still a retry', () => {
+    const spent = { ...EMPTY_PROGRESS, attempted: ['blastRadius\nn:000000000001'] };
+    const back = memoryStore();
+    saveProgress(back, 'ark:x', spent);
+    expect(loadProgress(back, 'ark:x').attempted).toEqual(spent.attempted);
+  });
+
+  /**
+   * **Absent means empty, and the direction matters.** A record written before
+   * this field existed must parse to *no* boards spent, so every one of them is
+   * still passable. The other reading — unknown means spent — would void a
+   * player's whole deck on upgrade, which is the failure this file's three other
+   * comments describe from the other side.
+   */
+  it('treats a save written before the field as having spent nothing', () => {
+    const legacy = { version: SAVE_VERSION, surveyed: [], passes: [] };
+    expect(parseProgress(JSON.stringify(legacy)).attempted).toEqual([]);
+  });
+
+  it('is sorted and unique, so the same record serialises the same bytes', () => {
+    const messy = {
+      version: SAVE_VERSION,
+      surveyed: [],
+      passes: [],
+      attempted: ['companion\nn:b', 'blastRadius\nn:a', 'companion\nn:b'],
+    };
+    expect(parseProgress(JSON.stringify(messy)).attempted).toEqual([
+      'blastRadius\nn:a',
+      'companion\nn:b',
+    ]);
+  });
+
+  it('drops junk rather than trusting it, like everything else here', () => {
+    const junk = {
+      version: SAVE_VERSION,
+      surveyed: [],
+      passes: [],
+      attempted: ['blastRadius\nn:a', 42, null, { verb: 'x' }],
+    };
+    expect(parseProgress(JSON.stringify(junk)).attempted).toEqual(['blastRadius\nn:a']);
+  });
+});

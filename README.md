@@ -163,6 +163,8 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | The board on the map | ✅ | Opening a challenge marks its **subject** and every placeable **candidate** on the map, with the tick state, and a click on a marker answers the board. The panel is docked and the scrim pointer-transparent, so the map stays readable and clickable — it used to be a dimmed, unmarked backdrop that discarded the board when clicked. **No edge is drawn between subject and candidate**: that relation is the answer and stays gated on `subjectsPassed` (ADR-0008). Half a deck's ids have no place (a Placement subject, an Archaeology candidate) and are dropped rather than positioned. |
 | Help, and the chronicle on the map | ✅ | **`?` opens help** — three testers pressed it and got nothing, and one measured 23 dead keys before concluding there was none. It names the controls and the map's channels, which is the half a colour legend cannot carry. And **the chronicle is on the flat map now**, clickable: ADR-0033 put it in the world only, so a quarter of this repo's deck and 77% of django's was reachable only behind a key nothing advertised. One `chronicleAt`, shared by both views, and `framedBounds` so `fit` actually shows it. |
 | A reveal is earned | ✅ | Below **0.5 precision** — *more of your picks were wrong than right* — the reveal names no candidate and the map unlock is withheld with it ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)). Closes the two-click farm a playtester found: select-all → read the annotated key → reopen → 100% and a field note. Select-all's precision is bounded at ≈1/3 by ADR-0007's choice set (**max 0.308 over 792 boards**), so the bar has 1.6× margin; precision 1.0 with low recall — the teaching moment — is untouched and is unfarmable by construction. |
+| The tour does not open with the boards the map answers | ✅ | Hovering a node paints gold lines to every direct importer (ADR-0008 decision 1, deliberately), so a board whose `truth` **is** that set is answerable by pointing. Measured at `9cae1c4`: **7 of graphql-js's 69, 6 of kysely's 75, 13 of hono's 54 and 5 of ark's 40** — and **every one is among the ten easiest**, so ascending difficulty served a newcomer's whole first session from exactly that set. `gate.ts` declines to *refuse* the guess for a stated reason (§8.4 already prices it, and the progression needs easy rungs), so the fix is the **order**: `Rank.naive` sits above difficulty and below tier. They stay reachable by clicking the node, and by the guide once the rest are done. |
+| A pass is earned once | ✅ | **A board's pass is decided by its first graded attempt** ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md) §10, reversing its own §7 on the owner's instruction). Withholding the reveal stops the product *handing* the key over; it cannot stop a player extracting it, because the grade line is a Mastermind oracle — `Found 1 of 4` after one pick says whether that pick was in the key — and guardrail 6 makes each probe free by design. So the *pass* is what moves and nothing else does: score, reveal, map unlock, `surveyed` and the board's availability are untouched. **Stated before the answer, twice** (`keyRule` on every board, `REANSWER_LINE` on a spent one), because a rule learned from its consequence is a trap. Five mutants die under `tests/unit`; a sixth — deleting the guide's seeded attempt counts — dies only under `test:e2e`, which is why there is a step for it. |
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
 | Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
@@ -186,22 +188,23 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `docs/prior-art.md` §2, and **no further polish can settle it**: it is what
   `docs/experiments/0001` measures, and that is unrun.
 - **What those three found that is still open.** Fixed at `HEAD`: the three false sentences, the
-  inert map, the select-all exploit, the missing help key, the legend's silent clipping and
-  Placement's unreachability. **Still open**: the **fog is dashed-vs-solid outlines** and no tester
-  noticed it existed, which is the last of the map's five channels with no explanation a player can
-  see; five of the legend's regions render as the same grey, because the palette runs out before 36
-  regions do; the guide **serves the four lowest-difficulty boards first** — measured as the exact
-  four lowest of 69 — and has no skip; and there is **no keyboard pan or zoom** (23 keys measured
-  dead). Each carries the measurement that found it in this session's `CHANGELOG.md` entries.
-- **A pass is still farmable in about twenty probes, and the notebook will call it proved.** The
-  grade line is an oracle no reveal policy can close: `Found 1 of 4` after a single pick says whether
-  that pick was in the key, and guardrail 6 makes each probe free by design. ADR-0035 closes the
-  *handover* — select-all and one-lucky-pick both get nothing — and a playtester's measured 4.1 probes
-  per board becomes ~20, teaching nothing on the way. **What it does not do is make a pass proof of
-  understanding**, which is what NORTH-STAR §9 asks of a field note. The only thing that closes it is
-  recording the pass from the **first attempt**, which the owner rejected because it makes a retry
-  unable to improve anything ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
-  §7, §9.1). That trade now has a measurement on both sides and is the owner's to re-take.
+  inert map, the select-all exploit, the missing help key, the legend's silent clipping,
+  Placement's unreachability, the farmable pass, and the opening run of map-answerable boards.
+  **Still open**: the **fog is dashed-vs-solid outlines** and no tester noticed it existed, which is
+  the last of the map's five channels with no explanation a player can see; five of the legend's
+  regions render as the same grey, because the palette runs out before 36 regions do; the guide has
+  **no skip**, so the only way past a suggestion is to answer it or ignore the button (its *ordering*
+  is fixed — see the row above — but the tester's other half of that finding is not); and there is
+  **no keyboard pan or zoom** (23 keys measured dead). Each carries the measurement that found it in
+  this session's `CHANGELOG.md` entries.
+- **Nothing measures how often an honest player wants a second attempt**, and since the pass is now
+  decided by the first one, that number is what prices the rule's cost
+  ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
+  §10.4). Attempts are session state: the record keeps *that* a board was graded, never *how often*,
+  so the figure to want — what fraction of boards a first-time player would pass on a second try —
+  needs the same instrumentation `docs/experiments/0001` §3 is missing. If it is large, the fix is a
+  better *first* attempt (a clearer prompt, a cheaper way to look around before committing) rather
+  than a second pass, and the argument in §10.1 is weaker than it reads.
 - **Nothing has measured whether the walkable world teaches better, and it now exists.**
   `docs/experiments/0001` is **designed, runnable and unrun**, so ADR-0033 ships the world as a mode
   and the flat map stays the arrival state. Its three structural blockers closed at `HEAD`: the

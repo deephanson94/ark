@@ -399,9 +399,28 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * over a third of a deck nobody had played.
    */
   let openQuestions = 0;
-  // Session-scoped, never persisted: ADR-0011 decision 2 forbids storing a
-  // cursor, and a position in the rotation is a cursor.
-  let selector: SelectorState = NO_HISTORY;
+  /**
+   * The rotation is session-scoped — ADR-0011 decision 2 forbids storing a
+   * cursor, and a position in a rotation is a cursor — but its **attempt counts
+   * are seeded from the record**, and that is not the same thing.
+   *
+   * Since ADR-0035 §10 a board's pass is decided by its first graded attempt, so
+   * a board already graded in an *earlier* session can never be passed again.
+   * Left at zero, the guide would rank those boards first — fewest attempts is
+   * its outermost key — and open every restored session by offering the one
+   * question in the deck that has nothing left to give. `attempts` is what
+   * "already tried" means to the ranking; `attempted` is what it means to the
+   * record; seeding is the same fact reaching the same consumer, not a stored
+   * cursor.
+   *
+   * Every key seeds at 1: what the rank needs is *tried at all* versus *fresh*,
+   * and the record does not count repeats (nor should it — the second attempt
+   * changes nothing).
+   */
+  let selector: SelectorState = {
+    ...NO_HISTORY,
+    attempts: new Map(progress.attempted.map((key) => [key, 1])),
+  };
   const retally = (): void => {
     // Derived from the record, not tracked alongside it, so a restored session
     // starts with the deck it left with — and a pass whose claim has decayed
@@ -449,7 +468,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     return ref === undefined ? null : (scene.atlas.nodes[ref]?.region ?? null);
   };
   const nextUp = (): Challenge | null =>
-    suggestNext(scene.atlas.challenges, regionOf, selector);
+    suggestNext(scene.atlas.challenges, regionOf, selector, answeredByTheMap);
 
   /**
    * How far a node's radius may be drawn.
@@ -512,6 +531,33 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * no `layout` should land here rather than silently vanish from the world,
    * which is the *subject-is-not-a-node* landmine met with the lesson learned.
    */
+  /**
+   * Boards whose answer key is exactly what hovering the subject already draws.
+   *
+   * Computed once: it is a property of the atlas, not of the session. See
+   * `selector.ts`'s `Rank.naive` for the measurement and why the fix is the
+   * order rather than the deck.
+   *
+   * Only Blast Radius can be in it — it is the one verb graded on the relation
+   * the map draws. Asking the question of a Companion or a commit board would be
+   * comparing a co-change key against an import ring.
+   */
+  const answeredByTheMap: ReadonlySet<string> = (() => {
+    const found = new Set<string>();
+    for (const challenge of scene.atlas.challenges) {
+      if (challenge.verb !== 'blastRadius') continue;
+      const ref = scene.graph.refById.get(challenge.subject);
+      if (ref === undefined) continue;
+      const direct = scene.graph.in[ref] ?? [];
+      if (direct.length !== challenge.truth.length) continue;
+      const truth = new Set(challenge.truth);
+      if (direct.every((edge) => truth.has(scene.nodes[edge.from]?.id ?? ''))) {
+        found.add(challenge.id);
+      }
+    }
+    return found;
+  })();
+
   const nextPlacelessChallenge = (): Challenge | null => {
     const open = scene.atlas.challenges.filter(
       (challenge) =>
@@ -611,12 +657,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // history is updated here and nowhere else: a map-click answer shapes the
       // next suggestion exactly as a suggested one does, because a byte-identical
       // answer key is felt the same however the question arrived.
+      // **Counted against what the record did, not against what the score was.**
+      // This read `progression.unlocked`, which is the *score* channel — and
+      // since ADR-0035 §10 a high score on a retry unlocks the map and records no
+      // pass, so the board stays in the deck with its attempt count frozen and
+      // the guide keeps offering it ahead of fresher ones. `answered` is the set
+      // `retally()` just rebuilt from the record, which is the question actually
+      // being asked here: is this board still open?
+      const graded = answerKey(challenge.verb, challenge.subject);
       selector = {
         ...selector,
         previous: challenge,
-        attempts: progression.unlocked
+        attempts: selector.answered.has(graded)
           ? selector.attempts
-          : noteAttempt(selector.attempts, answerKey(challenge.verb, challenge.subject)),
+          : noteAttempt(selector.attempts, graded),
       };
       const ref = scene.graph.refById.get(challenge.subject);
       if (ref !== undefined) {
@@ -651,6 +705,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       turnPending = true;
       describe(selected);
       invalidate();
+    },
+    // The record is the authority, not the session: a board graded three
+    // sessions ago has spent its attempt exactly as one graded a minute ago has,
+    // and `attempted` is the only thing that knows (ADR-0035 §10).
+    attempted(challenge) {
+      return progress.attempted.includes(answerKey(challenge.verb, challenge.subject));
     },
     onClose() {
       if (turnPending) {

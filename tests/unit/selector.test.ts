@@ -16,9 +16,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
+import { nodeIdFor } from '../../src/atlas/index.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
-import { witnessFor } from '../fixtures/atlas.js';
+import { atlasWith, challengeFor, witnessFor } from '../fixtures/atlas.js';
 
 const id = (n: number): NodeId => `n:${n.toString(16).padStart(12, '0')}`;
 
@@ -312,5 +313,124 @@ describe('a wrong answer rotates rather than repeats', () => {
     });
     expect(next?.id).toBe('blast-fresh');
     regions.clear();
+  });
+});
+
+describe('the tour does not open with the boards the map already answers', () => {
+  /**
+   * **Hovering a node paints gold lines to every direct importer** (ADR-0008
+   * decision 1, on purpose), so a board whose truth *is* that set is answerable
+   * by pointing. Measured across four repos, such boards are 8–24% of the Blast
+   * Radius deck and **every one of them is among the ten easiest** — so ascending
+   * difficulty served a newcomer's entire first session from exactly that set. A
+   * cold playtester found it and called it the difference between a first session
+   * that teaches the graph and one that teaches you to point at it.
+   *
+   * `gate.ts` declines to *refuse* this guess, for a stated reason: §8.4 already
+   * prices it and the progression needs easy rungs. So this asserts the fix that
+   * was taken — the order — and not the one that was not.
+   */
+  const atlas = atlasWith(
+    ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts', 'src/f.ts'],
+    [],
+  );
+  const easyButNaive = challengeFor(atlas, {
+    id: 'blast-naive',
+    difficulty: 0.03,
+    subject: nodeIdFor('src/a.ts'),
+    candidates: ['src/b.ts', 'src/c.ts', 'src/d.ts'].map(nodeIdFor).sort(),
+    truth: [nodeIdFor('src/b.ts')],
+  });
+  const harder = challengeFor(atlas, {
+    id: 'blast-real',
+    difficulty: 0.61,
+    subject: nodeIdFor('src/e.ts'),
+    candidates: ['src/b.ts', 'src/c.ts', 'src/d.ts'].map(nodeIdFor).sort(),
+    truth: [nodeIdFor('src/c.ts')],
+  });
+  const deck = [easyButNaive, harder];
+  const anywhere = (): string | null => null;
+
+  it('offers the board the map cannot answer first, even though it is harder', () => {
+    const picked = suggestNext(deck, anywhere, NO_HISTORY, new Set(['blast-naive']));
+    expect(picked?.id).toBe('blast-real');
+  });
+
+  it('still offers it once nothing else is left — the deck is not narrowed', () => {
+    // The boards are legitimately easy questions and `gate.ts` keeps them; what
+    // changed is when they are served. Withdrawing them instead would be the
+    // refusal that document declines to make.
+    const state = { ...NO_HISTORY, answered: new Set([answerKey('blastRadius', harder.subject)]) };
+    const picked = suggestNext(deck, anywhere, state, new Set(['blast-naive']));
+    expect(picked?.id).toBe('blast-naive');
+  });
+
+  it('orders by difficulty as before when neither is map-answerable', () => {
+    // The control: without the set, ascending difficulty is unchanged, so this
+    // ranking term cannot be quietly reordering everything else.
+    const picked = suggestNext(deck, anywhere, NO_HISTORY, new Set());
+    expect(picked?.id).toBe('blast-naive');
+  });
+});
+
+describe('a board whose attempt is spent sinks to the back of the tour', () => {
+  /**
+   * **The guide's outermost rank key is `attempts`, and since ADR-0035 §10 a
+   * board graded once can never be passed again.** So a restored session whose
+   * counts start at zero opens by offering the one question in the deck with
+   * nothing left to give — and it is not a small effect, because *fewest
+   * attempts* beats the region constraint, the tier and the difficulty all at
+   * once.
+   *
+   * `main.ts` seeds `attempts` from `progress.attempted` at load, which is what
+   * these assert as a property of the ranking. Seeding is not the stored cursor
+   * ADR-0011 decision 2 forbids: a cursor is a position in the rotation, and this
+   * is the record telling the ranking a fact the record already keeps.
+   */
+  const atlas = atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'], []);
+  const spentBoard = challengeFor(atlas, {
+    id: 'blast-spent',
+    difficulty: 0.05,
+    subject: nodeIdFor('src/a.ts'),
+    candidates: ['src/b.ts', 'src/c.ts', 'src/d.ts'].map(nodeIdFor).sort(),
+    truth: [nodeIdFor('src/b.ts')],
+  });
+  const freshBoard = challengeFor(atlas, {
+    id: 'blast-fresh-board',
+    difficulty: 0.9,
+    subject: nodeIdFor('src/c.ts'),
+    candidates: ['src/b.ts', 'src/d.ts'].map(nodeIdFor).sort(),
+    truth: [nodeIdFor('src/d.ts')],
+  });
+  const deck = [spentBoard, freshBoard];
+  const anywhere = (): string | null => null;
+  /** What `main.ts` builds at load: every spent key at 1. */
+  const seeded = (keys: readonly string[]): ReadonlyMap<string, number> =>
+    new Map(keys.map((key) => [key, 1]));
+
+  it('offers the fresh board first, even though it is much harder', () => {
+    const state = {
+      ...NO_HISTORY,
+      attempts: seeded([answerKey('blastRadius', spentBoard.subject)]),
+    };
+    expect(suggestNext(deck, anywhere, state)?.id).toBe('blast-fresh-board');
+  });
+
+  it('offers the spent board once nothing fresh is left — it is not withdrawn', () => {
+    // Guardrail 6: the board is not locked, it is last. Everything except the
+    // notebook entry still fires on it, and the reveal is the best thing in the
+    // product.
+    const state = {
+      ...NO_HISTORY,
+      answered: new Set([answerKey('blastRadius', freshBoard.subject)]),
+      attempts: seeded([answerKey('blastRadius', spentBoard.subject)]),
+    };
+    expect(suggestNext(deck, anywhere, state)?.id).toBe('blast-spent');
+  });
+
+  it('orders by difficulty when nothing is spent — the control', () => {
+    // Without this the assertion above would pass on the difficulty ordering
+    // alone, and nothing here would be about seeding at all.
+    expect(suggestNext(deck, anywhere, NO_HISTORY)?.id).toBe('blast-spent');
   });
 });

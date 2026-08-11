@@ -42,13 +42,22 @@ export interface SetScore {
  * count knows nothing the gate did not already assume — and it turns F1 from an
  * unexplained verdict into a rule they can play against, which is the
  * difference between a quiz and a game.
+ *
+ * **And the first-attempt rule is stated here rather than discovered** (ADR-0035
+ * §10). A board's pass is decided by its first graded answer, which is the only
+ * thing that stops a farmed pass being written down as knowledge — but a player
+ * who learns that from its consequence has been tricked, and `challenge.ts` can
+ * only say it on a board that is *already* spent. So the fresh board says it too.
+ * *Nothing is locked either way* is guardrail 6 and is literally true: the board
+ * reopens, the reveal fires, the map still unlocks off the score.
  */
 export function keyRule(challenge: Challenge): string {
   const key = challenge.truth.length;
   const count = challenge.candidates.length;
   return (
     `Exactly ${key === 1 ? 'one' : key} of these ${count} ${key === 1 ? 'counts' : 'count'}, ` +
-    'so extra picks lower the score. Nothing is locked by a wrong answer.'
+    'so extra picks lower the score. Your first answer is the one your notebook ' +
+    'keeps; nothing is locked either way.'
   );
 }
 

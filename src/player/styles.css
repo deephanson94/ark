@@ -457,11 +457,23 @@ body {
 }
 
 .console-instruction,
+.console-again,
 .console-evidence {
   margin: 0 0 12px;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--text-dim);
+}
+
+/*
+ * Said on a board that has already been graded (ADR-0035 §10). Marked out with a
+ * rule rather than a colour, because it is neither a warning nor a score: the
+ * board is open and everything except the notebook entry still fires on it. A
+ * red or amber treatment here would read as the lockout guardrail 6 forbids.
+ */
+.console-again {
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
 }
 
 .console-evidence {

@@ -16,7 +16,7 @@
  */
 
 import type { AtlasId, NodeId, RepoMeta, VerbId } from '../atlas/index.js';
-import { VERB_IDS, isCommitId, isNodeId } from '../atlas/index.js';
+import { VERB_IDS, byteCompare, isCommitId, isNodeId } from '../atlas/index.js';
 import type { Pass, Progress } from './progress.js';
 import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
 
@@ -135,7 +135,19 @@ export function parseProgress(text: string | null): Progress {
   const passes = (Array.isArray(record['passes']) ? record['passes'] : [])
     .map(asPass)
     .filter((pass): pass is Pass => pass !== null);
-  return { version: SAVE_VERSION, surveyed: asNodeIds(record['surveyed']), passes };
+  // `attempted` is additive: a record written before it existed parses to an
+  // empty list, so an older save stays valid and every board's next attempt is
+  // its first (ADR-0035 §10). Filtered to strings rather than trusted, like
+  // everything else here.
+  const attempted = (Array.isArray(record['attempted']) ? record['attempted'] : [])
+    .filter((key): key is string => typeof key === 'string')
+    .sort(byteCompare);
+  return {
+    version: SAVE_VERSION,
+    surveyed: asNodeIds(record['surveyed']),
+    passes,
+    attempted: [...new Set(attempted)],
+  };
 }
 
 export function serializeProgress(progress: Progress): string {

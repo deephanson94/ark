@@ -48,7 +48,17 @@ describe('the board states its own rule', () => {
     expect(rule).toContain('one of these 3');
     expect(rule).toContain('lower the score');
     // Guardrail 6 survives and is still said: no lockout, no fail state.
-    expect(rule).toContain('Nothing is locked');
+    // Case-insensitive because the clause moved to the tail of the sentence when
+    // the first-attempt rule joined it — the *claim* is what this asserts, and
+    // pinning the capital was pinning the sentence's shape instead.
+    expect(rule.toLowerCase()).toContain('nothing is locked');
+    // **And the first-attempt rule is stated before the answer** (ADR-0035 §10).
+    // A player who learns it from its consequence has been tricked, and
+    // `challenge.ts` can only say it on a board that is already spent — so it has
+    // to be here too, on a fresh one. The rule is what makes a pass proof of
+    // understanding rather than of persistence, and a hidden rule is a verdict.
+    expect(rule).toContain('first answer');
+    expect(rule).toContain('notebook');
   });
 
   it('reaches every verb’s prompt, so no board can go back to promising it', () => {
