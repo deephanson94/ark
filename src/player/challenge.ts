@@ -205,7 +205,11 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     for (let i = 0; i < 5; i++) {
       pips.append(el('span', i < filled ? 'pip is-on' : 'pip'));
     }
-    pips.title = `computed difficulty ${difficulty.toFixed(2)} — NORTH-STAR §8.4`;
+    // **No internal document reference in a user-facing tooltip.** Two
+    // playtesters found `NORTH-STAR §8.4` here and both filed it; a player has
+    // no §8.4. What the number means is worth saying, and it is the honest
+    // thing about it: nobody chose this, it was computed from the board.
+    pips.title = `difficulty ${difficulty.toFixed(2)} — computed from the graph, not chosen`;
 
     const dismiss = el('button', 'console-close', ['✕']);
     dismiss.type = 'button';

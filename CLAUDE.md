@@ -482,6 +482,36 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   because every verb had *a* test. When you add a peer to an existing family, list what the family is
   checked for and check the list against each member, not against the newcomer.
 
+- **A suite that checks the shape of a sentence never checks whether it is true, and three cold
+  playtesters found what 780 assertions could not.** Every prompt ended with *"Wrong picks cost you
+  nothing"*, which §8.2 makes **false** — a spare pick lowers precision, so the right file plus two
+  plausible wrong ones scores 50% where the right file alone scores 100%. Archaeology told the player
+  a commit message *"names this file"* on the strength of **one shared token** (`"Refactoring and test
+  changes"` naming `extensions-test.ts`), which is **87% of graphql-js's firings, 82% of kysely's,
+  54% of hono's** — not an edge case. And a grade showed `1 of 1` beside `33% · not yet` with nothing
+  on screen naming precision or recall. `reveal.test.ts` and `notes.test.ts` assert which note exists
+  and which class it carries; **no test anywhere held a sentence to being true**, so all three
+  survived four milestones with the suite green. The strategies were right in every case and the
+  *glosses* were separate claims nobody checked, which is the class-label landmine arriving in a
+  prompt, a witness line and a score. **When you write a sentence the player can check against what
+  is on screen beside it, write the assertion that checks it too** — and note the shape of the
+  cheapest fix: hold the strong claim to the rows that earn it and give the rest a weaker sentence
+  that is true, rather than narrowing the strategy and starving the class.
+
+- **The shallow-clone landmine has a version where the shallow clone is *yours*.** Every warning in
+  this file about `--depth` is about a repo you cloned to measure. But a cloud session's own checkout
+  of ark can be shallow too — this one was, at 148 commits — and then `npm run test:atlas` fails
+  **12 of 111** assertions the moment you touch anything, because `src/verbs/commits.ts` refuses the
+  history deck on a shallow repo and all three history verbs ship zero boards. The failures name
+  Companion, Placement and Archaeology invariants, so they read as *"your change broke the
+  generator"*, and the change in hand was in the player and could not have. `git fetch --unshallow`
+  fixes it; **`git rev-parse --is-shallow-repository` before you believe a red suite** is the habit,
+  and it is the same one line the standing constraints already ask for before believing a *number*.
+  Note which way this one errs: a shallow checkout makes the suite look **broken**, where a shallow
+  clone in a measurement makes the number look **fine**. And `ci.yml` has set `fetch-depth: 0` since
+  M0, under a comment saying precisely this — so the knowledge was in the repo, on the one machine
+  that was never going to be caught by it.
+
 - **A figure about this repo is measured on the tree that does not yet contain it.** The session that
   built Archaeology re-measured ADR-0019's tables — the ADR's own instruction — and wrote every ark
   figure down wrong: node counts included an untracked probe script, and commit counts predated the
@@ -1348,16 +1378,21 @@ The catalogue itself stays **deferred** — fifteen detectors were measured befo
 designed and the honest size is ~5 entries rather than 30–60. The walkable world ships (ADR-0033), which turns S1 from
 a gate on a thing that does not exist into a gate on a thing that does — and **nothing in the product
 may claim the world teaches better until it runs**, which is why the flat map is still the arrival
-state. Two blockers first, both in that document's §8: the two matched repos are still a TODO, and a
-two-arm design cannot detect *"orbit beats both"*, which is what `docs/prior-art.md` predicts.
-**And the sharpest problem is ADR-0033 §4**: the minimap draws the same import edges the world does,
-so a player may be reading topology off a 2D inset drawn over a 3D scene — it must be in both arms or
-neither, and separating world from inset needs a third condition. Then **region arches in the world**,
-which are unbuilt because ADR-0032 §9.6 refuses the obvious derivation. Then **build ADR-0030's twin
-surface** — the
-decision, the gate and the leak measurement are done; the code is not — an inspector line in the
-*revealed* register, its gate wired to the deck (*no member of the class still carries an unanswered
-board*), and its tests. The **phenomenon catalogue** is **deferred rather than queued**
+state. **The three structural blockers in that document's §8 are closed** and it is *runnable*: the
+matched repos are named with commits (`graphql/graphql-js` `9c245018` and `kysely-org/kysely`
+`f24018c7`, chosen from a measured slate of 31 — and node count alone, the criterion as written,
+picks a pair 2.2× apart on density), the arms are **staged** (map vs orbit, the world gated on that
+result — the owner's decision, and ADR-0009's own ordering made executable), and the quiz is a fixed
+**held-out** item set carrying the generator's certifications. ADR-0033 §4's minimap confound is
+resolved by a measurement that **refuted the obvious account of it**: the cull is not the mechanism —
+the world's own view reaches 98.7% / 99.0% of the edge set from a standing position — the
+*projection* is, so the world arm contains a small instance of the map arm, and its inset now keeps
+everything but its roads. What is left is §9: **the hold-out split script** (and it must check the
+removed keys against the served deck's `discloses`, or the instrument ships with a known leak),
+**M2's instrumentation** (attempts are session state; nothing persists them, and §3 claimed
+otherwise until this session), and **twelve participants**, which is owner-only. Then **region arches
+in the world**, which are unbuilt because ADR-0032 §9.6 refuses the obvious derivation. The
+**phenomenon catalogue** is **deferred rather than queued**
 (**[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)**):
 fifteen candidate detectors were measured on five repos *before* anything was designed, and the
 honest size is **~5 entries, not the ~30–60 this line used to claim** — the rest measure the scanner

@@ -9,7 +9,8 @@
  */
 
 import { existsSync, realpathSync } from 'node:fs';
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -35,7 +36,8 @@ export type Command = 'index' | 'play';
 interface Args {
   readonly command: Command;
   readonly root: string;
-  readonly out: string;
+  /** `null` for `play` with no `--out`: a private serving directory is made. */
+  readonly out: string | null;
   readonly quiet: boolean;
 }
 
@@ -106,6 +108,15 @@ export function parseArgs(argv: readonly string[]): Args | null {
   const rootPath = resolve(root ?? '.');
   // `play` writes the atlas where the built player will look for it, so the
   // person running it never has to know that `atlas.json` is the seam.
+  // **`play` writes nowhere by default.** It used to default to
+  // `<player>/atlas.json` — one shared path inside the installed package — so
+  // two `ark play` runs on one machine clobbered each other: three concurrent
+  // playtesters hit this, and the failure is silent and confusing rather than
+  // loud, because the second run replaces the first's atlas and the first
+  // browser then serves *a different repository* under the original title. A
+  // null `out` means "make me a private directory", resolved in `main` where
+  // the filesystem lives.
+  if (command === 'play' && out === null) return { command, root: rootPath, out: null, quiet };
   const fallback = command === 'play' ? join(PLAYER_DIST, 'atlas.json') : `${rootPath}/atlas.json`;
   return { command, root: rootPath, out: resolve(out ?? fallback), quiet };
 }
@@ -327,16 +338,26 @@ export async function main(argv: readonly string[]): Promise<number> {
   const started = Date.now();
   const { atlas, generation } = await buildIndex(indexOptions(args.root));
   const text = serializeAtlas(atlas);
+
+  // **A `play` with no `--out` gets a private copy of the player**, so two runs
+  // on one machine cannot serve each other's repository. `cp` rather than a
+  // symlink because the copy is what the HTTP server walks, and `serve.ts`
+  // refuses to follow a link out of its root — which is a pillar-5 guard worth
+  // more than the ~100 KiB this duplicates.
+  const serveRoot = args.out === null ? await mkdtemp(join(tmpdir(), 'ark-play-')) : null;
+  if (serveRoot !== null) await cp(PLAYER_DIST, serveRoot, { recursive: true });
+  const outPath = args.out ?? join(serveRoot ?? '', 'atlas.json');
+
   // The player's `public/` directory is generated and gitignored, so on a fresh
   // clone it does not exist yet and `--out` into it would fail with ENOENT.
-  await mkdir(dirname(args.out), { recursive: true });
-  await writeFile(args.out, text, 'utf8');
+  await mkdir(dirname(outPath), { recursive: true });
+  await writeFile(outPath, text, 'utf8');
 
   if (!args.quiet) {
     process.stdout.write(
       `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started)}\n`,
     );
-    process.stdout.write(`written     ${args.out}\n`);
+    process.stdout.write(`written     ${outPath}\n`);
   }
 
   // **The guard, above the command split on purpose.**
@@ -371,7 +392,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   // this product are deliberately independent (NORTH-STAR §7) — the player is a
   // pure function of the atlas and the indexer must never need to know how it
   // is bundled. So this checks, and says exactly what to run.
-  const distributionRoot = dirname(args.out);
+  const distributionRoot = dirname(outPath);
   try {
     await access(join(distributionRoot, 'index.html'));
   } catch {
@@ -388,7 +409,14 @@ export async function main(argv: readonly string[]): Promise<number> {
   // Resolve only when the process is interrupted, so the server stays up.
   await new Promise<void>((stop) => {
     const shutdown = (): void => {
-      void served.close().then(stop);
+      void served
+        .close()
+        // A temp directory this process made is this process's to remove. A
+        // failure here is not worth a non-zero exit — the OS cleans `tmpdir`.
+        .then(async () => {
+          if (serveRoot !== null) await rm(serveRoot, { recursive: true, force: true });
+        })
+        .then(stop, stop);
     };
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);

@@ -422,6 +422,27 @@ is a better position to measure from than a thing that does not.
 **D1–D3 and the invariant are untouched.** X and Y are frozen, the world is a rendering of the atlas,
 and the fitted overview is one keystroke away in both directions.
 
+### Owner's note — 2026-08-11: S1's shape, decided; S1 itself, still unmet
+
+**Recorded by a session, and it releases nothing.** `docs/experiments/0001` had three structural
+blockers, two of which turned on costs only the owner can spend. Both were put with their measured
+alternatives, and the owner chose:
+
+1. **Three arms, run in two stages** — stage 1 is *map vs orbit* (12 people), stage 2 adds a world
+   arm of 6 scored against stage 1's map arm as a shared control, and stage 2 is **not run** if the
+   orbit's mean tier-3 F1 comes in below the map's. That stop rule is this ADR's own sentence two
+   headings down, made executable: *"if the fly-through does not beat the flat map on S1, the avatar
+   never happens."* Two arms could never have detected *"orbit beats both"*, which is what
+   `docs/prior-art.md` §2 predicts, and stage 1 is also the *"orbit's own measured results"* that
+   **P4** named and that the note above released without.
+2. **The world arm's minimap keeps everything but its import edges** — ADR-0033 §4's confound,
+   resolved by a measurement that refuted the obvious account of it (experiment 0001 §4.3).
+
+**S1 is unchanged in force and unmet.** Nothing here is a gate decision: the design is now runnable,
+which is a different claim from run, and the flat map remains the arrival state. What this note
+changes is that *"why has S1 not been met?"* now has exactly one answer — twelve participants from
+outside the project — where it previously had three.
+
 ### The first experiment is the fly-through, not the avatar
 
 If the preconditions open, **build the orbit-camera fly-through first** — a 3D camera over an

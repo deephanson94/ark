@@ -84,6 +84,15 @@ export interface WorldDraw {
   readonly questions: ReadonlySet<NodeRef>;
   /** Whether any commit-subject board is still unanswered. */
   readonly chronicleLit: boolean;
+  /**
+   * Whether the minimap draws the import edges.
+   *
+   * True in the product. False only in experiment 0001's world arm, where the
+   * inset's edge layer is the confound ADR-0033 §4 records — see
+   * `minimap.ts`'s header for the measurement that chose this over dropping
+   * the inset entirely.
+   */
+  readonly minimapRoads: boolean;
 }
 
 export interface WorldStats extends WorldFrameStats {
@@ -325,6 +334,7 @@ export function createWorldMode(): WorldMode {
         questions: input.questions,
         waypoint: waypointOf(input),
         fovRadians: FOV,
+        roads: input.minimapRoads,
       });
       return { ...stats, litOnMinimap };
     },

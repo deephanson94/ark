@@ -54,6 +54,14 @@ export interface Hud {
     questionsLeft: number,
     ringed: number,
     bearing: number,
+    /**
+     * The control line, recomputed per frame because it is a property of the
+     * **view**, not of the session. A playtester measured `f` and `n` as dead
+     * in the world while this line still offered both, and `o orbit` while
+     * already in the orbit — two of the three views were advertising controls
+     * that do nothing.
+     */
+    keyHint: string,
   ): void;
 }
 
@@ -220,8 +228,11 @@ export function createHud(
   const quests = el('div', 'hud-quests');
   const detail = el('div', 'hud-detail');
   // A feature reachable only by reading the source does not exist. `f` was
-  // already undiscoverable; `o` would have shipped the same way.
-  const keys = el('div', 'hud-keys', ['f fit · n north · o orbit · enter ask']);
+  // already undiscoverable; `o` would have shipped the same way — and `g` did,
+  // for a milestone, because this line was not revisited when the world landed.
+  // Filled by `update` on every frame: it depends on the view, and two of the
+  // three views were advertising keys measured to be dead in them.
+  const keys = el('div', 'hud-keys');
   const compass = createCompass(onNorth);
 
   const root = el('div', 'hud', [
@@ -239,8 +250,9 @@ export function createHud(
 
   return {
     root,
-    update(coverage, level, stats, questionsLeft, ringed, bearing) {
+    update(coverage, level, stats, questionsLeft, ringed, bearing, keyHint) {
       compass.update(bearing);
+      keys.textContent = keyHint;
       bar.style.width = `${(coverage.fraction * 100).toFixed(1)}%`;
       // Two numbers, deliberately separate. Surveyed is what you have looked
       // at; understood is what you have proven. Only the second lifts the fog
