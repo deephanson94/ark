@@ -325,9 +325,7 @@ them, so the engagement half cannot be read off a finished session), and then **
 from outside the project**, which is owner-only and the wall S1 was always going to hit
 · then **region arches in the world** — districts are unmarked at street level, and ADR-0032 §9.6 is
 why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
-their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,
-gate and measurement are done and whose code is not: an inspector line, its wiring to the deck, and
-its tests · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
+their nearest node in a *different* region · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
 were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60
 this line used to claim — the rest measure the scanner, the norm, or an unreachable bar. Its best
 entry is an answer key: naming a cycle decides **109 of hugo's 156** Blast Radius boards with
@@ -336,7 +334,11 @@ index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it, ADR-0028 �
 only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
 walkable world, whose frame cost has never been measured anywhere.
 
-*(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Seven items left this list rather than being done here. **ADR-0030's twin surface** is **built** —
+`src/player/twins.ts`, one inspector line in the *revealed* register, gated on no member of the class
+still carrying an unanswered Blast Radius board, and `test:e2e` plays both halves of that gate. This
+list went on asking for it, which is the ADR-versus-code drift this repo has a landmine about,
+pointing the other way: the code was ahead of the document. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
 exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as
@@ -432,7 +434,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 31 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: one ADR per call the spec did not cover, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves
