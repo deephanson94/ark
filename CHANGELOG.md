@@ -3199,3 +3199,191 @@ One line per iteration: what changed, and what to do next.
   nobody noticed), the legend clips silently at 17 of 36 regions, **Placement is unreachable from
   the map** (25% of the deck, reachable only at the chronicle in walk mode), the guide serves the
   four lowest-difficulty boards first with no skip, and there is no help key. Then S1.
+
+- **Three more playtest findings closed, and the largest of them was a hole rather than a decision.**
+
+  **The chronicle is on the flat map.** ADR-0033 decision 2 gave commit-subject boards one place to be
+  answered — an obelisk outside the map's northern edge, positioned from the **bounds** so it says
+  *commits are answered here* and nothing about which files any of them touched. It existed **only in
+  the walkable world**. A playtester grid-clicked **333 nodes**, never met a Placement board, and had
+  to read the shipped bundle to discover the entry point was behind `g`: **25% of this repo's deck and
+  77% of django's**, reachable only by a key nothing advertised. `chronicleAt` now lives in
+  `camera.ts` beside `Bounds` and both views derive it, because two copies of that rule is how the two
+  places drift apart.
+
+  **The first version drew it off screen** — `fit` frames the *node* bounds and the chronicle stands
+  outside them, so it was drawn, clickable, and never visible. That is the marking-layer failure one
+  level up, and the e2e's sweep caught it: no click along the top of a fitted map opened a commit
+  board. `framedBounds` unions the landmark in.
+
+  **`?` opens help.** Three testers pressed it and got nothing; one measured **23 keys dead** before
+  concluding the product had none. It names the controls and — the half a colour legend cannot carry —
+  **what each of the map's channels means**: size, dashed outline, rings, dashed circle, ember arcs
+  and the diamond. Four of those five encodings had no explanation anywhere, and a tester guessed at
+  them and confirmed none.
+
+  **The legend says how many regions there are.** It clips at `max-height: 42vh` with
+  `pointer-events: none`, so there is no scrollbar to find and there cannot be one — the panel must
+  never eat a click meant for the map. A tester measured it showing **17 of 36**, silently, as the
+  only key to the map's primary channel. The title carries the count now and the list fades at the
+  cut, so a clipped list looks clipped.
+
+  Gated in the e2e: help must open, name four channels and close on Escape; and a click along the top
+  of a fitted flat map must open a **commit-subject** board. Both were unasserted before.
+
+  **Next**: the fog is still invisible (dashed-vs-solid outlines nobody noticed) and five regions
+  share a grey, which are the two remaining channel-legibility findings; the guide has no skip; there
+  is no keyboard pan or zoom. Then S1.
+
+- **A playtester was asked to attack ADR-0035 and broke its proudest sentence within the hour.** The
+  rule shipped withholding a reveal below 0.5 precision, and §3 argued the other half was safe: *"it
+  is **not farmable**, because reaching precision 1.0 means already knowing which ones were right."*
+  **Reaching it means knowing one.** A single lucky pick on a four-of-twenty board scored 40% — *"not
+  yet"* — and was handed all four members with evidence; three boards fell in **4, 7 and 13 submits**,
+  black-box, no atlas, **4.1 probes per board** across the deck, against the 20 the select-all rule
+  was built to stop. Field notes then read *"You proved 4 files that depend on …"*.
+
+  **§4.1 had already derived the fix and this document declined it**: `f1(1, recall) ≥ 0.5 ⟺ recall ≥
+  1/3` is written there in as many words, and the second clause was refused to keep one rule, citing
+  *"every leak in ADR-0014 was a rule that lived twice"*. Right principle, wrong quantity — the two
+  clauses are not two copies of one rule, they are the two ways an answer fails to have earned an
+  explanation: **imprecise**, and **thin**. Both are implemented now, and the sentence says which
+  fired, because *"pick fewer"* is advice in the wrong direction for a thin answer.
+
+  **What it still does not close is on the record rather than in a comment.** The grade line is itself
+  an oracle: `Found 1 of 4` after one pick says whether that pick was in the key, and guardrail 6
+  makes each probe free *by design*. Partial credit over a set is a Mastermind oracle. So the honest
+  claim is that farming now costs ~20 probes and teaches nothing, not that a pass proves
+  understanding — and the only thing that closes *that* is recording the pass from the first attempt,
+  the alternative the owner rejected. It goes back to them with a measurement on both sides, and sits
+  in `README.md` Known gaps until then.
+
+  **And the e2e's walking-surveys gate went red on a change with nothing to do with walking**, because
+  it ran on a page that had already played thirty steps — so whether a fixed walk met an *unsurveyed*
+  tower was a property of everything before it. Moved to a fresh save. **The first version of that
+  isolated check read `23 → 23` and looked exactly like a dead recorder**: a fresh save has no
+  selection, so the hero spawns *outside* the map (ADR-0033's "you arrive from outside") and 2.6 s of
+  walking never reached a building. It runs now, and asserts it arrived before asserting what it saw.
+
+  **Next**: the owner's call on first-attempt passes. Then the fog (still dashed-vs-solid outlines
+  nobody noticed), five regions sharing one grey, help's two over-claims — rings are log2 buckets sold
+  as a count, and colour cannot name a region when four share a swatch — Archaeology's `mentions`
+  witness firing on stopwords (*"its message talks about “a”"*), `enter` doing nothing in the
+  world 6 times of 6, and Escape silently ejecting you from it.
+
+- **Both testers came back and the ratings moved: first contact 4/10 → 7/10, the loop 5/10 → 6/10.**
+  All five verification claims came back **VERIFIED** by the cold tester, each with evidence rather
+  than assent: `?` is *"better than most shipped products'"*; the board's subject and 20 candidates are
+  marked on the map with tick state, a click on a marker toggles it, and clicking empty map or a
+  stranger node costs nothing; the chronicle was **found cold from its label** and opened a Placement
+  board; every prompt states its count and none calls a wrong pick free; and select-all yields no
+  candidate and a pristine reopened board. They also verified the arithmetic on nine grades by hand and
+  checked **138 history answer keys against `git show -M`, finding 0 violations** — their first pass
+  flagged 16 and every one was their own probe's fault.
+
+  **Two things they found that were mine, and one that was worse than it looked.**
+
+  **A board could say "passed" and "not explained here" in the same panel** — hit on the *first two
+  boards served*. One right and two wrong on a single-answer board is F1 0.5, which passes, and
+  precision 0.33, which withheld. `grade.score >= PASS_THRESHOLD` now short-circuits the withholding:
+  a pass is the product's own definition of having understood a board, so refusing to explain one is
+  the rule arguing with the grader. Safe because `isGameable` refuses to ship a board select-all can
+  pass, so every shipped board has `n > 3k`.
+
+  **That change immediately failed a test whose fixture was a board the generator would refuse** —
+  five candidates for a two-file key, where select-all scores 0.571 and *passes*. It had been fine
+  under the old rule. A fixture has to satisfy the invariants the generator enforces or it is asking
+  about a board that cannot exist; eight candidates now.
+
+  **And a sentence was false in a way `git show` settles in one command.** Companion promised
+  *"commits touching more than 25 files at once are ignored"*, and one board's answer key exists only
+  because a **42-file** commit is counted — ark caps on the files *on its map*, of which that commit
+  touched 22. Three of the 500 retained commits sit in that position. The cap is right; the sentence
+  described the wrong set. Also corrected: help sold **rings** as a count of dependents when the
+  channel is `bitLength` (both testers caught it — *"counting rings gives a number ~30× low"*), and
+  the HUD's *"24 surveyed"* on a fresh profile, which is the peaks granted for free.
+
+  **The largest finding is not fixed and is now the top of the list, with its measurement.** The
+  guide's first seven Blast Radius boards have `truth == the subject's complete set of direct
+  importers` — ranks 0–6 of 69 by difficulty, measured — and **hovering any node paints gold lines to
+  exactly that set**, which both the arrival tooltip and `?` teach you to do. It is not an accident:
+  `difficulty`'s surprise term is `|truth Δ direct-neighbours|`, so sorting ascending *selects for*
+  boards whose key is the naive guess. A newcomer's whole first session is answerable by pointing.
+  Fix candidates: require `surprise > 0` of a suggestion, or suppress the hover burst on a node whose
+  Blast Radius board is unanswered.
+
+  **Next**: that. Then the owner's call on first-attempt passes (README Known gaps), the fog, five
+  regions sharing a grey, `↯` and the difficulty pips having no legend, and `enter` doing nothing in
+  the world.
+
+- **The tour stops opening with the boards the map already answers, and a pass is earned once.** Two
+  fixes, both from the same cold playtest, both about the first twenty minutes teaching the graph
+  rather than teaching a trick.
+
+  **Map-answerable boards are reordered, not refused.** Hovering a node paints gold lines to every
+  direct importer (ADR-0008 decision 1, deliberately), so a board whose `truth` *is* that set is
+  answerable by pointing. Measured on clean clones: **7 of graphql-js's 69 Blast Radius boards, 6 of
+  kysely's 75, 13 of hono's 54, 5 of ark's 40 — and every one among the ten easiest**, so ascending
+  difficulty served the whole opening run from exactly that set. `gate.ts` declines to refuse the
+  guess for a stated reason (§8.4 prices it; the progression needs easy rungs), so the lever is the
+  *order*: `Rank.naive` above difficulty, below tier. The mutant that ranks it below difficulty dies.
+
+  **And the pass now comes from the first graded attempt** ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
+  §10, the owner reversing that document's own §7). §9.1's argument is why withholding the reveal was
+  never going to be enough on its own: the grade line **is** a Mastermind oracle — `Found 1 of 4`
+  after one pick says whether that pick was in the key — and guardrail 6 makes each probe free by
+  design, so ~20 probes bought a pass and a field note reading *"You proved…"* whatever the reveal
+  did. `Progress.attempted` is on the record and `applyGrade` writes a pass only the first time.
+  Everything else is untouched: score, reveal, `unlocks`, the map radius, `surveyed`, and the board's
+  own availability — so this is not guardrail 6's lockout, it is one notebook entry against every
+  notebook entry being free.
+
+  **Two surfaces state it before the answer**, because a rule learned from its consequence is a trap:
+  `keyRule` on every board (*"Your first answer is the one your notebook keeps; nothing is locked
+  either way"*) and `challenge.ts`'s `REANSWER_LINE` on a spent one, **before the answer and again
+  beside the grade** — without the second, a retry reads `S · 100% · exact` over a notebook that
+  records nothing, which is the two-true-surfaces failure §9.2 was already an amendment for.
+
+  **The mutation run is the finding worth keeping.** Five mutants die under `tests/unit` — dropping
+  the `first` clause, recording the attempt before reading it, keying `attempted` on the subject
+  alone, and two in `save.ts` (the field has to *persist*, since the farm is not a within-session
+  trick). A **sixth survived everything**: `main.ts` seeds the selector's attempt counts from
+  `progress.attempted` at load, because `attempts` is the guide's outermost rank key and a restored
+  session starting them at zero opens by offering the one board with nothing left to give. Deleting
+  the seed reddened **no unit test at all** — it is shell wiring. Hence a `test:e2e` step that probes
+  with a **select-all** (the one answer `isGameable` guarantees cannot pass, so no branch depends on
+  what the deck served) and asserts across a **reload**, which is the only place the seed is
+  distinguishable from `noteAttempt`. A unit suite covering three quarters of a rule looks exactly
+  like one covering it.
+
+  Also: `progress.test.ts`'s *"stores no understood set"* enumerated every field, so adding
+  `attempted` reddened it — and the **stricter assertion was the suspect**, not the code. ADR-0011
+  decision 2's rule is *`understood` is never stored*; a key list is a claim the contract never made.
+  This repo's own landmine, arriving on its own suite.
+
+  **Next**: run `docs/experiments/0001` (owner-only: twelve participants). Then the hold-out split
+  script and M2's attempt instrumentation, which §10.4 now also needs — nothing measures how often an
+  honest player wants a second try, and that number is what prices the rule above. Then the fog
+  channel with no explanation, five regions sharing a grey, the guide's missing skip, and no keyboard
+  pan or zoom.
+
+- **A model tier policy for subagents, in `CLAUDE.md`'s Subagents section** (owner's, 2026-08-11).
+  Sonnet is the default for well-specified implementation; Opus for concurrency, optimisation,
+  verify/judge and gnarly debugging; Fable only where independence from the orchestrator's own context
+  is the point. When unsure, take the cheaper tier and escalate **on a checkable failure** — does not
+  compile, does not pass the suite it was told to run, or a verify pass refutes it — because *"this
+  feels hard"* is not a failure and would make the rule unfalsifiable.
+
+  Two things written down beside it rather than left to be rediscovered. It **overrides the `Workflow`
+  tool's own advice** to omit `model` and inherit the session's; both are defensible, they disagree,
+  and the tool description is not a document anybody here can edit — so the precedence is stated
+  rather than guessed, which is this file's most-repeated landmine. And **Fable buys a critique of
+  reasoning, not liveness**: the Ctrl+F repair pass was designed by a Fable consult, reviewed as
+  sound, and fired zero times on either repo. An independent reviewer answers *"is this argument
+  sound?"*; only a measurement answers *"does this branch ever execute?"*
+
+  **Next**: unchanged — run `docs/experiments/0001`. Its two remaining non-owner blockers are the
+  hold-out split script (which must check removed keys against the served deck's `discloses`, or the
+  instrument ships with a known leak) and attempt instrumentation, which now also prices ADR-0035
+  §10.4 and collides with ADR-0011 decision 2's ban on storing a cursor — an argument to make in an
+  ADR, not a field to add quietly.

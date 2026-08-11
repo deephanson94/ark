@@ -118,6 +118,97 @@ describe('applyGrade', () => {
   });
 });
 
+/**
+ * **A board's pass is decided by its first graded attempt** (ADR-0035 §10).
+ *
+ * Withholding the reveal (ADR-0035) stopped the product *handing* the answer key
+ * over. It did not stop a player *extracting* it, and §9.1 says why no reveal
+ * policy can: the grade line is itself an oracle — `Found 1 of 4` after a single
+ * pick says whether that pick was in the key — and guardrail 6 makes each probe
+ * free by design. Partial credit over a set is a Mastermind oracle. A playtester
+ * ran it black-box: **4, 7 and 13 submits** for three boards, then a field note
+ * reading *"You proved 4 files that depend on src/player/ties.ts"*.
+ *
+ * So the pass is what moves, and nothing else does. The score, the reveal, the
+ * map unlock and `surveyed` all still follow every answer, which is why this is
+ * not guardrail 6's *lockout*: the board is open, it just no longer sells a
+ * notebook entry.
+ */
+describe('only the first graded attempt can pass a board', () => {
+  const perfect = gradeSet(challenge, { picked: truth }, BLAST_PHRASING);
+  const wrong = gradeSet(challenge, { picked: [candidates[9] ?? ''] }, BLAST_PHRASING);
+  const key = answerKey(challenge.verb, challenge.subject);
+
+  it('records the attempt whatever the score', () => {
+    expect(applyGrade(EMPTY_PROGRESS, challenge, wrong).progress.attempted).toEqual([key]);
+    expect(applyGrade(EMPTY_PROGRESS, challenge, perfect).progress.attempted).toEqual([key]);
+  });
+
+  it('refuses the pass on a second attempt, however good — the farm', () => {
+    // The exploit exactly: probe, learn from the grade line, come back perfect.
+    const probed = applyGrade(EMPTY_PROGRESS, challenge, wrong).progress;
+    expect(probed.passes).toHaveLength(0);
+    const farmed = applyGrade(probed, challenge, perfect).progress;
+    expect(farmed.passes).toHaveLength(0);
+    // …and the notebook stays empty, which is the claim NORTH-STAR §9 makes.
+    expect(fogOf(farmed).understood.size).toBe(0);
+  });
+
+  it('still passes a first attempt that earns it', () => {
+    // The other direction, and the reason this is not a lockout: an honest first
+    // answer is untouched. Without it the rule above would pass vacuously.
+    const passed = applyGrade(EMPTY_PROGRESS, challenge, perfect).progress;
+    expect(passed.passes).toHaveLength(1);
+    expect(fogOf(passed).understood.has(subject)).toBe(true);
+  });
+
+  it('leaves the score channel alone, so the reveal and the map still fire', () => {
+    // `unlocked` is the *map* channel and is keyed on the score alone. A retry
+    // that reads well and draws nothing would be ADR-0016's vanishing wires
+    // again — and ADR-0035 explains any passing answer, so the words are there.
+    const probed = applyGrade(EMPTY_PROGRESS, challenge, wrong).progress;
+    const again = applyGrade(probed, challenge, perfect);
+    expect(again.unlocked).toBe(true);
+    expect(again.progress.passes).toHaveLength(0);
+  });
+
+  it('does not spend one board’s attempt on another board’s key', () => {
+    // `attempted` is keyed `(verb, subject)` like every other set here. Keyed on
+    // the subject alone, answering a file's Blast Radius board would spend its
+    // Companion board's only attempt — the defect M4 found in three other sets.
+    const companion: Challenge = { ...challenge, id: 'companion-fixture', verb: 'companion' };
+    const after = applyGrade(applyGrade(EMPTY_PROGRESS, challenge, wrong).progress, companion, perfect);
+    expect(after.progress.passes).toHaveLength(1);
+    expect(after.progress.passes[0]?.verb).toBe('companion');
+  });
+
+  it('is generous to a save written before it existed', () => {
+    // An older record parses with `attempted` empty, so every board's next
+    // answer is its first. The other direction — treating an unknown board as
+    // spent — would void a player's whole deck on upgrade.
+    const legacy = { ...EMPTY_PROGRESS, attempted: [] };
+    expect(applyGrade(legacy, challenge, perfect).progress.passes).toHaveLength(1);
+  });
+
+  it('was rejected first, and the reason is recorded', () => {
+    // ADR-0035 §7 rejected this on the owner's instruction — *"it makes a retry
+    // pointless"* — and §9.1 sent it back with the farm measured on the other
+    // side. A retry is not pointless: everything except the record still fires,
+    // which the assertions above pin. This `it` is a pointer, not a check.
+    expect(EMPTY_PROGRESS.attempted).toEqual([]);
+  });
+});
+
+describe('guardrail 6 under the first-attempt rule', () => {
+  it('takes nothing away that a first attempt earned', () => {
+    const before = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }, BLAST_PHRASING)).progress;
+    const after = applyGrade(before, challenge, gradeSet(challenge, { picked: [] }, BLAST_PHRASING)).progress;
+    const [was, now] = [fogOf(before), fogOf(after)];
+    for (const id of was.understood) expect(now.understood.has(id)).toBe(true);
+    for (const id of was.surveyed) expect(now.surveyed.has(id)).toBe(true);
+  });
+});
+
 describe('the stored record', () => {
   it('is sorted and unique, so the same session serialises the same bytes', () => {
     const a = recordSurvey(EMPTY_PROGRESS, [candidates[3] ?? '', candidates[1] ?? '', candidates[3] ?? '']);
@@ -137,7 +228,14 @@ describe('the stored record', () => {
 
   it('stores no understood set — it is derived, and two copies would disagree', () => {
     const { progress } = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }, BLAST_PHRASING));
-    expect(Object.keys(progress).sort()).toEqual(['passes', 'surveyed', 'version']);
+    // **Asserted as the absence, not as the whole key list.** This enumerated
+    // every field, so adding `attempted` reddened it — and the stricter
+    // assertion was the suspect, not the code: ADR-0011 decision 2's rule is
+    // *`understood` is never stored*, and a key list is a claim the contract
+    // never made. This repo's landmine, arriving on its own suite.
+    expect(progress).not.toHaveProperty('understood');
+    expect(Object.keys(progress)).toContain('passes');
+    expect(Object.keys(progress)).toContain('surveyed');
   });
 
   it('adds the landmarks to the fog without storing them', () => {

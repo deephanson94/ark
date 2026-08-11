@@ -141,6 +141,26 @@ interface Rank {
   readonly attempts: number;
   readonly sameRegion: number;
   readonly tier: number;
+  /**
+   * 1 when the board's answer key is exactly what the map already draws.
+   *
+   * **The tour used to open with nothing else.** Hovering a node paints gold
+   * lines to every direct importer (ADR-0008 decision 1, deliberately), and a
+   * board whose truth *is* that set is answerable by pointing. Measured: such
+   * boards are **10% of graphql-js's, 8% of kysely's, 24% of hono's and 13% of
+   * ark's** — and **every one of them is among the ten easiest**, so ascending
+   * difficulty served a newcomer's whole first session from exactly that set. A
+   * cold playtester found it and called it the thing that decides whether the
+   * first twenty minutes teach you the graph or teach you to point at it.
+   *
+   * They are not broken questions — `gate.ts` declines to refuse this guess for a
+   * stated reason, that §8.4 already prices it and the progression needs easy
+   * rungs — so the fix is the **order**, not the deck. Ranked above difficulty
+   * and below tier: within a tier, a board that teaches something the map is not
+   * already showing comes first, and these stay reachable by clicking the node
+   * and by the guide once the rest are done.
+   */
+  readonly naive: number;
   readonly difficulty: number;
   readonly overlap: number;
   readonly id: string;
@@ -158,6 +178,9 @@ function rankLess(a: Rank, b: Rank): boolean {
   // ascending difficulty — writing it now stops an M4 session re-deriving the
   // ordering when the git verbs land.
   if (a.tier !== b.tier) return a.tier < b.tier;
+  // Above difficulty on purpose — see `Rank.naive`. Below it, the naive boards
+  // *are* the low-difficulty ones and the opening run is unchanged.
+  if (a.naive !== b.naive) return a.naive < b.naive;
   if (a.difficulty !== b.difficulty) return a.difficulty < b.difficulty;
   // **Below difficulty, and that placement was measured rather than argued.**
   // Ranked above it, a continuous overlap swamps the progression: it always
@@ -186,6 +209,12 @@ export function suggestNext(
   deck: readonly Challenge[],
   regionOf: (subject: AtlasId) => string | null,
   state: SelectorState,
+  /**
+   * Ids of boards the map already answers — see `Rank.naive`. A set rather than
+   * a predicate over the graph, because deciding it is a *graph* question and
+   * this module is pure over the deck; the shell computes it once at load.
+   */
+  answeredByTheMap: ReadonlySet<string> = new Set(),
 ): Challenge | null {
   // Null means "this subject is not anywhere on the map" — a commit (ADR-0018),
   // or a node the atlas no longer holds. The region constraint then simply does
@@ -202,6 +231,7 @@ export function suggestNext(
       attempts: state.attempts.get(answerKey(challenge.verb, challenge.subject)) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
+      naive: answeredByTheMap.has(challenge.id) ? 1 : 0,
       difficulty: challenge.difficulty,
       overlap: overlapWith(state.previous, challenge),
       id: challenge.id,

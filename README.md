@@ -161,7 +161,10 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
 | Phenomenon catalogue (transfer across repos) | ⬜ | **Deferred with findings** ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)). Fifteen detectors measured on five repos before designing anything: the honest size is ~5 entries, not 30–60, and its best entry — naming a cycle — is a **proof of Blast Radius's key**, deciding 109 of hugo's 156 boards at precision 1.000. ADR-0030's twin surface is its priced pilot. |
 | The board on the map | ✅ | Opening a challenge marks its **subject** and every placeable **candidate** on the map, with the tick state, and a click on a marker answers the board. The panel is docked and the scrim pointer-transparent, so the map stays readable and clickable — it used to be a dimmed, unmarked backdrop that discarded the board when clicked. **No edge is drawn between subject and candidate**: that relation is the answer and stays gated on `subjectsPassed` (ADR-0008). Half a deck's ids have no place (a Placement subject, an Archaeology candidate) and are dropped rather than positioned. |
+| Help, and the chronicle on the map | ✅ | **`?` opens help** — three testers pressed it and got nothing, and one measured 23 dead keys before concluding there was none. It names the controls and the map's channels, which is the half a colour legend cannot carry. And **the chronicle is on the flat map now**, clickable: ADR-0033 put it in the world only, so a quarter of this repo's deck and 77% of django's was reachable only behind a key nothing advertised. One `chronicleAt`, shared by both views, and `framedBounds` so `fit` actually shows it. |
 | A reveal is earned | ✅ | Below **0.5 precision** — *more of your picks were wrong than right* — the reveal names no candidate and the map unlock is withheld with it ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)). Closes the two-click farm a playtester found: select-all → read the annotated key → reopen → 100% and a field note. Select-all's precision is bounded at ≈1/3 by ADR-0007's choice set (**max 0.308 over 792 boards**), so the bar has 1.6× margin; precision 1.0 with low recall — the teaching moment — is untouched and is unfarmable by construction. |
+| The tour does not open with the boards the map answers | ✅ | Hovering a node paints gold lines to every direct importer (ADR-0008 decision 1, deliberately), so a board whose `truth` **is** that set is answerable by pointing. Measured at `9cae1c4`: **7 of graphql-js's 69, 6 of kysely's 75, 13 of hono's 54 and 5 of ark's 40** — and **every one is among the ten easiest**, so ascending difficulty served a newcomer's whole first session from exactly that set. `gate.ts` declines to *refuse* the guess for a stated reason (§8.4 already prices it, and the progression needs easy rungs), so the fix is the **order**: `Rank.naive` sits above difficulty and below tier. They stay reachable by clicking the node, and by the guide once the rest are done. |
+| A pass is earned once | ✅ | **A board's pass is decided by its first graded attempt** ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md) §10, reversing its own §7 on the owner's instruction). Withholding the reveal stops the product *handing* the key over; it cannot stop a player extracting it, because the grade line is a Mastermind oracle — `Found 1 of 4` after one pick says whether that pick was in the key — and guardrail 6 makes each probe free by design. So the *pass* is what moves and nothing else does: score, reveal, map unlock, `surveyed` and the board's availability are untouched. **Stated before the answer, twice** (`keyRule` on every board, `REANSWER_LINE` on a spent one), because a rule learned from its consequence is a trap. Five mutants die under `tests/unit`; a sixth — deleting the guide's seeded attempt counts — dies only under `test:e2e`, which is why there is a step for it. |
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
 | Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
@@ -184,13 +187,24 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   *"orbit already delivers height, for all 186 nodes at once, without occlusion"*. That agrees with
   `docs/prior-art.md` §2, and **no further polish can settle it**: it is what
   `docs/experiments/0001` measures, and that is unrun.
-- **What those three found that is still open**, beyond the falsehoods, the inert map and the
-  select-all exploit fixed at `HEAD`: **the fog is dashed-vs-solid outlines** and no tester noticed it existed; the **legend
-  clips silently** at 17 of 36 regions with five of them the same grey; **Placement is unreachable
-  from the map** — 25% of a deck whose only entry point is the chronicle, in walk mode; the guide
-  **serves the four lowest-difficulty boards first** and has no skip; and there is **no help key and
-  no keyboard pan or zoom**. Each is recorded with the measurement that found it in this session's
-  `CHANGELOG.md` entry.
+- **What those three found that is still open.** Fixed at `HEAD`: the three false sentences, the
+  inert map, the select-all exploit, the missing help key, the legend's silent clipping,
+  Placement's unreachability, the farmable pass, and the opening run of map-answerable boards.
+  **Still open**: the **fog is dashed-vs-solid outlines** and no tester noticed it existed, which is
+  the last of the map's five channels with no explanation a player can see; five of the legend's
+  regions render as the same grey, because the palette runs out before 36 regions do; the guide has
+  **no skip**, so the only way past a suggestion is to answer it or ignore the button (its *ordering*
+  is fixed — see the row above — but the tester's other half of that finding is not); and there is
+  **no keyboard pan or zoom** (23 keys measured dead). Each carries the measurement that found it in
+  this session's `CHANGELOG.md` entries.
+- **Nothing measures how often an honest player wants a second attempt**, and since the pass is now
+  decided by the first one, that number is what prices the rule's cost
+  ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
+  §10.4). Attempts are session state: the record keeps *that* a board was graded, never *how often*,
+  so the figure to want — what fraction of boards a first-time player would pass on a second try —
+  needs the same instrumentation `docs/experiments/0001` §3 is missing. If it is large, the fix is a
+  better *first* attempt (a clearer prompt, a cheaper way to look around before committing) rather
+  than a second pass, and the argument in §10.1 is weaker than it reads.
 - **Nothing has measured whether the walkable world teaches better, and it now exists.**
   `docs/experiments/0001` is **designed, runnable and unrun**, so ADR-0033 ships the world as a mode
   and the flat map stays the arrival state. Its three structural blockers closed at `HEAD`: the
@@ -311,9 +325,7 @@ them, so the engagement half cannot be read off a finished session), and then **
 from outside the project**, which is owner-only and the wall S1 was always going to hit
 · then **region arches in the world** — districts are unmarked at street level, and ADR-0032 §9.6 is
 why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
-their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,
-gate and measurement are done and whose code is not: an inspector line, its wiring to the deck, and
-its tests · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
+their nearest node in a *different* region · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
 were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60
 this line used to claim — the rest measure the scanner, the norm, or an unreachable bar. Its best
 entry is an answer key: naming a cycle decides **109 of hugo's 156** Blast Radius boards with
@@ -322,7 +334,11 @@ index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it, ADR-0028 �
 only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
 walkable world, whose frame cost has never been measured anywhere.
 
-*(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Seven items left this list rather than being done here. **ADR-0030's twin surface** is **built** —
+`src/player/twins.ts`, one inspector line in the *revealed* register, gated on no member of the class
+still carrying an unanswered Blast Radius board, and `test:e2e` plays both halves of that gate. This
+list went on asking for it, which is the ADR-versus-code drift this repo has a landmine about,
+pointing the other way: the code was ahead of the document. **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
 exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as
@@ -418,7 +434,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 31 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: one ADR per call the spec did not cover, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

@@ -36,6 +36,26 @@ const BAND_LABEL: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Said on a board that has already been graded, before the answer and beside the
+ * grade (ADR-0035 §10).
+ *
+ * **Every clause is checkable against something else on screen**, which is the
+ * standard `wording.test.ts` exists to hold — three shipped sentences were false
+ * of the code beside them before it did. *Notebook keeps the first answer* is
+ * `applyGrade`'s `first`; *nothing is locked* is guardrail 6 and stays literally
+ * true (the board opens, the picks tick, the reveal fires, the map unlocks off
+ * the score); *the score is still yours to read* is what the panel is doing.
+ *
+ * What it must **not** say is that answering again is pointless. It is not: the
+ * reveal, the map unlock and the field notes' `surveyed` half all still fire, and
+ * a board is the only place the product explains itself.
+ */
+const REANSWER_LINE =
+  'You have answered this board before, and your notebook keeps that first ' +
+  'answer — this round is for reading, not for the record. Nothing is locked: ' +
+  'the score, the reasons and the map all still follow your picks.';
+
+/**
  * What the map needs to draw the board that is open.
  *
  * **Ids, never refs, and never a verb.** The console has not known what a verb
@@ -70,6 +90,21 @@ export interface ConsoleHandlers {
   /** Fired once per submitted answer, before the player closes the panel. */
   onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): void;
   onClose(): void;
+  /**
+   * Whether this board has **already been graded**, and so has spent the one
+   * attempt its pass is decided by (ADR-0035 §10).
+   *
+   * Asked of the shell rather than tracked here, because the record outlives the
+   * panel: a board graded three sessions ago is as spent as one graded a minute
+   * ago, and only `progress.attempted` knows.
+   *
+   * The console needs it for one reason, and it is this repo's most-repeated
+   * defect: without it a retry can score `S · 100% · exact` and write nothing to
+   * the notebook — two true surfaces contradicting each other, which is exactly
+   * how ADR-0035 §9.2 got its amendment. The rule is stated on the board before
+   * the answer and again beside the grade.
+   */
+  attempted(challenge: Challenge): boolean;
   /**
    * The board's picks or pointer moved, so the frame behind is stale.
    *
@@ -205,6 +240,11 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     }
 
     submit.addEventListener('click', () => {
+      // Read **before** `onGraded`, which is what records the attempt. Asking
+      // afterwards would always answer true and the line would appear on a first
+      // answer — the off-by-one this file's neighbour in `progress.ts` carries a
+      // comment about, for the same reason.
+      const again = handlers.attempted(challenge);
       const grade = verb.grade(challenge, { picked: [...picked] });
       // The reveal is computed once and handed on, so the map and the panel
       // cannot disagree about what was just revealed — and `asEarned` is applied
@@ -212,22 +252,34 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // identities of correct answers the player did not pick when precision is
       // below the bar, and moves the map unlock with them, because withholding
       // the words while drawing the cone changes nothing (ADR-0035).
-      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade);
+      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade, challenge);
       handlers.onGraded(challenge, grade, reveal);
-      renderResult(challenge, grade, reveal);
+      renderResult(challenge, grade, reveal, again);
     });
 
+    // **Said before the answer, not after it.** A rule the player learns from its
+    // consequence is a trap; `keyRule` states it on a fresh board and this states
+    // the other half on a spent one. Verb-blind, like everything else here.
+    const spent = handlers.attempted(challenge)
+      ? [el('p', 'console-again', [REANSWER_LINE])]
+      : [];
     body.replaceChildren(
       header(prompt.title, challenge.difficulty),
       el('h2', 'console-question', [prompt.question]),
       el('p', 'console-instruction', [prompt.instruction]),
+      ...spent,
       list,
       el('div', 'console-footer', [tally, submit]),
     );
     refresh();
   }
 
-  function renderResult(challenge: Challenge, grade: Grade, reveal: Reveal): void {
+  function renderResult(
+    challenge: Challenge,
+    grade: Grade,
+    reveal: Reveal,
+    again: boolean,
+  ): void {
     // The board is over: its markers come off the map before the reveal names
     // the truth set.
     live = null;
@@ -255,6 +307,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // Written by the verb, for the same reason as the reveal itself: only
       // the verb knows what its answer key sampled away.
       el('p', 'console-instruction', [reveal.summary]),
+      // The band above says `exact`; the notebook says nothing. Both are true and
+      // together they read as a bug unless one of them explains the other.
+      ...(again ? [el('p', 'console-again', [REANSWER_LINE])] : []),
       notes(reveal.notes),
       el('div', 'console-footer', [el('div', 'console-tally', []), done]),
     );

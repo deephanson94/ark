@@ -80,9 +80,32 @@ export interface Progress {
   readonly surveyed: readonly NodeId[];
   /** Sorted by `(verb, subject)`. */
   readonly passes: readonly Pass[];
+  /**
+   * `(verb, subject)` keys that have been **graded at least once**, sorted.
+   *
+   * **A board's pass is decided by its first graded attempt** (ADR-0035 §10,
+   * owner's decision). Without this the deck was farmable: the grade line is an
+   * oracle — `Found 1 of 4` after a single pick says whether that pick was in
+   * the key — and guardrail 6 makes each probe free, so ~20 probes bought a
+   * pass and a field note reading *"You proved…"*. Withholding the reveal
+   * (ADR-0035) stops the product *handing* the key over; only this stops a
+   * farmed pass being recorded as knowledge, which is NORTH-STAR §9's whole
+   * distinction.
+   *
+   * **Additive, and absent means empty**, so a save written before this field
+   * existed stays valid and every board's next attempt is its first. That is the
+   * generous direction and the only one that does not silently void a player's
+   * progress.
+   */
+  readonly attempted: readonly string[];
 }
 
-export const EMPTY_PROGRESS: Progress = { version: SAVE_VERSION, surveyed: [], passes: [] };
+export const EMPTY_PROGRESS: Progress = {
+  version: SAVE_VERSION,
+  surveyed: [],
+  passes: [],
+  attempted: [],
+};
 
 function union<T extends string>(existing: readonly T[], added: Iterable<T>): T[] {
   return [...new Set([...existing, ...added])].sort(byteCompare);
@@ -152,9 +175,20 @@ export function applyGrade(
   // place a non-node subject can enter the record.
   const seen = [challenge.subject, ...challenge.candidates].filter(isNodeId);
   let next = recordSurvey(progress, seen);
-  const passed = grade.score >= threshold;
+  const key = answerKey(challenge.verb, challenge.subject);
+  // **The first graded attempt is the one that counts** (ADR-0035 §10). Reading
+  // it *before* recording keeps this a property of the answer rather than of the
+  // order of two lines — the shape of defect this file already carries a comment
+  // about one field down.
+  const first = !progress.attempted.includes(key);
+  next = { ...next, attempted: union(next.attempted, [key]) };
+  const passed = grade.score >= threshold && first;
   if (passed) next = recordPass(next, challenge.verb, challenge.subject, grade.correct);
-  return { progress: next, unlocked: passed };
+  // `unlocked` is the *map* channel and stays keyed on the score alone: ADR-0008
+  // decision 1 and guardrail 6 both say a reveal's picture follows its words, and
+  // the words are still shown (ADR-0035 explains any passing answer). A retry
+  // that reads well and draws nothing would be the vanishing-wires defect again.
+  return { progress: next, unlocked: grade.score >= threshold };
 }
 
 // ---------------------------------------------------------------------------

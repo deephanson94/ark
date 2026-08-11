@@ -59,6 +59,58 @@ export interface Bounds {
   readonly maxY: number;
 }
 
+/**
+ * How far outside the map's edge the chronicle stands.
+ *
+ * Shared, because the flat map and the walkable world must put it in the *same
+ * place*: a player who learns where the chronicle is in one view has to find it
+ * in the other, and two copies of this constant is the shape of every defect
+ * this repo has had to fix twice.
+ */
+export const OUTSKIRTS = 90;
+
+/**
+ * Where commit-subject boards are answered — **one landmark, outside the map**.
+ *
+ * ADR-0033 decision 2 put it here for the world and gave the reason: a commit
+ * has no `layout`, and marking it among the files it touched would draw
+ * Placement's own answer key on the ground. Its position is a function of the
+ * **bounds** and of nothing else, so it says *commits are answered here* and
+ * nothing whatever about which files any of them touched.
+ *
+ * **It was in the world only, and that was a hole rather than a decision.** A
+ * playtester grid-clicked 333 nodes on the flat map, never found a Placement
+ * board, and worked out from the shipped bundle that the only entry point was in
+ * walk mode — 25% of this repo's deck and 77% of django's, reachable only by
+ * pressing a key nothing advertised.
+ */
+export function chronicleAt(bounds: Bounds): Point {
+  return { x: (bounds.minX + bounds.maxX) / 2, y: bounds.minY - OUTSKIRTS };
+}
+
+/**
+ * The bounds a *view* has to frame: the nodes, plus the chronicle standing
+ * outside them.
+ *
+ * **`fit` over the node bounds alone leaves the chronicle off the top edge**,
+ * which is how the first version of the flat-map landmark shipped: drawn,
+ * clickable, and never on screen — the marking-layer failure one level up, and
+ * caught by an e2e sweep that found no commit board along the top of a fitted
+ * map.
+ */
+export function framedBounds(bounds: Bounds): Bounds {
+  const at = chronicleAt(bounds);
+  return {
+    minX: Math.min(bounds.minX, at.x),
+    maxX: Math.max(bounds.maxX, at.x),
+    // A little past it, so the landmark and its label are inside the frame
+    // rather than clipped by its own edge.
+    minY: Math.min(bounds.minY, at.y - OUTSKIRTS * 0.35),
+    maxY: bounds.maxY,
+  };
+}
+
+
 export const MIN_SCALE = 0.05;
 export const MAX_SCALE = 8;
 

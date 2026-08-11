@@ -465,8 +465,15 @@ export function createLegend(scene: Scene): HTMLElement {
     swatch.style.background = regionColor(region.index, 1);
     return el('li', 'legend-item', [swatch, `${region.label} (${region.nodeCount})`]);
   });
+  // **Say how many regions there are, not just as many as fit.** The box clips
+  // at `max-height: 42vh` with no scrollbar, fade or count, and a playtester
+  // measured it showing **17 of 36** — silently, with the map's primary channel
+  // as the thing being half-explained. `pointer-events: none` is why there is no
+  // scrollbar to find, and it is deliberate (the legend must never eat a click
+  // meant for the map), so the honest fix is to say the number.
+  const title = scene.regions.length === 0 ? 'regions' : `regions (${scene.regions.length})`;
   return el('div', 'legend', [
-    el('div', 'legend-title', ['regions']),
+    el('div', 'legend-title', [title]),
     el('ul', 'legend-list', items),
   ]);
 }
@@ -543,5 +550,74 @@ export function createNotebook(deckRefused: boolean): Notebook {
       });
       list.replaceChildren(...items);
     },
+  };
+}
+
+/**
+ * Help, on `?`.
+ *
+ * **Three cold playtesters pressed `?`, `h`, `H` and `F1` and got nothing**, and
+ * one measured 23 keys as dead before concluding the product had no help at all.
+ * The HUD's control line is a 10px grey strip that wraps mid-list; it is a
+ * reminder, not an answer to *what is this and what do I do*.
+ *
+ * Everything here is either a control that exists or a fact about the map's
+ * channels — nothing authored about any repository (guardrail 2). The channels
+ * are the half a legend cannot carry: colour has a legend, and size, ring,
+ * height and outline had none, so a player guessed at four encodings and
+ * confirmed none.
+ */
+export function createHelp(): { root: HTMLElement; toggle(): void; isOpen(): boolean } {
+  const rows: readonly (readonly [string, string])[] = [
+    ['drag · wheel', 'pan the map · zoom in and out'],
+    ['click', 'survey a file — its name, and what imports it'],
+    ['enter', 'ask the selected file’s question'],
+    ['f · n', 'fit the whole map · turn back to north'],
+    ['o', 'the orbit view — every file a column, height = how much depends on it'],
+    ['g', 'walk it — WASD to move, Q/E to turn, enter to open what you are standing at'],
+    ['shift-drag', 'turn the map by hand'],
+    ['?', 'this'],
+  ];
+  const keys = el(
+    'ul',
+    'help-keys',
+    rows.map(([key, what]) =>
+      el('li', 'help-row', [el('span', 'help-key', [key]), el('span', 'help-what', [what])]),
+    ),
+  );
+  const channels = el('ul', 'help-keys', [
+    ['colour', 'which region a file belongs to — a derived cluster, not its folder'],
+    ['size', 'how many lines it holds'],
+    ['a dashed outline', 'you have not surveyed it yet — the tallest few are surveyed for you, so you have somewhere to start'],
+    ['rings around it', 'how load-bearing it is — each ring is another doubling of the files that depend on it, through any chain'],
+    ['a dashed circle', 'it carries a question you have not answered'],
+    ['ember arcs', 'these two files change together in the history'],
+    ['the diamond', 'the chronicle — where questions about commits, rather than files, are answered'],
+  ].map(([key, what]) =>
+    el('li', 'help-row', [el('span', 'help-key', [key ?? '']), el('span', 'help-what', [what ?? ''])]),
+  ));
+  const panel = el('section', 'help-panel', [
+    el('h2', 'help-title', ['What this is']),
+    el('p', 'help-lede', [
+      'A map of a repository, mostly unsurveyed. Answer questions about its structure — ' +
+        'graded against facts read out of the repo itself — and the map fills in around what you prove.',
+    ]),
+    el('div', 'help-heading', ['controls']),
+    keys,
+    el('div', 'help-heading', ['what the map is telling you']),
+    channels,
+  ]);
+  panel.setAttribute('role', 'dialog');
+  const root = el('div', 'help-scrim', [panel]);
+  root.hidden = true;
+  root.addEventListener('pointerdown', (event) => {
+    if (event.target === root) root.hidden = true;
+  });
+  return {
+    root,
+    toggle: () => {
+      root.hidden = !root.hidden;
+    },
+    isOpen: () => !root.hidden,
   };
 }
