@@ -482,6 +482,16 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   because every verb had *a* test. When you add a peer to an existing family, list what the family is
   checked for and check the list against each member, not against the newcomer.
 
+- **Reading a requestAnimationFrame-driven value without waiting for a frame is a race that only
+  loses on someone else's machine.** The e2e asserted the map's board-marker count straight after
+  `waitForSelector('.console-panel')` — but the panel appearing is synchronous DOM and the count is
+  written inside the rAF loop. Locally a frame had always landed first; **CI reported `0 marks` on a
+  board that draws six**, so the suite was green here and red there on identical code, and the
+  failure text (*"a companion board marked 0 places"*) reads exactly like the feature being broken.
+  Poll with a deadline rather than reading once — the deadline is what keeps a genuinely dead layer
+  failing instead of hanging. Note this is *not* the merge-commit landmine below even though it wears
+  its clothes: the tree was identical and the machine was slower.
+
 - **A suite that checks the shape of a sentence never checks whether it is true, and three cold
   playtesters found what 780 assertions could not.** Every prompt ended with *"Wrong picks cost you
   nothing"*, which §8.2 makes **false** — a spare pick lowers precision, so the right file plus two

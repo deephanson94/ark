@@ -20,7 +20,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import type { ConsoleMessage } from 'playwright';
+import type { ConsoleMessage, Page } from 'playwright';
 import { build, preview } from 'vite';
 
 import type { Atlas } from '../src/atlas/index.js';
@@ -89,6 +89,30 @@ async function indexForPlayer(): Promise<Atlas> {
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
   await writeFile(ATLAS_OUT, serializeAtlas(atlas), 'utf8');
   return atlas;
+}
+
+
+/**
+ * The HUD's board-marker count, once a frame carrying it has actually painted.
+ *
+ * **Read without waiting, this is a race that only loses on a slow machine.**
+ * The panel appearing is synchronous DOM; the count is written inside the
+ * requestAnimationFrame loop. Locally a frame had always landed by the time the
+ * assertion ran, and CI's runner reported `0 marks` on a board that draws six —
+ * green here, red there, on identical code. Polling is the fix; the deadline is
+ * what keeps a genuinely dead layer failing rather than hanging.
+ */
+async function markCount(page: Page, atLeast: number): Promise<number> {
+  const deadline = 4000;
+  const step = 100;
+  let seen = 0;
+  for (let waited = 0; waited <= deadline; waited += step) {
+    const detail = (await page.locator('.hud-detail').innerText()).trim();
+    seen = Number(/(\d+) marks/.exec(detail)?.[1] ?? '0');
+    if (seen >= atLeast) return seen;
+    await page.waitForTimeout(step);
+  }
+  return seen;
 }
 
 async function main(): Promise<number> {
@@ -407,10 +431,9 @@ async function main(): Promise<number> {
       // measured off the renderer like `peaksDrawn` and `tiesDrawn`. A layer
       // that never fires would otherwise be code and comments asserting a
       // behaviour the product does not have.
-      const marksLine = (await page.locator('.hud-detail').innerText()).trim();
-      const marks = Number(/(\d+) marks/.exec(marksLine)?.[1] ?? '0');
+      const marks = await markCount(page, 1);
       if (marks <= 0) {
-        failures.push({ what: 'board', detail: `the map marked nothing: ${marksLine}` });
+        failures.push({ what: 'board', detail: 'the map marked nothing on an open board' });
       }
       process.stdout.write(`e2e: board marked ${marks} places on the map\n`);
 
@@ -895,8 +918,8 @@ async function main(): Promise<number> {
         // which is why the run-level `sawMapTick` flag exists rather than a
         // per-board assertion.
         {
-          const detail = (await page.locator('.hud-detail').innerText()).trim();
-          const marked = Number(/(\d+) marks/.exec(detail)?.[1] ?? '0');
+          const marked = await markCount(page, 2);
+          process.stdout.write(`e2e: companion board marked ${marked} places\n`);
           if (marked < 2) {
             failures.push({
               what: 'board',
