@@ -3152,3 +3152,50 @@ One line per iteration: what changed, and what to do next.
   on **any** grade, deliberately, so withholding the names alone changes nothing — the summary
   sentence, the map unlock and the notes have to move together or the fix is theatre. It wants a
   measured threshold and its own ADR.
+
+- **A reveal is earned now: select-all buys nothing**
+  (**[ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)**,
+  owner's decision). The exploit a playtester found in two clicks: tick every candidate, score ~10%
+  at no cost, read the whole annotated answer key off the reveal — with the full import cone drawn on
+  the map — reopen, tick what it named, and take `S · 100% · exact`, a pass and a **field note**.
+  NORTH-STAR §9 calls field notes *"facts you have proven you know, not facts you were shown"* and
+  says that distinction is the whole product; every proof in the deck was obtainable without
+  understanding anything. The *score* exploit was closed at M2 by `isGameable`; the *reveal* exploit
+  had never been looked at.
+
+  **Below 0.5 precision the reveal names no candidate**, states the counts, and does not unlock the
+  map. `precision < 0.5` is *exactly* the sentence the player reads — **more of your picks were wrong
+  than right** — so the prose is the condition rather than a gloss on it, which is this repo's
+  class-label landmine designed out instead of guarded against. Select-all cannot reach the bar
+  **structurally**: ADR-0007's three-to-one choice set puts its precision at ≈1/3, measured at a
+  **maximum of 0.308 over 792 boards** on graphql-js, kysely and hono, with none above 0.4 — so the
+  bar has 1.6× margin rather than ADR-0021's knife edge. Precision 1.0 with low recall, the teaching
+  moment, is untouched and is unfarmable because reaching it means already knowing.
+
+  **Two drafts of the rule were wrong and the tests caught both.** *Withhold the answers you did not
+  pick* closes nothing — under select-all there **are** none, every truth member is a `correct` note
+  — and the first run of `withhold.test.ts` failed on it. Keeping the `spurious` rows as the
+  mitigation fails one step later: `picks = correct ∪ spurious`, so naming the wrong ones names the
+  right ones **by complement**. The narrower rule does not survive the arithmetic either, and the
+  ADR shows why rather than asserting it: knowing which of your picks were right passes next time
+  whenever `f1(1, recall) ≥ 0.5`, i.e. **recall ≥ 1/3**, which is not an edge case.
+
+  **The map unlock moves with the words, and that is the whole point of it being one change.**
+  `unlocks: 'importRadius'` draws a superset of the key, so withholding the sentence while drawing
+  the picture would have been theatre — the coupling this was scoped against last session.
+
+  **Two costs, both stated rather than absorbed.** The player who reasons worst learns least. And
+  ADR-0020's negative witness now speaks only to answers above the bar — a real narrowing of a
+  shipped feature, which surfaced because the e2e's witness step went red: it had been picking a
+  single wrong answer, precision 0, so it was measuring the new rule instead of the witness. It
+  answers precisely now. What is **not** measured is how often honest play lands below the bar,
+  because nothing instruments attempts (experiment 0001 §3) — a measured exploit against an
+  unmeasured cost, said plainly so the 792-board figure does not lend its confidence to both halves.
+
+  Four mutants die, including both wrong drafts of the rule, and the e2e plays the exploit for real
+  against a fresh save and asserts no candidate label appears anywhere in the panel.
+
+  **Next**: the rest of what the playtests found — the fog is invisible (dashed-vs-solid outlines
+  nobody noticed), the legend clips silently at 17 of 36 regions, **Placement is unreachable from
+  the map** (25% of the deck, reachable only at the chronicle in walk mode), the guide serves the
+  four lowest-difficulty boards first with no skip, and there is no help key. Then S1.

@@ -492,6 +492,19 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   failing instead of hanging. Note this is *not* the merge-commit landmine below even though it wears
   its clothes: the tree was identical and the machine was slower.
 
+- **The obvious fix for a leak can close none of it, and the arithmetic is what says so.** The
+  select-all farm — tick everything, read the annotated key, reopen, score 100% — looks like it is
+  fixed by *withholding the answers the player did not pick*. Under select-all there **are** none:
+  every truth member is a `correct` note, so the filter matched zero rows and the reveal named the
+  key exactly as before. Keeping the `spurious` rows as the mitigation fails one step later, because
+  `picks = correct ∪ spurious` and naming one names the other **by complement**. And the narrow
+  version — keep the rows when coverage is low — dies to `f1(1, recall) ≥ 0.5 ⟺ recall ≥ 1/3`, so
+  learning which of your picks were right passes next time from a third of the key. Three drafts,
+  two killed by a unit test on its first run and one by four lines of algebra. **When a fix withholds
+  information, write down what the remaining information determines** — and note that the surviving
+  rule cost a *shipped feature* part of its reach (ADR-0020's witness now speaks only above the bar),
+  which surfaced as a red e2e step rather than as a decision anyone took.
+
 - **A suite that checks the shape of a sentence never checks whether it is true, and three cold
   playtesters found what 780 assertions could not.** Every prompt ended with *"Wrong picks cost you
   nothing"*, which §8.2 makes **false** — a spare pick lowers precision, so the right file plus two

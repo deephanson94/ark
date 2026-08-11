@@ -1173,13 +1173,27 @@ async function main(): Promise<number> {
             detail: `${landedOn}'s board offers no wrong answer the verb will explain`,
           });
         } else {
+          // **Every answer, plus the one wrong row whose witness is being
+          // checked.** Picking the wrong row alone was precision 0, and since
+          // ADR-0035 a board explains itself only to an answer that
+          // discriminated — so the old version of this step now measures the
+          // withholding rule rather than the witness. `k` answers and one
+          // mistake is precision `k/(k+1) ≥ 0.5`, which is above the bar for
+          // every board, and it leaves exactly one spurious row to explain.
+          const wanted = new Set(
+            [...witnessBoard.truth].map((id) => labelById.get(id) ?? '').filter((l) => l !== ''),
+          );
           const count = await page.locator('.choice-button').count();
           let picked = false;
           for (let i = 0; i < count; i++) {
             const button = page.locator('.choice-button').nth(i);
-            if ((await button.innerText()).trim() !== spoken.label) continue;
-            await button.click();
-            picked = true;
+            const label = (await button.innerText()).trim();
+            if (label === spoken.label) {
+              await button.click();
+              picked = true;
+            } else if (wanted.has(label)) {
+              await button.click();
+            }
           }
           if (!picked) {
             failures.push({ what: 'witness', detail: `${spoken.label} was not on the board` });
@@ -1849,6 +1863,73 @@ async function main(): Promise<number> {
       } finally {
         for (const error of seededErrors) failures.push({ what: 'console', detail: error });
         await context.close();
+      }
+    }
+
+    // ---- select-all buys nothing (ADR-0035) ------------------------------
+    //
+    // A playtester farmed a pass in two clicks: tick everything, read the
+    // annotated key off the reveal, reopen, tick what it named — `S · 100%`, a
+    // pass, and a field note. This plays that first step for real. It is a
+    // browser check rather than a unit one because the leak was as much the
+    // **map unlock** as the words, and because the panel is what a player reads:
+    // the assertion is that no candidate's label appears anywhere in it.
+    {
+      const exploitContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const exploitPage = await exploitContext.newPage();
+      const exploitErrors: string[] = [];
+      exploitPage.on('pageerror', (error: Error) => exploitErrors.push(String(error)));
+      exploitPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') exploitErrors.push(message.text());
+      });
+      try {
+        // A fresh save, so the guide's suggestion is an unanswered board.
+        await exploitPage.goto(url, { waitUntil: 'networkidle' });
+        await exploitPage.waitForSelector('.guide-action');
+        // **The guide takes you to a landmark; it does not open a question.**
+        // ADR-0011 is explicit about that, and it is only false for a placeless
+        // subject, where the control opens the board directly. So: click, and
+        // press Enter only if nothing opened — pressing it unconditionally would
+        // toggle the focused row and quietly un-tick one of the sweep's picks.
+        await exploitPage.locator('.guide-action').click();
+        await exploitPage.waitForTimeout(400);
+        if (!(await exploitPage.locator('.console-panel').isVisible())) {
+          await exploitPage.keyboard.press('Enter');
+        }
+        await exploitPage.waitForSelector('.choice-button', { timeout: 5000 });
+        const rows = await exploitPage.locator('.choice-button').allInnerTexts();
+        for (const button of await exploitPage.locator('.choice-button').all()) await button.click();
+        await exploitPage.locator('.console-submit').click();
+        await exploitPage.waitForSelector('.console-score', { timeout: 5000 });
+        const shown = (await exploitPage.locator('.console-panel').innerText()).trim();
+        // Every row's own rendered label, compared against rendered text — the
+        // `innerText` landmine, and the reason the labels come from the board
+        // rather than from the atlas.
+        const named = rows.map((row) => row.trim()).filter((row) => row !== '' && shown.includes(row));
+        if (named.length > 0) {
+          failures.push({
+            what: 'select-all',
+            detail: `the reveal named ${named.length} of ${rows.length} candidates after select-all`,
+          });
+        }
+        if (!shown.includes('wrong than right')) {
+          failures.push({
+            what: 'select-all',
+            detail: 'the board went silent without saying why',
+          });
+        }
+        // The control: this run must have been a genuine select-all on a real
+        // board, or the two assertions above pass against an empty panel.
+        if (rows.length < 4) {
+          failures.push({ what: 'select-all', detail: `only ${rows.length} rows to sweep` });
+        }
+        process.stdout.write(
+          `e2e: select-all over ${rows.length} rows → ${named.length} candidates named\n`,
+        );
+        await exploitPage.screenshot({ path: join(SHOT_DIR, 'select-all.png') });
+      } finally {
+        for (const error of exploitErrors) failures.push({ what: 'console', detail: error });
+        await exploitContext.close();
       }
     }
 
