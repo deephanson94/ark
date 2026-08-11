@@ -94,6 +94,16 @@ async function indexForPlayer(): Promise<Atlas> {
 async function main(): Promise<number> {
   const failures: Failure[] = [];
   /**
+   * Did any board in this run let a map click tick a candidate?
+   *
+   * Tracked across the run rather than asserted per board: which verb the deck
+   * serves first moves with the repo, and on a commit-candidate board no map
+   * click can tick anything. Without this flag a run that only opened
+   * Archaeology boards would skip the interesting half and go green — the
+   * dead-path failure this repo has a landmine about.
+   */
+  let sawMapTick = false;
+  /**
    * Subjects this run has already answered.
    *
    * Later steps need a board that is still **open** — the inspector hides its
@@ -390,6 +400,72 @@ async function main(): Promise<number> {
         failures.push({ what: 'challenge', detail: `only ${choices} choices offered` });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'challenge.png') });
+
+      // **The map marks the open board.** Three cold playtesters found the map
+      // inert during a challenge — a checkbox list of paths over a dimmed map
+      // with nothing on it marked — so this is the liveness gate on the fix,
+      // measured off the renderer like `peaksDrawn` and `tiesDrawn`. A layer
+      // that never fires would otherwise be code and comments asserting a
+      // behaviour the product does not have.
+      const marksLine = (await page.locator('.hud-detail').innerText()).trim();
+      const marks = Number(/(\d+) marks/.exec(marksLine)?.[1] ?? '0');
+      if (marks <= 0) {
+        failures.push({ what: 'board', detail: `the map marked nothing: ${marksLine}` });
+      }
+      process.stdout.write(`e2e: board marked ${marks} places on the map\n`);
+
+      // **And a click on the map answers the board rather than discarding it.**
+      // The scrim used to close on any pointerdown that reached it, so the most
+      // natural act during a challenge threw the ticks away.
+      //
+      // **The first version of this check passed for the wrong reason.** It
+      // swept the whole canvas, and the panel is docked to the right of it — so
+      // a "map click" that ticked a row was scored as a map click that ticked a
+      // marker, on an Archaeology board where the candidates are *commits* and
+      // no map click can ever tick anything. The panel's own box is excluded
+      // now, and the tick is required only where a candidate has a place at
+      // all: `marks > 1` means the subject plus at least one candidate.
+      const mapBox = await page.locator('canvas.map').boundingBox();
+      const panelBox = await page.locator('.console-panel').boundingBox();
+      if (mapBox !== null) {
+        const before = (await page.locator('.console-tally').innerText()).trim();
+        let toggled = '';
+        for (let row = 1; row < 20 && toggled === ''; row++) {
+          for (let column = 1; column < 30 && toggled === ''; column++) {
+            const x = mapBox.x + (mapBox.width * column) / 44;
+            const y = mapBox.y + (mapBox.height * row) / 24;
+            if (
+              panelBox !== null &&
+              x >= panelBox.x - 8 &&
+              x <= panelBox.x + panelBox.width + 8 &&
+              y >= panelBox.y - 8 &&
+              y <= panelBox.y + panelBox.height + 8
+            ) {
+              continue;
+            }
+            await page.mouse.click(x, y);
+            const now = (await page.locator('.console-tally').innerText()).trim();
+            if (now !== before) toggled = now;
+          }
+        }
+        if (marks > 1 && toggled === '') {
+          failures.push({ what: 'board', detail: 'no click on the map ever ticked a candidate' });
+        }
+        if (toggled !== '') {
+          sawMapTick = true;
+          process.stdout.write(`e2e: a click on the map → ${toggled}\n`);
+        }
+        // Verb-independent, and the other half of the fix: whatever the click
+        // landed on, the board is still open.
+        if (!(await page.locator('.console-panel').isVisible())) {
+          failures.push({ what: 'board', detail: 'clicking the map closed the board' });
+        }
+        // Leave the board as we found it, so the deliberate answer below is
+        // graded against a clean set of picks.
+        for (const pickedButton of await page.locator('.choice-button.is-picked').all()) {
+          await pickedButton.click();
+        }
+      }
 
       // Answer it correctly, on purpose. A wrong answer would exercise the
       // grade but not the *unlock*, and the unlock is the whole of ADR-0008
@@ -813,6 +889,56 @@ async function main(): Promise<number> {
         if (verb !== 'companion') {
           failures.push({ what: 'wires', detail: `expected a companion board, got ${verb}` });
         }
+        // **A Companion board's candidates are files, so this is where a map
+        // click can tick one.** The board opened earlier in this run may be
+        // Archaeology, whose candidates are commits and have no place at all —
+        // which is why the run-level `sawMapTick` flag exists rather than a
+        // per-board assertion.
+        {
+          const detail = (await page.locator('.hud-detail').innerText()).trim();
+          const marked = Number(/(\d+) marks/.exec(detail)?.[1] ?? '0');
+          if (marked < 2) {
+            failures.push({
+              what: 'board',
+              detail: `a companion board marked ${marked} places; expected the subject and candidates`,
+            });
+          }
+          const box = await page.locator('canvas.map').boundingBox();
+          const panel = await page.locator('.console-panel').boundingBox();
+          const before = (await page.locator('.console-tally').innerText()).trim();
+          let ticked = '';
+          if (box !== null) {
+            for (let row = 1; row < 22 && ticked === ''; row++) {
+              for (let column = 1; column < 32 && ticked === ''; column++) {
+                const x = box.x + (box.width * column) / 44;
+                const y = box.y + (box.height * row) / 26;
+                if (
+                  panel !== null &&
+                  x >= panel.x - 8 &&
+                  x <= panel.x + panel.width + 8 &&
+                  y >= panel.y - 8 &&
+                  y <= panel.y + panel.height + 8
+                ) {
+                  continue;
+                }
+                await page.mouse.click(x, y);
+                const now = (await page.locator('.console-tally').innerText()).trim();
+                if (now !== before) ticked = now;
+              }
+            }
+          }
+          if (ticked === '') {
+            failures.push({ what: 'board', detail: 'no map click ticked a candidate on a companion board' });
+          } else {
+            sawMapTick = true;
+            process.stdout.write(`e2e: a click on the map → ${ticked}\n`);
+          }
+          if (!(await page.locator('.console-panel').isVisible())) {
+            failures.push({ what: 'board', detail: 'clicking the map closed the board' });
+          }
+          for (const on of await page.locator('.choice-button.is-picked').all()) await on.click();
+        }
+
         const wanted = new Set((wirePlayed ?? wireTarget).truth.map((id) => pathById.get(id) ?? ''));
         const options = await page.locator('.choice-button').count();
         for (let i = 0; i < options; i++) {
@@ -1801,6 +1927,13 @@ async function main(): Promise<number> {
       } finally {
         await openContext.close();
       }
+    }
+
+    if (!sawMapTick) {
+      failures.push({
+        what: 'board',
+        detail: 'no board in this run let a map click tick a candidate — the marking layer is unexercised',
+      });
     }
 
     for (const error of consoleErrors) failures.push({ what: 'console', detail: error });

@@ -62,6 +62,34 @@ export interface FrameInput {
    * same reason everything else is: this module draws what it is given.
    */
   readonly chrome: readonly Box[];
+  /**
+   * The board that is open, resolved to places.
+   *
+   * **This is what makes the map an instrument rather than a backdrop.** Three
+   * cold playtesters opened a challenge and found a checkbox list of twenty
+   * paths over a dimmed map with nothing on it marked — so the only way to
+   * answer was to pattern-match on filenames, which is the exact failure
+   * pillar 3 exists to punish (`treeSibling` is a whole distractor class about
+   * it). Marking the subject and the candidates discloses **nothing**: every
+   * one of these paths is already printed in the panel, and the answer key is
+   * not among them — the import cone stays gated on `subjectsPassed`
+   * (ADR-0008 decision 1) and none of this draws an edge.
+   *
+   * Refs, because the shell resolved them. Half a deck's ids have no place at
+   * all — Placement's subject is a commit, Archaeology's candidates are — and
+   * the shell drops those rather than this module guessing (ADR-0018).
+   */
+  readonly board: BoardMarks | null;
+}
+
+/** The open board's places, and which of them are ticked. */
+export interface BoardMarks {
+  /** `null` when the subject is a commit, which has nowhere to stand. */
+  readonly subject: NodeRef | null;
+  readonly candidates: ReadonlySet<NodeRef>;
+  readonly picked: ReadonlySet<NodeRef>;
+  /** The candidate under the pointer, in the panel or on the map. */
+  readonly hovered: NodeRef | null;
 }
 
 export interface FrameStats {
@@ -78,6 +106,12 @@ export interface FrameStats {
    * on a real repo rather than to assert it in a fixture.
    */
   readonly tiesDrawn: number;
+  /**
+   * Board markers actually drawn. Measured, like `peaksDrawn` and `tiesDrawn`,
+   * because a marking layer that never fires is the defect it was built to fix
+   * wearing a comment that says otherwise.
+   */
+  readonly boardDrawn: number;
 }
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -98,7 +132,7 @@ const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
 const TIE_BOW = 0.16;
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus } =
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus, board } =
     input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
@@ -400,6 +434,54 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     labelsDrawn += placed.length;
   }
 
+
+  // ---- the open board ---------------------------------------------------
+  //
+  // Drawn last of the node passes and before the labels, so a marker is never
+  // buried under a disc. Three shapes and no fourth: a wide ring for the
+  // subject, a square for a candidate, and the square filled when it is ticked.
+  // Nothing here draws an **edge** — the relation between the subject and its
+  // candidates *is* the answer, and it stays where ADR-0008 put it.
+  let boardDrawn = 0;
+  if (board !== null) {
+    for (const node of nodes) {
+      const isSubject = board.subject === node.ref;
+      const isCandidate = board.candidates.has(node.ref);
+      if (!isSubject && !isCandidate) continue;
+      const point = project(node);
+      const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+      context.setLineDash([]);
+      if (isSubject) {
+        // The thing the question is about, findable at a glance across a map of
+        // 549 files. Two rings, because one reads as the question ring the deck
+        // already draws.
+        context.strokeStyle = INK.subject;
+        context.lineWidth = 2;
+        for (const gap of [5, 9]) {
+          context.beginPath();
+          context.arc(point.x, point.y, drawn + gap, 0, Math.PI * 2);
+          context.stroke();
+        }
+        boardDrawn++;
+        continue;
+      }
+      const ticked = board.picked.has(node.ref);
+      const focused = board.hovered === node.ref;
+      const side = Math.max(7, drawn + 5);
+      context.lineWidth = focused ? 2.4 : 1.4;
+      context.strokeStyle = ticked ? INK.picked : INK.candidate;
+      context.beginPath();
+      context.rect(point.x - side, point.y - side, side * 2, side * 2);
+      context.stroke();
+      if (ticked) {
+        context.fillStyle = INK.picked;
+        context.globalAlpha = 0.22;
+        context.fill();
+        context.globalAlpha = 1;
+      }
+      boardDrawn++;
+    }
+  }
   context.restore();
   return {
     nodesDrawn: nodes.length,
@@ -408,6 +490,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     level,
     peaksDrawn,
     tiesDrawn,
+    boardDrawn,
   };
 }
 
@@ -630,5 +713,11 @@ export function drawOrbitFrame(
     // nothing peak-specific at all — a "how many X" with no gate that X
     // happened, which is the landmine this field exists to satisfy.
     peaksDrawn: placed.length,
+    // **The orbit does not mark the board, and says so with a zero rather than
+    // by omission.** A column's disc is drawn at its *top* — turned, lifted and
+    // offset by headroom — so a marker placed by the flat projection would land
+    // where nothing is drawn, which is this file's oldest scar. Marking columns
+    // is a design question of its own and this is not it.
+    boardDrawn: 0,
   };
 }

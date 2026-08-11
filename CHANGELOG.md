@@ -3114,3 +3114,41 @@ One line per iteration: what changed, and what to do next.
   draw the edges the question is about, and let the player pan without losing the board. It collapses
   five of the open findings into one change and it is what makes the map the instrument you answer
   *with* rather than a background.
+
+- **The map does work during a challenge now, which was the largest thing three cold playtests
+  found.** Opening a board used to give you a 660px panel in the middle of the screen over a dimmed,
+  blurred map with **nothing on it marked** — so a player who had never seen the repo could only
+  pattern-match on filenames, which is what the `treeSibling` distractor class exists to punish, and
+  clicking the map to look at the thing the question was about **silently discarded the board**.
+
+  Four changes, one idea. The console publishes a `BoardView` — ids and tick state, never a verb,
+  never a ref — and the shell resolves whichever of them have a place, which is where **both halves
+  of `AtlasId` arrive and neither is assumed**: a Placement subject is a commit and an Archaeology
+  candidate is, so `refById` returns `undefined` and those are dropped rather than given an invented
+  position. `draw.ts` marks the subject with a double ring and every placeable candidate with a
+  square that fills when ticked. **No edge is drawn between them** — that relation *is* the answer,
+  and it stays gated on `subjectsPassed` where ADR-0008 put it. The scrim is pointer-transparent and
+  the panel docked to one edge, so the map is a place you can look at and click; a click on a marked
+  candidate **ticks it**, and a click anywhere else does nothing instead of throwing the board away.
+  Opening a board pans its subject to 30% of the width, because a marker under the panel is the
+  marking layer firing and the player seeing nothing.
+
+  **The first version of the e2e gate passed for the wrong reason**, which is the third time this
+  file has recorded that shape: the sweep covered the whole canvas and the panel is docked to the
+  right of it, so a "map click" that ticked a *row* was scored as a map click that ticked a marker —
+  on an Archaeology board, where the candidates are commits and no map click can ever tick anything.
+  The panel's box is excluded now, the tick is required only where `marks > 1`, and a **run-level
+  flag fails the suite if no board in the whole run ever exercised the path** rather than letting it
+  skip quietly. That flag went red on the first run after it was added, which is how the false
+  positive was found at all.
+
+  Three mutants die on the marking layer: drawing markers regardless of board membership, dropping
+  the layer when the subject has no place, and the two above.
+
+  **Next**: close the select-all exploit — submit everything, read the annotated key, reopen, tick
+  the named files, 100% and a field note in two clicks. The owner's decision is to withhold unpicked
+  truth members when precision is low, which is withholding by *board* and so allowed by ADR-0020.
+  The coupling to check first, found while scoping it: `unlocks: 'importRadius'` draws the full cone
+  on **any** grade, deliberately, so withholding the names alone changes nothing — the summary
+  sentence, the map unlock and the notes have to move together or the fix is theatre. It wants a
+  measured threshold and its own ADR.

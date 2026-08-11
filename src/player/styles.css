@@ -354,16 +354,23 @@ body {
    world stays visible and alive behind it, because the whole value of a fixed
    layout is the spatial context you keep while you think. */
 
+/* **Docked, not centred, and pointer-transparent.** Three cold playtesters
+   found the map useless during a challenge: a 660px panel in the middle of the
+   screen over a dimmed, blurred, unmarked map, and a click on the map threw the
+   board away. The panel now sits against one edge so the map is a place you can
+   look at and click, the wash is a gradient rather than a blanket, and the blur
+   is gone — you are meant to read what is behind this. */
 .console-scrim {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(6, 8, 12, 0.55);
-  backdrop-filter: blur(1.5px);
+  justify-content: flex-end;
+  padding: 18px;
+  background: linear-gradient(to right, rgba(6, 8, 12, 0) 0%, rgba(6, 8, 12, 0.35) 45%, rgba(6, 8, 12, 0.72) 100%);
   z-index: 10;
+  /* Clicks fall through to the canvas; the panel takes its own back below. */
+  pointer-events: none;
 }
 
 .console-scrim[hidden] {
@@ -373,7 +380,8 @@ body {
 .console-panel {
   display: flex;
   flex-direction: column;
-  width: min(660px, 100%);
+  pointer-events: auto;
+  width: min(520px, 100%);
   max-height: min(88vh, 780px);
   border: 1px solid rgba(140, 165, 200, 0.28);
   border-radius: 12px;
