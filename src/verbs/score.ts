@@ -23,6 +23,36 @@ export interface SetScore {
 }
 
 /**
+ * The rule of the board, in one sentence: how many count, and what a spare
+ * pick costs.
+ *
+ * **Every prompt used to end with *"Wrong picks cost you nothing"*, and it was
+ * false.** Under §8.2 a spare pick lowers precision, so on a one-file key a
+ * player who ticked the right file plus two plausible wrong ones scored **50%
+ * where the single right pick scores 100%** — three independent playtesters
+ * hit it, and one called it the worst moment of their session. The sentence was
+ * trying to say guardrail 6 (*never punish a wrong answer* — no penalty, no
+ * fail state, no lockout) and instead denied the metric the whole anti-gaming
+ * argument rests on.
+ *
+ * **Stating the key size is free against the Ctrl-F gate**, which is the reason
+ * it is safe rather than a judgement that it feels fair: `gate.ts` already
+ * hands every heuristic `truth.length`, so every board that ships has been
+ * scored against guesses *sized exactly like the key*. A player who knows the
+ * count knows nothing the gate did not already assume — and it turns F1 from an
+ * unexplained verdict into a rule they can play against, which is the
+ * difference between a quiz and a game.
+ */
+export function keyRule(challenge: Challenge): string {
+  const key = challenge.truth.length;
+  const count = challenge.candidates.length;
+  return (
+    `Exactly ${key === 1 ? 'one' : key} of these ${count} ${key === 1 ? 'counts' : 'count'}, ` +
+    'so extra picks lower the score. Nothing is locked by a wrong answer.'
+  );
+}
+
+/**
  * F1 over two sets of node ids. Duplicates in `picked` are ignored rather than
  * rewarded or punished — picking the same file twice is a UI event, not an
  * answer.
@@ -100,5 +130,35 @@ function explain(challenge: Challenge, result: SetScore, phrasing: SetPhrasing):
   if (result.missed.length > 0) parts.push(phrasing.missed(result.missed.length));
   if (result.spurious.length > 0) parts.push(phrasing.spurious(result.spurious.length));
   if (result.missed.length === 0 && result.spurious.length === 0) parts.push(phrasing.exact);
+  const arithmetic = howScored(challenge, result);
+  if (arithmetic !== null) parts.push(arithmetic);
   return parts.join(' ');
+}
+
+/**
+ * Where the number came from.
+ *
+ * **A playtester found every correct answer on a one-file key, was shown
+ * `1 of 1` and `33% · not yet`, and called it the worst moment of the
+ * session** — two true facts on one screen that read as a contradiction, with
+ * nothing anywhere naming precision, recall or F1. §8.2 makes over-selection
+ * cost you *by construction* rather than by a penalty, which is the property
+ * that makes "select everything" score 0.33 on a 20-candidate board and is why
+ * no anti-cheat code exists. But a rule the player cannot see is not a rule
+ * they can play against; it is a verdict.
+ *
+ * So the two ratios are stated in words, in the units they are actually in.
+ * Null on a perfect answer, where `phrasing.exact` has already said it, and on
+ * an empty one, where there is no fraction to report.
+ */
+function howScored(challenge: Challenge, result: SetScore): string | null {
+  const picked = result.correct.length + result.spurious.length;
+  if (picked === 0 || result.score >= 1) return null;
+  const found = result.correct.length;
+  const key = challenge.truth.length;
+  return (
+    `Scored ${Math.round(result.score * 100)}% — ` +
+    `${found} of your ${picked} ${picked === 1 ? 'pick is' : 'picks are'} right, ` +
+    `and there ${key === 1 ? 'is 1' : `are ${key}`} to find in all.`
+  );
 }

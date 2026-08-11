@@ -39,7 +39,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { commitAt, idOf, isCommitId, nodeAt } from '../../atlas/index.js';
 import { CTRL_F_THRESHOLD } from '../gate.js';
-import { gradeSet, scoreSet } from '../score.js';
+import { gradeSet, keyRule, scoreSet } from '../score.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -82,7 +82,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // player rather than kept in the generator.
     instruction:
       `Every other ${members.one} on this board was untouched by that commit. ` +
-      'Wrong picks cost you nothing.',
+      keyRule(challenge),
     action: 'Place a commit',
   };
 }
@@ -90,7 +90,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
 export const PHRASING: SetPhrasing = {
   scope: () => "read off the commit's own file list",
   missed: (count) => `${count} changed in that commit and you left ${plural(count, 'it', 'them')} out.`,
-  spurious: (count) => `${count} of your picks were untouched by it.`,
+  spurious: (count) => `${count} of your picks ${plural(count, 'was', 'were')} untouched by it.`,
   exact: 'Exact — you placed the change, not the neighbourhood.',
 };
 

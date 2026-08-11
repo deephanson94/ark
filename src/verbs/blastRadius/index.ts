@@ -20,7 +20,7 @@
 
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
-import { gradeSet } from '../score.js';
+import { gradeSet, keyRule } from '../score.js';
 import { counted } from '../members.js';
 import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
@@ -51,7 +51,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // "Which of these" is load-bearing: it never claims the choice set is
     // exhaustive, which is what makes a hub's sampled answer key honest.
     question: `A breaking change lands in ${words.label(challenge.subject)}. Which of these ${members.many} depend on it — directly, or through a chain of imports?`,
-    instruction: `Select every ${members.one} that reaches it. Wrong picks cost you nothing.`,
+    instruction: `Select every ${members.one} that reaches it. ${keyRule(challenge)}`,
     action: 'Map its blast radius',
   };
 }
@@ -71,8 +71,10 @@ export const PHRASING: SetPhrasing = {
           challenge.evidence.depth === 1 ? 'hop' : 'hops'
         } away`
       : 'traced through the import graph',
-  missed: (count) => `${count} reached the subject by a path you did not select.`,
-  spurious: (count) => `${count} of your picks do not reach the subject at all.`,
+  missed: (count) =>
+    `${count} ${plural(count, 'reaches', 'reach')} the subject by a path you did not select.`,
+  spurious: (count) =>
+    `${count} of your picks ${plural(count, 'does', 'do')} not reach the subject at all.`,
   exact: 'Exact — you drew the boundary where it actually is.',
 };
 

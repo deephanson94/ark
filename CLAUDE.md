@@ -482,6 +482,22 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   because every verb had *a* test. When you add a peer to an existing family, list what the family is
   checked for and check the list against each member, not against the newcomer.
 
+- **A suite that checks the shape of a sentence never checks whether it is true, and three cold
+  playtesters found what 780 assertions could not.** Every prompt ended with *"Wrong picks cost you
+  nothing"*, which §8.2 makes **false** — a spare pick lowers precision, so the right file plus two
+  plausible wrong ones scores 50% where the right file alone scores 100%. Archaeology told the player
+  a commit message *"names this file"* on the strength of **one shared token** (`"Refactoring and test
+  changes"` naming `extensions-test.ts`), which is **87% of graphql-js's firings, 82% of kysely's,
+  54% of hono's** — not an edge case. And a grade showed `1 of 1` beside `33% · not yet` with nothing
+  on screen naming precision or recall. `reveal.test.ts` and `notes.test.ts` assert which note exists
+  and which class it carries; **no test anywhere held a sentence to being true**, so all three
+  survived four milestones with the suite green. The strategies were right in every case and the
+  *glosses* were separate claims nobody checked, which is the class-label landmine arriving in a
+  prompt, a witness line and a score. **When you write a sentence the player can check against what
+  is on screen beside it, write the assertion that checks it too** — and note the shape of the
+  cheapest fix: hold the strong claim to the rows that earn it and give the rest a weaker sentence
+  that is true, rather than narrowing the strategy and starving the class.
+
 - **The shallow-clone landmine has a version where the shallow clone is *yours*.** Every warning in
   this file about `--depth` is about a repo you cloned to measure. But a cloud session's own checkout
   of ark can be shallow too — this one was, at 148 commits — and then `npm run test:atlas` fails

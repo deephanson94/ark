@@ -24,6 +24,9 @@ import { EMPTY_PROGRESS, deriveFog, livenessOf } from '../../src/player/progress
 import { VERBS } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
+/** The three arms and the three views happen to be the same three names. */
+const VIEWS = ['map', 'orbit', 'world'] as const;
+
 describe('the arm a session is locked to', () => {
   it('reads the three arms and nothing else', () => {
     expect(armFromSearch('?arm=map')).toBe('map');
@@ -44,26 +47,44 @@ describe('the arm a session is locked to', () => {
   });
 
   it('never advertises a key its arm has disabled, on either surface', () => {
-    // **Both hints, one assertion.** The player advertises its controls in two
-    // places — the DOM HUD and the world's own canvas line — and the first
-    // version of this change made only the first one arm-aware, so a locked
-    // `?arm=world` session painted *"g map"* under a `g` that does nothing. A
-    // screenshot caught it and no assertion would have, which is why the rule
-    // is quantified over the surfaces rather than written out per surface.
-    for (const arm of ['map', 'orbit', 'world'] as const) {
-      for (const hint of [keyHintFor(arm), worldHintFor(arm)]) {
-        for (const key of LOCKED_KEYS) expect(hint).not.toContain(key);
+    // **Both hints and every view, one assertion.** The player advertises its
+    // controls in two places — the DOM HUD and the world's own canvas line —
+    // and the first version of this change made only the first arm-aware, so a
+    // locked `?arm=world` session painted *"g map"* under a `g` that does
+    // nothing. A screenshot caught it and no assertion would have.
+    for (const arm of VIEWS) {
+      for (const view of VIEWS) {
+        for (const key of LOCKED_KEYS) expect(keyHintFor(arm, view)).not.toContain(key);
       }
+      for (const key of LOCKED_KEYS) expect(worldHintFor(arm)).not.toContain(key);
     }
-    // Unlocked, every one of them is offered — the control that stops this
-    // passing against a player with no controls at all.
-    const open = `${keyHintFor(null)} ${worldHintFor(null)}`;
+    // Unlocked, every one of them is offered somewhere — the control that stops
+    // this passing against a player with no controls at all.
+    const open = `${VIEWS.map((view) => keyHintFor(null, view)).join(' ')} ${worldHintFor(null)}`;
     for (const key of LOCKED_KEYS) expect(open).toContain(key);
     // And every arm can still open the board it is standing on, or the
     // experiment measures nothing.
-    for (const arm of ['map', 'orbit', 'world', null] as const) {
-      expect(keyHintFor(arm)).toContain('enter ask');
+    for (const arm of [...VIEWS, null] as const) {
+      expect(keyHintFor(arm, 'map')).toContain('enter ask');
+      expect(keyHintFor(arm, 'world')).toContain('enter open');
       expect(worldHintFor(arm)).toContain('enter open');
+    }
+  });
+
+  it('offers no key that is dead in the view on screen, locked or not', () => {
+    // The defect three playtesters hit was in the **unlocked** session: `f` and
+    // `n` measured dead in the world while the HUD offered both, and `o orbit`
+    // while already in the orbit. So this holds for `arm === null` too, which
+    // is the ordinary player and everyone outside the experiment.
+    for (const arm of [...VIEWS, null] as const) {
+      const world = keyHintFor(arm, 'world');
+      expect(world).not.toContain('f fit');
+      expect(world).not.toContain('n north');
+      expect(world).toContain('wasd move');
+      // `o` and `g` say where they *go* from here, never where you already are.
+      expect(keyHintFor(null, 'orbit')).not.toContain('o orbit');
+      expect(keyHintFor(null, 'world')).not.toContain('g walk');
+      expect(keyHintFor(null, 'map')).toContain('o orbit');
     }
   });
 });

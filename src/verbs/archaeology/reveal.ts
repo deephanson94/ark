@@ -96,7 +96,15 @@ const WITNESS: Readonly<
   // rows and 101 of hono's 734** lose their sentence, across 34 of 40 boards
   // here and 30 of 54 there. That is the largest withholding in the product and
   // it buys a leak that is closed rather than held 0.011 under a bar.
-  mentions: { text: 'a commit whose message names this file', guard: null },
+  // **Not "names this file".** The strategy matches any commit whose message
+  // shares *one token* with the subject's filename, and measured on real repos
+  // that is what nearly all of them are: 87% of graphql-js's 315 firings, 82%
+  // of kysely's and 54% of hono's are a single word, very often `test` — so
+  // `"Refactoring and test changes"` was shown to a playtester as *naming*
+  // `extensions-test.ts`, which they falsified in three seconds. A class label
+  // is not a class description, and this is that landmine in the witness line:
+  // the label was right and the gloss was a separate claim nobody checked.
+  mentions: { text: 'a commit whose message uses a word from this file’s name', guard: null },
   companion: { text: 'a commit that touched this file’s usual travelling companions', guard: 'partners' },
 };
 
@@ -183,7 +191,10 @@ export function revealOf(
   const add = (id: AtlasId, kind: NoteKind): void => {
     const commit = commitAt(graph, id);
     if (commit === null) return;
-    const names = messageWords(commit.subject).some((word) => words.has(word));
+    const shared = messageWords(commit.subject).filter((word) => words.has(word));
+    // Two claims, not one. `namesIt` is the strong one the old sentence made
+    // unconditionally; `shared` is what the strategy actually selects on.
+    const namesIt = namesTheFile(commit.subject, node.path, words);
     notes.push({
       id,
       label: commitLabel(commit),
@@ -194,8 +205,8 @@ export function revealOf(
       // not. The rule used to live on a `route: []` beside this field; it moved here
       // when that field went, because prose is where it can actually be broken.
       note: truth.has(id)
-        ? whyYes(names, id === earliest, id === latest, gapAfter.get(id) ?? null)
-        : whyNot(commit.files, names, adjacent, partners, node.path),
+        ? whyYes(namesIt, shared, id === earliest, id === latest, gapAfter.get(id) ?? null)
+        : whyNot(commit.files, namesIt, shared, adjacent, partners, node.path),
     });
   };
 
@@ -245,8 +256,34 @@ function daysBetween(from: string, to: string): number {
   return Math.round((parse(to) - parse(from)) / 86_400_000);
 }
 
+/**
+ * Does this message really *name* the file, or just share a word with it?
+ *
+ * The strategy that offers these commits matches on **any one token** of the
+ * filename, which is the right net to cast for a wrong answer — a message that
+ * sounds like this file is exactly the confusion the class exists to punish —
+ * and it is not what *"its message names this file"* claims. Measured across
+ * three repos, 54–87% of the firings share a single generic word, usually
+ * `test`. The strong claim is kept for the rows that earn it: the basename's
+ * stem appears verbatim, or every token of it does.
+ */
+function namesTheFile(message: string, path: string, tokens: ReadonlySet<string>): boolean {
+  const base = path.slice(path.lastIndexOf('/') + 1);
+  const dot = base.lastIndexOf('.');
+  const stem = dot <= 0 ? base : base.slice(0, dot);
+  if (stem.length > 2 && message.toLowerCase().includes(stem.toLowerCase())) return true;
+  const words = new Set(messageWords(message));
+  return tokens.size > 0 && [...tokens].every((token) => words.has(token));
+}
+
+/** The shared word, quoted, for a sentence the player can check on screen. */
+function quoteShared(shared: readonly string[]): string {
+  return `“${shared[0] ?? ''}”`;
+}
+
 function whyYes(
-  names: boolean,
+  namesIt: boolean,
+  shared: readonly string[],
   isEarliest: boolean,
   isLatest: boolean,
   gap: number | null,
@@ -261,22 +298,34 @@ function whyYes(
       : gap === 0
         ? `landing the same day as the change before it${isLatest ? ', and the most recent here' : ''}`
         : `${gap} day${gap === 1 ? '' : 's'} after the change before it${isLatest ? ', and the most recent here' : ''}`;
-  return names
-    ? `changed this file and says so in its message — ${place}.`
-    : `changed this file without ever naming it — ${place}. A log of subjects is not a log of files.`;
+  if (namesIt) return `changed this file and says so in its message — ${place}.`;
+  // The middle case is the common one and used to be told as the strong one.
+  // It is still worth saying: the message is *about* something this file's name
+  // is about, which is a weaker and checkable claim.
+  if (shared.length > 0) {
+    return `changed this file, and its message talks about ${quoteShared(shared)} — ${place}.`;
+  }
+  return `changed this file without ever naming it — ${place}. A log of subjects is not a log of files.`;
 }
 
 function whyNot(
   files: readonly NodeRef[],
-  names: boolean,
+  namesIt: boolean,
+  shared: readonly string[],
   adjacent: ReadonlySet<NodeRef>,
   partners: ReadonlySet<NodeRef>,
   path: string,
 ): string {
-  if (names) {
+  if (namesIt) {
     // The strategy that exists to punish reading the message instead of the
     // repo, explaining itself.
     return `its message names ${path} and its diff does not touch it — a message says what someone meant to do.`;
+  }
+  // The same lesson, on the weaker fact that is actually true of most of these
+  // rows. Quoting the word makes it checkable against the message on screen,
+  // which the old sentence was not: a player could read both and see it lie.
+  if (shared.length > 0) {
+    return `its message talks about ${quoteShared(shared)}, and so does this file’s name — but its diff does not touch it. A message says what someone meant to do.`;
   }
   // **Relations, not identities — and a relation over a set of one *is* an
   // identity.** Naming the file would hand over an atom of this commit's

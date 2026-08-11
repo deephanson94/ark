@@ -564,12 +564,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   };
   notebook.toggle.addEventListener('click', refreshNotes);
 
-  const hud = createHud(
-    scene.atlas,
-    () => turnTo(facingNorth(camera), null),
-    [notebook.toggle],
-    keyHintFor(arm),
-  );
+  const hud = createHud(scene.atlas, () => turnTo(facingNorth(camera), null), [notebook.toggle]);
 
   /**
    * Set by a grade, spent when the panel closes: **the map turns between
@@ -784,6 +779,11 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     });
     const focus = world.focus(unanswered, placeless !== null, target);
     drawWorldChrome(context, viewport, focus, placeless);
+    // The world is a view, not a second product: the guide is refreshed here for
+    // the same reason the HUD is, and leaving it out was measured as a blank
+    // panel for a whole `?arm=world` session and a counter one behind the HUD's
+    // in the unlocked one.
+    refreshGuide(openQuestions);
     hud.update(
       coverage(fog, scene.nodes.length),
       'world',
@@ -797,6 +797,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // North is north: the minimap is north-up and the world does not turn
       // under the walker, so the compass has one thing to say and says it.
       NORTH,
+      keyHintFor(arm, 'world'),
     );
   }
 
@@ -852,6 +853,50 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     // over.
     target.fillText(worldHintFor(arm), view.width / 2, view.height - 22);
     target.restore();
+  }
+
+  /**
+   * "Where next?", recomputed.
+   *
+   * **Called from every view, which it was not.** This lived inline in the
+   * map/orbit branch of `frame`, so in the walkable world the panel was never
+   * updated: under `?arm=world` it rendered as an enabled, clickable, *empty*
+   * pill for the entire session — measured by a playtester as `["",""]` after
+   * four seconds, a walk and a click — and in the unlocked world it went stale,
+   * showing "160 left" beside a HUD reading "159 left" in the same frame after
+   * a pass. The world is a first-class view (ADR-0033) and the arm the recall
+   * experiment runs in, so the one affordance telling a participant where to go
+   * cannot be a property of which branch drew the frame.
+   *
+   * Recomputed, never latched: a pass can decay and a reindex can resurrect its
+   * question, so a stored "you are finished" would go on lying.
+   */
+  function refreshGuide(openQuestions: number): void {
+    const upcoming = nextUp();
+    const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+    guide.update({
+      next: upcoming,
+      // Only when the deck is empty *because it was refused*. A repo whose
+      // questions have all been answered gets the other sentence, and merging
+      // the two would tell a Go-repo player they had finished (ADR-0025).
+      refusal: deckRefusal,
+      // The map's own short label when the subject is on the map; otherwise the
+      // verb's name for its subject, because only the verb knows what a commit
+      // is called. The shell asks *whether* it is placed and *what* it is
+      // called, and never what it is about.
+      path:
+        upcomingRef !== undefined
+          ? (scene.nodes[upcomingRef]?.label ?? null)
+          : upcoming === null
+            ? null
+            : (VERBS[upcoming.verb as keyof typeof VERBS]?.subjectLabel(
+                scene.graph,
+                upcoming.subject,
+              ) ?? null),
+      placed: upcomingRef !== undefined,
+      arrived: upcoming !== null && selected?.id === upcoming.subject,
+      questionsLeft: openQuestions,
+    });
   }
 
   function frame(): void {
@@ -919,35 +964,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         openQuestions,
         unanswered.size,
         camera.bearing,
+        keyHintFor(arm, orbit === null ? 'map' : 'orbit'),
       );
-      // Recomputed, never latched: a pass can decay and a reindex can resurrect
-      // its question, so a stored "you are finished" would go on lying.
-      const upcoming = nextUp();
-      const upcomingRef =
-        upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
-      guide.update({
-        next: upcoming,
-        // Only when the deck is empty *because it was refused*. A repo whose
-        // questions have all been answered gets the other sentence, and merging
-        // the two would tell a Go-repo player they had finished (ADR-0025).
-        refusal: deckRefusal,
-        // The map's own short label when the subject is on the map; otherwise
-        // the verb's name for its subject, because only the verb knows what a
-        // commit is called. The shell asks *whether* it is placed and *what* it
-        // is called, and never what it is about.
-        path:
-          upcomingRef !== undefined
-            ? (scene.nodes[upcomingRef]?.label ?? null)
-            : upcoming === null
-              ? null
-              : (VERBS[upcoming.verb as keyof typeof VERBS]?.subjectLabel(
-                  scene.graph,
-                  upcoming.subject,
-                ) ?? null),
-        placed: upcomingRef !== undefined,
-        arrived: upcoming !== null && selected?.id === upcoming.subject,
-        questionsLeft: openQuestions,
-      });
+      refreshGuide(openQuestions);
     }
     requestAnimationFrame(frame);
   }

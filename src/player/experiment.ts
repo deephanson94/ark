@@ -57,30 +57,38 @@ export function armFromSearch(search: string): Arm | null {
   return ARMS.find((arm) => arm === value) ?? null;
 }
 
+/** Which of the three views is on screen right now. */
+export type View = 'map' | 'orbit' | 'world';
+
 /**
- * The HUD's control line for an arm.
+ * The HUD's control line, for an arm **and a view**.
  *
- * A locked arm must not advertise a key that does nothing: `main.ts`'s own
- * comment about swallowing `o` in the world says a keypress that does nothing
- * and says nothing *"reads as a broken control rather than as a refusal"*, and
- * a participant hunting for a control that has been disabled is spending their
- * twenty minutes on the harness.
+ * The view half was missing, and a playtester measured what that cost: in the
+ * walkable world this line still read `f fit · n north · o orbit · g walk`
+ * while `f` and `n` are **dead there** (canvas hash unchanged across both) and
+ * `g` means *map*, not *walk*; in the orbit it offered `o orbit` while already
+ * in the orbit. So the rule this file states for locked arms — *do not
+ * advertise a key that does nothing* — was being broken by the **unlocked**
+ * session, which is the ordinary player and everyone outside the experiment.
+ * `main.ts`'s own comment says a keypress that does nothing and says nothing
+ * *"reads as a broken control rather than as a refusal"*.
+ *
+ * A locked arm additionally loses the two keys that would leave it.
  */
-export function keyHintFor(arm: Arm | null): string {
-  switch (arm) {
-    case 'map':
-      return 'f fit · n north · enter ask';
-    case 'orbit':
-      return 'drag turn · enter ask';
-    case 'world':
-      return 'wasd move · q/e turn · enter ask';
-    case null:
-      // Unlocked. `g` is listed because the world has shipped since this line
-      // was written and a feature reachable only by reading the source does
-      // not exist — which is what the comment above this line in `ui.ts`
-      // already said about `f` and `o`.
-      return 'f fit · n north · o orbit · g walk · enter ask';
+export function keyHintFor(arm: Arm | null, view: View): string {
+  const parts: string[] = [];
+  if (view === 'orbit') parts.push('drag turn');
+  // `f` and `n` are the flat map's and the orbit's; the world has neither.
+  if (view === 'world') parts.push('wasd move', 'q/e turn');
+  else parts.push('f fit', 'n north');
+  if (arm === null) {
+    // Where each key goes *from here*, not a fixed list: `o` returns to the map
+    // from the orbit, and `g` returns to the map from the world.
+    parts.push(view === 'orbit' ? 'o map' : 'o orbit');
+    parts.push(view === 'world' ? 'g map' : 'g walk');
   }
+  parts.push(view === 'world' ? 'enter open' : 'enter ask');
+  return parts.join(' · ');
 }
 
 /**
@@ -99,4 +107,4 @@ export function worldHintFor(arm: Arm | null): string {
 }
 
 /** Keys a locked arm refuses, as they appear in a hint. For the suite. */
-export const LOCKED_KEYS: readonly string[] = ['o orbit', 'g walk', 'g map'];
+export const LOCKED_KEYS: readonly string[] = ['o orbit', 'o map', 'g walk', 'g map'];

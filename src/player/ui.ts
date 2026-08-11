@@ -54,6 +54,14 @@ export interface Hud {
     questionsLeft: number,
     ringed: number,
     bearing: number,
+    /**
+     * The control line, recomputed per frame because it is a property of the
+     * **view**, not of the session. A playtester measured `f` and `n` as dead
+     * in the world while this line still offered both, and `o orbit` while
+     * already in the orbit — two of the three views were advertising controls
+     * that do nothing.
+     */
+    keyHint: string,
   ): void;
 }
 
@@ -190,13 +198,6 @@ export function createHud(
   atlas: Atlas,
   onNorth: () => void,
   extra: readonly Node[] = [],
-  /**
-   * The control line. Supplied by the caller because an experiment arm
-   * (`experiment.ts`) disables the keys that would leave it, and a HUD
-   * advertising a disabled key is the broken-control failure this file's own
-   * comment below is about.
-   */
-  keyHint = 'f fit · n north · o orbit · g walk · enter ask',
 ): Hud {
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
@@ -229,7 +230,9 @@ export function createHud(
   // A feature reachable only by reading the source does not exist. `f` was
   // already undiscoverable; `o` would have shipped the same way — and `g` did,
   // for a milestone, because this line was not revisited when the world landed.
-  const keys = el('div', 'hud-keys', [keyHint]);
+  // Filled by `update` on every frame: it depends on the view, and two of the
+  // three views were advertising keys measured to be dead in them.
+  const keys = el('div', 'hud-keys');
   const compass = createCompass(onNorth);
 
   const root = el('div', 'hud', [
@@ -247,8 +250,9 @@ export function createHud(
 
   return {
     root,
-    update(coverage, level, stats, questionsLeft, ringed, bearing) {
+    update(coverage, level, stats, questionsLeft, ringed, bearing, keyHint) {
       compass.update(bearing);
+      keys.textContent = keyHint;
       bar.style.width = `${(coverage.fraction * 100).toFixed(1)}%`;
       // Two numbers, deliberately separate. Surveyed is what you have looked
       // at; understood is what you have proven. Only the second lifts the fog

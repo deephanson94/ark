@@ -3050,3 +3050,67 @@ One line per iteration: what changed, and what to do next.
   **Next**: the two pieces of harness in that document's §9 — the hold-out split script (with the
   `discloses` check, or it ships with a known leak) and M2's counter — and then twelve participants,
   which is owner-only and the only thing S1 is now waiting on.
+
+- **Three cold playtests, and the product was lying to the player in three places.** The world,
+  the loop and first contact were each handed to an independent tester with the pitch a new user
+  gets and an explicit instruction not to read the source, the README or `docs/` before playing.
+  They rated it **4/10 · 5/10 · 4/10** and found, between them, three sentences on screen that are
+  **false** — none of which any of the 780 assertions could see, because every existing test checks
+  the *shape* of a note and none held one to being *true*.
+
+  **1. "Wrong picks cost you nothing" was on every prompt and it is false.** Under §8.2 a spare pick
+  lowers precision: the right file plus two plausible wrong ones scores **50% where the right file
+  alone scores 100%**, and one tester re-ran the same board both ways to prove it. The sentence was
+  reaching for guardrail 6 (*no penalty, no fail state, no lockout*) and instead denied the metric
+  the whole anti-gaming argument rests on. It is now `keyRule()` — one function, all four verbs —
+  and it **states the key size**: *"Exactly 6 of these 20 count, so extra picks lower the score.
+  Nothing is locked by a wrong answer."* Stating the count is **free against the Ctrl-F gate**, which
+  is why it is safe rather than a guess that it feels fair: `gate.ts` already hands every heuristic
+  `truth.length`, so every board that ships has been scored against guesses sized exactly like the
+  key. A player who knows the count knows nothing the gate did not already assume.
+
+  **2. The grade asserted a number and never explained it.** A tester found **1 of 1** correct
+  answers, was shown **`33% · not yet`**, and called it the worst moment of the session — two true
+  facts on one screen that read as a contradiction. The evidence line now closes with the
+  arithmetic: *"Scored 33% — 1 of your 3 picks is right, and there is 1 to find in all."*
+
+  **3. Archaeology told the player a commit message "names this file" when it shared one word.**
+  `"Refactoring and test changes"` was presented as naming `extensions-test.ts`, on the token
+  `test`. Measured, that is not an edge case: **87% of graphql-js's 315 firings, 82% of kysely's and
+  54% of hono's** are a single shared word. The strategy is right to cast that net — a message that
+  sounds like this file is the confusion the class exists to punish — and the *sentence* was a
+  separate claim nobody checked, which is this repo's class-label landmine in a witness line. Both
+  the reveal and the witness text now hold to what is true, and the strong claim is kept for the
+  rows that earn it (the stem verbatim, or every token).
+
+  **Two more, both in code this session wrote.** The world's **"Where next?" panel was blank for an
+  entire `?arm=world` session** — `guide.update` was called only in the map/orbit frame branch, so
+  the recall experiment's own arm shipped with a dead next-step affordance, and the unlocked world
+  showed *"160 left"* beside a HUD reading *"159 left"* in the same frame. And the **unlocked HUD
+  advertised keys measured to be dead**: `f` and `n` in the world (canvas hash unchanged), `o orbit`
+  while already in the orbit. `experiment.ts` wrote the rule *"a locked arm must not advertise a key
+  that does nothing"* and applied it only to locked arms — so the ordinary player broke the rule the
+  experiment arms enforced. The hint is now a function of `(arm, view)`.
+
+  Also: the difficulty pips carried `title="… — NORTH-STAR §8.4"`, an internal spec reference in a
+  user-facing tooltip; four phrasings disagreed with their own counts (*"1 of your picks do not
+  reach"*); and **`npm run play` wrote to one shared path inside the installed package**, so two runs
+  on one machine silently served each other's repository — which happened to all three testers
+  mid-session. `play` now gets a private copy of the player per invocation, verified by running two
+  servers at once and reading a different repo off each.
+
+  **What the testers found that is *not* fixed** is in `README.md` Known gaps with its measurement,
+  because a report this good deserves better than a quiet triage: the map is **inert during a
+  challenge** (the largest of them, and the cold tester's single highest-leverage fix), select-all
+  **hands over the annotated answer key**, the fog is invisible, the legend clips at 17 of 36
+  regions, **Placement is unreachable from the map**, the guide serves the four easiest boards first
+  with no skip, and there is no help key.
+
+  Seven mutants die across the new assertions, including the two that matter: restoring *"wrong
+  picks cost you nothing"* reddens two, and deleting the world's `refreshGuide` call reproduces the
+  tester's observation exactly (`guide ""`) in the e2e.
+
+  **Next**: the map should do work during a challenge — light the subject, mark the candidates,
+  draw the edges the question is about, and let the player pan without losing the board. It collapses
+  five of the open findings into one change and it is what makes the map the instrument you answer
+  *with* rather than a background.

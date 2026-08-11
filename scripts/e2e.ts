@@ -1752,13 +1752,24 @@ async function main(): Promise<number> {
         if (!afterKeys.includes(required) || forbidden.some((other) => afterKeys.includes(other))) {
           failures.push({ what: `arm=${arm}`, detail: `o/g/escape left the arm: "${afterKeys}"` });
         }
+        // **The guide must be alive in every arm.** Under `?arm=world` this
+        // panel rendered as an enabled, clickable, permanently *empty* pill —
+        // `guide.update` was called only in the map/orbit frame branch — which
+        // is the recall experiment's own arm shipping with a dead next-step
+        // affordance in every participant's field of view. Asserting it is
+        // non-empty is the liveness gate; the caption is the half that carries
+        // a count, so it is the half checked.
+        const caption = (await armPage.locator('.guide-caption').innerText()).trim();
+        if (caption.length === 0) {
+          failures.push({ what: `arm=${arm}`, detail: 'the guide panel is empty' });
+        }
         // A HUD advertising a key the arm has disabled is the broken-control
         // failure `main.ts` already has a comment about.
         const hint = (await armPage.locator('.hud-keys').innerText()).trim();
         if (hint.includes('orbit') || (arm === 'map' && hint.includes('walk'))) {
           failures.push({ what: `arm=${arm}`, detail: `the HUD offers a disabled key: "${hint}"` });
         }
-        process.stdout.write(`e2e: arm=${arm} → ${afterKeys} · keys "${hint}"\n`);
+        process.stdout.write(`e2e: arm=${arm} → ${afterKeys} · keys "${hint}" · guide "${caption}"\n`);
         await armPage.screenshot({ path: join(SHOT_DIR, `arm-${arm}.png`) });
       } finally {
         for (const error of armErrors) failures.push({ what: 'console', detail: error });

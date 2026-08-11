@@ -175,11 +175,23 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
   cycles today; this is a standing constraint on anything that would.
 
-- **Two independent playtests say the walkable world teaches nothing the flat map does not**, rating
-  it **3/10** and then **5/10** after fixes — and the second notes that the rating moved on
-  *stability*, not on fun. That agrees with `docs/prior-art.md` §2, and **no further polish can
-  settle it**: it is what `docs/experiments/0001` measures, and that is unrun. ADR-0033 §8.1 and §8.4
-  carry both reports.
+- **Five independent playtests now, and the walkable world still teaches nothing the flat map does
+  not.** The first two rated it **3/10** then **5/10** (ADR-0033 §8.1, §8.4). Three more, run cold at
+  `f370a55` on `graphql-js` and on ark, rated the product **4/10 · 5/10 · 4/10** on first-contact
+  intuitiveness, the core loop, and controls — and the views tester's verdict on the world was that
+  *"orbit already delivers height, for all 186 nodes at once, without occlusion"*. That agrees with
+  `docs/prior-art.md` §2, and **no further polish can settle it**: it is what
+  `docs/experiments/0001` measures, and that is unrun.
+- **What those three found that is still open**, beyond the falsehoods fixed at `HEAD`: the map is
+  **inert during a challenge** (the board is a checkbox list of paths over a dimmed map, and clicking
+  the map discards the board) — the cold tester's single highest-leverage fix and the largest open
+  item in the product; **select-all reveals the full annotated answer key**, so a pass is farmable in
+  two clicks; **the fog is dashed-vs-solid outlines** and no tester noticed it existed; the **legend
+  clips silently** at 17 of 36 regions with five of them the same grey; **Placement is unreachable
+  from the map** — 25% of a deck whose only entry point is the chronicle, in walk mode; the guide
+  **serves the four lowest-difficulty boards first** and has no skip; and there is **no help key and
+  no keyboard pan or zoom**. Each is recorded with the measurement that found it in this session's
+  `CHANGELOG.md` entry.
 - **Nothing has measured whether the walkable world teaches better, and it now exists.**
   `docs/experiments/0001` is **designed, runnable and unrun**, so ADR-0033 ships the world as a mode
   and the flat map stays the arrival state. Its three structural blockers closed at `HEAD`: the
@@ -290,7 +302,14 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**:
+**Make the map do work during a challenge** — light the subject, mark the candidates with their
+tick state, draw the edges the question is about, and let the player pan and zoom without the board
+being discarded. Three cold playtests rated the product 4/10 · 5/10 · 4/10 and this was the cold
+tester's single highest-leverage fix: today the board is a checkbox list of twenty paths over a
+dimmed map, so a player who has never seen the repo can only pattern-match on filenames — which is
+the failure pillar 3 exists to prevent. It collapses five separate findings (the inert map, the
+click that discards the board, the invisible fog, the unexplained size and colour channels, and the
+no-op click) into one change · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**:
 the matched repos are named with commits, the arms are staged with a stop rule, and the quiz is a
 fixed held-out item set (owner's decisions of 2026-08-11, recorded in ADR-0009). What is left is that
 document's §9 — **the hold-out split script** (remove k boards per verb, write the played atlas and

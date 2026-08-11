@@ -31,7 +31,7 @@
 
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
-import { gradeSet } from '../score.js';
+import { gradeSet, keyRule } from '../score.js';
 import { counted } from '../members.js';
 import { decidedByNothing, disclosesNothing } from '../disclosure.js';
 import type {
@@ -74,7 +74,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // is false in both directions: the limit is absolute, so on a small repo it
     // admits a commit touching a quarter of the files and on a monorepo it
     // excludes an ordinary feature landing.
-    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} ${words.repo.many} at once are ignored — they couple everything to everything. Wrong picks cost you nothing.`,
+    instruction: `Everything else on this board has changed with it ${atMost === 1 ? 'at most once' : `at most ${atMost} times`}. Commits touching more than ${wide} ${words.repo.many} at once are ignored — they couple everything to everything. ${keyRule(challenge)}`,
     action: 'Map what changes with it',
   };
 }
@@ -86,8 +86,8 @@ export const PHRASING: SetPhrasing = {
           challenge.evidence.minCount === 1 ? '' : 's'
         } with the subject`
       : 'read off the change history',
-  missed: (count) => `${count} changed with the subject and you left them out.`,
-  spurious: (count) => `${count} of your picks have never changed with it.`,
+  missed: (count) => `${count} changed with the subject and you left ${plural(count, 'it', 'them')} out.`,
+  spurious: (count) => `${count} of your picks ${plural(count, 'has', 'have')} never changed with it.`,
   exact: 'Exact — you found the change unit, not the folder.',
 };
 

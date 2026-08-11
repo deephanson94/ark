@@ -47,7 +47,7 @@
 
 import type { AtlasId, Challenge, Graph, NodeId } from '../../atlas/index.js';
 import { commitAt, commitIdFor, isCommitId, isNodeId, nodeAt } from '../../atlas/index.js';
-import { gradeSet } from '../score.js';
+import { gradeSet, keyRule } from '../score.js';
 import { counted } from '../members.js';
 import type {
   GenerateOptions,
@@ -88,7 +88,7 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // a strategy the question invites.
     instruction:
       `Every other commit here landed inside this ${subject.one}'s lifetime and left it untouched. ` +
-      'Wrong picks cost you nothing.',
+      keyRule(challenge),
     action: 'Dig up its history',
   };
 }
