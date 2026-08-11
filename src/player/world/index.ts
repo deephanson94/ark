@@ -69,6 +69,17 @@ export interface WorldDraw {
   readonly viewport: Viewport;
   /** Where the DOM panels stand, so labels are not drawn underneath them. */
   readonly chrome: readonly Box[];
+  /**
+   * Where the guide is sending the player, if anywhere.
+   *
+   * `null` for a node the shell could not place; the world then points at the
+   * chronicle, because a placeless subject is answered there and nowhere else
+   * (ADR-0033 decision 2). Handed in already resolved — the world never asks
+   * what a challenge is about, only where the shell says to go.
+   */
+  readonly target: SceneNode | null;
+  /** True when the guide's next board has no place of its own. */
+  readonly targetIsPlaceless: boolean;
   readonly fog: Fog;
   readonly questions: ReadonlySet<NodeRef>;
   /** Whether any commit-subject board is still unanswered. */
@@ -101,7 +112,11 @@ export interface WorldMode {
   advance(nowMs: number): boolean;
   draw(context: CanvasRenderingContext2D, input: WorldDraw): WorldStats;
   /** What the interact key would open right now. */
-  focus(questions: ReadonlySet<NodeRef>, chronicleLit: boolean): Focus | null;
+  focus(
+    questions: ReadonlySet<NodeRef>,
+    chronicleLit: boolean,
+    target?: SceneNode | null,
+  ): Focus | null;
   /**
    * Nodes the hero is standing close enough to have *looked at*.
    *
@@ -144,7 +159,29 @@ export function createWorldMode(): WorldMode {
    * The test is against the footprint circles rather than the drawn boxes: a
    * circle is what `hero.ts` collides with, and a camera that used a different
    * shape from the body would clip on one and not the other.
+   *
+   * (The doc block below belongs to `waypointOf`; this one to `eyeOf`, further
+   * down. Two comments that had drifted apart from their functions.)
    */
+
+  /**
+   * Where the guide is sending you, as a place on the ground.
+   *
+   * A placeless subject points at the chronicle rather than at nothing — which
+   * also teaches where the chronicle is, since it is the one landmark a player
+   * has no other reason to walk to.
+   */
+  const waypointOf = (input: WorldDraw): { x: number; y: number; label: string } | null => {
+    if (world === null) return null;
+    if (input.target !== null) {
+      return { x: input.target.x, y: input.target.y, label: input.target.label };
+    }
+    if (input.targetIsPlaceless && input.chronicleLit) {
+      return { x: world.chronicle.x, y: world.chronicle.y, label: 'the chronicle' };
+    }
+    return null;
+  };
+
   const eyeOf = (at: Hero): Eye => {
     const back = { x: -Math.sin(at.facing), y: Math.cos(at.facing) };
     let distance = EYE_DISTANCE;
@@ -168,7 +205,11 @@ export function createWorldMode(): WorldMode {
     return follow(at, Math.max(EYE_MIN_DISTANCE, distance), EYE_HEIGHT, EYE_PITCH, FOV);
   };
 
-  const focusOf = (questions: ReadonlySet<NodeRef>, chronicleLit: boolean): Focus | null => {
+  const focusOf = (
+    questions: ReadonlySet<NodeRef>,
+    chronicleLit: boolean,
+    target: SceneNode | null = null,
+  ): Focus | null => {
     if (world === null || hero === null) return null;
     if (chronicleLit) {
       const distance =
@@ -178,6 +219,11 @@ export function createWorldMode(): WorldMode {
     let best: { tower: Tower; distance: number } | null = null;
     for (const tower of near(world, hero.x, hero.y, INTERACT_RANGE + HERO_RADIUS)) {
       if (!questions.has(tower.ref)) continue;
+      // **The place the guide sent you wins any tie of proximity.** A playtest
+      // walked to the building the guide named and was offered its neighbour,
+      // because nearest-wins is blind to why you came — which quietly breaks
+      // the one promise the guide makes.
+      if (target !== null && tower.ref === target.ref) return { kind: 'tower', tower };
       const distance = Math.hypot(tower.node.x - hero.x, tower.node.y - hero.y) - tower.footprint;
       if (best === null || distance < best.distance) best = { tower, distance };
     }
@@ -260,8 +306,9 @@ export function createWorldMode(): WorldMode {
         fog: input.fog,
         questions: input.questions,
         chronicleLit: input.chronicleLit,
-        focus: focusOf(input.questions, input.chronicleLit),
+        focus: focusOf(input.questions, input.chronicleLit, input.target),
         chrome: input.chrome,
+        waypoint: waypointOf(input),
       });
       const litOnMinimap = drawMinimap(context, {
         world,
@@ -269,6 +316,8 @@ export function createWorldMode(): WorldMode {
         viewport: input.viewport,
         fog: input.fog,
         questions: input.questions,
+        waypoint: waypointOf(input),
+        fovRadians: FOV,
       });
       return { ...stats, litOnMinimap };
     },

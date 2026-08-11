@@ -281,6 +281,53 @@ dropped.
 
 ---
 
+## 8.3 Navigation, and the idea that had to be refused to get there
+
+The playtest's flattest complaint was not a bug: **you cannot tell where to go.** The flat map answers
+that at a glance; the world could not answer it at all, so a walker's only strategy was to wander
+until a beacon appeared — the opposite of the deliberate route the guide already computes. Three
+things now answer it, and none of them states a fact the flat map does not already draw:
+
+- **A waypoint** on the guide's next subject: a chevron over the place when it is on screen, an arrow
+  pinned to the edge when it is not, carrying the name and the distance in paces either way. Its
+  bearing is computed in **view space**, so it stays correct when the target is behind you — which is
+  exactly when you most need telling, and the case a screen-space angle gets backwards. A *placeless*
+  subject points at the chronicle, which also teaches where the chronicle is.
+- **A sight cone on the minimap**, spanning the world camera's own field of view. The inset is the
+  whole repo; what it lacked was the join — *which part of it is in front of me now*. Binding an
+  egocentric view to a survey one is the mechanism §6 says the minimap exists for, and it was missing
+  the one element that does the binding.
+- **The guide's target wins any tie of proximity.** A playtest walked to the building the guide named
+  and was offered its neighbour, because nearest-wins is blind to why you came.
+
+### The idea that would have made walking teach something, and why it is dead
+
+The most attractive answer to *"what does walking teach that the map does not"* is **direction**: the
+flat map draws every edge as an undirected line (`draw.ts`, `moveTo`/`lineTo`, no arrowhead), so
+*which way a dependency points* is information the world could add. Tier 2 of NORTH-STAR §5 is
+literally *"which way do dependencies point?"*
+
+It is an **exact** disclosure of Blast Radius's answer key, and this was measured rather than argued.
+Walk backwards along the arrows from the subject and intersect with the choice set; score it with
+`scoreSet`, the metric the player is graded by:
+
+| | blast boards | mean score | beats band A | **exact** |
+|---|---:|---:|---:|---:|
+| ark | 40 | **1.000** | 40 | **40** |
+| hono | 54 | **1.000** | 54 | **54** |
+
+100% of both repos, byte-exact. That is not a heuristic that happens to score well — ADR-0008's
+invariant is `candidates ∩ dependents(subject, ∞) = truth`, so a directed road network *is* the
+answer, by construction, on every board that will ever be generated. Arrows are refused.
+
+*The first run of that probe returned a mean of **0.000** on 94 boards, because `graph.in[ref]` holds
+`AtlasEdge` objects rather than refs, so the walk never left depth 0. A mean of exactly zero across
+two repos is the shape of an instrument measuring nothing — and note the direction the error ran: it
+made the design look **safe**, which is the direction that gets believed by someone who wants to
+ship. This repo's landmine about throwaway probes, met again.*
+
+---
+
 ## Alternatives rejected
 
 **Edges as arcs overhead, like the map's co-change wires.** Rejected because the ground is where a
@@ -294,6 +341,10 @@ weighed.
 **One chronicle stone per commit, laid out by date.** More place-like, and it makes date order a
 thing you can read off the ground — which is a `Ctrl+F` on a board whose rows already print dates.
 The single obelisk claims nothing.
+
+**Arrows on the roads, showing which way each dependency points.** Refused on a measurement: it
+scores **1.000 exact on 100% of both repos' Blast Radius boards** (§8.3). It is the single most
+attractive idea for making the world teach something the map does not, and it is the answer key.
 
 **Mouse-look.** Not wired. It needs pointer lock, which is a decision about capturing the player's
 cursor and belongs in its own change; the keyboard turn is enough to walk with.

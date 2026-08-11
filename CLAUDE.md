@@ -882,6 +882,17 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   believable**, which is the always-reads-good instrument in a new costume, and the cap was a
   performance guard nobody remembered writing. A table over repos of different sizes is a claim that
   the instrument scaled; say what it sampled, or do not sample.
+- **The best idea for a new layer is often the one that hands over an existing layer's answer key.**
+  The obvious way to make a walkable world teach something the flat map does not is to show **which
+  way each dependency points** — the map draws every edge undirected, and NORTH-STAR §5's tier 2 is
+  literally *"which way do dependencies point?"*. Measured through `scoreSet`, walking backwards along
+  those arrows scores **1.000 exact on 100% of both repos' Blast Radius boards**, because ADR-0008's
+  invariant makes a directed road network *the answer set by construction* rather than a good guess.
+  The attraction and the danger were the same property. **Before adding a channel to a new surface,
+  ask which existing verb's key that channel reconstructs** — and note that the probe's first run said
+  **0.000 on 94 boards** (it iterated `graph.in[ref]`, which holds edges rather than refs, so the walk
+  never left depth 0). A mean of exactly zero across two repos is an instrument measuring nothing, and
+  it errs in the direction that makes shipping look safe.
 - **A glyph radius is not a ground area, and nothing in the type system knows the difference.** The
   world took `radiusFor(loc)` — the flat map's disc radius, drawn at whatever screen scale the camera
   holds — as the footprint a building occupies on the ground. Measured, that leaves **88.5% of this

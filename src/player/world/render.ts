@@ -47,6 +47,16 @@ export interface WorldFrameInput {
   /** What pressing the interact key would open, if anything. */
   readonly focus: Focus | null;
   /**
+   * Where the guide is sending the player.
+   *
+   * Drawn as a marker over the place when it is on screen and as an arrow at
+   * the screen's edge when it is not, with the distance either way. It carries
+   * **no fact the flat map does not already draw** — every unanswered subject
+   * wears a ring there, and the guide names this one in the panel — so it is a
+   * navigation aid rather than a disclosure.
+   */
+  readonly waypoint: { readonly x: number; readonly y: number; readonly label: string } | null;
+  /**
    * Screen rectangles of the DOM panels standing over the canvas.
    *
    * The same fact `draw.ts` takes for the same reason: the renderer cannot see
@@ -224,6 +234,7 @@ export function drawWorldFrame(
   }
 
   const labelsDrawn = drawLabels(context, labelled, viewport, input.chrome);
+  if (input.waypoint !== null) drawWaypoint(context, input.waypoint, eye, viewport, hero);
 
   return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn };
 }
@@ -797,4 +808,85 @@ function drawLabels(
   context.textAlign = 'left';
   context.textBaseline = 'alphabetic';
   return drawn;
+}
+
+/**
+ * The way to the next question.
+ *
+ * The playtest's flattest complaint was not a bug: you cannot tell where to go.
+ * The flat map answers that at a glance and the world could not answer it at
+ * all — so a walker's only strategy was to wander until a beacon appeared,
+ * which is the opposite of the deliberate route the guide already computes.
+ *
+ * On screen it is a chevron over the place; off screen it is an arrow pinned to
+ * the edge in the right direction. Both carry the distance, because "which way"
+ * without "how far" still leaves you guessing whether to commit.
+ */
+function drawWaypoint(
+  context: CanvasRenderingContext2D,
+  waypoint: { x: number; y: number; label: string },
+  eye: Eye,
+  viewport: Viewport,
+  hero: Hero,
+): void {
+  const paces = Math.round(Math.hypot(waypoint.x - hero.x, waypoint.y - hero.y));
+  const text = `${waypoint.label} · ${paces}`;
+  context.save();
+  context.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+  context.textAlign = 'center';
+
+  const overhead = projectPoint(eye, viewport, waypoint.x, waypoint.y, 34);
+  const onScreen =
+    overhead !== null &&
+    overhead.point.x > 40 &&
+    overhead.point.x < viewport.width - 40 &&
+    overhead.point.y > 40 &&
+    overhead.point.y < viewport.height - 40;
+
+  if (onScreen && overhead !== null) {
+    const { x, y } = overhead.point;
+    context.fillStyle = 'rgba(255, 214, 130, 0.92)';
+    context.beginPath();
+    context.moveTo(x, y + 12);
+    context.lineTo(x - 9, y - 6);
+    context.lineTo(x + 9, y - 6);
+    context.closePath();
+    context.fill();
+    labelPill(context, text, x, y - 12);
+    context.restore();
+    return;
+  }
+
+  // Off screen: an arrow on the edge, pointing the way. The bearing is computed
+  // in **view space** so it stays correct when the target is behind the eye —
+  // the case a screen-space angle gets exactly backwards, and the case that
+  // matters most, because a target behind you is when you most need telling.
+  const view = toView(eye, waypoint.x, waypoint.y, 0);
+  const angle = Math.atan2(view.right, Math.max(view.forward, 0.001));
+  const clamped = Math.max(-1.35, Math.min(1.35, angle));
+  const x = viewport.width / 2 + Math.tan(clamped) * (viewport.width * 0.34);
+  const y = view.forward > 0 ? 74 : viewport.height - 132;
+  const pointingDown = view.forward <= 0;
+  context.fillStyle = 'rgba(255, 214, 130, 0.92)';
+  context.beginPath();
+  context.moveTo(x, pointingDown ? y + 13 : y - 13);
+  context.lineTo(x - 10, pointingDown ? y - 6 : y + 6);
+  context.lineTo(x + 10, pointingDown ? y - 6 : y + 6);
+  context.closePath();
+  context.fill();
+  labelPill(context, text, x, pointingDown ? y - 12 : y + 30);
+  context.restore();
+}
+
+function labelPill(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+): void {
+  const half = context.measureText(text).width / 2 + 7;
+  context.fillStyle = 'rgba(6, 9, 14, 0.82)';
+  context.fillRect(x - half, y - 14, half * 2, 17);
+  context.fillStyle = 'rgba(255, 226, 168, 0.95)';
+  context.fillText(text, x, y);
 }

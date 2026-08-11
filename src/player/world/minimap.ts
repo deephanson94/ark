@@ -39,6 +39,7 @@ import { visibilityOf } from '../fog.js';
 import { INK, regionColor, regionSilhouette } from '../palette.js';
 import type { World } from './build.js';
 import type { Hero } from './hero.js';
+import { VIEW_DISTANCE } from './render.js';
 
 export interface MinimapInput {
   readonly world: World;
@@ -46,6 +47,10 @@ export interface MinimapInput {
   readonly viewport: Viewport;
   readonly fog: Fog;
   readonly questions: ReadonlySet<NodeRef>;
+  /** Where the guide is sending the player, if anywhere. */
+  readonly waypoint: { readonly x: number; readonly y: number } | null;
+  /** The world camera's field of view, for the sight cone. */
+  readonly fovRadians: number;
 }
 
 const SIZE = 176;
@@ -64,7 +69,7 @@ export function minimapBox(viewport: Viewport): MinimapBox {
 }
 
 export function drawMinimap(context: CanvasRenderingContext2D, input: MinimapInput): number {
-  const { world, hero, viewport, fog, questions } = input;
+  const { world, hero, viewport, fog, questions, waypoint, fovRadians } = input;
   const box = minimapBox(viewport);
   const bounds = world.bounds;
   const spanX = Math.max(1, bounds.maxX - bounds.minX);
@@ -88,6 +93,29 @@ export function drawMinimap(context: CanvasRenderingContext2D, input: MinimapInp
   context.lineWidth = 1;
   context.stroke();
   context.clip();
+
+  // **The sight cone, drawn before anything else.** The playtest's sharpest
+  // non-bug complaint was that a walker sees a neighbourhood where the flat map
+  // shows the whole repo — and this inset *is* the whole repo. What it was
+  // missing is the join: which part of it is in front of you right now. A wedge
+  // in the facing direction, spanning the world camera's own field of view, is
+  // the standard way of binding an egocentric view to a survey one, and it is
+  // the mechanism ADR-0033 §6 says the minimap exists for.
+  const sight = context.createRadialGradient(0, 0, 0, 0, 0, VIEW_DISTANCE * scale);
+  sight.addColorStop(0, 'rgba(255, 236, 190, 0.20)');
+  sight.addColorStop(1, 'rgba(255, 236, 190, 0)');
+  context.save();
+  const eyeAt = toMap(hero.x, hero.y);
+  context.translate(eyeAt.x, eyeAt.y);
+  context.rotate(hero.facing);
+  context.fillStyle = sight;
+  context.beginPath();
+  context.moveTo(0, 0);
+  // Facing 0 is −Y, which is up on this inset, so the wedge opens upward.
+  context.arc(0, 0, VIEW_DISTANCE * scale, -Math.PI / 2 - fovRadians / 2, -Math.PI / 2 + fovRadians / 2);
+  context.closePath();
+  context.fill();
+  context.restore();
 
   context.strokeStyle = 'rgba(140, 160, 190, 0.14)';
   context.lineWidth = 0.6;
@@ -133,6 +161,17 @@ export function drawMinimap(context: CanvasRenderingContext2D, input: MinimapInp
   context.closePath();
   context.fillStyle = 'rgba(240, 168, 92, 0.9)';
   context.fill();
+
+  // Where the guide is sending you, on the survey view as well as in the world:
+  // a ring that is not a node marker, so it cannot be mistaken for a file.
+  if (waypoint !== null) {
+    const at = toMap(waypoint.x, waypoint.y);
+    context.strokeStyle = 'rgba(255, 214, 130, 0.95)';
+    context.lineWidth = 1.6;
+    context.beginPath();
+    context.arc(at.x, at.y, 6, 0, Math.PI * 2);
+    context.stroke();
+  }
 
   // The hero: a triangle pointing the way they face. Facing 0 is −Y, which is
   // up on this inset because the inset is the flat map and the flat map's −Y is

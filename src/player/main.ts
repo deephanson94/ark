@@ -712,14 +712,22 @@ function start(scene: Scene, root: HTMLElement): void {
    */
   function drawWorld(): void {
     const placeless = nextPlacelessChallenge();
+    // Where the guide is pointing, resolved to a place by the shell — the world
+    // never asks what a challenge is about, only where to go (ADR-0027's seam).
+    const upcoming = nextUp();
+    const targetRef =
+      upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+    const target = targetRef === undefined ? null : (scene.nodes[targetRef] ?? null);
     const stats = world.draw(context, {
       viewport,
       chrome,
+      target,
+      targetIsPlaceless: upcoming !== null && targetRef === undefined,
       fog,
       questions: unanswered,
       chronicleLit: placeless !== null,
     });
-    const focus = world.focus(unanswered, placeless !== null);
+    const focus = world.focus(unanswered, placeless !== null, target);
     drawWorldChrome(context, viewport, focus, placeless);
     hud.update(
       coverage(fog, scene.nodes.length),
@@ -1095,7 +1103,14 @@ function start(scene: Scene, root: HTMLElement): void {
     }
     if (world.isActive()) {
       if (event.key === 'Enter' || event.key === ' ') {
-        const focus = world.focus(unanswered, nextPlacelessChallenge() !== null);
+        const upcoming = nextUp();
+        const targetRef =
+          upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+        const focus = world.focus(
+          unanswered,
+          nextPlacelessChallenge() !== null,
+          targetRef === undefined ? null : (scene.nodes[targetRef] ?? null),
+        );
         if (focus === null) return;
         event.preventDefault();
         const challenge =

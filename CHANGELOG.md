@@ -2887,3 +2887,22 @@ One line per iteration: what changed, and what to do next.
   **Next**: unchanged — run `docs/experiments/0001`. The playtest's two non-bug verdicts (you see
   only a local neighbourhood; walking taught nothing the flat map had not) are exactly what
   `docs/prior-art.md` §2 predicts, and exactly what S1 exists to measure.
+
+- **Navigation in the world, and the idea it had to refuse first.** The playtest's flattest complaint
+  was not a bug: *you cannot tell where to go*. Three things answer it now — a **waypoint** on the
+  guide's next subject (a chevron over it on screen, an edge arrow when off, name and distance either
+  way, bearing computed in **view space** so it stays right when the target is behind you); a **sight
+  cone on the minimap**, which is what actually binds the egocentric view to the survey one and was
+  the missing half of ADR-0033 §6; and **the guide's target winning any tie of proximity**, since a
+  playtest walked to the building the guide named and was offered its neighbour.
+
+  **Arrows on the roads are dead, and that is the interesting part.** Showing which way each
+  dependency points is the most attractive answer to *"what does walking teach that the map does
+  not"* — the flat map draws every edge undirected, and NORTH-STAR §5's tier 2 is literally that
+  question. Scored with `scoreSet`: **1.000 exact on 100% of both repos' Blast Radius boards**,
+  because ADR-0008's invariant makes a directed road network the answer set *by construction*. The
+  first run of that probe said 0.000 on 94 boards — it iterated `graph.in[ref]`, which holds edges
+  rather than refs — and a mean of exactly zero across two repos is an instrument measuring nothing,
+  erring in the direction that makes shipping look safe.
+
+  **Next**: unchanged — run `docs/experiments/0001`.
