@@ -736,7 +736,7 @@ function start(scene: Scene, root: HTMLElement): void {
       // `tiesDrawn` are here for. `roads` is the one to watch: ADR-0033's whole
       // argument is that the ground carries the import graph, so a frame that
       // draws zero roads is that argument silently not shipping.
-      `${stats.towersDrawn} towers · ${stats.roadsDrawn} roads · ${stats.labelsDrawn} labels · ${stats.beaconsDrawn} beacons`,
+      `${stats.towersDrawn} towers · ${stats.skylineDrawn} skyline · ${stats.roadsDrawn} roads · ${stats.labelsDrawn} labels · ${stats.beaconsDrawn} beacons`,
       openQuestions,
       unanswered.size,
       // North is north: the minimap is north-up and the world does not turn
@@ -1102,6 +1102,17 @@ function start(scene: Scene, root: HTMLElement): void {
       return;
     }
     if (world.isActive()) {
+      if (event.key === 'o') {
+        // Three views over one atlas, and the keys move between all of them.
+        // `o` was silently swallowed here — a keypress that does nothing and
+        // says nothing reads as a broken control rather than as a refusal.
+        leaveWorld();
+        landTurn();
+        orbit = DEFAULT_ORBIT;
+        camera = fit(scene.bounds, viewport, camera.bearing);
+        invalidate();
+        return;
+      }
       if (event.key === 'Enter' || event.key === ' ') {
         const upcoming = nextUp();
         const targetRef =

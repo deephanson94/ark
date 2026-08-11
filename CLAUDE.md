@@ -882,6 +882,15 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   believable**, which is the always-reads-good instrument in a new costume, and the cap was a
   performance guard nobody remembered writing. A table over repos of different sizes is a claim that
   the instrument scaled; say what it sampled, or do not sample.
+- **Count the branch before you trust the reason you built it.** The world drew nothing past its view
+  distance, which violates NORTH-STAR risk #4's *"always show the silhouette of unexplored regions"*
+  — so a distant skyline was built to fix the empty frames a playtest reported. Sampling 121 standing
+  positions then showed **no position on either repo has nothing in full view** (0 of 121, both), so
+  the empty frames were the **frustum** — the player at the shore facing away from the map — and not
+  the cull at all. The layer is worth keeping on its own merits (mean **10 silhouettes on ark, 112 on
+  hono**, so real on a repo twice the bootstrap's size and nearly dead on the bootstrap) but the
+  *stated reason* was wrong, and the honest response to "there is nothing out there" was **less out
+  there**, not scenery. A bug report tells you what was on screen, never why.
 - **The best idea for a new layer is often the one that hands over an existing layer's answer key.**
   The obvious way to make a walkable world teach something the flat map does not is to show **which
   way each dependency points** — the map draws every edge undirected, and NORTH-STAR §5's tier 2 is

@@ -296,7 +296,14 @@ export function createWorldMode(): WorldMode {
 
     draw(context, input) {
       if (world === null || hero === null) {
-        return { towersDrawn: 0, roadsDrawn: 0, labelsDrawn: 0, beaconsDrawn: 0, litOnMinimap: 0 };
+        return {
+          towersDrawn: 0,
+          roadsDrawn: 0,
+          labelsDrawn: 0,
+          beaconsDrawn: 0,
+          skylineDrawn: 0,
+          litOnMinimap: 0,
+        };
       }
       const stats = drawWorldFrame(context, {
         world,
@@ -363,8 +370,13 @@ const WORLD_KEYS = new Set([
  *
  * A clamp rather than a fence: you slide along the edge instead of stopping
  * dead, the same way you slide along a building.
+ *
+ * 70 rather than the first draft's 140: sampling showed **no** standing position
+ * on ark or hono has nothing in full view, so the playtest's empty frames were
+ * the player at the shore facing *outward* — and the honest response to "there
+ * is nothing out there" is less out there, not scenery to fill it.
  */
-const SHORE = 140;
+const SHORE = 70;
 
 function withinShore(hero: Hero, world: World): Hero {
   const { bounds } = world;

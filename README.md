@@ -166,6 +166,11 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
+- **Two independent playtests say the walkable world teaches nothing the flat map does not**, rating
+  it **3/10** and then **5/10** after fixes — and the second notes that the rating moved on
+  *stability*, not on fun. That agrees with `docs/prior-art.md` §2, and **no further polish can
+  settle it**: it is what `docs/experiments/0001` measures, and that is unrun. ADR-0033 §8.1 and §8.4
+  carry both reports.
 - **Nothing has measured whether the walkable world teaches better, and it now exists.**
   `docs/experiments/0001` is designed and unrun, so ADR-0033 ships the world as a mode and the flat
   map stays the arrival state. The confound to design around is in ADR-0033 §4: **the minimap draws

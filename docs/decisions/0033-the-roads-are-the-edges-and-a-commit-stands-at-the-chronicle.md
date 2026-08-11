@@ -326,6 +326,61 @@ two repos is the shape of an instrument measuring nothing — and note the direc
 made the design look **safe**, which is the direction that gets believed by someone who wants to
 ship. This repo's landmine about throwaway probes, met again.*
 
+## 8.4 The re-playtest: 5/10, and where polish stops paying
+
+The same brief, the same instructions not to be polite, run against the fixed build with the tree
+held still. **5/10, up from 3.** All five fixes verified landed, each with evidence rather than
+eyeballing — the heading fix checked at many headings with the waypoint distance falling 397 → 301 →
+209 → 128 while walking off-axis; the held-key leak checked by holding `w` for two seconds over an
+open panel and reading `surveyed` byte-identical before and after; the boundary checked by running
+into it twice and getting the same clamped distance.
+
+Its verdict on the rest is the one worth keeping: *"the rating moved on **stability**, not on fun …
+walking is now a working, honest way to get to that modal. It is not yet a reason to prefer it."*
+And on the question this whole rung exists to answer — does walking teach anything the flat map does
+not — *"no, not that I could find"*, with the observation that **the minimap's existence is itself
+the admission**: the north-up inset was added because the 3D view could not carry survey knowledge,
+and it now does most of the *where am I in the repo* work.
+
+Two rough edges it found are fixed: a **duplicate label** where the waypoint's pill and the tower's
+own floating label stacked the same filename twice, and **`o` silently swallowed** in the world —
+a keypress that does nothing and says nothing reads as a broken control, so `o` now leaves for the
+orbit and the three views are reachable from each other.
+
+### The void, and what it actually was
+
+Its highest-leverage suggestion was to fill the empty space, ideally the way NORTH-STAR risk #4
+already mandates: *"always show the silhouette of unexplored regions — you can see there's something
+there, just not what."* The flat map has obeyed that since M1; the world drew **nothing at all** past
+`VIEW_DISTANCE`. So a skyline was built — far towers as one flat shape in the region's silhouette
+tint, two projections each, out to 2,400 units.
+
+**Then it was counted, and the reason it was built turned out to be wrong.** Sampling 121 standing
+positions across the walkable area of both repos:
+
+| | towers | mean in full view | mean as silhouette | positions with **nothing** in view |
+|---|---:|---:|---:|---:|
+| ark | 182 | 172 | **10** | **0 of 121** |
+| hono | 425 | 313 | **112** | **0 of 121** |
+
+There is no standing position on either repo where the frame is empty — so the playtest's
+`0 towers · 0 roads` frames were the **frustum**, not the distance cull: it had run to the shore and
+was facing away from the map. Which is honest, because there is nothing out there. The response is
+therefore *less out there* — `SHORE` cut from 140 to 70 — rather than scenery to fill it.
+
+The skyline is kept, and its firing rate is recorded rather than assumed: **10 on ark, 112 on hono**,
+which makes it a real layer on a repo twice the bootstrap's size and nearly dead on the bootstrap
+itself, whose entire 488-unit span fits inside one view distance. The e2e gates *"something is
+standing"* rather than *"the skyline fired"* — the first version of that step measured exactly **1**
+on ark, which is a bar on a knife edge and this repo has a landmine about those.
+
+### Where this stops
+
+The re-playtest's own third option is the right one: *"stop treating this as a rung to keep polishing
+and go run `docs/experiments/0001`."* Two independent playtests and `docs/prior-art.md` §2 now agree
+that walking does not teach more than the map, and **no further bug-fixing can answer that** — it is
+a measurement, it is designed, and it is unrun. §9's first bullet is the whole of what is left.
+
 ---
 
 ## Alternatives rejected

@@ -75,6 +75,12 @@ export interface WorldFrameStats {
   readonly labelsDrawn: number;
   /** Beacons stroked. Measured, for the same reason `peaksDrawn` is on the map. */
   readonly beaconsDrawn: number;
+  /**
+   * Distant towers drawn as silhouettes. Measured because this is the whole of
+   * risk #4's mitigation in this view, and a path that never fires is worse
+   * than no path — the e2e reads it.
+   */
+  readonly skylineDrawn: number;
 }
 
 /**
@@ -85,6 +91,37 @@ export interface WorldFrameStats {
  * what keeps django's 10,162 roads from being 10,162 quads a frame.
  */
 export const VIEW_DISTANCE = 620;
+/**
+ * How far out a tower is drawn as a **silhouette** — no faces, no roof, no
+ * label, no beacon, one flat shape against the haze.
+ *
+ * NORTH-STAR risk #4's mitigation is *"always show the silhouette of unexplored
+ * regions — you can see there's something there, just not what"*, and the flat
+ * map has obeyed it since M1 (`regionSilhouette`). The world did not: past
+ * `VIEW_DISTANCE` there was **nothing at all**, so crossing between clusters
+ * meant seconds of unlit void with `0 towers · 0 roads` in the HUD. A playtest
+ * called that the single biggest experiential problem and it is the exact
+ * failure risk #4 names — an empty screen reading as "the tool is hiding things
+ * from me" rather than as "there is a district over there".
+ *
+ * Wide enough to cover every repo measured (ADR-0032 §3.1: ark's span is 475,
+ * hono's 763, django's diagonal 1,517), because a skyline that stops is worse
+ * than no skyline: it draws an edge to a world that has none.
+ *
+ * **Counted before being trusted, because a path that never fires is worse than
+ * no path.** Sampled over 121 standing positions across the walkable area:
+ * a mean of **10 silhouettes on ark and 112 on hono** — so this is a real layer
+ * on a repo twice the bootstrap's size and nearly dead on the bootstrap itself,
+ * whose entire 488-unit span fits inside one view distance. Recorded rather than
+ * quietly shipped.
+ *
+ * The same sampling refuted the reason it was built: **no standing position on
+ * either repo has nothing in full view** (0 of 121, both repos). The playtest's
+ * `0 towers · 0 roads` frames were the *frustum*, not the distance cull — it had
+ * run to the shore and was facing away from the map. Which is honest: there is
+ * nothing out there. `withinShore` is tighter now so there is less of it.
+ */
+export const SILHOUETTE_DISTANCE = 2400;
 /** Roads longer than this are cut into pieces, for painter's order and for fog. */
 const ROAD_CHOP = 34;
 
@@ -159,11 +196,15 @@ export function drawWorldFrame(
   }
 
   let towersDrawn = 0;
+  const distant: { tower: Tower; distance: number }[] = [];
   for (const tower of world.towers) {
     const dx = tower.node.x - eye.x;
     const dy = tower.node.y - eye.y;
     const distance = Math.hypot(dx, dy);
-    if (distance > VIEW_DISTANCE + tower.footprint) continue;
+    if (distance > VIEW_DISTANCE + tower.footprint) {
+      if (distance <= SILHOUETTE_DISTANCE) distant.push({ tower, distance });
+      continue;
+    }
     const centre = toView(eye, tower.node.x, tower.node.y, tower.height / 2);
     if (centre.forward <= 0) {
       // Behind the eye — but a wide tower straddling the eye plane still shows
@@ -190,6 +231,13 @@ export function drawWorldFrame(
       prims.push({ kind: 'chronicle', depth: centre.forward, fade: fadeAt(chronicleDistance) });
     }
   }
+
+  // The skyline, before everything near it. Far-to-near among themselves, and
+  // all of them behind every full-detail tower — which is exact, because
+  // "distant" here *means* further than any of them.
+  distant.sort((a, b) => b.distance - a.distance);
+  let skylineDrawn = 0;
+  for (const far of distant) skylineDrawn += drawSilhouette(context, far.tower, eye, viewport) ? 1 : 0;
 
   const heroView = toView(eye, hero.x, hero.y, 0);
   if (heroView.forward > 0) prims.push({ kind: 'hero', depth: heroView.forward });
@@ -228,7 +276,13 @@ export function drawWorldFrame(
       beaconsDrawn += drawBeacon(context, tower, eye, viewport, prim.fade) ? 1 : 0;
     }
     const head = projectPoint(eye, viewport, tower.node.x, tower.node.y, tower.height);
-    if (head !== null && state !== 'silhouette' && prim.fade > 0.25) {
+    // Not the waypoint's own target: its pill already names it, and drawing
+    // both stacked two identical file names on top of each other.
+    const isWaypoint =
+      input.waypoint !== null &&
+      input.waypoint.x === tower.node.x &&
+      input.waypoint.y === tower.node.y;
+    if (head !== null && state !== 'silhouette' && prim.fade > 0.25 && !isWaypoint) {
       labelled.push({ tower, at: head.point, ppu: head.ppu, lit });
     }
   }
@@ -236,7 +290,35 @@ export function drawWorldFrame(
   const labelsDrawn = drawLabels(context, labelled, viewport, input.chrome);
   if (input.waypoint !== null) drawWaypoint(context, input.waypoint, eye, viewport, hero);
 
-  return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn };
+  return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn, skylineDrawn };
+}
+
+/**
+ * A far tower: one flat shape, in its region's silhouette tint.
+ *
+ * Two projections and a rectangle, not eight and five faces — this runs over
+ * every node in the atlas at django's 3,035, and the detail would be
+ * sub-pixel anyway. The *tint* is the point: risk #4 wants you to see that
+ * there is a district over there, and the flat map has said which one by hue
+ * since M1. Fog is respected exactly as it is up close, because a silhouette is
+ * what an unsurveyed node looks like at any distance.
+ */
+function drawSilhouette(
+  context: CanvasRenderingContext2D,
+  tower: Tower,
+  eye: Eye,
+  viewport: Viewport,
+): boolean {
+  const foot = projectPoint(eye, viewport, tower.node.x, tower.node.y, 0);
+  const head = projectPoint(eye, viewport, tower.node.x, tower.node.y, tower.height);
+  if (foot === null || head === null) return false;
+  if (foot.point.x < -40 || foot.point.x > viewport.width + 40) return false;
+  const half = Math.max(0.5, tower.footprint * foot.ppu);
+  context.globalAlpha = 0.5;
+  context.fillStyle = regionSilhouette(tower.node.regionIndex, 1);
+  context.fillRect(foot.point.x - half, head.point.y, half * 2, foot.point.y - head.point.y);
+  context.globalAlpha = 1;
+  return true;
 }
 
 // ---- sky and ground -------------------------------------------------------

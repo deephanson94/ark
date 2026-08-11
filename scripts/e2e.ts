@@ -1110,6 +1110,15 @@ async function main(): Promise<number> {
     if (towersDrawn <= 0) {
       failures.push({ what: 'world', detail: `nothing was standing on the plane: ${worldDetail}` });
     }
+    // **The skyline is checked at the edge of the world, not here.** NORTH-STAR
+    // risk #4 wants the silhouette of what you have not explored, and the world
+    // drew *nothing* past `VIEW_DISTANCE` — seconds of unlit void when crossing
+    // between clusters, which is the exact failure that risk names. But ark's
+    // whole span is 475 units against a 620-unit view, so standing in the city
+    // there is no "distant" to draw and this reads a legitimate 0. Asserting it
+    // here would be asserting a path this repo cannot take from this spot. The
+    // run-to-the-boundary step below is where the feature exists to fire, and
+    // that is where it is gated.
 
     // Walking. `surveyed` must rise, because walking past a building is looking
     // at it — the mechanic that makes an unexplored world navigable rather than
@@ -1171,6 +1180,32 @@ async function main(): Promise<number> {
         what: 'world',
         detail: `turning and walking emptied the world: ${afterTurnWalk}`,
       });
+    }
+
+    // Out to the shore, which is the case the skyline exists for: far enough
+    // that most of the repo is past `VIEW_DISTANCE`, where the world used to
+    // draw literally nothing. Running *backwards* keeps the heading, so this is
+    // a distance test rather than another turn test.
+    await page.keyboard.down('Shift');
+    await page.keyboard.down('s');
+    await page.waitForTimeout(4200);
+    await page.keyboard.up('s');
+    await page.keyboard.up('Shift');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(SHOT_DIR, 'world-shore.png') });
+    const shoreDetail = (await page.locator('.hud-detail').innerText()).trim();
+    process.stdout.write(`e2e: at the shore → ${shoreDetail}\n`);
+    const shoreSkyline = Number(/(\d+) skyline/.exec(shoreDetail)?.[1] ?? '0');
+    const shoreTowers = Number(/(\d+) towers/.exec(shoreDetail)?.[1] ?? '0');
+    // **The gate is that something is standing, not that the skyline fired.**
+    // Sampled over 121 positions, ark averages 10 silhouettes and hono 112 —
+    // ark's entire 488-unit span fits inside one 620-unit view, so a 0 here is a
+    // legitimate reading of a small repo and asserting on it would be a bar
+    // sitting on a knife edge (the first version of this step measured exactly
+    // **1**). The count is reported so a regression is visible; the assertion is
+    // the property that actually matters.
+    if (shoreTowers + shoreSkyline <= 0) {
+      failures.push({ what: 'world', detail: `the shore is an empty plane: ${shoreDetail}` });
     }
 
     // ADR-0009's D1 again: the flat map is one keystroke away from here too.

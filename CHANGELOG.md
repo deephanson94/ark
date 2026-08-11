@@ -2906,3 +2906,29 @@ One line per iteration: what changed, and what to do next.
   erring in the direction that makes shipping look safe.
 
   **Next**: unchanged — run `docs/experiments/0001`.
+
+- **Re-playtested: 5/10, up from 3 — and the rating moved on stability, not on fun.** Same brief,
+  same instruction not to be polite, run against the fixed build with the tree held still. All five
+  fixes verified landed with evidence rather than eyeballing. Its verdict on the rest is the one to
+  keep: *"walking is now a working, honest way to get to that modal. It is not yet a reason to prefer
+  it"*, and on whether walking teaches more than the map, *"no, not that I could find"* — with the
+  observation that **the minimap's existence is the admission**, since the north-up inset was added
+  because the 3D view could not carry survey knowledge and now does most of the *where am I* work.
+
+  Fixed from it: a **duplicate label** (the waypoint pill and the tower's own label stacked the same
+  filename), and **`o` silently swallowed** in the world — a keypress that does nothing and says
+  nothing reads as broken, so `o` now leaves for the orbit.
+
+  **A skyline was built for the void, then the reason for it was refuted by counting.** NORTH-STAR
+  risk #4 mandates showing the silhouette of unexplored regions; the flat map has since M1 and the
+  world drew *nothing* past `VIEW_DISTANCE`. But sampling 121 standing positions on both repos found
+  **no position with nothing in full view** (0 of 121, both) — the playtest's `0 towers` frames were
+  the **frustum**, not the cull: it had run to the shore and was facing away. So the response is less
+  shore (140 → 70) rather than scenery. The skyline is kept with its firing rate recorded — **10 on
+  ark, 112 on hono** — real on a repo twice the bootstrap's size, nearly dead on the bootstrap, whose
+  488-unit span fits inside one view distance. The e2e gates *"something is standing"* rather than
+  *"the skyline fired"*, because the first version of that step measured exactly **1**.
+
+  **Next**: stop polishing this rung and run `docs/experiments/0001`. Two independent playtests and
+  `docs/prior-art.md` §2 agree walking does not teach more than the map, and no further bug-fixing
+  can answer that — it is a measurement, it is designed, and it is unrun.

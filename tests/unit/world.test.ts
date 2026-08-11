@@ -357,6 +357,6 @@ describe('the mode holds its own state', () => {
     expect(Math.abs(hero?.x ?? 0)).toBeLessThan(span + 1000);
     expect(Math.abs(hero?.y ?? 0)).toBeLessThan(span + 1000);
     const world = buildWorld(scene);
-    expect(hero?.y ?? 0).toBeLessThanOrEqual(world.bounds.maxY + 141);
+    expect(hero?.y ?? 0).toBeLessThanOrEqual(world.bounds.maxY + 71);
   });
 });
