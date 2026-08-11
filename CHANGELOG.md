@@ -2932,3 +2932,35 @@ One line per iteration: what changed, and what to do next.
   **Next**: stop polishing this rung and run `docs/experiments/0001`. Two independent playtests and
   `docs/prior-art.md` §2 agree walking does not teach more than the map, and no further bug-fixing
   can answer that — it is a measurement, it is designed, and it is unrun.
+
+- **The phenomenon catalogue is deferred, and a cycle turns out to be an answer key**
+  (**ADR-0034**). Fifteen candidate detectors were written and counted on five repos *before*
+  anything was designed, which is the only reason this entry says what it says: **roughly half the
+  table was measuring the instrument.** `barrel` reads 0.0% on flask because `kind: 'reexport'` is
+  emitted only by `scan.ts`, so no Go or Python repo can produce one — flask's `__init__.py` is a
+  textbook barrel the detector cannot see, and hugo's two "barrels" are stray documentation
+  JavaScript. `entry` is a **test-file detector**: 52 of ark's 54, 140 of hono's 149. `hub` reads
+  0.0% on hugo for the *same* unreachable-bar reason this session had just caught in `hotspot` — and
+  the cause is sharper than the fix, because hugo's median cone is 140 against a max of 152 **only
+  because its 131-node tangle drags the median up**. Detectors calibrated against one distribution
+  are not independent.
+
+  Five rows on four repos were measured over history the product itself refuses: those clones were
+  `--depth 400`, so `commits.ts` had refused the entire history deck. Re-cloned at full depth, hono's
+  `fossil` moved **6.5% → 1.3%**. And the ark column was off by one node because the probe files sat
+  in `scripts/` while the probe indexed the repo — ark indexes itself, and the measurement included
+  the measurement.
+
+  **The finding that outlives the decision**: ticking the candidates in the subject's strongly
+  connected component decides **109 of hugo's 156 Blast Radius boards**, 11 of prometheus's 63 and 7
+  of hono's 54 — with `impure = 0` everywhere. That is not a heuristic that scores well; strong
+  connectivity is mutual reachability, so ADR-0008's invariant forces every SCC-mate into the key.
+  **Precision 1.000 by construction**, verified with two independent SCC algorithms. The entry's
+  teaching value and its leak are the same property, at an order of magnitude past ADR-0030's twin.
+  Nothing draws or names cycles today; this is now a standing constraint on anything that would.
+
+  So the catalogue's honest size is **~5 entries, not 30–60**, and the sequence is inverted: build
+  **ADR-0030's twin surface** first as the priced pilot — it is the catalogue's own entry #1,
+  decided, leak-scored and unbuilt — and let one entry's real cost price the other thirty.
+
+  **Next**: the twin surface, then `docs/experiments/0001`.

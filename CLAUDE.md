@@ -882,6 +882,36 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   believable**, which is the always-reads-good instrument in a new costume, and the cap was a
   performance guard nobody remembered writing. A table over repos of different sizes is a claim that
   the instrument scaled; say what it sampled, or do not sample.
+- **A phenomenon defined against a distribution inherits every other phenomenon in the repo.**
+  ADR-0034's `hub` was *cone ≥ 10× the median cone* and read **0.0% on hugo** — the same
+  unreachable-threshold artifact the same session had just caught in `hotspot` (a bar of 30 where the
+  maximum possible churn is 29), one row up, in the table it was about to write an ADR from. The cause
+  is the interesting half: hugo's median cone is **140 against a maximum of 152**, because its
+  131-node tangle puts 131 nodes at a cone of at least 130. **The tangle destroyed the hub detector's
+  denominator.** So detectors calibrated independently against one distribution are not independent,
+  and *"check the bar against the achievable range"* has to be re-run whenever any other detector
+  changes what the distribution looks like.
+- **A phenomenon is a property; a *rank* measures nothing.** "Top 2% by churn" fires on exactly 2% of
+  every repo ever indexed, so it cannot distinguish a repo with a hotspot from one without. And count
+  **instances, not members**: hugo's *"tangle 60.4% of nodes"* is **131 members of one instance**
+  (`[131, 2]`), which turns *"hugo's package graph is one giant tangle"* — true, teachable,
+  transferable — into a number that makes the norm look like a phenomenon.
+- **An absent detector and an absent phenomenon are the same cell.** `barrel` reads **0.0% on flask**,
+  which is not flask's architecture: `kind: 'reexport'` is emitted only by `src/indexer/scan.ts`, so
+  `goscan` and `pyscan` cannot produce one and `src/flask/__init__.py` is a textbook barrel the
+  detector cannot see. Hugo's two "barrels" are `docs/assets/js/…/index.js` — stray documentation
+  JavaScript, presented as a cell about a Go repo. The `UNREAD`-list landmine with a different
+  whitelist. Its sibling: `entry` (no dependents) reads 3.2%–55.4% across five repos and is really a
+  **test-file detector** — 52 of ark's 54, 140 of hono's 149, 45 of flask's 46 are test or script
+  paths, and this file's own landmine already says a zero-dependent file *may be an entry point,
+  check the manifest*.
+- **A shallow clone silently poisons every history-derived measurement, and `--depth` is what a
+  session reaches for.** ADR-0034's first table measured `hotspot`, `fossil`, `churny leaf`,
+  co-change and `shotgun` on four repos cloned at `--depth 400`; `src/verbs/commits.ts` refuses the
+  entire history deck there, so hono and prometheus shipped **zero** history boards and the rows read
+  as findings. Re-cloned at full depth, hono's `fossil` moved **6.5% → 1.3%** and its co-change row
+  52.1% → 76.7%. Clone the whole history when the number is about history — and check
+  `git rev-parse --is-shallow-repository` rather than remembering how you cloned it.
 - **Count the branch before you trust the reason you built it.** The world drew nothing past its view
   distance, which violates NORTH-STAR risk #4's *"always show the silhouette of unexplored regions"*
   — so a distant skyline was built to fix the empty frames a playtest reported. Sampling 121 standing
@@ -1310,7 +1340,12 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **run `docs/experiments/0001`.** The walkable world ships (ADR-0033), which turns S1 from
+Next action: **build ADR-0030's twin surface** — an inspector line in the *revealed* register, its
+gate wired to the deck (*no member of the class still carries an unanswered board*), and its tests.
+**[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)
+makes it the priced pilot** for the phenomenon catalogue, which is deferred rather than queued:
+fifteen detectors were measured before anything was designed, and the honest size is ~5 entries
+rather than 30–60. Then **run `docs/experiments/0001`.** The walkable world ships (ADR-0033), which turns S1 from
 a gate on a thing that does not exist into a gate on a thing that does — and **nothing in the product
 may claim the world teaches better until it runs**, which is why the flat map is still the arrival
 state. Two blockers first, both in that document's §8: the two matched repos are still a TODO, and a
@@ -1322,9 +1357,15 @@ which are unbuilt because ADR-0032 §9.6 refuses the obvious derivation. Then **
 surface** — the
 decision, the gate and the leak measurement are done; the code is not — an inspector line in the
 *revealed* register, its gate wired to the deck (*no member of the class still carries an unanswered
-board*), and its tests. Then the **phenomenon catalogue**, a repo-independent vocabulary of ~30–60
-structural phenomena, which is the atom that would let anything *transfer* to another repo and the
-other half of risk #1. Then **django's index budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of
+board*), and its tests. The **phenomenon catalogue** is **deferred rather than queued**
+(**[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)**):
+fifteen candidate detectors were measured on five repos *before* anything was designed, and the
+honest size is **~5 entries, not the ~30–60 this line used to claim** — the rest measure the scanner
+(`barrel` is emitted only by `scan.ts`, so a Go or Python repo's 0 is ark's blindness), the norm
+(co-change-without-import is 44–85% of pairs), test files (52 of ark's 54 `entry` nodes are test or
+script paths), or an unreachable bar. Its best entry is an **answer key**: ticking the subject's
+strongly connected component decides **109 of hugo's 156 Blast Radius boards** at precision 1.000.
+The twin surface is that catalogue's entry #1 and its priced pilot. Then **django's index budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of
 it the force-directed layout (ADR-0028 §6), which is a `layout.ts` change with its own determinism
 risk and wants its own ADR.
 
