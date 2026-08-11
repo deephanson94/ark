@@ -193,6 +193,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   regions do; the guide **serves the four lowest-difficulty boards first** — measured as the exact
   four lowest of 69 — and has no skip; and there is **no keyboard pan or zoom** (23 keys measured
   dead). Each carries the measurement that found it in this session's `CHANGELOG.md` entries.
+- **A pass is still farmable in about twenty probes, and the notebook will call it proved.** The
+  grade line is an oracle no reveal policy can close: `Found 1 of 4` after a single pick says whether
+  that pick was in the key, and guardrail 6 makes each probe free by design. ADR-0035 closes the
+  *handover* — select-all and one-lucky-pick both get nothing — and a playtester's measured 4.1 probes
+  per board becomes ~20, teaching nothing on the way. **What it does not do is make a pass proof of
+  understanding**, which is what NORTH-STAR §9 asks of a field note. The only thing that closes it is
+  recording the pass from the **first attempt**, which the owner rejected because it makes a retry
+  unable to improve anything ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)
+  §7, §9.1). That trade now has a measurement on both sides and is the owner's to re-take.
 - **Nothing has measured whether the walkable world teaches better, and it now exists.**
   `docs/experiments/0001` is **designed, runnable and unrun**, so ADR-0033 ships the world as a mode
   and the flat map stays the arrival state. Its three structural blockers closed at `HEAD`: the

@@ -3234,3 +3234,39 @@ One line per iteration: what changed, and what to do next.
   **Next**: the fog is still invisible (dashed-vs-solid outlines nobody noticed) and five regions
   share a grey, which are the two remaining channel-legibility findings; the guide has no skip; there
   is no keyboard pan or zoom. Then S1.
+
+- **A playtester was asked to attack ADR-0035 and broke its proudest sentence within the hour.** The
+  rule shipped withholding a reveal below 0.5 precision, and §3 argued the other half was safe: *"it
+  is **not farmable**, because reaching precision 1.0 means already knowing which ones were right."*
+  **Reaching it means knowing one.** A single lucky pick on a four-of-twenty board scored 40% — *"not
+  yet"* — and was handed all four members with evidence; three boards fell in **4, 7 and 13 submits**,
+  black-box, no atlas, **4.1 probes per board** across the deck, against the 20 the select-all rule
+  was built to stop. Field notes then read *"You proved 4 files that depend on …"*.
+
+  **§4.1 had already derived the fix and this document declined it**: `f1(1, recall) ≥ 0.5 ⟺ recall ≥
+  1/3` is written there in as many words, and the second clause was refused to keep one rule, citing
+  *"every leak in ADR-0014 was a rule that lived twice"*. Right principle, wrong quantity — the two
+  clauses are not two copies of one rule, they are the two ways an answer fails to have earned an
+  explanation: **imprecise**, and **thin**. Both are implemented now, and the sentence says which
+  fired, because *"pick fewer"* is advice in the wrong direction for a thin answer.
+
+  **What it still does not close is on the record rather than in a comment.** The grade line is itself
+  an oracle: `Found 1 of 4` after one pick says whether that pick was in the key, and guardrail 6
+  makes each probe free *by design*. Partial credit over a set is a Mastermind oracle. So the honest
+  claim is that farming now costs ~20 probes and teaches nothing, not that a pass proves
+  understanding — and the only thing that closes *that* is recording the pass from the first attempt,
+  the alternative the owner rejected. It goes back to them with a measurement on both sides, and sits
+  in `README.md` Known gaps until then.
+
+  **And the e2e's walking-surveys gate went red on a change with nothing to do with walking**, because
+  it ran on a page that had already played thirty steps — so whether a fixed walk met an *unsurveyed*
+  tower was a property of everything before it. Moved to a fresh save. **The first version of that
+  isolated check read `23 → 23` and looked exactly like a dead recorder**: a fresh save has no
+  selection, so the hero spawns *outside* the map (ADR-0033's "you arrive from outside") and 2.6 s of
+  walking never reached a building. It runs now, and asserts it arrived before asserting what it saw.
+
+  **Next**: the owner's call on first-attempt passes. Then the fog (still dashed-vs-solid outlines
+  nobody noticed), five regions sharing one grey, help's two over-claims — rings are log2 buckets sold
+  as a count, and colour cannot name a region when four share a swatch — Archaeology's `mentions`
+  witness firing on stopwords (*"its message talks about “a”"*), `enter` doing nothing in the
+  world 6 times of 6, and Escape silently ejecting you from it.

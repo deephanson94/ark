@@ -102,6 +102,7 @@
  * grade's arithmetic are what they get instead.
  */
 
+import type { Challenge } from '../atlas/index.js';
 import type { Grade, Reveal } from './types.js';
 
 /**
@@ -114,10 +115,33 @@ import type { Grade, Reveal } from './types.js';
  */
 export const REVEAL_PRECISION_BAR = 0.5;
 
+/**
+ * The recall an answer must also reach.
+ *
+ * **This clause was derived in ADR-0035 §4.1 and then not implemented, and a
+ * playtester farmed the deck through the gap.** `f1(1, recall) ≥ 0.5` iff
+ * `recall ≥ 1/3`, so an answer holding less than a third of the key cannot pass
+ * next time even knowing exactly which of its picks were right — and one holding
+ * a third or more can. The ADR declined the second clause to keep one rule and
+ * asserted instead that precision 1.0 is *"not farmable, because reaching
+ * precision 1.0 means already knowing which ones were right"*. That is false:
+ * reaching it means knowing **one**. Measured black-box on this repo, a single
+ * lucky pick on a 4-of-20 board printed all four members with evidence, and
+ * three boards fell in **4, 7 and 13 submits** — 4.1 probes per board across the
+ * deck, against the 20 the old rule was built to stop.
+ */
+export const REVEAL_RECALL_BAR = 1 / 3;
+
 /** `correct / picked`, from a grade. Zero picks cannot reach the bar. */
 export function precisionOf(grade: Grade): number {
   const picked = grade.correct.length + grade.spurious.length;
   return picked === 0 ? 0 : grade.correct.length / picked;
+}
+
+/** `correct / |truth|`. An empty key is vacuously complete. */
+export function recallOf(grade: Grade, challenge: Challenge): number {
+  const key = challenge.truth.length;
+  return key === 0 ? 1 : grade.correct.length / key;
 }
 
 /**
@@ -127,8 +151,10 @@ export function precisionOf(grade: Grade): number {
  * handed the *same* object — the property `challenge.ts` already relies on so
  * that "the map and the panel cannot disagree about what was just revealed".
  */
-export function asEarned(reveal: Reveal, grade: Grade): Reveal {
-  if (precisionOf(grade) >= REVEAL_PRECISION_BAR) return reveal;
+export function asEarned(reveal: Reveal, grade: Grade, challenge: Challenge): Reveal {
+  const earned =
+    precisionOf(grade) >= REVEAL_PRECISION_BAR && recallOf(grade, challenge) >= REVEAL_RECALL_BAR;
+  if (earned) return reveal;
   if (reveal.notes.length === 0) return reveal;
   return {
     ...reveal,
@@ -137,18 +163,29 @@ export function asEarned(reveal: Reveal, grade: Grade): Reveal {
     // than appended to, and replaced by a sentence about the *rule* rather than
     // about the relation — which is why a shared module may write it and
     // ADR-0027's seam still holds: nothing here knows what the verb asked.
-    summary: earnedSentence(grade),
+    summary: earnedSentence(grade, challenge),
     notes: [],
     unlocks: 'nothing',
   };
 }
 
-function earnedSentence(grade: Grade): string {
+function earnedSentence(grade: Grade, challenge: Challenge): string {
   const right = grade.correct.length;
   const wrong = grade.spurious.length;
+  // Two reasons a board stays quiet, and the sentence says which. Imprecise is
+  // the one a player fixes by picking fewer; thin is the one they fix by finding
+  // more, and telling them "pick fewer" there would be advice in the wrong
+  // direction — the failure mode of a single message for two conditions, which
+  // this repo has a landmine about.
+  if (precisionOf(grade) < REVEAL_PRECISION_BAR) {
+    return (
+      `More of your picks were wrong than right — ${wrong} against ${right} — so this board is ` +
+      'not explained here. Pick fewer and more carefully and every choice gets its reason. ' +
+      'Answer again whenever you like; nothing is locked.'
+    );
+  }
   return (
-    `More of your picks were wrong than right — ${wrong} against ${right} — so this board is ` +
-    'not explained here. Pick fewer and more carefully and every choice gets its reason. ' +
-    'Answer again whenever you like; nothing is locked.'
+    `You found ${right} of ${challenge.truth.length}, which is too thin for this board to explain ` +
+    'itself — a third of the answers is the bar. Nothing is locked; try again with more of them.'
   );
 }

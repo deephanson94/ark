@@ -1447,10 +1447,19 @@ async function main(): Promise<number> {
     const surveyedAfterWalk = Number(
       /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
     );
-    if (surveyedAfterWalk <= surveyedBeforeWalk) {
+    // **Not asserted here, and that is the repair rather than a weakening.**
+    // This page has already played boards, grid-scanned the map and clicked
+    // dozens of nodes, so whether a fixed walk from spawn meets an *unsurveyed*
+    // tower is a property of everything that ran before it. It went red when a
+    // change to the withholding rule altered which boards unlocked what — a real
+    // change, in code with nothing to do with walking, breaking a claim about
+    // walking. ADR-0033 decision 6's liveness gate now runs on a fresh save
+    // below, where the surveyed set starts at the landmarks and the claim is
+    // about the walk alone.
+    if (surveyedAfterWalk < surveyedBeforeWalk) {
       failures.push({
         what: 'world',
-        detail: `walking surveyed nothing: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+        detail: `walking un-surveyed something: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
       });
     }
     process.stdout.write(
@@ -1863,6 +1872,61 @@ async function main(): Promise<number> {
       } finally {
         for (const error of seededErrors) failures.push({ what: 'console', detail: error });
         await context.close();
+      }
+    }
+
+    // ---- walking surveys (ADR-0033 decision 6), on a fresh save ----------
+    //
+    // The claim: walking past a building is looking at it, through the same
+    // recorder the flat map's click uses. Isolated in its own context because on
+    // the main page the surveyed set is whatever thirty prior steps left behind,
+    // and a fixed walk then proves nothing about walking.
+    {
+      const walkContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const walkPage = await walkContext.newPage();
+      const walkErrors: string[] = [];
+      walkPage.on('pageerror', (error: Error) => walkErrors.push(String(error)));
+      try {
+        await walkPage.goto(url, { waitUntil: 'networkidle' });
+        await walkPage.waitForSelector('.hud-counts');
+        const before = Number(
+          /(\d+) surveyed/.exec((await walkPage.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+        );
+        // **Running, and for long enough to reach the city.** A fresh save has no
+        // selection, so `world.enter` puts the hero at the *spawn* — outside the
+        // map's northern edge, ~90 units out (ADR-0033's "you arrive from
+        // outside") — where a short walk reaches no building at all and surveys
+        // nothing. The first version of this check held `w` for 2.6 s and read
+        // `23 → 23`, which looks exactly like a dead recorder and was a walk that
+        // never arrived. Shift is run.
+        await walkPage.keyboard.press('g');
+        await walkPage.waitForTimeout(300);
+        await walkPage.keyboard.down('Shift');
+        await walkPage.keyboard.down('w');
+        await walkPage.waitForTimeout(5000);
+        await walkPage.keyboard.up('w');
+        await walkPage.keyboard.up('Shift');
+        await walkPage.waitForTimeout(300);
+        const detail = (await walkPage.locator('.hud-detail').innerText()).trim();
+        if (!/[1-9]\d* towers/.test(detail)) {
+          failures.push({
+            what: 'world',
+            detail: `the fresh walk never reached the city: ${detail}`,
+          });
+        }
+        const after = Number(
+          /(\d+) surveyed/.exec((await walkPage.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+        );
+        if (after <= before) {
+          failures.push({
+            what: 'world',
+            detail: `walking surveyed nothing on a fresh save: ${before} → ${after}`,
+          });
+        }
+        process.stdout.write(`e2e: a fresh walk surveyed ${before} → ${after}\n`);
+      } finally {
+        for (const error of walkErrors) failures.push({ what: 'console', detail: error });
+        await walkContext.close();
       }
     }
 

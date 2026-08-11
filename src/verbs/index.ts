@@ -42,7 +42,7 @@ export {
 } from './types.js';
 export type { SetScore } from './score.js';
 export { gradeSet, isGameable, keyRule, scoreSet, selectAllScore } from './score.js';
-export { REVEAL_PRECISION_BAR, asEarned, precisionOf } from './withhold.js';
+export { REVEAL_PRECISION_BAR, REVEAL_RECALL_BAR, asEarned, precisionOf, recallOf } from './withhold.js';
 export type { DifficultyInput } from './difficulty.js';
 export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from './difficulty.js';
 export type {

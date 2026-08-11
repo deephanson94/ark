@@ -212,7 +212,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // identities of correct answers the player did not pick when precision is
       // below the bar, and moves the map unlock with them, because withholding
       // the words while drawing the cone changes nothing (ADR-0035).
-      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade);
+      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade, challenge);
       handlers.onGraded(challenge, grade, reveal);
       renderResult(challenge, grade, reveal);
     });

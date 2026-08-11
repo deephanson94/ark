@@ -1,6 +1,7 @@
 # ADR-0035 — The board explains itself to an answer that discriminated
 
-- **Status**: **accepted and built.**
+- **Status**: **accepted, built, and amended the same day — §3's second bullet was false and a
+  playtester farmed the deck through it.** See §9.
 - **Date**: 2026-08-11
 - **Decided by**: the owner, from three options put with their costs.
 - **Bears on**: NORTH-STAR §9 (field notes claim only what was proved), guardrail 6
@@ -52,8 +53,9 @@ rather than guarded against.
   got caught by.
 - **Picking few and getting them all right is precision 1.0.** The honest
   near-miss — *"you found 2 of 6; here are the other four and why"* — is
-  untouched, and it is **not farmable**, because reaching precision 1.0 means
-  already knowing which ones were right.
+  untouched. ~~and it is **not farmable**, because reaching precision 1.0 means
+  already knowing which ones were right.~~ **WITHDRAWN — see §9. Reaching
+  precision 1.0 means knowing *one*.**
 
 Recall is the wrong knob and it is worth saying why: select-all has recall
 **1.0**, the maximum. Any rule keyed on recall rewards the exploit.
@@ -149,3 +151,51 @@ honest answers score precision < 0.5*, and it needs the same instrumentation M2
 does. Until then this is a reasoned trade with a measured **exploit** side and an
 unmeasured **cost** side, which is worth saying plainly rather than letting the
 792-board figure lend its confidence to both halves.
+
+
+---
+
+## 9. Amendment, same day: the claim in §3 was false, and it was the proudest sentence
+
+An independent playtester was asked to attack this rule and did:
+
+> *"One correct pick farms any board's answer key. Three boards fell in **4, 7 and
+> 13 submits**, black-box, no atlas, no codebase knowledge — 4.1 probes per board
+> across the deck. Field notes then read 'You proved 4 files that depend on
+> src/player/ties.ts'."*
+
+**§3's second bullet is withdrawn.** *"Reaching precision 1.0 means already
+knowing which ones were right"* is false: it means knowing **one**. A single
+lucky pick on a four-of-twenty board scored 40% — *"not yet"* — and was handed
+all four members with evidence, and guardrail 6 makes each failed probe free.
+This repo's own landmine says the soft spot is where the change is proudest, and
+that sentence is the one this document spent the most effort on.
+
+**§4.1 had already derived the fix and this document declined it.** `f1(1, recall)
+≥ 0.5 ⟺ recall ≥ 1/3` is written there in as many words, and the second clause
+was refused on the grounds that *"every leak in ADR-0014 was a rule that lived
+twice"*. That is a real principle applied to the wrong quantity: the two clauses
+are not two copies of one rule, they are the two ways an answer can fail to have
+earned an explanation — imprecise, and thin. **Both are implemented now**
+(`REVEAL_RECALL_BAR`), the sentence says which one fired, because *"pick fewer"*
+is advice in the wrong direction for a thin answer.
+
+### 9.1 What this still does not close, and it is not closable here
+
+**The grade line is itself an oracle, and no reveal policy can change that.**
+`Found 1 of 4` after a single pick says whether that pick was in the key; so does
+a non-zero score. A determined player can therefore establish the whole key in
+one probe per candidate — ~20 on a standard board — and then answer perfectly.
+Partial credit over a set *is* a Mastermind oracle, and guardrail 6 means a probe
+costs nothing by design.
+
+So the honest claim is narrower than §2's: this makes farming **cost more and
+teach nothing**, and it stops the product *handing* the key over. It does not make
+a pass proof of understanding, which is what NORTH-STAR §9 wants of a field note.
+
+**The only thing that closes that is recording the pass from the first attempt** —
+the alternative §7 rejected on the owner's instruction, because it makes a retry
+unable to improve anything. That trade now has a measured cost on the other side
+of it and goes back to the owner rather than being decided here. **Until then,
+`README.md`'s Known gaps carries it**: a farmed pass is reachable in ~20 probes
+and the notebook will call it proved.
