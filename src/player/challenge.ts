@@ -23,6 +23,7 @@
 import type { AtlasId, Challenge } from '../atlas/index.js';
 import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
 import { VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
+import { asEarned } from '../verbs/withhold.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -206,8 +207,12 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     submit.addEventListener('click', () => {
       const grade = verb.grade(challenge, { picked: [...picked] });
       // The reveal is computed once and handed on, so the map and the panel
-      // cannot disagree about what was just revealed.
-      const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
+      // cannot disagree about what was just revealed — and `asEarned` is applied
+      // *here*, before either sees it, for the same reason. It withholds the
+      // identities of correct answers the player did not pick when precision is
+      // below the bar, and moves the map unlock with them, because withholding
+      // the words while drawing the cone changes nothing (ADR-0035).
+      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade);
       handlers.onGraded(challenge, grade, reveal);
       renderResult(challenge, grade, reveal);
     });
