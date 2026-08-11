@@ -28,6 +28,7 @@ import {
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
 import { VERBS, isGameable, scoreSet, wordsFor } from '../../src/verbs/index.js';
 import { prepare } from '../../src/player/scene.js';
+import { findTwins, nameableClass } from '../../src/player/twins.js';
 import { FOOTPRINT_SCALE, buildWorld } from '../../src/player/world/build.js';
 import { HERO_RADIUS } from '../../src/player/world/hero.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
@@ -1105,5 +1106,57 @@ describe('the walkable world stands on the real atlas', () => {
       const gap = Math.hypot(tower.node.x - world.chronicle.x, tower.node.y - world.chronicle.y);
       expect(gap).toBeGreaterThan(world.chronicle.radius + tower.footprint);
     }
+  });
+});
+
+/**
+ * Twins on the real graph, and the gate's arrival curve (ADR-0030).
+ *
+ * The ADR's own consequences table is asserted here rather than quoted: what a
+ * gate *leaves* has to be measured, because ADR-0016's failure was a payoff
+ * that appeared and then withdrew. This one runs the other way — the fact
+ * arrives as boards are answered — and on ark it arrives late, which is exactly
+ * why "does this surface ever fire" is a question a fixture cannot answer.
+ */
+describe('twin classes on this repo', () => {
+  it('finds classes of files nothing can tell apart', () => {
+    const graph = buildGraph(atlas);
+    const twins = findTwins(graph, atlas.nodes.map((node) => node.id));
+    // The population, before anything below is believed. ADR-0030 measured
+    // twins as *common* — 15.5% of ark's blast-eligible subjects — and retired
+    // the "two on ark and none elsewhere" hypothesis the gap was written under.
+    expect(twins.classes.length, 'no twin class at all on this repo').toBeGreaterThan(0);
+    for (const found of twins.classes) {
+      expect(found.members.length).toBeGreaterThan(1);
+      // A class exists because its members share a *non-empty* cone.
+      expect(found.coneSize).toBeGreaterThan(0);
+    }
+  });
+
+  it('names nothing on a fresh save, and something once the boards are cleared', () => {
+    const graph = buildGraph(atlas);
+    const twins = findTwins(graph, atlas.nodes.map((node) => node.id));
+    const blastSubjects = new Set(
+      atlas.challenges.filter((c) => c.verb === 'blastRadius').map((c) => c.subject),
+    );
+    const hasBoard = (member: number): boolean => {
+      const id = atlas.nodes[member]?.id;
+      return id !== undefined && blastSubjects.has(id);
+    };
+
+    let nameableFresh = 0;
+    let nameableCleared = 0;
+    for (const found of twins.classes) {
+      // Fresh: every board is open, so a class touching any subject is silent.
+      if (nameableClass(twins, found.members[0] as number, hasBoard) !== null) nameableFresh++;
+      // Cleared: no board is open, so every class may be named.
+      if (nameableClass(twins, found.members[0] as number, () => false) !== null) nameableCleared++;
+    }
+    // **This is the liveness gate, and it needs both halves.** Asserting only
+    // that the cleared count is positive would pass against a surface with no
+    // gate at all; asserting only the fresh count would pass against a surface
+    // that never fires. The pair is what says "gated, and reachable".
+    expect(nameableCleared, 'no class is nameable even with every board answered').toBeGreaterThan(0);
+    expect(nameableFresh).toBeLessThan(nameableCleared);
   });
 });

@@ -265,8 +265,11 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `actions/setup-node@v4` and `actions/configure-pages@v5` are all being force-run on Node 24 with a
   deprecation warning. A warning today, and one change across `ci.yml` and `pages.yml` rather than a
   fix smuggled into whichever one is being touched — ADR-0031 §6, where it surfaced.
-- **Duplicate-answer-key twins are still never mentioned to the player — but the decision is taken
-  and it is now *unbuilt* rather than *undecided*** (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
+- ~~**Duplicate-answer-key twins are never mentioned to the player.**~~ **Built** — the inspector
+  names a class once no member still carries an unanswered Blast Radius board, in the revealed
+  register. Re-measured at `3cda64a`: ark has 8 classes / 20 members, 1 nameable at load and 8 once
+  the deck is cleared, against the 5 / 0 ADR-0030 recorded. Both halves of the gate are checked in a
+  browser. The row that follows is the decision it was built from (**[ADR-0030](./docs/decisions/0030-a-twin-is-named-once-its-whole-class-is-cleared.md)**).
   `cone(A) = cone(B)` is the import graph's version of NORTH-STAR §2's *"one module wearing two
   hats"*, and it is **common**: 15.5% of ark's blast-eligible subjects are in a twin class, 15.2% of
   hono's, 8.6% of hugo's and **32.3% of prometheus's**, whose largest class is 25 interchangeable
@@ -280,11 +283,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Build ADR-0030's twin surface** — an inspector line in the *revealed* register, its gate wired to
-the deck (*no member of the class still carries an unanswered board*), and its tests. It is small,
-decided and leak-scored, and **[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)
-makes it the priced pilot** for the phenomenon catalogue, which is now deferred: one entry's real
-cost prices the other thirty · then **run `docs/experiments/0001`** — the world exists now, which makes S1 a thing that can be measured
+**Run `docs/experiments/0001`** — ADR-0030's twin surface is **built**, which priced the phenomenon
+catalogue's per-entry cost at ~250 lines, one module, one gate and two suites (ADR-0034 made it the
+pilot). What is left blocking S1 is in that document's §8: the two matched repos are a TODO, and a
+two-arm design cannot detect *"orbit beats both"* — the world exists now, which makes S1 a thing that can be measured
 rather than a thing that gates a thing that does not exist. Its §8 lists two blockers first: the two
 matched repos are still a TODO, and a two-arm design cannot detect *"orbit beats both"*, which is what
 `docs/prior-art.md` actually predicts. **The minimap draws the same edges the world does**, so it must

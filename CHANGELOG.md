@@ -2964,3 +2964,28 @@ One line per iteration: what changed, and what to do next.
   decided, leak-scored and unbuilt — and let one entry's real cost price the other thirty.
 
   **Next**: the twin surface, then `docs/experiments/0001`.
+
+- **The twin surface is built** (ADR-0030, four milestones after it was decided). `src/player/twins.ts`
+  groups nodes by identical transitive dependent cone, derived from the graph at load rather than
+  carried in the atlas, and the inspector names a class in the *revealed* register: *"nothing in this
+  repository can tell this apart from `reveal.ts`: 47 places reach both of them, by the same paths."*
+
+  **Both halves of the gate are checked in a browser**, because either alone passes against a broken
+  surface: on a fresh save `companion/reveal.ts` says nothing while its class carries a board, and
+  with every Blast Radius board answered the line renders. Three mutants die, including the exact
+  forbidden shape — gating per *row* instead of per class, which would make the absence of the line
+  point at the member whose board is still open.
+
+  **The first version of that browser check was the dead-path landmine wearing a test's clothes**: it
+  looked only at the fresh save, found neither of the two nameable members fell under a 40×26 grid,
+  printed *"skipping the render check"* and went green.
+
+  Re-measured at `3cda64a`, ark has **8 twin classes / 20 members**, 1 nameable at load and 8 once
+  the deck is cleared — against the 5 classes / 0 nameable ADR-0030 recorded, so its sentence *"on
+  ark it arrives late"* is no longer true. ark indexes itself; the invariant survives and the count
+  did not.
+
+  This was ADR-0034's priced pilot, and **the price is now known: ~250 lines, one module, one gate,
+  two suites for one catalogue entry.** The catalogue stays deferred.
+
+  **Next**: run `docs/experiments/0001`.

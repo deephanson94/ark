@@ -28,6 +28,7 @@ import { buildGraph, commitIdFor, serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 import { VERBS, commitLabel } from '../src/verbs/index.js';
 import { storageKeyFor } from '../src/player/save.js';
+import { findTwins } from '../src/player/twins.js';
 import { GOLDEN_TURN, TURN_MS } from '../src/player/heading.js';
 // The player's own label rule, not a second copy of it: `node.path` is what
 // this map used, which is the same string only while no node is the repo root.
@@ -649,6 +650,150 @@ async function main(): Promise<number> {
       if (wireHit === null) {
         wireTargetPath = pathById.get(wireTarget?.subject ?? '') ?? '(none)';
       }
+
+      // ---- twins (ADR-0030) ---------------------------------------------
+      //
+      // **The liveness gate for a surface that is silent by design.** A twin
+      // class may be named only when *no* member still carries an unanswered
+      // Blast Radius board, so on a fresh save most of ark's classes say
+      // nothing — measured, 1 of 8 is nameable at load and all 8 once the deck
+      // is cleared. A test that only checked "no error" would pass against a
+      // surface that never renders, which is this repo's dead-path landmine.
+      //
+      // The candidate set is computed from the atlas and then intersected with
+      // what the sweep above actually reached — never predicted, which is the
+      // mistake the wires step just above had to be rewritten for.
+      const twinClasses = findTwins(
+        graph,
+        atlas.nodes.map((node) => node.id),
+      );
+      const openBlast = new Set(
+        atlas.challenges.filter((entry) => entry.verb === 'blastRadius').map((entry) => entry.subject),
+      );
+      const nameableMembers: string[] = [];
+      for (const found of twinClasses.classes) {
+        const gated = found.members.some((member) => {
+          const id = atlas.nodes[member]?.id;
+          return id !== undefined && openBlast.has(id);
+        });
+        if (gated) continue;
+        for (const member of found.members) {
+          const path = atlas.nodes[member]?.path;
+          if (path !== undefined) nameableMembers.push(path);
+        }
+      }
+      process.stdout.write(
+        `e2e: ${twinClasses.classes.length} twin classes, ${nameableMembers.length} members nameable now\n`,
+      );
+      if (nameableMembers.length === 0) {
+        failures.push({
+          what: 'twins',
+          detail: `no twin class is nameable on a fresh save — the surface can never render (${twinClasses.classes.length} classes exist)`,
+        });
+      }
+
+      // The gate *closing*, checked in the browser on the un-seeded page. This
+      // is the half that matters: the leak ADR-0030 closes is a passed board
+      // certifying its distractors as non-dependents of the twin, so a surface
+      // that renders correctly and gates incorrectly is worse than no surface.
+      const gatedPaths: string[] = [];
+      for (const found of twinClasses.classes) {
+        const gated = found.members.some((member) => {
+          const id = atlas.nodes[member]?.id;
+          return id !== undefined && openBlast.has(id);
+        });
+        if (!gated) continue;
+        for (const member of found.members) {
+          const path = atlas.nodes[member]?.path;
+          if (path !== undefined) gatedPaths.push(path);
+        }
+      }
+      const gatedAt = gatedPaths
+        .map((path) => ({ path, at: reachable.get(path) }))
+        .find((found) => found.at !== undefined);
+      if (gatedAt?.at !== undefined) {
+        await page.mouse.move(gatedAt.at.x, gatedAt.at.y);
+        await page.waitForTimeout(120);
+        if ((await page.locator('.inspector-twin').count()) > 0) {
+          failures.push({
+            what: 'twins',
+            detail: `${gatedAt.path} named its twin class while a member still carries an open board`,
+          });
+        } else {
+          process.stdout.write(`e2e: gate holds — ${gatedAt.path} says nothing while its class has a board\n`);
+        }
+      }
+
+      // **Silent while gated, and rendering once cleared** — both halves, because
+      // either alone passes against a broken surface. The first version of this
+      // step tried only the fresh save, found that neither of its two nameable
+      // members fell under a 40×26 grid, printed "skipping the render check" and
+      // went green: a liveness gate that reports its own absence and passes is
+      // the dead-path landmine wearing a test's clothes.
+      //
+      // Answering every Blast Radius board opens all 8 classes (20 members),
+      // which is both far likelier to land under the grid *and* the ADR's actual
+      // claim: the fact arrives as boards are answered, the opposite direction
+      // from ADR-0016's wires, which appeared and then withdrew.
+      const twinSeed = JSON.stringify({
+        version: 1,
+        surveyed: [],
+        passes: atlas.challenges
+          .filter((entry) => entry.verb === 'blastRadius')
+          .map((entry) => ({ verb: entry.verb, subject: entry.subject, proved: entry.truth })),
+      });
+      const twinKey = storageKeyFor(atlas.repo);
+      const twinContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const twinPage = await twinContext.newPage();
+      const twinErrors: string[] = [];
+      twinPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') twinErrors.push(message.text());
+      });
+      twinPage.on('pageerror', (error: Error) => twinErrors.push(String(error)));
+      await twinPage.addInitScript(
+        ([storageKey, value]: [string, string]) => window.localStorage.setItem(storageKey, value),
+        [twinKey, twinSeed] as [string, string],
+      );
+      await twinPage.goto(url, { waitUntil: 'networkidle' });
+      await twinPage.waitForSelector('.hud-counts');
+      const allNameable = new Set<string>();
+      for (const found of twinClasses.classes) {
+        for (const member of found.members) {
+          const path = atlas.nodes[member]?.path;
+          if (path !== undefined) allNameable.add(path);
+        }
+      }
+      const twinBox = await twinPage.locator('canvas.map').boundingBox();
+      let twinSaid: string | null = null;
+      if (twinBox !== null) {
+        // Sweep, then take what the sweep found — never predict which node the
+        // grid will land on.
+        for (let row = 1; row < 34 && twinSaid === null; row++) {
+          for (let column = 1; column < 52 && twinSaid === null; column++) {
+            const x = twinBox.x + (twinBox.width * column) / 52;
+            const y = twinBox.y + (twinBox.height * row) / 34;
+            await twinPage.mouse.move(x, y);
+            if ((await twinPage.locator('.inspector-twin').count()) === 0) continue;
+            twinSaid = rendered(await twinPage.locator('.inspector-twin').innerText());
+          }
+        }
+      }
+      if (twinSaid === null) {
+        failures.push({
+          what: 'twins',
+          detail: `no twin line rendered anywhere with every Blast Radius board answered (${allNameable.size} members should be nameable)`,
+        });
+      } else {
+        process.stdout.write(`e2e: twin → ${twinSaid}\n`);
+        // The *revealed* register, not the proved one (ADR-0011 decision 3).
+        if (!twinSaid.includes('nothing in this repository can tell')) {
+          failures.push({ what: 'twins', detail: `twin line is not in the revealed register: ${twinSaid}` });
+        }
+      }
+      for (const error of twinErrors) {
+        failures.push({ what: 'twins', detail: `console error on the seeded page: ${error}` });
+      }
+      await twinContext.close();
       process.stdout.write(
         `e2e: grid reached ${reachable.size} nodes; ${wireTargets.length} companion-only candidates\n`,
       );

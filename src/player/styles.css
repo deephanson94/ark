@@ -258,6 +258,35 @@ body {
   color: var(--text);
 }
 
+/**
+ * A twin class, in the *revealed* register (ADR-0030 decision 3).
+ *
+ * Deliberately not styled like a `.field`: those are measurements of this node,
+ * and this is a statement about a *set* the node belongs to. And not styled
+ * like a proved claim either — the field notes own that register, and ADR-0011
+ * decision 3 is that a shown fact must say it is shown.
+ */
+.inspector-twin {
+  margin: 10px 0 2px;
+  padding: 8px 9px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  background: rgba(126, 214, 214, 0.06);
+  border-left: 2px solid rgba(126, 214, 214, 0.5);
+  border-radius: 0 4px 4px 0;
+}
+
+.inspector-twin-mark {
+  display: block;
+  margin-bottom: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(126, 214, 214, 0.9);
+}
+
 .field {
   display: flex;
   justify-content: space-between;

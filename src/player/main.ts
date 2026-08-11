@@ -47,6 +47,8 @@ import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurve
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
+import type { Twins } from './twins.js';
+import { findTwins, nameableClass } from './twins.js';
 import type { Ties } from './ties.js';
 import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { WorldMode } from './world/index.js';
@@ -403,6 +405,21 @@ function start(scene: Scene, root: HTMLElement): void {
   // Wires a restored save has already earned, before the first frame.
   retie();
 
+  /**
+   * Twin classes, computed once at load.
+   *
+   * `cone(A) = cone(B)` over the **full** transitive dependent set, derived from
+   * the graph rather than carried in the atlas — a `twins` field would be a
+   * second encoding of something `edges` already determines (ADR-0030's
+   * alternatives). One sweep of `dependents`; the cost to watch is django's
+   * 3,035 nodes at a mean closure of 165, which is the case that would justify
+   * moving it into the indexer.
+   */
+  const twins: Twins = findTwins(
+    scene.graph,
+    scene.atlas.nodes.map((node) => node.id),
+  );
+
   const regionOf = (subject: AtlasId): string | null => {
     const ref = scene.graph.refById.get(subject);
     return ref === undefined ? null : (scene.atlas.nodes[ref]?.region ?? null);
@@ -494,6 +511,23 @@ function start(scene: Scene, root: HTMLElement): void {
       // `depthFor`, one panel over, and visible only in an e2e screenshot.
       understood: node !== null && tracedRadius.has(node.id),
       challenge,
+      // ADR-0030. The gate is *answered*, not *passed* — what the leak needs is
+      // the other board's reveal, which a player sees whatever they scored, and
+      // guardrail 6 forbids punishing a wrong answer. And it is the whole
+      // class: a per-row guard would make the absence of this line point at the
+      // member whose board is still open.
+      twins:
+        node === null
+          ? null
+          : nameableClass(twins, node.ref, (member) => {
+              const id = scene.nodes[member]?.id;
+              if (id === undefined) return false;
+              const bucket = challengesById.get(id) ?? [];
+              return bucket.some(
+                (c) =>
+                  c.verb === 'blastRadius' && !selector.answered.has(answerKey(c.verb, c.subject)),
+              );
+            }),
     });
   };
 

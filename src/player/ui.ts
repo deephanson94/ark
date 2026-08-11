@@ -21,6 +21,7 @@ import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
+import type { TwinClass } from './twins.js';
 
 type Children = readonly (Node | string)[];
 
@@ -264,6 +265,15 @@ export function createHud(
   };
 }
 
+/**
+ * `a`, `a and b`, `a, b and c`. One place, because the alternative is three
+ * call sites that disagree about the last comma.
+ */
+function listOf(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`;
+}
+
 export interface InspectorView {
   readonly node: SceneNode | null;
   readonly radius: Radius | null;
@@ -277,6 +287,14 @@ export interface InspectorView {
   readonly challenge: Challenge | null;
   /** True when `challenge` has already been passed. Labels the button. */
   readonly answered: boolean;
+  /**
+   * The twin class this node belongs to, **if it may be named** (ADR-0030).
+   *
+   * `null` covers both "no twin" and "the gate is closed", and the panel must
+   * not be able to tell those apart — a panel that could would be able to
+   * render the difference, and the difference is the fact being withheld.
+   */
+  readonly twins: TwinClass | null;
 }
 
 export interface Inspector {
@@ -296,7 +314,7 @@ export function createInspector(
 
   return {
     root,
-    show({ node, radius, understood, challenge, answered }) {
+    show({ node, radius, understood, challenge, answered, twins }) {
       body.replaceChildren();
       empty.style.display = node === null ? 'block' : 'none';
       if (node === null) return;
@@ -334,6 +352,39 @@ export function createInspector(
             `${radius.dependents.size} file${radius.dependents.size === 1 ? '' : 's'}`,
           ),
         );
+      }
+
+      /**
+       * **Twins, in the *revealed* register — a shown fact, not a proved one.**
+       *
+       * ADR-0011 decision 3 draws the line and ADR-0030 decision 3 applies it:
+       * this is not *"you proved"*, it is *"nothing in this repository can tell
+       * these apart"*. The count is the class's cone size, which is the whole
+       * content of the claim — a class reached by one file is thin and true,
+       * and the number is what tells the reader so.
+       *
+       * Here rather than on the map (decision 4): `ties.ts`'s own comment is
+       * that *"a wired answer is the map's `Ctrl+F`"*, and a twin relation is
+       * static, so an edge would either be permanently drawn — a lookup — or
+       * flicker as boards open and close, which is ADR-0016's vanishing-wires
+       * defect wearing a new hat.
+       */
+      if (twins !== null) {
+        const others = twins.members.filter((member) => member !== node.ref);
+        const names = others
+          .map((member) => scene.nodes[member]?.label ?? '')
+          .filter((label) => label !== '');
+        if (names.length > 0) {
+          const places = `${twins.coneSize} place${twins.coneSize === 1 ? '' : 's'}`;
+          const reach = twins.members.length === 2 ? 'both of them' : `all ${twins.members.length} of them`;
+          body.append(
+            el('div', 'inspector-twin', [
+              el('span', 'inspector-twin-mark', ['indistinguishable']),
+              ` nothing in this repository can tell this apart from ${listOf(names)}: `,
+              `${places} reach ${reach}, by the same paths.`,
+            ]),
+          );
+        }
       }
 
       if (atlasNode.originPath !== atlasNode.path) {

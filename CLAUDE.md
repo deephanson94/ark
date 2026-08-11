@@ -1340,12 +1340,12 @@ hugo and django, the two worst offenders, on the strength of 24 and 45 stray Jav
 refuses `awesome`. And `unsupported / onDisk` **provably cannot work** — refusing hugo needs a bar
 ≤ 58.7% and `awesome` sits at 69.6%, so the sets overlap and no threshold exists.
 
-Next action: **build ADR-0030's twin surface** — an inspector line in the *revealed* register, its
-gate wired to the deck (*no member of the class still carries an unanswered board*), and its tests.
-**[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)
-makes it the priced pilot** for the phenomenon catalogue, which is deferred rather than queued:
-fifteen detectors were measured before anything was designed, and the honest size is ~5 entries
-rather than 30–60. Then **run `docs/experiments/0001`.** The walkable world ships (ADR-0033), which turns S1 from
+Next action: **run `docs/experiments/0001`.** ADR-0030's twin surface is **built** — `src/player/twins.ts`,
+one inspector line in the *revealed* register, gated on *no member of the class still carrying an
+unanswered Blast Radius board*, both halves checked in a browser. That was ADR-0034's priced pilot
+and the price is now known: **~250 lines, one module, one gate, two suites** for one catalogue entry.
+The catalogue itself stays **deferred** — fifteen detectors were measured before anything was
+designed and the honest size is ~5 entries rather than 30–60. The walkable world ships (ADR-0033), which turns S1 from
 a gate on a thing that does not exist into a gate on a thing that does — and **nothing in the product
 may claim the world teaches better until it runs**, which is why the flat map is still the arrival
 state. Two blockers first, both in that document's §8: the two matched repos are still a TODO, and a
