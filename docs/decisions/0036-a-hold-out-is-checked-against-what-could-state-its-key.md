@@ -105,17 +105,46 @@ close this channel; the same measurement takes it to 0 of 6. It was rejected bec
 taking **one end of the range**, and §6 names a floor and a ceiling as one instrument failure wearing
 two signs. A bar removes the compromised items and leaves the spread.
 
-## Decision 5 — mutual membership is reported and not refused on
+## Decision 5 — mutual membership is reported, not refused on, and returns `null` where it cannot be asked
 
 Two boards of one verb that name each other. Stated structurally, so it names no verb and therefore no
 relation: on Companion it is the symmetric co-change pair, on Blast Radius the same shape is a
 **cycle**, which is ADR-0034 §4's SCC finding arriving from the other side.
 
-It reads **0, 0, 0, 1** across the four repos and moves with the selection rule, because barring
+It reads **0 / 0 / 0 / 1** across the four repos and moves with the selection rule, because barring
 changes which boards are picked. Refusing on a channel this small and this rule-sensitive would shrink
 the quiz for an unmeasured benefit; §4.4's instruction is to swap items that are *disclosed*, and this
-is a property of two boards' shapes rather than a fact any reveal states. When the number is known on
-a repo where it is not ~0, this is the line that changes.
+is a property of two boards' shapes rather than a fact any reveal states.
+
+**The first version of this channel broke decision 1's own rule, in the file whose docstring is
+mostly about that rule**, and a review sweep caught it. Placement's subject is a commit and its
+members are nodes; Archaeology's are the other way round. The two roles are in **disjoint
+namespaces**, so the lookup misses by construction and the count is 0 for a reason that has nothing to
+do with the repo — printed in the same column as Blast Radius's checked 0. It returns `null` now and
+the report prints **`n/a`**. Two zeroes, again, in the channel added second, by the author of the
+paragraph forbidding it.
+
+### What this channel subsumes
+
+ADR-0016's wire gate has the identical *absent-versus-unanswered* shape as decision 3: `openBoards` is
+built from **unanswered** `coChangeTies` challenges, so a held-out Companion board suppresses nothing
+and its subject's pairs draw. Measured, the leak reduces to mutual membership and is **0 atoms on all
+four repos** — because a wire needs `S ∈ truth(Y)` for a served `Y`, and `Y` must also be a candidate
+on `S`'s board, which by ADR-0014's certification puts `Y ∈ truth(S)`. That is mutual membership
+exactly.
+
+**Apparatus, since the result is another zero**: 172 / 329 / 348 / 194 wires drawn, **1–2 of 6**
+held-out subjects carry an incident wire, and **6 of 6** boards' candidates appear in the wire graph
+on every repo. The join found rows; there is nothing in them.
+
+## Decision 6 — taking a verb's whole supply is a shortfall
+
+`shortfall = k − held` fires only when `k > eligible`, never at `k === eligible` — so `-k 40` on a
+40-board verb removed **every** board of that verb, reported `shortfall 0`, and exited 0. The played
+atlas then has no board of that kind, and `empty.ts` would tell the participant *"every question
+answered"* over a deck that was taken from them: `deckRefused` comes from `sourceCoverage`, which
+never reads `challenges`, so a hold-out is a **third** cause for a zero the panel already forks on
+twice. Held out entirely, a verb now reports the whole request as short and the script exits 2.
 
 ## What was measured and deliberately **not** called a leak
 
@@ -136,6 +165,11 @@ work, and `CLAUDE.md`'s landmine is that the error runs in the direction that ge
 - Eight mutants die, including `keyFacts` returning `[]`, `REFUSE_AT` unreachable, `MAX_ROUNDS = 1`,
   a verb-blind `mutualMembership`, a `keyFacts` that reuses `discloses`, an ignored bar, and a
   `preferenceOrder` that takes one end of the range.
+- **A post-ship review sweep found two defects the mutants could not**, both in this document's own
+  decisions rather than in the code they describe: the vacuous `mutual` zero (decision 5) and the
+  whole-supply shortfall (decision 6). Neither is reachable by mutating a line — one is a missing
+  distinction and the other a boundary nothing exercised. That is the argument for the sweep being a
+  separate instrument from the mutation run, not a redundant one.
 - One mutant **reddened nothing on its first draft** because it mutated the map *builder* instead of
   the matcher. A bad mutant looks exactly like a robust test.
 

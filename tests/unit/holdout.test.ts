@@ -251,8 +251,8 @@ describe('mutual membership — the channel the disclosure check is blind to', (
     const served = companionBoard('c-2', 'src/b.ts', ['src/a.ts']);
     const found = mutualMembership([held], [served]);
     expect(found).toHaveLength(1);
-    expect(found[0]?.id).toBe('c-1');
-    expect(found[0]?.servedId).toBe(idOf('src/b.ts'));
+    expect(found?.[0]?.id).toBe('c-1');
+    expect(found?.[0]?.servedId).toBe(idOf('src/b.ts'));
   });
 
   it('does not match across verbs', () => {
@@ -268,6 +268,36 @@ describe('mutual membership — the channel the disclosure check is blind to', (
     const held = companionBoard('c-1', 'src/a.ts', ['src/b.ts']);
     const served = companionBoard('c-2', 'src/b.ts', ['src/c.ts']);
     expect(mutualMembership([held], [served])).toEqual([]);
+  });
+
+  it('is null, not empty, where a subject and a member are different kinds of id', () => {
+    // Placement's subject is a commit and its members are nodes, so "two boards
+    // naming each other" is not a relation that can hold — and a 0 printed here
+    // beside Blast Radius's checked 0 would be this module's own two-zeroes rule
+    // broken in the channel it added second. It was, in the first version.
+    const placement = placementBoard('p-1', SHA_ONE, ['src/a.ts']);
+    const archaeology = archaeologyBoard('a-1', 'src/a.ts', [SHA_ONE]);
+    expect(mutualMembership([placement], [placement])).toBeNull();
+    expect(mutualMembership([archaeology], [archaeology])).toBeNull();
+    // And the report says so rather than printing a number.
+    const atlas = atlasWithDeck([placement, archaeologyBoard('a-2', 'src/c.ts', [SHA_TWO], 0.9)]);
+    const split = splitDeck(atlas, { placement: 1 }, VERBS);
+    expect(split.report.perVerb[0]?.mutual).toBeNull();
+    expect(summary(split.report).join('\n')).toContain('mutual n/a');
+  });
+});
+
+describe('taking a verb’s whole supply', () => {
+  it('is a shortfall even though the arithmetic says otherwise', () => {
+    // `size - bucket.length` fires only when k > eligible. At k === eligible the
+    // played atlas loses every board of that verb and the script exited 0.
+    const atlas = atlasWithDeck([
+      blastBoard('b-1', 'src/a.ts', ['src/b.ts'], 0.1),
+      blastBoard('b-2', 'src/c.ts', ['src/d.ts'], 0.9),
+    ]);
+    const split = splitDeck(atlas, { blastRadius: 2 }, VERBS);
+    expect(split.played.challenges.filter((c) => c.verb === 'blastRadius')).toEqual([]);
+    expect(split.report.perVerb[0]?.shortfall).toBe(2);
   });
 });
 

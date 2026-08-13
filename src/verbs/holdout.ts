@@ -163,7 +163,7 @@ export interface VerbSplit {
    * **The second channel, and the only one that can fire on the quiz's own two
    * verbs** — reported, never refused on. See `mutualMembership`.
    */
-  readonly mutual: readonly MutualItem[];
+  readonly mutual: readonly MutualItem[] | null;
   /**
    * Boards this verb could not hold out because removing them would open a
    * surface that states their own key. See `HoldoutBar`.
@@ -311,7 +311,22 @@ function disclosure(
 export function mutualMembership(
   heldOut: readonly Challenge[],
   served: readonly Challenge[],
-): MutualItem[] {
+): MutualItem[] | null {
+  // **Only askable where a subject and a member are the same kind of id**, and
+  // returning `null` rather than `[]` where they are not is this module's own
+  // two-zeroes rule applied to the channel it added second — which the first
+  // version got wrong, in the file whose docstring is mostly about that rule.
+  //
+  // Placement's subject is a commit and its members are nodes; Archaeology's are
+  // the other way round. The two roles are in **disjoint namespaces**, so
+  // `bucket.get(member)` misses by construction and the count is 0 for a reason
+  // that has nothing to do with the repo. Printing that beside Blast Radius's
+  // checked zero would be the same cell for two different facts, again.
+  const kindOf = (id: string): string => id.slice(0, 2);
+  for (const challenge of heldOut) {
+    const member = challenge.truth[0];
+    if (member !== undefined && kindOf(member) !== kindOf(challenge.subject)) return null;
+  }
   const byVerb = new Map<VerbId, Map<string, ReadonlySet<string>>>();
   for (const challenge of served) {
     let bucket = byVerb.get(challenge.verb);
@@ -477,7 +492,17 @@ export function splitDeck(
       refused: refusedEver.get(verb) ?? [],
       mutual: mutualMembership(bucket, servedChallenges),
       barred: barredEver.get(verb) ?? [],
-      shortfall: Math.max(0, size - bucket.length),
+      // **A verb whose whole supply was taken is short even when the arithmetic
+      // says otherwise.** `size - bucket.length` fires only when `k > eligible`,
+      // never when `k === eligible` — so `-k 40` on a 40-board verb emptied that
+      // verb's played deck and exited 0, handing participants an atlas with no
+      // board of that kind and the guide saying "every question answered".
+      // Reported as a shortfall of the whole request, because that is what the
+      // caller has to act on.
+      shortfall:
+        bucket.length > 0 && bucket.length === (byVerb.get(verb) ?? []).length
+          ? size
+          : Math.max(0, size - bucket.length),
     };
   });
 
@@ -505,7 +530,7 @@ export function summary(report: HoldoutReport): string[] {
     lines.push(
       `${split.verb.padEnd(12)} held ${String(split.heldOut.length).padStart(3)}` +
         ` of ${String(split.eligible).padStart(4)} eligible   ${refusals}` +
-        `   mutual ${split.mutual.length}` +
+        `   mutual ${split.mutual === null ? 'n/a' : String(split.mutual.length)}` +
         `   barred ${split.barred.length}${short}`,
     );
   }

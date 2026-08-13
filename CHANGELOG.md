@@ -3329,3 +3329,22 @@ One line per iteration: what changed, and what to do next.
   **Next**: `docs/experiments/0001` §9 is down to **twelve participants**, which is owner-only.
   Then region arches in the world (ADR-0032 §9.6), then django's index budget (17.6–18.6 s against a
   10 s ceiling, ~40% force-directed layout).
+
+- **A review sweep found two defects in the split, both in this session's own decisions rather than in
+  the code they describe.** `mutualMembership` printed **0 for Placement and Archaeology** — where a
+  subject is a commit and its members are nodes, so the lookup misses **by construction** and the zero
+  says nothing about the repo. That is the two-zeroes rule this module's docstring is mostly about,
+  broken in the channel it added second, by the author of the paragraph forbidding it. It returns
+  `null` now and the report prints `n/a`. And `shortfall = k − held` never fired at `k === eligible`,
+  so `-k 40` on a 40-board verb removed **every** board of that kind, reported 0 short, and exited 0 —
+  handing participants an atlas whose guide says *"every question answered"* over a deck that was
+  taken from them (`empty.ts` forks a zero on two causes and a hold-out is a third). It exits 2 now.
+  Neither was reachable by mutating a line; the sweep is a different instrument from the mutation run.
+
+  **ADR-0016's wire gate has the same absent-versus-unanswered shape as the twin gate, and it was
+  measured rather than assumed.** `openBoards` is built from *unanswered* Companion challenges, so a
+  held-out board suppresses nothing. The leak reduces to mutual membership and is **0 atoms on all
+  four repos**, because a wire needs a served board naming the held subject *and* that board's subject
+  to be a candidate on the held one — which ADR-0014's certification turns back into mutual
+  membership. Apparatus, since it is another zero: **172 / 329 / 348 / 194** wires drawn, 1–2 of 6
+  held subjects carrying an incident wire, and 6 of 6 boards' candidates present in the wire graph.
