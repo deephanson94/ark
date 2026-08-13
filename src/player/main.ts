@@ -48,6 +48,8 @@ import type { Progress } from './progress.js';
 import { VERBS, channelOf } from '../verbs/index.js';
 import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
+import type { Tally } from './tally.js';
+import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
 import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
 import type { Twins } from './twins.js';
@@ -223,6 +225,23 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // function the whole session already exercised.
   const store = browserStore();
   const saveKey = storageKeyFor(scene.atlas.repo);
+  // `docs/experiments/0001` M2's instrumentation, in its own record beside the
+  // save. **Nothing reads this back into the game** — it is written here and
+  // read by a facilitator out of `localStorage`, which is what keeps it a
+  // measurement rather than the cursor ADR-0011 decision 2 forbids. See
+  // `tally.ts`; `tests/unit/tally.test.ts` asserts the selector never imports it.
+  const tallyKey = tallyKeyFor(scene.atlas.repo);
+  let tally: Tally = locked ? parseTally(store?.getItem(tallyKey) ?? null) : EMPTY_TALLY;
+  // **The readout, and the reason it is here rather than on screen.** M2's datum
+  // has to leave a finished session somehow, and showing a participant their own
+  // pre-registered measure changes the thing being measured. So it is a function
+  // the facilitator calls once, at minute 20, and it exists only in an arm —
+  // `docs/experiments/0001` §9 names it. Guardrail 6 is untouched because the
+  // player is never shown it and nothing in the game reads it.
+  if (locked) {
+    (globalThis as unknown as Record<string, unknown>)['arkTally'] = (): unknown =>
+      summarise(tally);
+  }
   const liveness = livenessOf(scene.graph, VERBS);
   const shore = landmarks(scene.nodes);
   // The same set the fog gives away for free, drawn as summits. One rule, two
@@ -595,6 +614,26 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // gone by the next click — ADR-0016 decision 3.
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
+      // Every graded submission, pass or fail — which is the difference between
+      // this and the `attempts` map below, and the reason M2's datum did not
+      // exist before. That one counts only the boards that did *not* pass, so a
+      // board answered correctly first time was invisible to it.
+      // **Only in an arm.** `experiment.ts`'s rule is that no query string is
+      // today's player, unchanged — the deployed page has none — so an ordinary
+      // session stores nothing at all, and ADR-0011 decision 2 has no surface to
+      // be argued about. The instrument exists for the twenty minutes it is
+      // measuring and at no other time.
+      if (locked) {
+        tally = noteGrade(tally, challenge.verb, challenge.subject, progression.unlocked);
+      }
+      try {
+        if (locked) store?.setItem(tallyKey, serializeTally(tally));
+      } catch {
+        // Quota or a private-mode store. An instrument that cannot write must
+        // not take the session down with it — the run is still valid, the
+        // engagement half of it is simply unrecorded, and the facilitator finds
+        // out by the key being absent rather than by a stack trace at minute 3.
+      }
       retally();
       refreshNotes();
       // Both paths into a challenge converge here, which is why the selector's

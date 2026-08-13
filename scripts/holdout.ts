@@ -41,7 +41,7 @@ import process from 'node:process';
 import type { Atlas, VerbId } from '../src/atlas/index.js';
 import { VERB_IDS, buildGraph, serializeAtlas, validateAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
-import { VERBS } from '../src/verbs/index.js';
+import { CTRL_F_THRESHOLD, VERBS, scoreSet } from '../src/verbs/index.js';
 import type { HoldoutBar, HoldoutSizes } from '../src/verbs/holdout.js';
 import { splitDeck, summary } from '../src/verbs/holdout.js';
 import { findTwins } from '../src/player/twins.js';
@@ -149,12 +149,74 @@ function twinBar(atlas: Atlas): HoldoutBar {
   };
 }
 
+/**
+ * A board the map already answers is not a quiz item.
+ *
+ * Hovering a node paints its **direct importers** in gold — ADR-0008 decision 1,
+ * available to everyone, gated by nothing, in every arm. On the boards where the
+ * answer key is mostly direct importers that guess is not a hint, it is the
+ * answer: measured on hono, ticking exactly what the hover paints beats band A on
+ * **17 of 54** Blast Radius boards (31.5%), and on the easy end it is close to
+ * total — mean F1 **0.890** for difficulty ≤ 0.50 against **0.095** for ≥ 0.80,
+ * Spearman ρ = **−0.826**.
+ *
+ * The product ships those boards deliberately: `gate.ts` declines to refuse the
+ * guess because §8.4 already prices it and the progression needs easy rungs. A
+ * quiz is not a progression. An item every arm can answer by pointing measures
+ * nothing about the arms and spends one of six slots, so it is barred here even
+ * though it is a perfectly good board to *play*.
+ *
+ * **This is a bar and not a change to `preferenceOrder`, and the difference is
+ * the point.** Ranking the quiz by descending difficulty would also close the
+ * channel — the same measurement shows top-6-by-difficulty taking it to 0 of 6 —
+ * but it does so by taking one end of the range, and §6 names a floor and a
+ * ceiling as the same instrument failure wearing opposite signs. Barring the
+ * decided boards removes exactly the items that are compromised and leaves the
+ * spread intact.
+ *
+ * Uses the product's own bar (`CTRL_F_THRESHOLD`, band A) and the product's own
+ * metric (`scoreSet`), because ADR-0020's landmine is that an exposure reported
+ * in units the product does not grade in cannot be compared to any threshold.
+ */
+function naiveBar(atlas: Atlas): HoldoutBar {
+  const graph = buildGraph(atlas);
+  return (challenge) => {
+    if (challenge.verb !== 'blastRadius') return null;
+    const ref = graph.refById.get(challenge.subject);
+    if (ref === undefined) return null;
+    // The direct importers of the subject, restricted to the choice set — which
+    // is what a player can actually tick.
+    const candidates = new Set(challenge.candidates);
+    const painted: string[] = [];
+    for (const edge of graph.in[ref] ?? []) {
+      const id = atlas.nodes[edge.from]?.id;
+      if (id !== undefined && candidates.has(id)) painted.push(id);
+    }
+    if (painted.length === 0) return null;
+    const score = scoreSet(painted, challenge.truth).score;
+    if (score < CTRL_F_THRESHOLD) return null;
+    return `the map's hover paint scores ${score.toFixed(3)} on this key, at or above band A`;
+  };
+}
+
+/** Both bars, first reason wins. */
+function barsFor(atlas: Atlas): HoldoutBar {
+  const bars = [twinBar(atlas), naiveBar(atlas)];
+  return (challenge) => {
+    for (const bar of bars) {
+      const reason = bar(challenge);
+      if (reason !== null) return reason;
+    }
+    return null;
+  };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const atlas = await loadAtlas(args.target);
 
   const sizes: HoldoutSizes = Object.fromEntries(args.verbs.map((v) => [v, args.k]));
-  const split = splitDeck(atlas, sizes, VERBS, twinBar(atlas));
+  const split = splitDeck(atlas, sizes, VERBS, barsFor(atlas));
 
   // The played atlas must be a *valid* atlas, not merely a smaller object.
   // Removing challenges preserves the id sort and every referential check, but

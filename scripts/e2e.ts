@@ -1444,13 +1444,37 @@ async function main(): Promise<number> {
     if (walked === inWorld) {
       failures.push({ what: 'world', detail: 'holding w moved nothing — the hero does not walk' });
     }
-    const surveyedAfterWalk = Number(
-      /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
-    );
+    // **Keep walking until something new is surveyed, with a deadline.** One
+    // fixed burst in one fixed direction was an assumption about where the city
+    // happens to lie, and ark indexes itself — adding two source files re-rolled
+    // the layout, the hero's straight line passed only buildings the earlier map
+    // steps had already surveyed, and a step that had been green for a milestone
+    // went red on a commit that changed nothing about walking. That is the
+    // `.first()` landmine with a compass instead of an index.
+    //
+    // The deadline is what keeps this an assertion: a genuinely dead surveyor
+    // still fails, it just takes twelve seconds to say so instead of three.
+    const surveyedNow = async (): Promise<number> =>
+      Number(
+        /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
+      );
+    let surveyedAfterWalk = await surveyedNow();
+    for (let sweep = 0; sweep < 5 && surveyedAfterWalk <= surveyedBeforeWalk; sweep++) {
+      // Turn, then walk. Turning first is what makes the sweeps independent
+      // rather than five copies of the same straight line.
+      await page.keyboard.down('e');
+      await page.waitForTimeout(500);
+      await page.keyboard.up('e');
+      await page.keyboard.down('w');
+      await page.waitForTimeout(2000);
+      await page.keyboard.up('w');
+      await page.waitForTimeout(250);
+      surveyedAfterWalk = await surveyedNow();
+    }
     if (surveyedAfterWalk <= surveyedBeforeWalk) {
       failures.push({
         what: 'world',
-        detail: `walking surveyed nothing: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+        detail: `walking surveyed nothing in six sweeps: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
       });
     }
     process.stdout.write(
@@ -1992,6 +2016,56 @@ async function main(): Promise<number> {
         const caption = (await armPage.locator('.guide-caption').innerText()).trim();
         if (caption.length === 0) {
           failures.push({ what: `arm=${arm}`, detail: 'the guide panel is empty' });
+        }
+        // **M2's instrumentation has to actually fire, in a browser, in an arm.**
+        // Every assertion about it elsewhere is a unit test over a pure module,
+        // and this repo's landmine is that shell wiring is exactly what a unit
+        // suite cannot see — a mutant deleting the seed of the guide's attempt
+        // counts once reddened no unit test at all. So: play a board, and check
+        // the reading moved and survived a reload. `arkTally` exists only in an
+        // arm, which is the other half of the claim.
+        if (arm === 'map') {
+          const beforeTally = await armPage.evaluate(
+            '(globalThis.arkTally ? globalThis.arkTally() : null)',
+          );
+          if (beforeTally === null) {
+            failures.push({ what: `arm=${arm}`, detail: 'arkTally() is absent inside an arm' });
+          }
+          // The guide takes you to a landmark; it does not open a question —
+          // except for a placeless subject, where the control opens the board.
+          // Same dance as the select-all step, and for the same reason.
+          await armPage.locator('.guide-action').click();
+          await armPage.waitForTimeout(400);
+          if (!(await armPage.locator('.console-panel').isVisible())) {
+            await armPage.keyboard.press('Enter');
+          }
+          await armPage.waitForSelector('.choice-button', { timeout: 5000 });
+          await armPage.locator('.choice-button').first().click();
+          await armPage.locator('.console-submit').click();
+          await armPage.waitForSelector('.console-score', { timeout: 5000 });
+          const afterTally = (await armPage.evaluate(
+            '(globalThis.arkTally ? globalThis.arkTally() : null)',
+          )) as { graded: number } | null;
+          if (afterTally === null || afterTally.graded !== 1) {
+            failures.push({
+              what: `arm=${arm}`,
+              detail: `one graded board should read 1, read ${JSON.stringify(afterTally)}`,
+            });
+          }
+          // Persisted, not merely in memory: the whole point of a record over a
+          // variable is that a reload mid-session does not lose the reading.
+          await armPage.reload({ waitUntil: 'networkidle' });
+          await armPage.waitForSelector('.hud-detail');
+          await armPage.waitForTimeout(300);
+          const reloaded = (await armPage.evaluate(
+            '(globalThis.arkTally ? globalThis.arkTally() : null)',
+          )) as { graded: number } | null;
+          if (reloaded === null || reloaded.graded !== 1) {
+            failures.push({
+              what: `arm=${arm}`,
+              detail: `the tally did not survive a reload: ${JSON.stringify(reloaded)}`,
+            });
+          }
         }
         // A HUD advertising a key the arm has disabled is the broken-control
         // failure `main.ts` already has a comment about.

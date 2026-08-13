@@ -3210,9 +3210,12 @@ One line per iteration: what changed, and what to do next.
 
   **The two zeroes are not the same and the script refuses to print them the same way.** On Placement
   and Archaeology the check *ran*: their keys are expressible as disclosed facts, and ADR-0019
-  decision 7 already excluded the overlap at generation time — so a zero here proves that exclusion
-  survives an arbitrary subset of the deck, which was not obvious, because decision 7 was computed
-  against the **full** deck and the served deck is a subset of it. On Blast Radius and Companion the
+  decision 7 already excluded the overlap at generation time. **How much that proves is bounded by
+  deck coverage, and this paragraph's first draft overstated it** — a review of the measurement
+  caught it. On hono only **52 of 332 key atoms** across both decks sit where the cross-verb channel
+  could fire at all (a Placement board covers 54 of 500 retained commits, an Archaeology board 54 of
+  425 nodes), so decision 7 is confirmed on those 52 and a k=6 sample contains almost none of them.
+  The honest reading is *regression detection on decision 7*, not *the hold-out is safe*. On Blast Radius and Companion the
   check is **blind**: their keys are relations between *files* and every fact in `disclosure.ts` is
   keyed on a commit, so no accumulated fact can state one. Those two are §4.4's entire discriminating
   tier, so **the check §9 specifies is structurally vacuous on exactly the items the experiment is
@@ -3249,6 +3252,18 @@ One line per iteration: what changed, and what to do next.
   twin class on any of the four**. `findTwins` is imported from `src/player/` rather than
   reimplemented, because two definitions of *twin* is worse than the leak.
 
+  **A second bar, from the same fan-out: a board the map already answers is not a quiz item.**
+  Hovering a node paints its direct importers for everyone in every arm (ADR-0008 decision 1), and on
+  the easy end of the deck that is not a hint but the answer — mean F1 **0.890** below difficulty
+  0.50 against **0.095** above 0.80, ρ = −0.826, beating band A on **17 of hono's 54** boards. In the
+  quiz it decided **2 of 6** held-out boards on graphql-js and on hono and 1 of 6 on kysely, **best
+  F1 1.000** — an item answerable by pointing, spending one of six slots. Barred, using the product's
+  own bar (`CTRL_F_THRESHOLD`) and metric (`scoreSet`): now **0 of 6 on all four repos**, best 0.667
+  / 0.667 / 0.667 / 0.750. Ranking the quiz by descending difficulty would also have closed it and
+  was rejected — §6 names a floor and a ceiling as one instrument failure wearing two signs, so the
+  bar removes the compromised items and leaves the spread. Both bars together take **19 of ark's 40,
+  39 of graphql-js's 69, 31 of kysely's 75, 20 of hono's 54**, and no repo goes short of k=6.
+
   **What was measured and deliberately *not* called a leak**: a served Blast Radius board about `D`
   where `D` transitively imports `S` discloses `dependents(D) ⊆ dependents(S)`, covering part of the
   key on **29 of ark's 40** boards. Exploiting it requires knowing `D` depends on `S` and reasoning
@@ -3265,3 +3280,52 @@ One line per iteration: what changed, and what to do next.
   **Next**: M2's instrumentation — nothing persists attempt counts, so the engagement half of S1
   cannot be read off a finished session. Note that `selector.ts`'s `attempts` counts only boards that
   did **not** pass, so it is not the datum §3 says it is even before persistence.
+
+- **M2's instrumentation, and the datum that did not exist.** `docs/experiments/0001` §3 pre-registers
+  engagement as *"challenges attempted within the fixed 20 minutes"* and said `noteAttempt` kept the
+  count in session state. It did not: `main.ts` increments that map **only when the grade did not
+  pass**, so `selector.attempts` counts **failures**, and persisting it would have answered
+  *"challenges attempted"* with a number that **falls as participants do better** — anti-correlated
+  with the quantity, on exactly the between-arm comparison §3 exists to make. Persistence was the
+  second problem. The class-label landmine in a schema: the name says attempts, the docstring says
+  failures, the experiment's prose says attempts.
+
+  **The first draft was refuted by three independent reviewers and the shipped shape is theirs**
+  (**[ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)**). It put
+  a tally in `Progress`, arguing that a write-only field is not the cursor ADR-0011 decision 2 forbids
+  because *"position in the progression is recomputed from the answered set on every load"*. That
+  promotes the ADR's **reason** to its operative test — decision 2 says *"neither is a cursor"* and
+  prints the record's schema as a literal, so any new key changes it. `selector.ts` had already
+  classified this exact datum the other way, in code, citing the same ADR. And the proposed proof —
+  *"delete the read path and nothing changes"* — is vacuous: it passes on every tree containing the
+  field, including one where the next session wires it in.
+
+  So: `src/player/tally.ts`, its own key beside the save, **written only when `?arm=` locked the
+  session**. The ordinary player stores nothing, which leaves ADR-0011 decision 2 untouched rather
+  than argued with. The field is `graded` and never `attempts`, and the shapes are deliberately
+  incompatible with `SelectorState.attempts` — a sorted array against a `ReadonlyMap` — so wiring it
+  into `suggestNext` is a rewrite, not a one-word edit. That is the enforcement a comment cannot give.
+  `passedOn` latches which attempt first passed, which is the figure that prices any rule spending a
+  player's first attempt.
+
+  **And a readout, because a record with no reader is not an instrument.** §9 offered *"a counter in
+  the save, or a facilitator's tally"* and missed the option that beats both: the count already
+  existed in memory and what M2 lacked was a way to get it out. `arkTally()` exists in an arm only and
+  is never shown to the participant, since showing someone their pre-registered measure changes it.
+
+  **Proved to fire in a browser, because a unit suite structurally cannot see shell wiring** — this
+  repo's scar is a mutant that deleted the guide's attempt-count seed and reddened no unit test at
+  all. `test:e2e` plays a board under `?arm=map`, asserts the reading moved, reloads, asserts it
+  survived; deleting the write reddens both. Writing that step also cost two rounds: `.guide-go` was a
+  selector I invented (it is `.guide-action`) and the guide takes you to a landmark rather than
+  opening a board — both invisible to `tsc` and both caught only by running it.
+
+  **One pre-existing e2e step went red and it was mine indirectly.** The world's walking check held
+  `w` for a fixed burst and asserted `surveyed` rose. Ark indexes itself, so adding two source files
+  re-rolled the layout and the hero's straight line met only already-surveyed buildings — green on
+  `origin/master`, red here, on a commit that changed nothing about walking. It now sweeps with a
+  deadline, which keeps a genuinely dead surveyor failing.
+
+  **Next**: `docs/experiments/0001` §9 is down to **twelve participants**, which is owner-only.
+  Then region arches in the world (ADR-0032 §9.6), then django's index budget (17.6–18.6 s against a
+  10 s ceiling, ~40% force-directed layout).

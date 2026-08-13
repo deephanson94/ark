@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 35 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 37 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 35 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 37 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -163,6 +163,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | The board on the map | ✅ | Opening a challenge marks its **subject** and every placeable **candidate** on the map, with the tick state, and a click on a marker answers the board. The panel is docked and the scrim pointer-transparent, so the map stays readable and clickable — it used to be a dimmed, unmarked backdrop that discarded the board when clicked. **No edge is drawn between subject and candidate**: that relation is the answer and stays gated on `subjectsPassed` (ADR-0008). Half a deck's ids have no place (a Placement subject, an Archaeology candidate) and are dropped rather than positioned. |
 | A reveal is earned | ✅ | Below **0.5 precision** — *more of your picks were wrong than right* — the reveal names no candidate and the map unlock is withheld with it ([ADR-0035](./docs/decisions/0035-the-board-explains-itself-to-an-answer-that-discriminated.md)). Closes the two-click farm a playtester found: select-all → read the annotated key → reopen → 100% and a field note. Select-all's precision is bounded at ≈1/3 by ADR-0007's choice set (**max 0.308 over 792 boards**), so the bar has 1.6× margin; precision 1.0 with low recall — the teaching moment — is untouched and is unfarmable by construction. |
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
+| M2's instrumentation (`arkTally()`) | ✅ | `docs/experiments/0001` §3's engagement measure, in its own `localStorage` record and **only inside `?arm=`**, so the ordinary player stores nothing and ADR-0011 decision 2 is untouched rather than argued with ([ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)). The datum did not exist before, and not only unpersisted: `selector.attempts` increments **only on a non-pass**, so it counts failures and would have answered *"challenges attempted"* with a number that falls as participants do better. The first draft put it in `Progress` and **three independent reviewers refuted it**; the shipped shape is theirs. `test:e2e` plays a board in an arm, reloads and asserts the reading survived — deleting the write reddens both assertions. |
 | Hold-out split (`npm run holdout`) | ✅ | Cuts a built atlas into the atlas both arms play and the fixed quiz they are scored on (`docs/experiments/0001` §4.4). `Verb.keyFacts` is the third disclosure direction — *what would state my own key* — and it returns **`null` rather than `[]`** where the vocabulary cannot express one, so the two verbs of the discriminating tier print `unchecked` instead of a clean zero. Refuses **0 on ark `75b6117`, graphql-js `9c245018`, kysely `f24018c7` and hono `7075369e`**; the swap loop is proved by a hand-built collision in `tests/unit/holdout.test.ts`, because on a generated atlas ADR-0019 decision 7 makes one impossible. |
 | Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
@@ -203,16 +204,19 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   reaches **98.7% / 99.0%** of the edge set from a standing position, so the inset is not showing
   more, it is showing the same graph exocentrically — the world arm therefore contains a small
   instance of the map arm, and in that arm the inset keeps everything but its roads (`?arm=world`).
-  **The hold-out split now ships** (`npm run holdout`), so what is left of that document's §9 is
-  **M2's instrumentation and twelve participants**.
+  **Both pieces of that document's §9 now ship** — the hold-out split (`npm run holdout`, ADR-0036)
+  and M2's instrumentation (`arkTally()`, ADR-0037) — so what is left is **twelve participants**.
 - **The hold-out split's disclosure check refuses nothing, and the two zeroes underneath it are not
   the same fact.** Measured at k=6 per verb over all four verbs, on full clones of named commits —
   ark `75b6117`, `graphql/graphql-js` `9c245018`, `kysely-org/kysely` `f24018c7`, `honojs/hono`
   `7075369e` — the check refuses **0 on every repo** and the swap loop runs **once**. On Placement
   and Archaeology that is a *measurement*: their keys are expressible as disclosed facts and
-  ADR-0019 decision 7 already excluded the overlap at generation time, so this proves the exclusion
-  survives an arbitrary subset of the deck, which was not obvious — the exclusion was computed
-  against the *full* deck. On Blast Radius and Companion it is **blindness**: their keys relate files
+  ADR-0019 decision 7 already excluded the overlap at generation time. **How much that zero proves is
+  bounded by deck coverage, and the first draft of this paragraph overstated it.** On hono only
+  **52 of 332 key atoms** across both decks sit where the cross-verb channel could fire at all — a
+  Placement board covers 54 of 500 retained commits and an Archaeology board 54 of 425 nodes — so
+  decision 7 is confirmed on those 52 and the k=6 sample contains almost none of them. It is a
+  regression detector on decision 7 rather than a hold-out safety property. On Blast Radius and Companion it is **blindness**: their keys relate files
   and every disclosable fact names a commit, so no accumulated fact can state one and the check
   cannot fire. Those are §4.4's *entire discriminating tier*, so the specified check is structurally
   vacuous on precisely the items the experiment is scored on, and the script prints `unchecked`
@@ -230,6 +234,14 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   of graphql-js's 6. `HoldoutBar` now refuses to hold out a board whose subject shares a cone with
   anything else: it bars **11 of ark's 40, 24 of graphql-js's 69, 26 of kysely's 75, 6 of hono's
   54**, costs no repo its k=6, and leaves **0 of 6** held-out subjects in a twin class on all four.
+- **A board the map already answers is not a quiz item, and 2 of 6 were.** Hovering paints a node's
+  direct importers for everyone in every arm (ADR-0008 decision 1); on the easy end that is the
+  answer rather than a hint — mean F1 **0.890** below difficulty 0.50 against **0.095** above 0.80
+  (ρ = −0.826), beating band A on 17 of hono's 54 boards. In the held-out set it decided **2 of 6**
+  on graphql-js and hono, 1 of 6 on kysely, at **best F1 1.000**. Barred with the product's own bar
+  and metric: **0 of 6 on all four**, best 0.667–0.750. The product ships those boards on purpose
+  (`gate.ts` declines to refuse the guess; the progression needs easy rungs) — a quiz is not a
+  progression, and that is the whole difference.
 - **Districts are unmarked at street level.** Region arches are designed (ADR-0032 §3.2) and
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street
@@ -333,10 +345,9 @@ the matched repos are named with commits, the arms are staged with a stop rule, 
 fixed held-out item set (owner's decisions of 2026-08-11, recorded in ADR-0009). **The hold-out split
 ships** — `npm run holdout <repo> --out <dir>` writes the played atlas and the quiz and checks every
 removed key against the served deck's `discloses` output, which refuses **0 across four repos** for
-two different reasons the script keeps apart (see Known gaps). What is left of that document's §9 is
-**M2's instrumentation** (attempts are session state and nothing persists them, so the engagement
-half cannot be read off a finished session) and then **twelve participants from outside the
-project**, which is owner-only and the wall S1 was always going to hit
+two different reasons the script keeps apart (see Known gaps). **M2's instrumentation ships too**
+(ADR-0037), so **both** pieces of that document's §9 are done and what is left is **twelve
+participants from outside the project**, which is owner-only and the wall S1 was always going to hit
 · then **region arches in the world** — districts are unmarked at street level, and ADR-0032 §9.6 is
 why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
 their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,

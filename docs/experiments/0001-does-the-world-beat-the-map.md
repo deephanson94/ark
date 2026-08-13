@@ -1,11 +1,13 @@
 # Experiment 0001 — Does the world beat the map?
 
-- **Status**: **designed and runnable; not run.** Revised twice. The first review found four
+- **Status**: **runnable, harness complete, not run.** Both pieces of §9's harness shipped
+  2026-08-13 (ADR-0036, ADR-0037); what is left is twelve participants, which is owner-only.
+  Revised twice. The first review found four
   defects, including a tier-3 item using the exact wording ADR-0008 removed from the product. The
   second revision (2026-08-11) closed the three structural problems §8 had left open — the matched
   repos are **named with commits** (§4.1), the arm structure is **staged** and the minimap confound
   resolved by measurement (§4.2, §4.3), and the quiz is a **fixed held-out item set** (§4.4). What
-  remains is in §9: two pieces of harness, and recruiting, which is owner-only. Committing the
+  remains is in §9: recruiting, which is owner-only. Committing the
   design cleared the half of ADR-0009's S1 that gates *merging*; the half that gates *shipping*
   needs the experiment actually run.
 - **Date**: 2026-08-10, revised 2026-08-11
@@ -78,11 +80,24 @@ opposite argument being made after the fact. What M2 buys is the ability to say 
 level: the same score in half the time, or twice the challenges attempted, is a real finding and it
 would go to the owner as a decision rather than being folded into a pass.
 
-> **M2 is not instrumented today, and the table above says it is.** `noteAttempt` keeps attempt
-> counts in `selector.ts`'s session state and **nothing persists them** — the save records passes
-> and `surveyed`, and neither is a count of attempts. §9 carries the cost. Recorded here rather than
-> quietly fixed in the sentence, because a document claiming a behaviour the code does not have is
-> this repo's most-repeated defect.
+> **M2 is instrumented since 2026-08-13** ([ADR-0037](../decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)),
+> and the paragraph this replaces was wrong about the code in a way worth keeping on the record. It
+> said *"`noteAttempt` keeps attempt counts in `selector.ts`'s session state and nothing persists
+> them"* — crediting the code with a datum it did not have. `main.ts` increments that map **only when
+> the grade did not pass**, so `selector.attempts` counts **failures**, and a persisted version would
+> have answered *"challenges attempted"* with a number that falls as participants do better. The
+> datum did not exist even in session state; persistence was the *second* problem.
+>
+> What exists now: `src/player/tally.ts` counts **every graded submission**, pass or fail, in its own
+> `localStorage` record keyed on the repo's root commit — and **only when `?arm=` locked the
+> session**, so the ordinary player stores nothing and ADR-0011 decision 2 is untouched rather than
+> argued with. The facilitator takes the reading at minute 20 by calling **`arkTally()`** in the
+> browser console, which returns `{graded, boards, first, later, unpassed}`. It is not shown to the
+> participant: showing someone their own pre-registered measure changes the thing being measured.
+>
+> **It is a total, not a window.** M2 says *within the fixed 20 minutes* and the record carries no
+> clock. That is sound here only because §4 fixes one participant to one repo they have never seen,
+> so the record is empty at minute 0 by construction — a property of the protocol, not of the datum.
 
 ---
 
@@ -384,16 +399,29 @@ the question ADR-0008 removed from the product for marking players wrong.
 
 ## 9. What is left before this can be run
 
-Two pieces of harness, both small and neither owner-gated, and then the thing that is:
+**Both pieces of harness are built** (2026-08-13). What is left is the thing that was always going to
+be the wall.
 
-1. **The hold-out split.** A script that takes a built atlas, removes k boards per verb, writes the
-   played atlas and the quiz, and **checks the removed keys against the served deck's `discloses`
-   output** (§4.4). Without the check the split ships with a known leak; without the split there is
-   no fixed item set. Estimated at one script and one test over the two named atlases.
-2. **M2's instrumentation.** Attempts are session state and nothing persists them (§3), so the
-   engagement half of the criterion cannot be read off a finished session today. A counter in the
-   save, or a facilitator's tally — the first is a schema change and the second is free and less
-   reliable.
+1. ~~**The hold-out split.**~~ **Built** — `npm run holdout <repo> --out <dir>`
+   ([ADR-0036](../decisions/0036-a-hold-out-is-checked-against-what-could-state-its-key.md)). It
+   writes the played atlas and the quiz and runs the check §4.4 asks for. **Read its output with the
+   distinction the script prints**: the `discloses` check refuses 0 on all four measured repos, and on
+   Blast Radius and Companion — *this quiz's entire tier 3* — it prints `unchecked` rather than `0`,
+   because their keys relate files while every disclosable fact names a commit, so the check cannot
+   fire there under any deck.
+
+   Two leaks the specified check does not see were measured and closed. Removing a board opens
+   ADR-0030's twin gate on its own key (**4 of kysely's 6 held-out boards at F1 1.000**), and a board
+   whose key is mostly direct importers is answerable by *hovering* (**2 of 6** on graphql-js and
+   hono, best F1 1.000). Both are barred; after them the quiz is **0 of 6** on both counts across four
+   repos.
+
+   **Run it on the two named commits before recruiting**, and keep the printed report with the
+   artifacts — it is the instrument's provenance.
+2. ~~**M2's instrumentation.**~~ **Built** — `src/player/tally.ts`
+   ([ADR-0037](../decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)). Counts every
+   graded submission inside an arm; the facilitator calls **`arkTally()`** at minute 20. See §3 for
+   what it reads and what it deliberately is not.
 3. **Recruiting twelve people from outside the project.** Owner-only, and the wall S1 was always
    going to hit. Everything above exists so that the answer to *"why has this not run?"* is this line
    and nothing else.
