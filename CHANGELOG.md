@@ -3847,8 +3847,10 @@ pointer events back so the map underneath stays draggable. **Together the two ch
 100% of the map from the legend on all eight repos** — neither alone does, since Louvain still
 overflows 17 rows on four of them.
 
-**What survived, counted rather than assumed.** `absorbSmallRegions` is not vestigial: Louvain ships
-sub-`MIN_REGION` communities on hono (2), graphql-js (2) and kysely (1). Its test is rewritten around
+**What survived, counted rather than assumed — except it wasn't, and the next entry corrects this
+paragraph.** `absorbSmallRegions` is not vestigial: Louvain ships sub-`MIN_REGION` communities on
+hono (2), graphql-js (2) and kysely (1). *(Those are the pass's **precondition**, not its firings; it
+performs* **0 merges** *on all eight repos. See the following entry.)* Its test is rewritten around
 that, and **the first fixture written for it was vacuous** — a pair hanging off a small cluster is
 merged by Louvain itself, so absorption never ran and the test would have passed with the pass
 deleted. The shipped fixture uses a five-clique whose degree mass makes Louvain refuse the merge;
@@ -3886,3 +3888,75 @@ clean.
 §5 tier 1 and naming now does — visibly, since this repo's own 40-file region whose best directory is
 `tests` is labelled `src/atlas/index`. ADR-0041 §7 shows the problem is separable from the clustering
 and that the obvious metric cannot arbitrate it. Then region arches, whose blocker just closed.
+
+## What a Fable review found in the Louvain change: two claims about machinery firing
+
+The measurements in the entry above reproduce — a reviewer re-derived the region counts, the γ=1
+argmax on all eight repos, the wired counts, django's 0.244 → 0.191, hono's 4-vs-38 stability steps
+and the 0/22 centroids, all to the digit. **Both places it went wrong were claims that a branch
+runs**, which is the exact defect class this repo's landmine list exists to prevent.
+
+**`absorbSmallRegions` performs 0 merges on all eight repos, and five documents said it "fires".**
+The probe counted communities *below the floor* — the pass's **precondition** — and every write-up
+transcribed that as firings: hono 2, graphql-js 2, kysely 1. Instrumenting the merge loop itself
+gives **0 on ark, flask, hono, graphql-js, kysely, prometheus, hugo and django**. Every one of those
+sub-floor communities is a two-node island with **no outward edge**, so the pass marks it `stranded`
+and declines; what removes it is the **terrain fold**, which also means `docs/atlas-format.md`'s
+claim that the region-count floor "holds because `absorbSmallRegions` survived" was wrong about
+which mechanism enforces it. Corrected in `regions.ts` (twice), the test, `atlas-format.md` §3.4,
+this file and the ADR; `scripts/probe-absorb.ts` now counts the **merge**. The pass is kept and
+labelled *dead under this configuration* in ADR-0019's `oldestK` sense, with its revival condition
+written down. **Counting the condition under which a branch could run looks exactly like counting
+the branch, and reads as diligence** — that is the new landmine.
+
+**`splitDisconnected` — the module's advertised Leiden guarantee — was executed by nothing.**
+Replacing its body with `return { labels, splits: 0 }` passed all 858 unit and 112 atlas tests; no
+test file imported `louvain` at all. `tests/unit/louvain.test.ts` now exists: **15 assertions, and
+6 of 7 mutants die** (the survivor is the aggregated-adjacency sort, already recorded as a guard for
+a configuration that does not exist yet). Two of those tests exist only because the first draft's
+mutants survived: a label whose members **straddle** another community, because with `[0,0,1,1]` a
+boundary-ignoring walk still relabels nothing; and a **tie whose insertion order is not ascending**,
+built from cliques `{0,1,2,7}` and `{3,4,5,6}` so the bridge's neighbour scan meets the higher
+community first. Every symmetric fixture lets the tie-break rules escape unmeasured.
+
+**The same CSS contradiction was still shipping one panel over.** `.inspector` carried
+`overflow-y: auto` with `pointer-events: none` — identical to the legend defect the ADR diagnoses,
+in the same stylesheet. The first fix grepped one selector rather than the pattern. `.inspector-body`
+now owns the scroll.
+
+**The legend fix had no browser-level check, and the first two attempts at one were vacuous.**
+`scripts/e2e.ts` never mentioned the legend, so "the rows are ordered and the list scrolls" — the
+whole user-facing claim — was verified by nothing. The step now asserts descending size, terrain
+last and single, and a count on every row. Getting the scroll assertion honest took three goes:
+at 1440×900 ark's seven rows **fit**, so the branch never ran; forcing the overflow with a 260px
+window exposed that `node.scrollTop = 40` is a DOM write which **succeeds even with
+`pointer-events: none`**, so it would have passed against the exact bug. It now moves a real
+hit-tested wheel over the panel — and restoring the viewport is not restoring the *view*, so it
+presses `f`, because the first version left the camera zoomed and reddened a peaks gate 200 lines
+later. Reverting the CSS reddens it.
+
+**Three prose defects where a sentence contradicted a number in the same document.** ADR §9 said the
+golden layout needed re-pinning — it feeds `computeLayout` a hand-written `groups` array, so a
+clustering change cannot reach it, and the table's own next row (*852 of 853 wired*) already said so;
+no commit touched the file. §8 asserted the wiring patch was both "not applied to this branch" and
+"has since been applied". §7 presented the metric's best-matching *directories* as the labels the map
+prints, which is precisely the naming failure that section is about — the region best described by
+`tests` is the one labelled `src/atlas/index`. §7's hono count (51) is the raw partition where §1's
+(49) is the shipped atlas after the terrain fold, now stated.
+
+**Two instruments had rotted into lying about their own first column.** `probe-arms.ts`'s arm A
+reads `node.region` from the dump, so it is "label propagation" only until this change ships: run on
+current dumps it printed arm A ≡ arm B and a win table reading *A 6, B 5, C 0* — sums to 11 over 8
+repos, because ties were counted twice. It now detects the collapse as a **partition** (the labels
+differ even when the grouping is identical, so comparing arrays never fired) and refuses to be read.
+`probe-stability.ts`'s "now" arm has the same caveat, now documented.
+
+**And a pre-existing one, fixed while passing.** `scripts/e2e.ts` has carried a literal NUL byte
+since `f96d621` as a never-matches sentinel, which makes a 900-line harness **binary to git** and its
+diffs unreviewable. Written as an escape now.
+
+**Next**: unchanged — the naming rule, which this review sharpened rather than moved. Measured:
+renaming a region moves **no node** (verified over three permutations of the group numbering, since
+`computeLayout` accumulates centroids in node-index order with the group number only a `Map` key) but
+**recolours every map**, because hue is index × golden angle over the id-sorted region list. So it
+belongs inside this epoch rather than after it, and deferring it buys a second standalone recolour.

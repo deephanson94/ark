@@ -263,6 +263,11 @@ So the folder tree was added as a **third arm** and scored on both axes. It is t
 by construction, and it is also a real candidate: five lines instead of 313, and it still moves the
 layout, so if it won it would be a completely different and much cheaper decision.
 
+Counts here are of the **raw partition over the linked subgraph**, which is what the arms produce;
+§1's are of the shipped atlas, after sub-floor components have been folded into terrain. That is why
+hono reads 51 here and 49 there — the gap is exactly its two two-node islands, and it is 0 on the
+repos with none.
+
 | repo | arm | regions | **Q** | **mean name F1** | largest |
 |---|---|---:|---:|---:|---:|
 | ark | A label prop | 15 | 0.334 | 0.288 | 47% |
@@ -296,9 +301,13 @@ But the yardstick's optimum is the thing the spec forbids, so a wash on it is no
 the clustering. **Tier 1 is unblocked on count and still blocked on naming**, and the naming problem
 is now clearly a *naming* problem, separable from this decision.
 
-Where it works, it works: ark's five regions come out as `tests / src/verbs / src/player /
-src/indexer / src/atlas` — `README.md`'s own architecture table, recovered from the import graph
-without reading it. It fails where a repo's directories do not follow its coupling (django separates
+Where it works, it works: ark's five regions are **best described by** the directories `tests`,
+`src/verbs`, `src/player`, `src/indexer` and `src/atlas` — `README.md`'s own architecture table,
+recovered from the import graph without reading it. **Those are the metric's best-matching
+directories, not the labels the map prints**, and the difference is this section's whole subject: the
+shipped labels at `d4acfa5` are `src/atlas/index`, `src/atlas/schema`, `src/indexer`, `src/player`
+and `src/verbs`, so the region best described by `tests` is the one labelled `src/atlas/index` — the
+naming failure, on the repo where the clustering works best. It fails where a repo's directories do not follow its coupling (django separates
 `tests/` from `django/`), which is a fact about the repository.
 
 ---
@@ -306,8 +315,10 @@ without reading it. It fails where a repo's directories do not follow its coupli
 ## 8. The acceptance test — a run, not a claim
 
 The prototype was wired into a scratch copy of the tree and the **real** suite run against it. The
-exact diff is [`0041-wiring.patch`](./0041-wiring.patch), which is **not applied to this branch** —
-it reproduces everything below, and **has since been applied** — see the status line.
+exact diff is [`0041-wiring.patch`](./0041-wiring.patch). It was *"not applied to this branch"* while
+this document was `proposed` and **has been applied** since the epoch was licensed; an earlier draft
+of this sentence asserted both halves at once. It is kept as the record of what the measurements
+below were taken against, and it is now two hardening refactors behind the code.
 
 ```
 npm run test:determinism  (ark, under the wired prototype, full git history)
@@ -353,7 +364,7 @@ survives.**
 
 | | |
 |---|---|
-| `tests/unit/layout.test.ts` golden layout (ADR-0038) | **Re-pin.** Every coordinate changes. |
+| `tests/unit/layout.test.ts` golden layout (ADR-0038) | **Untouched — and this row said "re-pin" for a whole draft.** It feeds `computeLayout` a hand-written `groups` array, so a clustering change cannot reach it; no commit on this branch edits the file. The table's own next-but-one row already refuted it (*852 of 853 pass wired*, the one failure being `regions.test.ts`). Every atlas coordinate changed and the golden layout pins none of them — which is worth knowing about the golden layout, not only about this change. |
 | `atlas.test.ts` spread ratio | **Re-measure.** ark 0.188 → 0.158, bar holds. |
 | `atlas.test.ts` region-count bound | **Holds as written** — absorption still runs after Louvain, so the `MIN_REGION ≥ 3` premise survives in the wired build. *(An earlier draft said this breaks; that was the prototype's raw output, which absorption never saw.)* |
 | `tests/unit/regions.test.ts` | **1 of its 15 tests fails**, measured, not estimated — *"folds a stranded file into the region it is most connected to"*. It encodes label propagation's repair for label propagation's own side effect (*"holding connectors out of the vote leaves some files with no voters at all"*), and that mechanism ceases to exist. On its fixture Louvain returns the triangle `{a,b,c}` and the star `{hub,lonely,d,e}`, which is a defensible partition of it. `regions.ts` goes 428 → 389 lines plus a 313-line module. |
@@ -380,7 +391,7 @@ interleaved rather than absolute. django's per-file row is **advisory** in `npm 
 
 **Effort**: smaller than this document first estimated, and now measured rather than guessed. The
 algorithm exists and is wired in a scratch tree; the whole test surface is **one failing unit test,
-plus re-pinning the golden layout and the spread ratio**. The separable naming problem is the real
+plus re-measuring the spread ratio**. The separable naming problem is the real
 remaining work.
 
 ---

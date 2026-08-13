@@ -306,9 +306,11 @@ There is deliberately **no cap** on region count. The bound is a consequence rat
 
 That bound is loose by two orders of magnitude and was never what kept the number readable — it
 permits 1,021 regions on django. What keeps it readable is the clustering: measured across eight
-repositories, ADR-0041 puts every one at **9–22 regions** (django 175 → 22, hono 57 → 20). The floor
-the bound rests on still holds because `absorbSmallRegions` survived the replacement, and it is not
-vestigial — Louvain ships communities under it on hono, graphql-js and kysely.
+repositories, ADR-0041 puts every one at **9–22 regions** (django 175 → 22, hono 57 → 20). The floor the bound
+rests on is enforced by the **terrain fold**, not by `absorbSmallRegions`: a connected component
+still under the floor after clustering becomes terrain. Louvain does ship sub-floor communities on
+hono, graphql-js and kysely, and every one is a two-node island the fold takes — absorption performs
+**0 merges on all eight repos** (ADR-0041 §5.2).
 
 ### 3.5 `history`
 

@@ -30,7 +30,12 @@ const run = promisify(execFile);
 
 interface Snapshot {
   readonly sha: string;
-  /** path → region id, current label propagation. */
+  /**
+   * path → region id, from `buildAtlas` — i.e. **whatever this checkout ships**.
+   * It was label propagation while ADR-0041 was being measured and is Louvain
+   * since; run on a current tree it duplicates the `lou` arm. Check out
+   * `d4acfa5` to reproduce the label-propagation column.
+   */
   readonly now: ReadonlyMap<string, string>;
   /** path → louvain community, or undefined for an edgeless node. */
   readonly lou: ReadonlyMap<string, number>;

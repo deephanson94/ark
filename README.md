@@ -295,6 +295,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   account for 100% of the map from the legend on all eight repos**; neither alone does — Louvain
   still overflows 17 rows on four of them.
 
+  **A review of this change found two false claims of the same kind, and both are corrected.**
+  `absorbSmallRegions` was recorded in five places as firing on hono, graphql-js and kysely; those
+  were communities below the floor — the pass's *precondition* — and it performs **0 merges on all
+  eight repos**, the terrain fold being what removes them. And `splitDisconnected`, the module's
+  advertised Leiden guarantee, was executed by **no test at all**: a no-op body passed the whole
+  suite. `tests/unit/louvain.test.ts` now exists, 6 of 7 mutants die, and the `.inspector` panel —
+  which carried the identical `overflow-y: auto` + `pointer-events: none` contradiction one rule
+  block away — is fixed too.
+
   **The costs are on the record rather than absorbed.** Every player's spatial memory of every map is
   gone, once; no saved progress was lost, because `nodeIdFor` hashes `originPath` and nothing in
   `save.ts`, `progress.ts`, `notes.ts` or `fog.ts` reads a region. And Louvain is **less stable

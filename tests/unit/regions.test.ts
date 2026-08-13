@@ -26,14 +26,17 @@ describe('detectRegions', () => {
   });
 
   it('separates two clusters joined only by a barrel', () => {
-    // The failure that made this rewrite necessary: plain label propagation
-    // decides a repo with one shared barrel is a single community. On this repo
-    // that put 36 of 64 files in one region.
-    // Six a side, so the barrel's degree clears the connector cutoff the way a
-    // real barrel does. The heuristic is relative to the median degree, so a
-    // "hub" with only twice the connections of its neighbours is not treated as
-    // one — at that ratio it is a peer, and merging the two groups is arguably
-    // the right answer anyway.
+    // The failure this fixture was built for: plain label propagation decides a
+    // repo with one shared barrel is a single community — 36 of 64 files in one
+    // region here. Louvain has no such failure mode, because a giant community
+    // is penalised by modularity's own degree term, so this now guards a
+    // property rather than a patch.
+    //
+    // The six-a-side shape is a leftover from the connector-cutoff heuristic
+    // ADR-0041 deleted (it needed the barrel's degree to clear a multiple of the
+    // median). Kept because it is still a fair barrel: the two sides are equal
+    // and joined only through the hub, which is the structure the assertion is
+    // about.
     const left = ['left/a.ts', 'left/b.ts', 'left/c.ts', 'left/d.ts', 'left/e.ts', 'left/f.ts'];
     const right = ['right/u.ts', 'right/v.ts', 'right/w.ts', 'right/x.ts', 'right/y.ts', 'right/z.ts'];
     const paths = ['barrel.ts', ...left, ...right];
@@ -51,10 +54,16 @@ describe('detectRegions', () => {
   });
 
   it('folds an undersized community into the region it is most connected to', () => {
-    // Louvain ships communities below MIN_REGION and absorption folds them, so
-    // this is live machinery rather than a leftover: measured on real repos it
-    // fires on hono (2 communities of 2), graphql-js (2) and kysely (1), and
-    // not at all on ark, django, flask, hugo or prometheus (ADR-0041).
+    // **This pass performs no merge on any repo measured** — 0 on all eight.
+    // Louvain does ship sub-MIN_REGION communities (hono 2, graphql-js 2,
+    // kysely 1), but every one is a two-node island with no outward edge, so
+    // absorption declines and the terrain fold takes it. An earlier version of
+    // this comment quoted those counts as firings; that was the precondition,
+    // not the event (ADR-0041 §5.2).
+    //
+    // The test is kept because the branch is reachable — a sub-floor community
+    // *with* an edge leaving it absorbs rather than being greyed — and this
+    // fixture is the only thing that executes it at all.
     //
     // **The fixture has to be chosen, not invented.** The obvious one — a pair
     // hanging off a small cluster — is vacuous, because Louvain merges it
@@ -66,7 +75,7 @@ describe('detectRegions', () => {
     // Hence a five-clique, and `probe-fixture2` in this ADR's working set
     // confirms Louvain really does leave `edge/*` standing alone here.
     const core = ['core/1.ts', 'core/2.ts', 'core/3.ts', 'core/4.ts', 'core/5.ts'];
-    const side = ['side/1.ts', 'side/2.ts', 'side/3.ts', 'side/4.ts'];
+    const side = ['side/1.ts', 'side/2.ts', 'side/3.ts', 'side/4.ts', 'side/5.ts'];
     const paths = [...core, ...side, 'edge/1.ts', 'edge/2.ts'];
     const links: [string, string][] = [];
     for (const group of [core, side]) {
@@ -76,18 +85,21 @@ describe('detectRegions', () => {
     }
     links.push([core[0] ?? '', side[0] ?? '']);
     links.push(['edge/1.ts', 'edge/2.ts']);
-    // Both of the pair's outward edges go to `core`, none to `side` — so this
-    // asserts *which* region absorbed it, not merely that something did. A rule
-    // that folded into the lowest label, or the largest region, or the first
-    // neighbour found, would still have to pick `core` here, so the discriminating
-    // half is the assertion below it.
+    // **One edge to `core`, two to `side`** — the half that makes this a test of
+    // *"most connected"* rather than of "absorbed by something". A first version
+    // put both edges on `core`, and then folding into the lowest label, the
+    // largest region, or the first neighbour found all give the same answer:
+    // a mutant ignoring edge weight entirely survived it. Here `core` sorts
+    // first and the cliques are the same size, so every one of those rules picks
+    // `core` and only the real rule picks `side`.
     links.push(['edge/1.ts', core[1] ?? '']);
-    links.push(['edge/2.ts', core[2] ?? '']);
+    links.push(['edge/2.ts', side[1] ?? '']);
+    links.push(['edge/2.ts', side[2] ?? '']);
 
     const { regions, byPath } = assignment(paths, links);
     expect(byPath.get('edge/1.ts')).toBe(byPath.get('edge/2.ts'));
-    expect(byPath.get('edge/1.ts')).toBe(byPath.get('core/1.ts'));
-    expect(byPath.get('edge/1.ts')).not.toBe(byPath.get('side/1.ts'));
+    expect(byPath.get('edge/1.ts')).toBe(byPath.get('side/1.ts'));
+    expect(byPath.get('edge/1.ts')).not.toBe(byPath.get('core/1.ts'));
     // The invariant `test:atlas` and `docs/atlas-format.md` §3.4 both rest on:
     // no topology region is smaller than the floor, which is what bounds the
     // region count without a magic cap.

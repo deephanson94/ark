@@ -557,7 +557,7 @@ async function main(): Promise<number> {
           // `clicked` stayed 0 and the step hung 30 s on a Submit that was
           // correctly disabled. The same half-of-the-union mistake the comment
           // above describes, one map along.
-          entry.candidates.every((id) => shownHereSet.has(labelById.get(id) ?? ' ')),
+          entry.candidates.every((id) => shownHereSet.has(labelById.get(id) ?? '\u0000')),
       );
       if (!question.includes(subject)) {
         failures.push({ what: 'prompt', detail: `asked about ${subject} but says "${question}"` });
@@ -1326,6 +1326,94 @@ async function main(): Promise<number> {
       await page.keyboard.press('Escape');
       await page.waitForSelector('.notes-scrim', { state: 'hidden', timeout: 5000 });
     }
+
+    // ---- the legend (ADR-0041) -----------------------------------------
+    //
+    // The change's user-facing claim is that the rows are ordered by size, that
+    // terrain is one row, and that a clipped list can be **scrolled** — and
+    // none of that was checked by anything running a browser. The scroll in
+    // particular is a CSS property nothing else can see: it was declared and
+    // simultaneously disabled by `pointer-events: none` in the same rule block
+    // for a milestone.
+    const legendRowText = await page.locator('.legend-item').allInnerTexts();
+    if (legendRowText.length === 0) {
+      failures.push({ what: 'legend', detail: 'the legend drew no rows at all' });
+    }
+    const legendCounts = legendRowText.map((row) => Number(/\((\d+)[^)]*\)\s*$/.exec(row)?.[1] ?? '-1'));
+    if (legendCounts.some((n) => n < 0)) {
+      failures.push({ what: 'legend', detail: `a row printed no count: ${legendRowText.join(' | ')}` });
+    }
+    // Terrain sorts last however big it is; every other row descends by size.
+    const terrainAt = legendRowText.findIndex((row) => row.startsWith('terrain'));
+    const topology = terrainAt === -1 ? legendCounts : legendCounts.slice(0, terrainAt);
+    for (let i = 1; i < topology.length; i++) {
+      if ((topology[i] ?? 0) > (topology[i - 1] ?? 0)) {
+        failures.push({
+          what: 'legend',
+          detail: `rows are not descending by size: ${legendRowText.join(' | ')}`,
+        });
+        break;
+      }
+    }
+    if (terrainAt !== -1 && terrainAt !== legendRowText.length - 1) {
+      failures.push({ what: 'legend', detail: `terrain is not last: ${legendRowText.join(' | ')}` });
+    }
+    if (legendRowText.filter((row) => row.startsWith('terrain')).length > 1) {
+      failures.push({ what: 'legend', detail: 'terrain drew more than one row' });
+    }
+    // The list must actually take a wheel event. `scrollHeight > clientHeight`
+    // says it overflows; scrolling it and reading `scrollTop` says the overflow
+    // is reachable, which is the half that was broken. On a repo whose legend
+    // fits, there is nothing to scroll and the check is skipped rather than
+    // faked — and it says which happened.
+    //
+    // **The window is shrunk to force the overflow**, because at 1440x900 this
+    // repo's seven rows fit and the branch that was broken never runs — the
+    // first version of this step printed "fits without scrolling" and asserted
+    // nothing, which is the never-fires landmine inside the test written to
+    // close it. `max-height: 42vh` means a short window clips, on any repo.
+    const listBox = page.locator('.legend-list');
+    await page.setViewportSize({ width: 1440, height: 260 });
+    await page.waitForTimeout(120);
+    const overflows = await listBox.evaluate((node) => node.scrollHeight > node.clientHeight + 1);
+    if (!overflows) {
+      failures.push({
+        what: 'legend',
+        detail: `${legendRowText.length} rows still fit in a 260px window — the scroll path cannot be tested`,
+      });
+    } else {
+      // **A real wheel over the panel, not `node.scrollTop = 40`.** Assigning
+      // `scrollTop` is a DOM write that succeeds whatever `pointer-events` says,
+      // so it would pass against the exact bug this fixes. Hit-testing is the
+      // thing under test, so the input has to be hit-tested.
+      const box = await listBox.boundingBox();
+      if (box === null) {
+        failures.push({ what: 'legend', detail: 'the list has no box to point at' });
+      } else {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.wheel(0, 120);
+        await page.waitForTimeout(120);
+        const moved = await listBox.evaluate((node) => node.scrollTop);
+        if (moved <= 0) {
+          failures.push({
+            what: 'legend',
+            detail: 'the list overflows and a wheel over it scrolled nothing — pointer-events again',
+          });
+        }
+        process.stdout.write(
+          `e2e: legend → ${legendRowText.length} rows, clipped at 260px, wheel scrolled it to ${moved}\n`,
+        );
+      }
+    }
+    // Restoring the *size* is not restoring the *view*: the camera does not
+    // re-fit on resize, so leaving it here sent the next step's zoom to
+    // "street - 1 nodes" and reddened the peaks gate 200 lines later. `f` fits
+    // at the current heading, which is the control a player would use.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(120);
+    await page.mouse.move(720, 450);
+    await page.keyboard.press('f');
+    await page.waitForTimeout(200);
 
     // Zoomed in, to check semantic zoom actually promotes detail.
     for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -240);

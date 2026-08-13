@@ -2,8 +2,8 @@
  * Throwaway probe: three arms, scored on nameability **and** modularity side by
  * side, because separately either one is misleading.
  *
- *   A  label propagation   — what ships today
- *   B  Louvain γ = 1       — the prototype
+ *   A  **whatever produced the dumps** — see the warning below
+ *   B  Louvain γ = 1       — what ships since ADR-0041
  *   C  top-level directory — the control, and a real candidate
  *
  * ## Why arm C exists
@@ -25,6 +25,17 @@
  *  - If C wins on **both**, the honest recommendation is not Louvain at all —
  *    it is five lines instead of three hundred, it still moves the layout, and
  *    it is a completely different decision. That would be the finding.
+ *
+ * ## Arm A is not "label propagation" — it is whatever indexed the dumps
+ *
+ * It reads `node.region` straight out of the dump, so it was label propagation
+ * only while that was what shipped. Run against dumps built after ADR-0041 it
+ * prints arm A ≡ arm B on every repo, under a heading that reads as label
+ * propagation holding its own. ADR §12 invites re-measurement, so the
+ * instrument had to stop lying about its first column: it now detects the
+ * collapse and says so rather than tabulating it.
+ *
+ * To reproduce the ADR's arm A, build dumps from a checkout at `d4acfa5`.
  *
  * NOT part of the suite. `npx tsx scripts/probe-arms.ts <dumpdir>`
  */
@@ -92,6 +103,23 @@ export interface Prepared {
   readonly now: readonly number[];
   readonly lou: readonly number[];
   readonly dir: readonly number[];
+}
+
+/** Do two labellings induce the same grouping, whatever their labels are called? */
+export function samePartition(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  const forward = new Map<number, number>();
+  const backward = new Map<number, number>();
+  for (const [i, left] of a.entries()) {
+    const right = b[i] ?? -1;
+    const seen = forward.get(left);
+    if (seen === undefined) forward.set(left, right);
+    else if (seen !== right) return false;
+    const back = backward.get(right);
+    if (back === undefined) backward.set(right, left);
+    else if (back !== left) return false;
+  }
+  return true;
 }
 
 export function prepareArms(dump: Dump): Prepared {
@@ -162,6 +190,8 @@ async function main(): Promise<void> {
     'repo         arm          regs      Q   meanF1  nameable  namedNodes%  largest%',
   );
   const wins = { q: { A: 0, B: 0, C: 0 }, f1: { A: 0, B: 0, C: 0 } };
+  /** Repos where arm A came out identical to arm B — i.e. the dump is post-ADR-0041. */
+  const collapsed: string[] = [];
   for (const dump of dumps) {
     const p = prepareArms(dump);
     if (p.nodesOf.length === 0) continue;
@@ -177,10 +207,18 @@ async function main(): Promise<void> {
 
     const bestQ = Math.max(...scores.map(([, s]) => s.q));
     const bestF1 = Math.max(...scores.map(([, s]) => s.meanF1));
+    // A tie is not a win for both. Counting it twice made the summary sum to 11
+    // over 8 repos, which is how a reader notices — and only if they add up.
+    const winnerQ = scores.find(([, s]) => s.q === bestQ)?.[0][0] as 'A' | 'B' | 'C' | undefined;
+    const winnerF1 = scores.find(([, s]) => s.meanF1 === bestF1)?.[0][0] as 'A' | 'B' | 'C' | undefined;
+    if (winnerQ !== undefined) wins.q[winnerQ]++;
+    if (winnerF1 !== undefined) wins.f1[winnerF1]++;
+    // **As a partition, not as a label array.** Arm A's labels are region
+    // indices and arm B's are community numbers, so the raw arrays differ even
+    // when the grouping is character-for-character the same — the first version
+    // of this check compared them directly and never fired.
+    if (samePartition(p.now, p.lou)) collapsed.push(dump.repo);
     for (const [name, s] of scores) {
-      const key = (name[0] ?? 'A') as 'A' | 'B' | 'C';
-      if (s.q === bestQ) wins.q[key]++;
-      if (s.meanF1 === bestF1) wins.f1[key]++;
       console.log(
         [
           (scores[0]?.[0] === name ? dump.repo : '').padEnd(11),
@@ -195,6 +233,14 @@ async function main(): Promise<void> {
       );
     }
     console.log('');
+  }
+  if (collapsed.length > 0) {
+    console.log(
+      `\n!! arm A is IDENTICAL to arm B on ${collapsed.length} of the repos (${collapsed.join(', ')}).\n` +
+        `!! These dumps were built by a post-ADR-0041 indexer, so "A labelProp" is a lie:\n` +
+        `!! arm A is whatever produced the dump. Rebuild dumps from a d4acfa5 checkout to\n` +
+        `!! reproduce the ADR's arm A, and do not read the win counts below.\n`,
+    );
   }
   console.log(
     `wins on modularity  — A ${wins.q.A}  B ${wins.q.B}  C ${wins.q.C}\n` +

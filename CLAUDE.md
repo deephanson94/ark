@@ -990,6 +990,40 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   hono**, so real on a repo twice the bootstrap's size and nearly dead on the bootstrap) but the
   *stated reason* was wrong, and the honest response to "there is nothing out there" was **less out
   there**, not scenery. A bug report tells you what was on screen, never why.
+- **Counting the condition under which a branch *could* run looks exactly like counting the branch,
+  and reads as diligence.** ADR-0041 replaced label propagation and then asked the right question of
+  the pass it kept — does `absorbSmallRegions` still fire? — and answered it with the wrong
+  measurement: it counted communities *below* `MIN_REGION`, which is the pass's **precondition**, and
+  wrote "it fires on hono (2), graphql-js (2), kysely (1)" into `regions.ts` twice, a unit test,
+  `docs/atlas-format.md`, the CHANGELOG and two commit messages. Instrumenting the merge loop gives
+  **0 merges on all eight repos**: every one of those sub-floor communities is a two-node island with
+  no outward edge, so the pass declines and the *terrain fold* removes it — which also made
+  `atlas-format.md` wrong about which mechanism enforces the region-count floor. The
+  never-fires landmine one row down says to count how often new machinery fires; this is its
+  sharper form, because a plausible number **was** produced and five documents transcribed it.
+  **Instrument the effect, not its trigger** — and note that the rule applies to machinery you
+  *keep* as much as to machinery you add, since "do we still need this?" is the question that
+  invites the shortcut.
+- **A guarantee no test executes is a comment.** The same change shipped `splitDisconnected` as
+  "Leiden's connectivity guarantee, deterministically", argued in its header that it earned its place
+  as *"the cheapest possible proof of a property"* — and **no test anywhere imported the module**.
+  Replacing the body with `return { labels, splits: 0 }` passed all 858 unit and 112 atlas tests. It
+  fires 0 times on eight repos too, so the real deck could not stand in for a test either. Worse, the
+  first suite written for it let three mutants live: `[0,0,1,1]` cannot catch a walk that ignores the
+  label boundary (the first component claims its label and nothing is left to relabel, so the output
+  is unchanged), and **no symmetric fixture can catch a tie-break rule**, because symmetry is exactly
+  what stops the rule from having to choose. Both needed asymmetry built on purpose — a label whose
+  members straddle another community, and cliques numbered so the neighbour scan meets the higher
+  community first.
+- **`node.scrollTop = 40` is not a test that a user can scroll.** Assigning `scrollTop` is a DOM
+  write that succeeds whatever `pointer-events` says, so an e2e written that way passes against
+  `overflow-y: auto` + `pointer-events: none` — the exact defect it was added to catch. Hit-testing
+  is the thing under test, so the input has to be hit-tested: move the mouse over the element and
+  send a real wheel. Two neighbours of the same shape: at the default viewport this repo's legend
+  **fits**, so the overflow branch never ran and the step printed a cheerful "fits without scrolling"
+  while asserting nothing — force the condition rather than reporting its absence; and restoring a
+  viewport is not restoring the *view*, because the camera does not re-fit on resize, so a shrink-and
+  -restore left the map zoomed in and reddened an unrelated gate two hundred lines later.
 - **The best idea for a new layer is often the one that hands over an existing layer's answer key.**
   The obvious way to make a walkable world teach something the flat map does not is to show **which
   way each dependency points** — the map draws every edge undirected, and NORTH-STAR §5's tier 2 is

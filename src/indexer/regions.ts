@@ -20,9 +20,9 @@
  * NORTH-STAR §7 reserves to the owner; it was licensed on 2026-08-13 and no
  * session may take one on its own initiative.
  *
- * `absorbSmallRegions` **survived** the replacement and is not vestigial:
- * Louvain ships communities below `MIN_REGION` on hono (2), graphql-js (2) and
- * kysely (1), measured. Files with no import edges are the honest exception —
+ * `absorbSmallRegions` survived the replacement and **performs no merge on any
+ * repo measured** — see its own docblock, which is where the count belongs.
+ * Files with no import edges are the honest exception —
  * topology says nothing about a standalone markdown file, so those, and
  * components still below the floor, aggregate into coarse `terrain` regions,
  * one per top-level path segment (ADR-0010).
@@ -281,15 +281,32 @@ function stemOf(path: string): string {
 /**
  * Fold undersized regions into their strongest neighbour.
  *
- * **This was written for a defect that no longer exists and is kept because it
- * still fires.** Under label propagation, holding connectors out of the vote
- * left a file whose only links ran through a barrel with nobody to vote for, so
- * it kept its initial label and became a region of one — 7 regions became 22 on
- * this repo, seven of them called `src/indexer`. ADR-0041 removed that
- * mechanism, which makes "do we still need this?" a question needing a count
- * rather than an assumption. Counted: Louvain ships communities below the floor
- * on **hono (2), graphql-js (2) and kysely (1)**, and on none of ark, django,
- * flask, hugo or prometheus. It is live machinery.
+ * **This was written for a defect that no longer exists, and it now performs no
+ * merge on any repo measured.** Under label propagation, holding connectors out
+ * of the vote left a file whose only links ran through a barrel with nobody to
+ * vote for, so it kept its initial label and became a region of one — 7 regions
+ * became 22 on this repo, seven of them called `src/indexer`. ADR-0041 removed
+ * that mechanism.
+ *
+ * **The first count taken after that removal was of the wrong event**, and it
+ * reached five documents before a review caught it. It counted communities
+ * *below the floor* — this pass's precondition — and called that "it fires":
+ * hono 2, graphql-js 2, kysely 1. Instrumenting the merge loop itself gives
+ * **0 merges on all eight repos**. Every one of those sub-floor communities is
+ * a two-node island with **no outward edge**, so the loop below marks it
+ * `stranded` and declines; what actually removes it is the terrain fold in
+ * `detectRegions`. Counting the condition under which a branch *could* run
+ * looks exactly like counting the branch, and reads as diligence.
+ *
+ * So it is **dead under this configuration**, in ADR-0019's `oldestK` sense,
+ * and kept for a narrow reason rather than a measured one: the floor itself is
+ * enforced by the terrain fold regardless, so the only thing this pass decides
+ * is *where a sub-floor community goes* — into its strongest neighbour, staying
+ * topology, rather than being greyed into terrain. A community with edges is a
+ * topological claim and terrain is the absence of one, so when the case does
+ * arise, absorbing is the truer answer. **The condition that revives it is a
+ * sub-floor community with an edge leaving it**; `scripts/probe-absorb.ts`
+ * prints that count per repo, and it is 0 everywhere today.
  *
  * Modularity has no floor on community size, so the reason to have one is the
  * map rather than the maths: a two-file region costs a legend row and a palette
