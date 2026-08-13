@@ -1131,12 +1131,19 @@ flask and system-design-primer — so that document's *"the refusal will resolve
 land"* is closed. None of the 315 withdrawn questions came back; what the five ship instead is
 **1,048** questions about their own source.
 
-**`django/django` breaches the index budget and it is said out loud: 17.6–18.6 s at 3,035 nodes
-against a 10 s ceiling.** It is **not** the Python scanner (1.2 s of it) — the force-directed layout
-is **~7.1 s, ~40%**, and hugo's is ~40% of its ~6.8 s at half the scale. Every figure there is a
-range, because this container's run-to-run spread on them is ±25%. `README.md` Known gaps carries it with
-the phase breakdown; fixing it is a `layout.ts` change with its own determinism risk and wants its
-own ADR.
+**`django/django`'s index budget is closed: 4.44 ms/file against a 5.00 hard ceiling** (ADR-0038;
+the 10 s absolute is quoted at 2,000 files and django has 3,035). *This paragraph described it as a
+breach for two milestones, and the diagnosis was half right.* The layout **is** the dominant phase —
+35.4%, of which **98% is one repulsion loop** whose 3×3 neighbourhood holds **937 nodes** at django's
+shape. But *"fixing it is a `layout.ts` change"* was wrong twice over. The obvious fix is a finer
+grid, which reorders a floating-point sum and therefore **moves nodes**, which NORTH-STAR §7 forbids —
+a speedup that changes a coordinate is a *re-layout*, an owner-level amendment. And the biggest single
+win was not there at all: it was **a sort**, `placement/distractors.ts` ordering **1,136,093
+candidates across django's deck to keep 19 apiece**. Every change is byte-identical on five
+repositories, which is the acceptance test a frozen layout demands — and nothing checked that before,
+because eleven layout tests asserted *properties* and not one pinned a value. There is a **golden
+layout** now. Measure with **interleaved** rounds through `scripts/budget.ts`: this container's ±25%
+spread reads as a result otherwise, and an un-interleaved run produced 23.1 s and 26.5 s outliers.
 
 **M5's Go half ships.** A Go node is a **package** — the directory, not the file
 (**[ADR-0026](./docs/decisions/0026-a-go-node-is-a-package-and-its-scanner-is-hand-rolled.md)**) —
@@ -1410,10 +1417,18 @@ result — the owner's decision, and ADR-0009's own ordering made executable), a
 resolved by a measurement that **refuted the obvious account of it**: the cull is not the mechanism —
 the world's own view reaches 98.7% / 99.0% of the edge set from a standing position — the
 *projection* is, so the world arm contains a small instance of the map arm, and its inset now keeps
-everything but its roads. What is left is §9: **the hold-out split script** (and it must check the
-removed keys against the served deck's `discloses`, or the instrument ships with a known leak),
-**M2's instrumentation** (attempts are session state; nothing persists them, and §3 claimed
-otherwise until this session), and **twelve participants**, which is owner-only. Then **region arches
+everything but its roads. **Both pieces of §9's harness now ship**, so what is left of it is
+**twelve participants**, which is owner-only. The hold-out split is `npm run holdout`
+(**[ADR-0036](./docs/decisions/0036-a-hold-out-is-checked-against-what-could-state-its-key.md)**) —
+and its headline is that the check §9 specifies **cannot fire on the quiz's own two verbs**, because
+Blast Radius and Companion keys relate files while every disclosable fact names a commit, so it
+prints `unchecked` rather than a clean `0`. Three leaks the specified check cannot see were measured
+and barred: the twin gate a *removal* opens (4 of kysely's 6 at F1 1.000), the map's hover paint (2 of
+6 on two repos), and a served Placement reveal assembling a Companion key (1 of 6 on kysely at 0.909).
+M2's instrumentation is `src/player/tally.ts`
+(**[ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)**), written
+**only inside `?arm=`** so ADR-0011 decision 2 is untouched rather than argued with — and the datum
+did not exist before, since `selector.attempts` counts *failures*. Then **region arches
 in the world**, which are unbuilt because ADR-0032 §9.6 refuses the obvious derivation. The
 **phenomenon catalogue** is **deferred rather than queued**
 (**[ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md)**):
@@ -1423,9 +1438,14 @@ honest size is **~5 entries, not the ~30–60 this line used to claim** — the 
 (co-change-without-import is 44–85% of pairs), test files (52 of ark's 54 `entry` nodes are test or
 script paths), or an unreachable bar. Its best entry is an **answer key**: ticking the subject's
 strongly connected component decides **109 of hugo's 156 Blast Radius boards** at precision 1.000.
-The twin surface is that catalogue's entry #1 and its priced pilot. Then **django's index budget** — 17.6–18.6 s against a 10 s ceiling, ~40% of
-it the force-directed layout (ADR-0028 §6), which is a `layout.ts` change with its own determinism
-risk and wants its own ADR.
+The twin surface is that catalogue's entry #1 and its priced pilot. ~~Then **django's index
+budget**~~ — **closed** at **4.44 ms/file against a 5.00 hard ceiling**
+(**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-the-layout-may-not-move-to-meet-it-and-the-sort-was-the-cost.md)**).
+The 10 s figure is quoted **at 2,000 files** and django has 3,035, so the rate is the row to read.
+Every change is byte-identical on five repos, because a speedup that moves a coordinate is a
+*re-layout* and NORTH-STAR §7 forbids it. The cost was not where the record said: the layout's
+obvious fix is the forbidden one, and the biggest single win was **a sort** ordering 1,136,093
+candidates to keep 19 apiece.
 
 **Three narrower gaps replace it in `README.md`, each with its measurement.** Two are sharper than
 they first read, because a post-ship review measured them (ADR-0025 §9). **`UNREAD` is a list, and

@@ -3484,3 +3484,13 @@ One line per iteration: what changed, and what to do next.
 
   **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), then region
   arches in the world (ADR-0032 §9.6), then the layout's remaining lever, parallelism across nodes.
+
+- **Close-out: the documents this session's claims live in, brought into line.** `CLAUDE.md`'s Next
+  action still sent a session to build both halves of experiment 0001's harness and to fix django's
+  index budget as *"a `layout.ts` change"*; all three are done and the last of them was the wrong
+  prescription. Its own rule is that the Next line and `README.md`'s move together — *"two places, one
+  fact"* — so both now say the same thing: **twelve participants**, then region arches, then the
+  layout's parallelism lever. The document map said **31 ADRs** against 38 on disk, which is the
+  measured-constant drift this file has a landmine about, sitting in the table that points at the
+  landmines. Link integrity checked across every ADR reference in `README.md`, `CHANGELOG.md`,
+  `docs/experiments/` and `docs/decisions/`: none broken.
