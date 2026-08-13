@@ -281,17 +281,23 @@ function stemOf(path: string): string {
 /**
  * Fold undersized regions into their strongest neighbour.
  *
- * Holding connectors out of the vote fixes the one-giant-blob failure and
- * causes the opposite one: a file whose only links run through a barrel has no
- * one left to vote for, keeps its own initial label, and becomes a region of
- * one. On this repo that turned 7 regions into 22, seven of which were called
- * `src/indexer`.
+ * **This was written for a defect that no longer exists and is kept because it
+ * still fires.** Under label propagation, holding connectors out of the vote
+ * left a file whose only links ran through a barrel with nobody to vote for, so
+ * it kept its initial label and became a region of one — 7 regions became 22 on
+ * this repo, seven of them called `src/indexer`. ADR-0041 removed that
+ * mechanism, which makes "do we still need this?" a question needing a count
+ * rather than an assumption. Counted: Louvain ships communities below the floor
+ * on **hono (2), graphql-js (2) and kysely (1)**, and on none of ark, django,
+ * flask, hugo or prometheus. It is live machinery.
  *
- * So any region below the floor is merged into whichever region it shares the
- * most edges with — connectors included, since here they are exactly the
- * evidence of where a stranded file belongs. Smallest first, so the merges
- * cascade rather than fight, and ties broken by lowest label to stay
- * deterministic.
+ * Modularity has no floor on community size, so the reason to have one is the
+ * map rather than the maths: a two-file region costs a legend row and a palette
+ * slot to say less than the edge between them already says.
+ *
+ * Any region below the floor is merged into whichever region it shares the most
+ * edges with. Smallest first, so the merges cascade rather than fight, and ties
+ * broken by lowest label to stay deterministic.
  *
  * Regions of unlinked files are untouched: they have no edges to be absorbed
  * by, and "these files are connected to nothing" is a true thing to show.
