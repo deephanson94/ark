@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 37 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 38 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 37 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 38 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -284,13 +284,29 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   ADR-0025 refused now ship **1,048** challenges about their own source between them — but every
   other language still gets a map of its documentation and, when that map is a sliver of the repo,
   no deck at all.
-- **`django/django` breaches the index budget: 17.6–18.6 s at 3,035 nodes against a 10 s ceiling.**
-  Measured at ADR-0028 §6 and **not** the Python scanner, which is 1.2 s of it: the force-directed
-  layout is **~7.1 s, ~40%**, and hugo's is ~40% of its ~6.8 s at half the scale. The per-node rate
-  is ~5.9 ms against a 5.00 ms/file row, on a repo 1.5× the 2,000-file reference scale the ceiling
-  is written for. Every figure there is a range because this container's spread on them is ±25%.
-  Fixing it is a `layout.ts` change with its own determinism risk and it wants its own ADR. The
-  atlas is 2,985 KiB against a 5,120 KiB ceiling, so nothing else is close.
+- **`django/django` is 5% over the index budget's *rate*: 5.25 ms/file against a 5.00 ms/file
+  ceiling** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-and-the-layout-may-not-move.md)**,
+  measured on a full clone of `c9eb16a87e`). Absolute, that is **15.9 s at 3,035 files** — quoted
+  against a 10 s ceiling that `CLAUDE.md` writes *at 2,000 files*, which is why the rate is the row
+  to read and why this entry used to lead with a figure that looks like a 76% breach. It was 5.73
+  ms/file (17.4 s) before this change.
+
+  **The layout is 35.4% of the index and 98% of that is one loop** — the 3×3 grid neighbourhood holds
+  **937 nodes** at django's shape, so it runs 853M pair tests and grows superlinearly (0.41 ms/node at
+  190 nodes, 2.78 at 3,035). `layout.ts`'s claim that the grid *"keeps this linear in practice"* is
+  corrected in place. **The obvious fix — a finer grid — is forbidden**: it changes the order
+  contributions are summed in, floating-point addition is not associative, and NORTH-STAR §7 freezes
+  the layout. A speedup that moves a coordinate is a re-layout, which is an owner-level amendment.
+
+  So the change is constant-factor only and its acceptance test is **byte-identity**, verified on
+  **five repositories** (django, ark, hono, kysely, graphql-js). Nothing checked that before: eleven
+  layout tests asserted *properties* and not one pinned a value, so an optimisation that moved every
+  node by a hundredth passed them all. There is a **golden layout** now, and two mutants die on it.
+
+  **The next lever is `placement/distractors.ts` (8.9%), not the layout** — the gap is ~1.5 s and that
+  phase is ~1.4 s. The one lever left on the layout is parallelism across nodes, which preserves each
+  node's accumulation order and therefore byte-identity; it wants its own decision. The atlas is
+  2,985 KiB against a 5,120 KiB ceiling, so nothing else is close.
 - **`UNREAD` is a list, and anything not on it is invisible — silently.** This is the residual half
   of the Markdown-map defect, and it is not hypothetical: a **Terraform** repo
   (`terraform-aws-modules/terraform-aws-vpc`) shipped **64 challenges over 24 Markdown files with

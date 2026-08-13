@@ -14,6 +14,63 @@ const CHAIN: LayoutEdge[] = [
 ];
 
 describe('computeLayout', () => {
+  /**
+   * **A golden layout, and the reason it exists is a change that nearly shipped
+   * without one.**
+   *
+   * Every other test here checks a *property* — determinism across runs, finite
+   * coordinates, connected nodes closer than unconnected ones. None of them pins
+   * a value, so an optimisation that made the layout faster and moved every node
+   * by a hundredth passed the whole file. NORTH-STAR §7 freezes the layout
+   * because spatial memory of a codebase is the mechanic the product rests on,
+   * and until this test that freeze was a promise rather than a check.
+   *
+   * ADR-0038's speedups were verified by hand against the previous
+   * implementation on five repositories. That is not repeatable; this is.
+   *
+   * **If this goes red, the question is not "update the numbers".** It is
+   * whether the change was meant to move the map, and if it was, whether the
+   * north star has been amended to allow it.
+   */
+  it('produces exactly these coordinates — the map does not move', () => {
+    const edges = [
+      { from: 0, to: 1, weight: 1 },
+      { from: 1, to: 2, weight: 1 },
+      { from: 2, to: 0, weight: 2 },
+      { from: 3, to: 4, weight: 1 },
+      { from: 4, to: 5, weight: 3 },
+      { from: 5, to: 3, weight: 1 },
+      { from: 0, to: 6, weight: 1 },
+      { from: 6, to: 7, weight: 1 },
+      { from: 7, to: 8, weight: 1 },
+    ];
+    const groups = [0, 0, 0, 1, 1, 1, 2, 2, 2];
+    expect(computeLayout(9, edges, DEFAULT_LAYOUT_OPTIONS, groups)).toEqual([
+      [49.75, -39.23],
+      [60.34, -61.76],
+      [40.45, -63.1],
+      [-86.63, -25.8],
+      [-78.91, -5.25],
+      [-98.33, -6.53],
+      [39.92, 51.53],
+      [26.21, 73.94],
+      [47.19, 76.21],
+    ]);
+    // The no-regions path is a different branch and is pinned too: cohesion is
+    // skipped entirely when `groups` is empty.
+    expect(computeLayout(9, edges)).toEqual([
+      [-3.84, -71.95],
+      [49.37, -93.59],
+      [39.57, -51.77],
+      [77.21, 54.13],
+      [32.9, 57.76],
+      [34.68, 92.81],
+      [-65.82, -50.96],
+      [-86.54, 4.87],
+      [-77.54, 58.71],
+    ]);
+  });
+
   it('is identical across runs — spatial memory depends on it', () => {
     const first = computeLayout(40, CHAIN);
     const second = computeLayout(40, CHAIN);

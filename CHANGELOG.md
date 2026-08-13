@@ -3385,3 +3385,42 @@ One line per iteration: what changed, and what to do next.
   Which also makes **`src/player/ties.ts`'s header stale**: it records that leak at *"up to 6 of 6 on
   this repo, measured"*, a figure taken before the `claimed` set existed — same verb, same repo, two
   documents disagreeing, and the old number came from the pre-dedupe generator.
+
+- **django's index budget: 5.73 → 5.25 ms/file, byte-identically, and the ceiling turns out to be a
+  rate.** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-and-the-layout-may-not-move.md)**,
+  on a full clone of `c9eb16a87e` — 3,035 nodes, 10,167 edges, reproducing ADR-0028's figures.)
+
+  **The headline was the wrong number to lead with.** `README.md` said *"17.6–18.6 s against a 10 s
+  ceiling"*, which reads as a 76% breach; `CLAUDE.md` writes that ceiling **at 2,000 files** and
+  django has 3,035, so the honest measure is the hard `ms/file` row `scripts/budget.ts` already
+  enforces. The rate was in the same paragraph, two sentences down. It is 15.9 s and **5% over**, from
+  17.4 s and 15%.
+
+  **And the prescription was wrong.** *"Fixing it is a `layout.ts` change"* — the layout is 35.4% of
+  the index and **98% of it is one loop**, whose 3×3 grid neighbourhood holds **937 nodes** at
+  django's shape (853M pair tests, growing superlinearly: 0.41 ms/node at 190 nodes against 2.78 at
+  3,035). `layout.ts`'s claim that a uniform grid *"keeps this linear in practice"* is corrected in
+  place. But **the obvious fix is forbidden**: a finer grid changes the order contributions are summed
+  in, floating-point addition is not associative, and NORTH-STAR §7 freezes the layout. A speedup that
+  moves a coordinate is a *re-layout*, which is an owner-level amendment to the north star.
+
+  So: constant-factor only, with **byte-identity as the acceptance test** rather than a benchmark. A
+  conservative squared-distance pre-filter (59.4% of pair tests are beyond the cutoff and every one
+  paid a `Math.sqrt`; the padded bound means anything it rejects would certainly have failed the exact
+  test, which still runs on every survivor), accumulation into locals, and an indexed inner loop —
+  **8.4 s → 6.4 s**. Plus a concurrent prefetch in the walk, which was doing ~6,000 sequential
+  `stat`/`readFile` round trips: idle **3.57 s → 2.85 s**, smaller than hoped and said so. The
+  prefetch fires for every file (190 / 425 / 3,035) and its fall-back fires **0** times.
+
+  **Byte-identical on five repositories** — django, ark, hono, kysely, graphql-js — compared with
+  `cmp` over the same trees. **Nothing checked that before**: eleven layout tests asserted *properties*
+  and not one pinned a value, so an optimisation moving every node by a hundredth passed them all. The
+  freeze NORTH-STAR §7 describes was a promise nothing tested. There is a **golden layout** now, on
+  both branches, and two mutants die on it — the tempting `squared > cutoff * cutoff` and a reordered
+  accumulation.
+
+  **Next**: the remaining ~1.5 s is not the layout. `placement/distractors.ts` is **1.43 s (8.9%)** and
+  is roughly the size of the gap — and it already avoids the per-subject tokenisation landmine, so
+  whatever it is doing wants measuring before it wants changing. The one layout lever left is
+  parallelism across nodes, which preserves each node's accumulation order and therefore byte-identity;
+  it wants its own decision rather than a paragraph in this one.

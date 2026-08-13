@@ -110,15 +110,42 @@ export function computeLayout(
   const dy = new Float64Array(count);
   const cutoff = ideal * options.cutoff;
   const cellSize = cutoff;
+  /**
+   * A squared distance above which `Math.sqrt(squared) > cutoff` is certain.
+   *
+   * Padded above `cutoff²` on purpose. `sqrt` is correctly rounded, so
+   * `squared > cutoff * cutoff` is *almost* equivalent to the real test and can
+   * disagree on the last bit at the boundary — which would move a node, which
+   * is the one thing this function may not do. A pair rejected here is one the
+   * exact test below would have rejected too; a pair near the boundary simply
+   * pays the `sqrt` it always paid.
+   */
+  const beyondCutoff = cutoff * cutoff * (1 + 2 ** -20);
 
   for (let iteration = 0; iteration < options.iterations; iteration++) {
     dx.fill(0);
     dy.fill(0);
 
-    // Repulsion, restricted to a neighbourhood. A uniform grid keeps this
-    // linear in practice; the cells are walked in index order so the sum is
-    // accumulated in a fixed sequence and floating-point addition stays
-    // reproducible.
+    // Repulsion, restricted to a neighbourhood. The cells are walked in index
+    // order so the sum is accumulated in a fixed sequence and floating-point
+    // addition stays reproducible.
+    //
+    // **This comment used to say a uniform grid "keeps this linear in
+    // practice", and measurement refutes it.** At django's shape — 3,035 nodes,
+    // 175 regions — the 3×3 neighbourhood holds **937 nodes on average**, so
+    // this loop runs 853M pair tests and takes **98%** of the whole layout.
+    // Cohesion is why: it collapses each region toward its centroid (see
+    // `LayoutOptions.cohesion`, which saturates), so cells become dense and the
+    // grid stops separating anything. The growth is superlinear — 0.41 ms/node
+    // at 190 nodes against 2.78 at 3,035.
+    //
+    // What is done about it below is **constant-factor only, and deliberately
+    // so**: every coordinate this function returns must stay byte-identical,
+    // because NORTH-STAR §7 freezes the layout and a re-layout scrambles every
+    // map anyone has learned. A finer grid would cut the tests enormously and
+    // change the *order* contributions are summed in, which changes the last
+    // bits, which moves nodes. ADR-0038 has the measurement and the option that
+    // is left.
     const grid = new Map<number, number[]>();
     const key = (x: number, y: number): number =>
       Math.floor(x / cellSize) * 73856093 + Math.floor(y / cellSize) * 19349663;
@@ -134,15 +161,35 @@ export function computeLayout(
       const yi = ys[i] ?? 0;
       const cellX = Math.floor(xi / cellSize);
       const cellY = Math.floor(yi / cellSize);
+      // Accumulated in locals and stored once. `dx[i] = dx[i] + term` repeated
+      // 346M times is the same *sequence* of additions as `dxi = dxi + term`
+      // followed by one store — identical bits, two fewer typed-array accesses
+      // per contributing pair.
+      let dxi = 0;
+      let dyi = 0;
       for (let ox = -1; ox <= 1; ox++) {
         for (let oy = -1; oy <= 1; oy++) {
           const bucket = grid.get((cellX + ox) * 73856093 + (cellY + oy) * 19349663);
           if (bucket === undefined) continue;
-          for (const j of bucket) {
+          // Indexed rather than `for…of`: same order, no iterator allocated per
+          // cell per node per iteration.
+          for (let b = 0; b < bucket.length; b++) {
+            const j = bucket[b] ?? 0;
             if (j === i) continue;
             let vx = xi - (xs[j] ?? 0);
             let vy = yi - (ys[j] ?? 0);
-            let distance = Math.sqrt(vx * vx + vy * vy);
+            const squared = vx * vx + vy * vy;
+            // **A conservative pre-filter, not a replacement for the test.**
+            // 59.4% of the pairs reached here are beyond the cutoff and
+            // contribute nothing, and the original paid a `Math.sqrt` for every
+            // one. `beyondCutoff` is strictly above `cutoff²`, so anything it
+            // rejects would certainly have failed `distance > cutoff` below —
+            // the exact test still runs on everything that survives, and the
+            // set of contributing pairs is unchanged. Comparing `squared >
+            // cutoff * cutoff` directly would be the tempting version and is
+            // the one that can differ in the last bit.
+            if (squared > beyondCutoff) continue;
+            let distance = Math.sqrt(squared);
             if (distance === 0) {
               // Coincident. Separate along a fixed axis derived from the index
               // difference rather than a random direction.
@@ -152,11 +199,13 @@ export function computeLayout(
             }
             if (distance > cutoff) continue;
             const force = (ideal * ideal) / distance;
-            dx[i] = (dx[i] ?? 0) + (vx / distance) * force;
-            dy[i] = (dy[i] ?? 0) + (vy / distance) * force;
+            dxi += (vx / distance) * force;
+            dyi += (vy / distance) * force;
           }
         }
       }
+      dx[i] = dxi;
+      dy[i] = dyi;
     }
 
     // Attraction along edges.
