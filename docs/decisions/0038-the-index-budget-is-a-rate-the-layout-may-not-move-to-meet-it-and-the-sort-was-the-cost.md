@@ -1,4 +1,4 @@
-# ADR-0038 — The index budget is a rate, and the layout may not move to meet it
+# ADR-0038 — The index budget is a rate, the layout may not move to meet it, and the sort was the cost
 
 - **Status**: accepted
 - **Date**: 2026-08-13
@@ -30,14 +30,19 @@ sentence leads with `17.6–18.6 s against a 10 s ceiling`, and that is the numb
 
 django has **3,035 files**. At the ceiling's own rate that is 15.2 s, not 10 s:
 
-| | before | after | ceiling |
-|---|---|---|---|
-| django, absolute | 17.4 s | **15.9 s** | 10 s *(advisory, quoted at 2,000 files)* |
-| django, per file | 5.73 ms | **5.25 ms** | **5.00 ms (hard)** |
+| | master | + layout & walk | + `topBy` | ceiling |
+|---|---|---|---|---|
+| django, absolute | 16.01 s | 14.54 s | **13.48 s** | 10 s *(advisory, quoted at 2,000 files)* |
+| django, per file | 5.27 ms | 4.79 ms | **4.44 ms** | **5.00 ms (hard)** |
 
-From **15% over the rate to 5% over**. Still over, and still worth saying out loud — but a headline of
-*"17.6 s against a 10 s ceiling"* reads as a 76% breach and sends a session to change the layout,
-which the next section is about why it must not do.
+*(Medians of three interleaved rounds through `scripts/budget.ts` — the instrument that decides this
+budget — after a discarded warm-up. Interleaved because this container's spread is ±25% and a batched
+before/after reads the drift as a result: an un-interleaved run of the same code gave 23.1 s and
+26.5 s as first-of-batch outliers.)*
+
+**The breach is closed**: 5.27 → **4.44 ms/file** against a 5.00 hard ceiling. It was never the 76%
+the old headline implies — a headline of *"17.6 s against a 10 s ceiling"* reads that way and sends a
+session to change the layout, which the next section is about why it must not do.
 
 ## Finding 2 — the layout is 98% one loop, and that loop may not be made cheaper
 
@@ -72,7 +77,8 @@ Three changes, each order-preserving by construction:
 - **An indexed inner loop** instead of `for…of`, which allocated an iterator per cell per node per
   iteration.
 
-Measured: **8.4 s → 6.4 s** at django's shape (1.32×), and 1.17–1.53× on the four real repos.
+Measured on the phase itself: **8.4 s → 6.4 s** at django's shape (1.32×), and 1.17–1.53× on the four
+real repos.
 
 ## Decision 2 — the walk prefetches a directory's files concurrently
 
@@ -110,10 +116,41 @@ with-regions and no-regions branches. Two mutants die on it — the exact-square
 reordered accumulation. If it goes red the question is not *"update the numbers"*; it is whether the
 change was meant to move the map, and whether the north star has been amended to allow it.
 
+## Decision 4 — the distractors rank with a top-`k` selection, and the rewrite that preceded it is not in the tree
+
+The remaining gap was ~1.4 s and `placement/distractors.ts` was 8.9% of the index, so it was the next
+lever. Timed per strategy on django, **`treeSibling` is 75.7% of it** (1,232 ms of 1,628 ms).
+
+**Two attempts, and the first one is the finding.** `treeSibling` scores `max` over the changed files
+of the shared directory prefix, by widening outward through `byDirPrefix` per anchor — which is
+`anchors × candidates`, **1.73M scoring steps** on django. So: replace the walk with a prefix trie
+built from the anchors, giving the same maximum in `candidates × depth`. It was built, and verified
+byte-identical on five repositories, and it left the strategy at **1,138 ms against 1,094**. The scan
+was never the cost. It is reverted; this paragraph is what it bought.
+
+What *is* the cost is the line after the scan. `[...scored.keys()].sort(…).slice(0, limit)` orders
+**1,136,093 candidates across django's deck** to keep 19 apiece, and an isolated timer puts that sort
+at **792 ms of the strategy's 1.1 s** — 5% of the whole index spent ordering candidates nobody looks
+at. `src/verbs/rank.ts`'s `topBy` keeps a bounded shortlist instead: one comparison against the worst
+kept rejects the common case, where a sort pays `log n` — and every comparison calls back into a score
+map, which is why the constant matters.
+
+**It is exactly `sort(…).slice(0, limit)` and not an approximation**, provided `compare` is a total
+order — which every caller's is, each ending on a unique node id. Under a total order there are no
+ties between distinct items, so a full sort's stability cannot be observed. That proviso is the thing
+to check when adding a caller.
+
+Two smaller order-preserving wins are in the same file. `sharedPrefix(segments, …)` inside the widening
+walk **is always `depth`** — `byDirPrefix` registers a node under every prefix of its directory and the
+walk runs deepest-first with `seen`, so the first sighting is at the largest matching depth. Asserted
+over every pair on three repositories: **0 mismatches in 1,971,833**. And the bucket walk is not worth
+restructuring: visits are only **1.08×** unique refs, because the shallowest bucket already holds
+nearly the repository.
+
 ## What is left, with its number
 
-django is **5.25 ms/file against a 5.00 ceiling** — about **1.5 s** short. Where the remaining time
-is, profiled after both changes:
+django is **4.44 ms/file against a 5.00 ceiling** — inside it, with about 12% of headroom. Where the
+time goes, profiled after the layout and walk changes and before `topBy`:
 
 | phase | | note |
 |---|---|---|
@@ -123,10 +160,10 @@ is, profiled after both changes:
 | `pyscan.ts` | 1.02 s (6.4%) | |
 | *(garbage collector)* | 0.45 s (2.8%) | |
 
-**The next lever is `placement/distractors.ts`**, not the layout — it is ~8.9% and the gap is ~9%. It
-already avoids the per-subject tokenisation `CLAUDE.md` has a landmine about (the corpus is
-precomputed and inverted), so whatever it is doing is something else and wants measuring before it
-wants changing.
+`placement/distractors.ts` was that table's next lever and decision 4 took it. What is left of it is
+`nameSimilar` and `structural`, which share the ranking pattern `topBy` now serves and were **not**
+converted — they were not measured as hot, and converting an unmeasured caller is how the trie above
+happened.
 
 **The one lever left on the layout is parallelism, and it is left deliberately.** Repulsion reads
 `xs`/`ys` and writes only its own node's accumulator, so it is embarrassingly parallel across `i` —
@@ -144,3 +181,5 @@ its own decision, not a paragraph in one about constant factors.
   particular is what makes the grid useless at scale, and tuning it for speed would be a re-layout
   wearing a performance argument.
 - **The golden test goes red.** See decision 3 — that is a question about intent, not about numbers.
+- **Another `.sort(…).slice(0, limit)` is measured hot.** `topBy` is there; the caution in decision 4
+  is that "measured hot" is the precondition, not "looks similar".

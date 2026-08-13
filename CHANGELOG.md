@@ -3387,7 +3387,7 @@ One line per iteration: what changed, and what to do next.
   documents disagreeing, and the old number came from the pre-dedupe generator.
 
 - **django's index budget: 5.73 → 5.25 ms/file, byte-identically, and the ceiling turns out to be a
-  rate.** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-and-the-layout-may-not-move.md)**,
+  rate.** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-the-layout-may-not-move-to-meet-it-and-the-sort-was-the-cost.md)**,
   on a full clone of `c9eb16a87e` — 3,035 nodes, 10,167 edges, reproducing ADR-0028's figures.)
 
   **The headline was the wrong number to lead with.** `README.md` said *"17.6–18.6 s against a 10 s
@@ -3424,3 +3424,37 @@ One line per iteration: what changed, and what to do next.
   whatever it is doing wants measuring before it wants changing. The one layout lever left is
   parallelism across nodes, which preserves each node's accumulation order and therefore byte-identity;
   it wants its own decision rather than a paragraph in this one.
+
+- **And the budget breach is closed: 4.44 ms/file against a 5.00 ceiling, byte-identically.** The
+  entry above stopped at 5.25 and named `placement/distractors.ts` as the next lever. It was, and the
+  first attempt at it is the finding worth keeping.
+
+  `treeSibling` is **75.7%** of that file, and it scores `max` over the changed files of the shared
+  directory prefix by widening outward per anchor — `anchors × candidates`, **1.73M steps** on django.
+  So a prefix trie, giving the same maximum in `candidates × depth`. Built, verified byte-identical on
+  five repositories, and it left the strategy at **1,138 ms against 1,094**. **The scan was never the
+  cost**; the rewrite is reverted and lives only in ADR-0038.
+
+  The cost is the line after it. `[...scored.keys()].sort(…).slice(0, limit)` orders **1,136,093
+  candidates across django's deck** to keep 19 apiece — **792 ms**, 5% of the whole index, spent
+  ordering candidates nobody looks at. `src/verbs/rank.ts`'s `topBy` keeps a bounded shortlist and is
+  *exactly* sort-then-slice under a total order, which every caller has because each comparator ends
+  on a unique node id. `nameSimilar` and `structural` share the pattern and were **not** converted —
+  they were not measured hot, and converting an unmeasured caller is how the trie happened.
+
+  Two smaller proven wins in the same file: `sharedPrefix(segments, …)` inside the widening walk **is
+  always `depth`** (asserted over every pair on three repos — **0 mismatches in 1,971,833**), and the
+  bucket walk is not worth restructuring (visits are **1.08×** unique refs).
+
+  Measured with **interleaved** rounds through `scripts/budget.ts` after a discarded warm-up, because
+  a batched before/after reads this container's ±25% drift as a result — an un-interleaved run of the
+  same code produced 23.1 s and 26.5 s first-of-batch outliers. Three rounds, `topBy` ahead in all
+  three: **16.01 s → 14.54 s → 13.48 s** across master, layout+walk, and this.
+
+  **Two mutants of `topBy` survive its test file and both are equivalent** under the documented
+  total-order precondition — recorded in the test rather than chased, since killing them would pin
+  behaviour the module refuses to promise.
+
+  **Next**: `docs/experiments/0001` needs twelve participants (owner-only). Then region arches in the
+  world (ADR-0032 §9.6). The layout's remaining lever is parallelism across nodes, which preserves each
+  node's accumulation order and therefore byte-identity; it wants its own decision.

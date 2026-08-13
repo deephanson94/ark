@@ -284,29 +284,28 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   ADR-0025 refused now ship **1,048** challenges about their own source between them — but every
   other language still gets a map of its documentation and, when that map is a sliver of the repo,
   no deck at all.
-- **`django/django` is 5% over the index budget's *rate*: 5.25 ms/file against a 5.00 ms/file
-  ceiling** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-and-the-layout-may-not-move.md)**,
-  measured on a full clone of `c9eb16a87e`). Absolute, that is **15.9 s at 3,035 files** — quoted
-  against a 10 s ceiling that `CLAUDE.md` writes *at 2,000 files*, which is why the rate is the row
-  to read and why this entry used to lead with a figure that looks like a 76% breach. It was 5.73
-  ms/file (17.4 s) before this change.
+- ~~**`django/django` breaches the index budget.**~~ **Closed** — **4.44 ms/file against the 5.00
+  ms/file hard ceiling**, from 5.27 (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-the-layout-may-not-move-to-meet-it-and-the-sort-was-the-cost.md)**,
+  medians of three interleaved rounds through `scripts/budget.ts` on a full clone of `c9eb16a87e`).
+  Absolute, 16.0 s → **13.5 s** at 3,035 files; the 10 s figure this entry used to lead with is quoted
+  by `CLAUDE.md` **at 2,000 files**, so the rate is the row to read and the breach was never the 76%
+  it looked like.
 
-  **The layout is 35.4% of the index and 98% of that is one loop** — the 3×3 grid neighbourhood holds
-  **937 nodes** at django's shape, so it runs 853M pair tests and grows superlinearly (0.41 ms/node at
-  190 nodes, 2.78 at 3,035). `layout.ts`'s claim that the grid *"keeps this linear in practice"* is
-  corrected in place. **The obvious fix — a finer grid — is forbidden**: it changes the order
-  contributions are summed in, floating-point addition is not associative, and NORTH-STAR §7 freezes
-  the layout. A speedup that moves a coordinate is a re-layout, which is an owner-level amendment.
+  **Every change is byte-identical on five repositories** — django, ark, hono, kysely, graphql-js —
+  because NORTH-STAR §7 freezes the layout and a speedup that moves a coordinate is a *re-layout*, not
+  a performance change. Nothing checked that before: eleven layout tests asserted *properties* and not
+  one pinned a value. There is a **golden layout** now, and two mutants die on it.
 
-  So the change is constant-factor only and its acceptance test is **byte-identity**, verified on
-  **five repositories** (django, ark, hono, kysely, graphql-js). Nothing checked that before: eleven
-  layout tests asserted *properties* and not one pinned a value, so an optimisation that moved every
-  node by a hundredth passed them all. There is a **golden layout** now, and two mutants die on it.
+  **The cost was not where the record said.** The layout is 35.4% and 98% of that is one repulsion
+  loop whose 3×3 neighbourhood holds **937 nodes** at django's shape — but the obvious fix (a finer
+  grid) reorders a floating-point sum and moves nodes, so only constant-factor work is allowed there
+  (8.4 s → 6.4 s). The rest came from the walk's ~6,000 sequential `stat`/`readFile` round trips, and
+  from **a sort**: `placement/distractors.ts` ordered **1,136,093 candidates** to keep 19 apiece, 792 ms
+  of it. `src/verbs/rank.ts`'s `topBy` keeps a bounded shortlist instead.
 
-  **The next lever is `placement/distractors.ts` (8.9%), not the layout** — the gap is ~1.5 s and that
-  phase is ~1.4 s. The one lever left on the layout is parallelism across nodes, which preserves each
-  node's accumulation order and therefore byte-identity; it wants its own decision. The atlas is
-  2,985 KiB against a 5,120 KiB ceiling, so nothing else is close.
+  **A prefix-trie rewrite of that strategy was built, verified, and reverted** — it was justified by
+  the scan being `anchors × candidates`, and it left the strategy at 1,138 ms against 1,094. The scan
+  was never the cost. Recorded in the ADR rather than deleted quietly.
 - **`UNREAD` is a list, and anything not on it is invisible — silently.** This is the residual half
   of the Markdown-map defect, and it is not hypothetical: a **Terraform** repo
   (`terraform-aws-modules/terraform-aws-vpc`) shipped **64 challenges over 24 Markdown files with
