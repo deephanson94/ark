@@ -151,7 +151,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Python scanner + `sys.path`-free resolution | ✅ | Hand-rolled, ~300 lines, **zero runtime dependencies** — same 675/12,052 import **statement** sites as tree-sitter *and* as Python's own `ast`, 0 of 3,011 files disagreeing, 7.1× faster (ADR-0028 §1) — the *call* arm was covered by no second instrument and was wrong until a review measured it (§8.1). A node is a **file**. Roots are read off the repo's layout, never `sys.path`. A *history* language: `canGradeImports` refuses Blast Radius by **language**, so `pallets/flask` `6a2f545b` is 91 nodes, 193 edges, 17 regions and **118 challenges of which 0 are Blast Radius**. |
 | Source-coverage refusal (ADR-0025) | ✅ | The walk counts source it recognises and cannot read; a repo whose map holds less than a tenth of its source gets the map and **no deck**. Both sides of that ratio are counts of **files** since ADR-0026 — `mapped` counted *nodes*, which is a category error once a node is a package. **All five repos ADR-0025 refused now ship**: Go returned hugo and cobra, Python returns django, flask and system-design-primer, and that document's *"the refusal will resolve itself as languages land"* is closed. Its reach is bounded by a **list** of languages — see gaps. |
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
-| Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
+| Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. **Determinism is what this row claims and it holds; region *quality* is separately measured and poor** — see gaps and [ADR-0041](./docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md) (proposed). |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
 | Which subjects a capped deck is spent on | ✅ | The cap bites on every repo measured, so `retain` decides more about a deck than any strategy — and it shipped for two milestones **with no tests**. It now bands the difficulty-sorted list and spends each band on its most **load-bearing** subject (`elevation`, ADR-0013 — which is also the map's vertical channel, so the deck agrees with the picture). Measured on clean clones, the 15 most-imported files carrying any board go **6 → 12 on hono `7075369e` and 7 → 9 on kysely `f24018c7`**, deck sizes unchanged; `src/context.ts` (76 importers), `src/hono.ts` (72) and `src/util/object-utils.ts` (183) had none. Flat importance reproduces the old deck **byte-identically**, which is checked on both repos and over 49 shapes — the first implementation claimed that identity in a comment and moved 3 and 7 Placement boards ([ADR-0039](./docs/decisions/0039-a-capped-deck-spends-each-band-on-its-most-load-bearing-subject.md)). |
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. Its one *accepted* exposure is now closed rather than held under the bar — the structure-blind subtree hint is withheld, since a margin of 0.011 on a self-indexing repo lasted three milestones. |
@@ -216,7 +216,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `docs/experiments/0001` measures, and that is unrun.
 - **What those three found that is still open**, beyond the falsehoods, the inert map and the
   select-all exploit fixed at `HEAD`: **the fog is dashed-vs-solid outlines** and no tester noticed it existed; the **legend
-  clips silently** at 17 of 36 regions with five of them the same grey; **Placement is unreachable
+  clips silently** at 17 of 36 regions with five of them the same grey — both now measured and
+  mechanised in ADR-0041: 36 is graphql-js's region count to the digit, and the identical greys are
+  terrain regions sharing `scene.ts`'s one `TERRAIN_INDEX`, one legend row apiece (13 of them on
+  prometheus); **Placement is unreachable
   from the map** — 25% of a deck whose only entry point is the chronicle, in walk mode; the guide
   **serves the four lowest-difficulty boards first** and has no skip; and there is **no help key and
   no keyboard pan or zoom**. Each is recorded with the measurement that found it in this session's
@@ -278,6 +281,24 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   and metric: **0 of 6 on all four**, best 0.667–0.750. The product ships those boards on purpose
   (`gate.ts` declines to refuse the guess; the progression needs easy rungs) — a quiz is not a
   progression, and that is the whole difference.
+- **Region clustering fails in two opposite directions, and the legend was most of the reported
+  harm.** Measured on full clones of named commits across eight repos
+  ([ADR-0041](./docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md),
+  **proposed, not accepted**). **Fragmentation**: hono `7075369e` gets **57 regions for 425 nodes**
+  and django `c9eb16a8` **175 for 3,035**, putting **71%** and **86%** of their nodes in legend rows
+  the panel never shows. **Collapse**: hugo `44da0860` puts **161 of 204 linked nodes — 78.9% — in
+  one region** at **Q = 0.089**, and reads *healthiest* in the set on region count, which is why the
+  count is not the measurement. Two rendering defects sit on top and neither is the clustering's
+  fault: the legend is ordered by region **id** (alphabetical, so what falls off the end is
+  arbitrary), and `.legend` carries `overflow-y: auto` **and** `pointer-events: none` in the same
+  rule block, so the clipped rows are *unreachable* rather than below the fold. Ordering by size and
+  collapsing terrain to one row takes **six repos of eight to ≥ 89%** of the map accounted for — 36%
+  → 89% on graphql-js, 43% → 95% on prometheus — and **moves no node**. A deterministic Louvain
+  prototype (`scripts/prototype-louvain.ts`, 56/56 paired runs byte-identical, γ = 1 the modularity
+  argmax on all eight repos) lands **every repo at 5–15 regions**, raises modularity on all eight,
+  and takes hugo's blob to 20.1% — but **nameability is a wash** (improves on three repos, worsens on
+  three, django 14% → 1% of nodes in a nameable region), so it does not by itself unblock tier 1.
+  Adopting it moves every node, which is owner-only.
 - **Districts are unmarked at street level.** Region arches are designed (ADR-0032 §3.2) and
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street
@@ -429,6 +450,13 @@ entry is an answer key: naming a cycle decides **109 of hugo's 156** Blast Radiu
 precision 1.000 · and one measurement
 only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
 walkable world, whose frame cost has never been measured anywhere.
+
+**Waiting on an owner decision, not on work**:
+[ADR-0041](./docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md) is
+**proposed**. Its part 1 — the legend fixes — is measured, cheap, moves no node and is not
+owner-gated, so it can be taken by any session. Its part 2 asks for a **layout epoch** to adopt
+deterministic Louvain, which every node's X,Y depends on and which NORTH-STAR §7 reserves to the
+owner. Neither has been merged.
 
 *(Eight items left this list rather than being done here. **`django`'s index budget** closed as
 ADR-0038 — at **4.44 ms/file against a 5.00 hard ceiling**, the 10 s absolute being quoted at 2,000
