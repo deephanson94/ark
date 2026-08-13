@@ -72,6 +72,21 @@ interface Weighted {
   readonly totalWeight: number;
 }
 
+/**
+ * Largest value in a list, or `floor` if it is empty.
+ *
+ * **Not `Math.max(...list)`.** Spreading an array passes one *argument* per
+ * element, and engines cap that at ~65k–125k — so the idiom throws
+ * `RangeError: Maximum call stack size exceeded` on a repo big enough to need
+ * it. NORTH-STAR risk #2 is explicitly about 10k-file monorepos, and every use
+ * of this in Louvain is over one entry per node.
+ */
+function largest(list: readonly number[], floor: number): number {
+  let best = floor;
+  for (const value of list) if (value > best) best = value;
+  return best;
+}
+
 /** Build the undirected weighted graph, parallel edges summed, self-loops dropped. */
 function weightedFrom(count: number, edges: readonly Edge[]): Weighted {
   const buckets: Map<number, number>[] = Array.from({ length: count }, () => new Map());
@@ -167,7 +182,7 @@ function densify(labels: readonly number[]): number[] {
 
 /** Collapse each community into one node. */
 function aggregate(graph: Weighted, community: readonly number[]): Weighted {
-  const count = Math.max(0, ...community) + 1;
+  const count = largest(community, 0) + 1;
   const buckets: Map<number, number>[] = Array.from({ length: count }, () => new Map());
   const selfLoops = new Array<number>(count).fill(0);
 
@@ -206,7 +221,7 @@ export function splitDisconnected(
 ): { labels: number[]; splits: number } {
   const out = [...labels];
   const seen = new Array<boolean>(labels.length).fill(false);
-  let nextLabel = Math.max(-1, ...labels) + 1;
+  let nextLabel = largest(labels, -1) + 1;
   /** Labels whose first component has already been walked. */
   const claimed = new Set<number>();
   let splits = 0;
@@ -274,7 +289,7 @@ export function louvain(
 
   for (let level = 0; level < options.maxLevels; level++) {
     const community = localMoving(graph, options.resolution, options.maxSweeps);
-    const distinct = Math.max(0, ...community) + 1;
+    const distinct = largest(community, 0) + 1;
     if (distinct === graph.adjacency.length) break;
     mapping = mapping.map((label) => community[label] ?? 0);
     levels.push([...mapping]);
