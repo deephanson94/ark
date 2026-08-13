@@ -3458,3 +3458,29 @@ One line per iteration: what changed, and what to do next.
   **Next**: `docs/experiments/0001` needs twelve participants (owner-only). Then region arches in the
   world (ADR-0032 §9.6). The layout's remaining lever is parallelism across nodes, which preserves each
   node's accumulation order and therefore byte-identity; it wants its own decision.
+
+- **A comment claiming an open leak that had been closed, and a gate measured for what it still does.**
+  `src/player/ties.ts`'s header recorded mutual Companion carrying at *"up to 6 of 6 on this repo,
+  measured"* and prescribed the fix: *"generator-side work — window mutual members the way ADR-0012
+  re-asks colliding subjects"*. **That fix shipped**, as `companion/generate.ts`'s `claimed` set of
+  unordered pairs, citing the same measurement — so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide, and the
+  value is now **0 on ark, hono, kysely and graphql-js**. The header described a defect the product no
+  longer has, which is this repo's most-repeated class of error pointed at its own comment.
+
+  **So what is ADR-0016's endpoint gate still for?** Measured across those four repos by replaying the
+  Companion deck in served order: it **fires 16 / 28 / 26 / 43 times**, and **0** of those withheld
+  wires could have disclosed anything — not a member of the open board's key, not even a candidate on
+  it. Two independent generator invariants rule it out: `claimed`, and a candidate pool that excludes
+  *every* file the matrix pairs with the subject.
+
+  **Kept rather than deleted, and the judgement is written down.** The precedent for deleting it is
+  `selector.ts`'s `sameTruth`, removed once `dedupe()` made it unreachable — but that flag could no
+  longer *fire*, and this one fires and is merely ineffective, so removing it changes what is on
+  screen and is a pillar-3 call rather than a cleanup. It is defence in depth for an invariant two
+  files away. What was missing is a check: the `claimed` invariant was pinned only by a hand-built
+  two-board fixture, so `tests/atlas/atlas.test.ts` now asserts it on the **generated deck**, with an
+  apparatus assertion so a zero is a measurement rather than an empty deck. Disabling `claimed`
+  produces **22 mutual pairs** on this repo and the test goes red.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), then region
+  arches in the world (ADR-0032 §9.6), then the layout's remaining lever, parallelism across nodes.

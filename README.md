@@ -254,13 +254,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street
   (ADR-0032 §9.6). A legibility gap, and a smaller lie than a misplaced landmark.
-- **`src/player/ties.ts`'s header records a leak at a figure that predates the fix.** It says mutual
-  Companion carrying reaches *"up to 6 of 6 on this repo, measured"*; `companion/generate.ts`'s
-  `claimed` set is keyed on an **unordered** pair, so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide and the
-  measured value is now **0 on all four repos** (ark, graphql-js, kysely, hono). Same verb, same repo,
-  two documents disagreeing — the old number came from the pre-dedupe generator. Not fixed here
-  because it is `ties.ts`'s own argument to restate, and ADR-0016's gate may still be right for a
-  reason the stale number was standing in for.
+- ~~**`src/player/ties.ts`'s header records a leak at a figure that predates the fix.**~~ **Closed.**
+  It said mutual Companion carrying reaches *"up to 6 of 6 on this repo, measured"* and prescribed
+  generator-side work; that work shipped as `companion/generate.ts`'s `claimed` set — one matrix cell,
+  one question — so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide and the measured value is **0 on ark,
+  hono, kysely and graphql-js**. The header now says so.
+
+  **What that leaves ADR-0016's endpoint gate doing is measured rather than assumed**: it still
+  **fires** — 16 / 28 / 26 / 43 suppressions across those four repos — and on **none** of them could
+  the withheld wire have disclosed anything, because `claimed` keeps the subject out of the partner's
+  key and the candidate pool keeps every matrix partner off the partner's board entirely. **0 wires
+  naming a key member, 0 naming a candidate.** It is **kept**, as defence in depth for an invariant
+  two files away, and the reasoning is in the header — the precedent for deleting it (`selector.ts`'s
+  `sameTruth`) removed a flag that could no longer *fire*, where this one fires and is merely
+  ineffective. `tests/atlas/atlas.test.ts` now pins the invariant on the **real deck** rather than on
+  a hand-built fixture; disabling `claimed` produces **22 mutual pairs** here and the test goes red.
 - **The world's frame cost is unmeasured.** `npm run raster` has never been pointed at it, P1′ is
   owner-only, and django's 10,162 roads inside `VIEW_DISTANCE` are the case to watch. `VIEW_DISTANCE`
   itself is 620 and was picked by eye, which ADR-0033 records rather than dressing up as derived.
