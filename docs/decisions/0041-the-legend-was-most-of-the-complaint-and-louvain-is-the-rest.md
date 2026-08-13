@@ -362,6 +362,22 @@ survives.**
 | `test:determinism` | **Passes wired**, on ark plus seven repos. |
 | Deployed page | Rebuilds from `master` on push; the map moves under anyone mid-session. |
 
+**Index cost: inside the noise, and measured the way ADR-0038 says to.** Louvain itself is 58 ms on
+django against a 12 s index, and label propagation's 20 passes go away — so the expectation was
+"no change", which is exactly the kind of expectation that gets asserted instead of measured. Run
+**interleaved** (A, B, A, B, …) against a `master` worktree on a full clone of django, three rounds:
+
+| | median | spread |
+|---|---:|---:|
+| `master` | 16,418 ms | 16,305 – 17,305 |
+| this branch | 17,153 ms | 16,552 – 18,240 |
+
+735 ms apart (4.5%) with overlapping spreads, and **round 3 reverses the sign** — inside the ±25%
+this container is documented to swing. Note both trees read ~20% slower than ADR-0038's 13.5 s for
+django, which is the machine and not the change: that is the whole reason the comparison is
+interleaved rather than absolute. django's per-file row is **advisory** in `npm run budget`, and every
+**hard** budget is within ceiling on this branch.
+
 **Effort**: smaller than this document first estimated, and now measured rather than guessed. The
 algorithm exists and is wired in a scratch tree; the whole test surface is **one failing unit test,
 plus re-pinning the golden layout and the spread ratio**. The separable naming problem is the real
