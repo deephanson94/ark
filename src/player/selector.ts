@@ -60,7 +60,7 @@
  */
 
 import type { Challenge, AtlasId } from '../atlas/index.js';
-import { byteCompare } from '../atlas/index.js';
+import { byteCompare, round2 } from '../atlas/index.js';
 import { answerKey } from './progress.js';
 
 export interface SelectorState {
@@ -144,7 +144,7 @@ function overlapWith(previous: Challenge | null, challenge: Challenge): number {
  * whatever each verb's inputs are — so the numbers are not commensurable across
  * verbs, and comparing them raw is a category error rather than a preference.
  * Measured on four repos, the ranges barely overlap: Blast Radius spans
- * **0.03–0.94** and Companion **0.49–0.96** on hono, so ascending raw difficulty
+ * **0.03–0.94** and Companion **0.49–0.91** on hono, so ascending raw difficulty
  * serves *every* Blast Radius board below 0.49 before the first Companion one.
  * A player met the second verb at board **25 on hono, 19 on graphql-js and 17
  * here** — the git-as-rubric thesis is M4's whole point and a first session never
@@ -206,8 +206,12 @@ function overlapWith(previous: Challenge | null, challenge: Challenge): number {
  * | 20 | 7 / 5 | 14 of 216 |
  * | 60 | 7 / 2 | 14 of 216 |
  *
- * Four is too coarse to interleave; twenty and sixty buy no further interleave
- * and start starving the term underneath. Ten is the knee.
+ * Four is too coarse to interleave. Past ten the reach of the term underneath
+ * drops and stays down. **Ark keeps improving past ten — its second verb reaches
+ * board 2 at sixty bands** — so this is a knee on hono and a trade on ark, not a
+ * plateau on both; the first draft of this comment said "twenty and sixty buy no
+ * further interleave", which the ark column of its own table refutes. Ten is
+ * chosen for the column where the term below still fires.
  */
 const PROGRESS_BANDS = 10;
 
@@ -225,12 +229,26 @@ function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
     );
     let at = 0;
     while (at < sorted.length) {
-      const difficulty = (sorted[at] as Challenge).difficulty;
+      // **Grouped on `round2`, not on raw equality.** Every generator routes
+      // difficulty through `round2` today (measured: 0 non-fixed-points across
+      // five real atlases), so this changes no shipped band — but the tie
+      // contract above would otherwise rest on an invariant nothing states.
+      // `validateAtlas` checks difficulty is finite and in 0..1 and no more, so
+      // one verb emitting `0.1 + 0.2` beside boards at `0.3` would render as two
+      // identical 0.30s in different bands, and every term below `progress` —
+      // including the overlap term this banding exists to protect — would go
+      // unreachable between them. Rounding here removes the dependency instead
+      // of documenting it.
+      const difficulty = round2((sorted[at] as Challenge).difficulty);
       let end = at;
-      while (end < sorted.length && (sorted[end] as Challenge).difficulty === difficulty) end++;
-      // `at` is the number of boards strictly easier than this one. `min`
-      // because a run reaching the end would otherwise earn a band of its own.
-      const band = Math.min(PROGRESS_BANDS - 1, Math.floor((at * PROGRESS_BANDS) / sorted.length));
+      while (end < sorted.length && round2((sorted[end] as Challenge).difficulty) === difficulty) {
+        end++;
+      }
+      // `at` is the number of boards strictly easier than this one, so it is at
+      // most `sorted.length - 1` and the band is at most `PROGRESS_BANDS - 1`
+      // without a clamp. There was a `Math.min` here and it could never bind —
+      // a dead branch whose comment described an impossible case.
+      const band = Math.floor((at * PROGRESS_BANDS) / sorted.length);
       for (let i = at; i < end; i++) out.set((sorted[i] as Challenge).id, band);
       at = end;
     }

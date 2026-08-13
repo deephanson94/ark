@@ -107,8 +107,22 @@ above, not an implementation detail.
 **The two hand-written examples in the test file both passed while this was wrong.** What caught it
 was a measurement on a real repo, and what pins it now is a test over shapes rather than examples:
 `max ∈ {1,2,3,7,10,54,75} × (L−max) ∈ {1,2,3,7,40,129,300}`, compared against the previous rule
-transcribed verbatim. Mutating the anchored bands back to clamped bands fails **exactly that one
-assertion** of nine.
+transcribed verbatim. Mutating the anchored bands back to the **floor**-based clamped bands fails
+exactly that one assertion.
+
+**That sweep is necessary and it is not sufficient, which a review found by building the rival it
+misses.** It runs entirely under *flat* importance, and so does every other assertion that touches
+the band geometry — so a different rival, evenly-spaced bands computed with `Math.round` and the
+anchor clamped in, has **zero** flat-identity diffs over all 49 shapes and passes the whole file,
+while shipping a different deck on any repo whenever importance is non-flat. That is the
+configuration three of the four verbs run in. What pins the geometry is a second property, asserted
+over the same shapes: with importance a single spike at index `k`, the result must be the anchors
+with **the anchor nearest `k`** replaced by `k` — which is what splitting each gap at its midpoint
+means, and is false of every other partition. A third rival the same review built — scanning only
+`[anchor − 1, anchor + 1]` of each band — passed all ten assertions against the original fixture,
+because every weighted entry in it sat within one index of an anchor; it swapped **15 of hono's 54
+Companion boards** and dropped their mean subject elevation from 4.7 to 1.9. The fixture now places
+its weights 2 and 3 indices out.
 
 ---
 
@@ -130,15 +144,32 @@ questions is spent on different subjects.
 
 ### 4.1 The cost, stated
 
-The deck's *hardest* board gets slightly easier, because the top band now trades its hardest member
-for its most load-bearing one: Archaeology's maximum difficulty goes 1.000 → 0.890 on hono and
-1.000 → 0.950 on kysely. Every other quantile is unchanged to two decimal places. That is the trade
-this ADR makes deliberately — a question about a file nobody imports, at difficulty 1.00, against a
+The deck's *hardest* boards get slightly easier, because a top band now trades its hardest member
+for its most load-bearing one. Diffing every verb's quantiles between the two atlases:
+
+| | | min | p25 | med | p75 | max |
+|---|---|---|---|---|---|---|
+| hono | companion | — | 0.73 → **0.74** | — | 0.84 → **0.85** | — |
+| hono | archaeology | — | — | — | — | 1.00 → **0.89** |
+| kysely | blastRadius | — | — | — | 0.85 → **0.84** | — |
+| kysely | companion | — | — | — | — | 0.96 → **0.92** |
+| kysely | archaeology | — | — | — | — | 1.00 → **0.95** |
+
+Everything not listed is unchanged to two decimal places. *The first draft of this section claimed
+only the two Archaeology maxima moved and that "every other quantile is unchanged" — three of the
+five rows above falsify it, and the data was already printed in the run the section was written
+from.* The trade is deliberate: a question about a file nobody imports, at difficulty 1.00, against a
 question about the file everybody imports, at 0.89.
 
-Some landmarks are still mute and are supposed to be. `benchmarks/routers/src/tool.mts` and
-`src/http-exception.ts` on hono, and five kysely files, have no board because they lose their band
-to something taller, or because guardrail 4 refuses them. This decision changes *which* subjects a
+Some landmarks are still mute and are supposed to be. **Three** of hono's top fifteen have no board —
+`benchmarks/routers/src/tool.mts` (23 importers), `src/http-exception.ts` (20) and
+`src/utils/types.ts` (16) — and **six** of kysely's: `test/node/src/test-setup.ts` (50),
+`src/operation-node/operation-node-source.ts` (48), `src/util/query-id.ts` (47),
+`src/operation-node/identifier-node.ts` (36), `src/driver/database-connection.ts` (34) and
+`src/util/compilable.ts` (26). They lose their band to something taller, or guardrail 4 refuses them.
+(15 − 12 and 15 − 9 from §4's own table; an earlier draft said two and five, which contradicted the
+table two paragraphs above it and hid `src/utils/types.ts` from the record that exists to list
+exactly these.) This decision changes *which* subjects a
 capped deck spends itself on; it does not raise the cap, and raising the cap is a different decision
 with its own budget.
 
@@ -178,6 +209,7 @@ the map's vertical channel into disagreement for no gain.
 ## 6. Consequences
 
 - Every history-and-graph verb's deck moves on every repo. Ark's own atlas moves, as always.
-- `retain` has tests for the first time: nine, of which the shape-sweep is the load-bearing one.
+- `retain` has tests for the first time: **ten**, of which the shape sweep and the band-geometry
+  property are the load-bearing ones. (`tests/unit/sample.test.ts` holds one more, for `spread`.)
 - **The next verb whose subject is not a file must choose an `importance` explicitly.** There is no
   default to fall through to, which is the point — a silent `() => 0` would look like a decision.

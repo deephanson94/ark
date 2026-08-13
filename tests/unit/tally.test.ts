@@ -160,6 +160,9 @@ describe('the readout the facilitator takes', () => {
 });
 
 describe('the claim the design rests on', () => {
+  const read = (name: string): string =>
+    readFileSync(fileURLToPath(new URL(`../../src/player/${name}`, import.meta.url)), 'utf8');
+
   /**
    * **The one that matters.** The argument for storing this at all is that it is
    * never read back into the game, so position in the progression is still
@@ -169,21 +172,55 @@ describe('the claim the design rests on', () => {
    * single test going red.
    */
   it('the selector never imports the tally', () => {
-    const selector = readFileSync(
-      fileURLToPath(new URL('../../src/player/selector.ts', import.meta.url)),
-      'utf8',
-    );
+    const selector = read('selector.ts');
     expect(selector).not.toContain('tally');
     expect(selector).not.toContain('Tally');
+  });
+
+  /**
+   * **And the shell cannot wire it in either, which the above does not cover.**
+   * `SelectorState` is constructed in `main.ts`, not in `selector.ts`, so the
+   * grep above is satisfied by a five-line change in the shell: build a map from
+   * `parseTally(storedTally()).entries` and hand it to the selector as
+   * `attempts`. That compiles, and `attempts` is the **outermost** key of the
+   * rank, so a count stored by a previous session would decide which board a
+   * restored one opens with — precisely ADR-0011 decision 2's cursor. A reviewer
+   * applied that mutant and all 850 unit tests stayed green, because no test
+   * imports `player/main.ts` at all.
+   *
+   * These are assertions about the *source*, and they are labelled as such
+   * rather than dressed up as behavioural ones. Two properties, because either
+   * alone is evadable: the state starts at `NO_HISTORY`, and every later value
+   * of `attempts` is derived from the previous `selector.attempts`.
+   */
+  it('the shell builds the selector’s attempts from nothing but its own previous value', () => {
+    const main = read('main.ts');
+    expect(main).toContain('let selector: SelectorState = NO_HISTORY;');
+    const assignments = [...main.matchAll(/\battempts:/g)];
+    // Apparatus: if the shell stopped tracking attempts at all this would pass
+    // vacuously, so assert the site exists before asserting what it holds.
+    expect(assignments.length).toBeGreaterThan(0);
+    for (const at of assignments) {
+      const rhs = main.slice(at.index ?? 0, (at.index ?? 0) + 220);
+      expect(rhs).toContain('selector.attempts');
+    }
+  });
+
+  /**
+   * The tally goes to storage and the selector's state does not. Guards the
+   * other direction of the same seam: a session persisting the rotation would
+   * be a stored cursor even if nothing read it back this release.
+   */
+  it('nothing but the tally and the progress record reaches storage', () => {
+    const main = read('main.ts');
+    for (const call of main.matchAll(/setItem\(([^)]*)\)/g)) {
+      expect(call[1] ?? '').not.toContain('selector');
+    }
   });
 
   it('the selector’s state carries no attempt count that outlives the session', () => {
     // `NO_HISTORY` is what a fresh load starts from. If a future change seeded
     // it from storage, this is where that would show.
-    const selector = readFileSync(
-      fileURLToPath(new URL('../../src/player/selector.ts', import.meta.url)),
-      'utf8',
-    );
-    expect(selector).toContain('session-scoped and never persisted');
+    expect(read('selector.ts')).toContain('session-scoped and never persisted');
   });
 });

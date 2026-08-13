@@ -20,13 +20,14 @@ player who passes everything:
 | ark | blastRadius × 15 | 0.04–0.51 | board 17 |
 
 hono's first six boards are `benchmarks/jsx/src/preact.ts`, **`src/middleware/jwk/keys.test.json`**
-— a JSON fixture — `benchmarks/query-param/src/qs.mts`, and three `src/jsx/dom/*`. Seven of
-graphql-js's first ten are `src/__testUtils__/*`. Both of those repos are `docs/experiments/0001`'s
+— a JSON fixture — `benchmarks/query-param/src/qs.mts`, `src/jsx/jsx-runtime.ts`,
+`src/jsx/dom/client.ts` and `src/jsx/dom/server.ts`. Seven of graphql-js's first ten are
+`src/__testUtils__/*`. Both of those repos are `docs/experiments/0001`'s
 matched pair, so this is what twelve recruited participants would have met.
 
-Archaeology first appears at board 109–150 and Placement at 163–221. **A first session never reaches
-the git-graded half of the product**, which is M4's entire thesis and NORTH-STAR §5's
-"disproportionately high-value" tier.
+Archaeology first appears at board **73 / 109 / 138 / 150** and Placement at **117 / 163 / 208 /
+221** (ark / hono / graphql-js / kysely). **A first session never reaches the git-graded half of the
+product**, which is M4's entire thesis and NORTH-STAR §5's "disproportionately high-value" tier.
 
 ---
 
@@ -113,24 +114,34 @@ re-scales as it is cleared, and a two-board verb's last question re-enters band 
 | 20 | 7 / 5 | 14 of 216 |
 | 60 | 7 / 2 | 14 of 216 |
 
-Four is too coarse to interleave. Twenty and sixty buy no further interleave and start starving the
-term underneath. Ten is the knee.
+Four is too coarse to interleave. Past ten, the reach of the term underneath drops and stays down.
+**Ark keeps improving past ten** — its second verb reaches board 2 at sixty bands, which the table's
+own last row says and an earlier draft of this sentence denied ("twenty and sixty buy no further
+interleave"). So ten is a knee on hono and a trade on ark, and it is chosen for the column where the
+term below still fires.
 
 ---
 
 ## 5. What it bought, measured
 
+Same decks throughout, only the rank changed — ark's column is a clean clone at **`c35e38a`**, since
+it indexes itself and every figure about it moves with the commit.
+
 | | hono | graphql-js | kysely | ark |
 |---|---|---|---|---|
 | second verb first appears at board | 25 → **7** | 19 → **8** | 9 → **7** | 17 → **5** |
 | mean subject elevation, first 15 | 1.87 → **3.20** | 2.80 → **4.40** | 4.53 → **4.67** | 3.47 → 3.27 |
-| deck mean elevation (for reference) | 3.14 | 4.50 | 4.55 | 3.04 |
-| `overlap` term's reach | 24 → 18 of 216 | — | — | 42 → 29 of 160 |
+| deck mean elevation (for reference) | 3.14 | 4.50 | 4.55 | 3.07 |
+| `overlap` term's reach | 24 → 18 of 216 | — | — | 43 → 32 of 160 |
 
 The opening now reaches `src/utils/http-status.ts`, `src/router/reg-exp-router/index.ts`,
 `src/error/GraphQLError.ts` and `src/operation-node/insert-query-node.ts` inside the first ten
-boards, and the first-15 mean elevation moves from *below* the deck's mean to at or above it on three
-repos of four.
+boards. The first-15 mean elevation rises on **three** repos of four and crosses from *below* the
+deck's mean to above it on **two** — hono and kysely. Read the ark and graphql-js rows before
+quoting either number: ark's opening was already above its deck mean and **falls** (3.47 → 3.27
+against 3.07), and graphql-js rises a long way and is still *below* its deck mean (4.40 against
+4.50). An earlier draft of this paragraph said "moves from below to at or above on three repos of
+four", which is true of no three repos in the table directly above it.
 
 **The `overlap` term's reach falls by about a quarter and it is not starved**, which is the number
 this decision is most at risk of having got wrong, so it is stated rather than left implied.
@@ -139,12 +150,32 @@ this decision is most at risk of having got wrong, so it is stated rather than l
 
 ## 6. What this does *not* fix
 
-**Archaeology and Placement still first appear at board 68–150 and 116–221.** `tier` remains above
-`progress`, because §5's tiers *are* the curriculum and demoting them is a north-star question, not a
-selector one. Ranking `progress` above `tier` was measured and puts all four verbs inside the first
-twelve boards on every repo — three each — at a first-12 difficulty range of 0.03–0.63. **That is
-available and deliberately not taken here**; it needs an owner's decision about whether the tier
-ordering or the verb mix is the progression.
+**Archaeology and Placement still first appear at board 70–150 and 119–221** (ark `c35e38a` /
+hono / graphql-js / kysely: 70, 109, 138, 150 and 119, 163, 208, 221 — ark indexes itself, so its two
+move with every commit and are quoted at a sha). `tier` remains above `progress`, because §5's tiers
+*are* the curriculum and demoting them is a north-star question, not a selector one.
+
+**The obvious next lever does not do what this section first claimed it does.** Swapping `progress`
+above `tier`, with the shipped banding and everything else untouched, gives:
+
+| first twelve boards | verb mix | difficulty |
+|---|---|---|
+| hono | blast 6, companion 5, archaeology 1 — **no Placement** | 0.03–0.56 |
+| graphql-js | blast 7, companion 5 — **two verbs** | 0.03–0.66 |
+| kysely | blast 8, companion 4 — **two verbs** | 0.03–0.68 |
+| ark | blast 4, companion 4, archaeology 3, placement 1 | 0.04–0.64 |
+
+It is structural, not a tuning miss: a tier-6 Placement board cannot precede the twenty-odd band-0
+boards the other verbs put in front of it, so "all four verbs in the first twelve" is unreachable at
+ten bands on three of the four repos. *The first draft of this section said the swap "puts all four
+verbs inside the first twelve boards on every repo — three each". That figure came from the
+scratch probe that ranked on a bare **position**, before the implementation became a band — §4
+rejects position-based ranking, so the number priced a mechanism this document does not propose.*
+Changing one knob and quoting a measurement taken with another is the counterfactual landmine, and
+it was in the one paragraph here written to inform an owner's decision.
+
+**So the swap is available, its real price is the table above, and it still needs an owner's
+decision** about whether the tier ordering or the verb mix is the progression.
 
 **The opening is still about half peripheral files.** Blast Radius's easy end is peripheral by
 construction (§3), and this decision reaches the easy landmark questions that exist rather than
@@ -157,8 +188,11 @@ fan-out — NORTH-STAR §5's tiers 1 and 2, which no shipped verb emits. That is
 
 - Every repo's served order changes. No atlas changes: `progress` is derived from the deck the
   player was given, so there is no schema bump and no reindex.
-- `withinVerbRank` runs once per suggestion over the whole deck — O(n log n) at n ≤ 500, called once
-  per grade.
+- `withinVerbRank` runs once per suggestion over the whole deck, O(n log n). **Not once per grade**:
+  `main.ts`'s world-mode redraw calls `nextUp()` on every dirty frame, so while the avatar is moving
+  this runs at frame rate. Measured, the whole of `suggestNext` costs **0.219 ms/call on django's
+  358-board deck** (0.072 ms of it this function), about 13 ms per 60 frames — inside budget, and
+  named here because the first draft of this line called it a cold path on no evidence.
 - Three new unit tests, each verified against a mutant: deleting the band term, banding by index
   instead of by ties, and banding over the remainder. The third mutant initially survived the test
   named for it, because that test asserted ascending difficulty over a single verb — true either way.

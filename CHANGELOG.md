@@ -3551,19 +3551,22 @@ One line per iteration: what changed, and what to do next.
   refuted** ([ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md)).
   The guide's opening was trivia, and on both of `docs/experiments/0001`'s matched repos: a
   pass-everything player's **first fifteen boards were all Blast Radius** at difficulty 0.03–0.10 on
-  hono and 0.03–0.28 on graphql-js, whose first six included **`src/middleware/jwk/keys.test.json`**
-  — a JSON fixture — two benchmark scripts, and seven `src/__testUtils__/*`. The second verb first
-  appeared at board **25 / 19 / 9 / 17**, so a first session never reached the git-graded half of the
-  product, which is M4's entire thesis.
+  hono and 0.03–0.28 on graphql-js. Hono's first six held **`src/middleware/jwk/keys.test.json`** — a
+  JSON fixture — and two benchmark scripts; seven of graphql-js's first **ten** are
+  `src/__testUtils__/*`. (A first draft of this sentence attached all of that to graphql-js, which
+  put ten files in six boards and gave one repo another's opening.) The second verb first appeared at
+  board **25 / 19 / 9 / 17** (hono / graphql-js / kysely / ark), so a first session never reached the
+  git-graded half of the product, which is M4's entire thesis.
 
   The cause is a category error rather than a design choice: §8.4 computes `difficulty` from each
   verb's own inputs, and the scales do not overlap — Blast Radius spans 0.03–0.94 on hono where
-  Companion spans 0.49–0.96 — so a rank comparing the raw numbers serves *every* Blast Radius board
+  Companion spans 0.49–0.91 — so a rank comparing the raw numbers serves *every* Blast Radius board
   below 0.49 first. `progress`, a band within the verb's own range, now sits between `tier` and
   `difficulty`. Second verb at **7 / 8 / 7 / 5**, and the first fifteen boards' mean subject elevation
-  moves from below the deck's mean to at or above it on three repos of four (hono 1.87 → 3.20 against
-  a deck mean of 3.14, graphql-js 2.80 → 4.40). No atlas change and no reindex: the band is derived
-  from the deck the player already has.
+  rises on three repos of four, crossing from below the deck's mean to above it on two — hono
+  1.87 → 3.20 against a deck mean of 3.14, kysely 4.53 → 4.67 against 4.55. graphql-js rises furthest
+  (2.80 → 4.40) and is still below its 4.50; ark's opening was already above its deck mean and falls.
+  No atlas change and no reindex: the band is derived from the deck the player already has.
 
   **The proposal that was on the table is refused, on a measurement.** Adding a "prefer a
   load-bearing subject" term above difficulty reads as the obvious fix and is very nearly difficulty
@@ -3583,9 +3586,9 @@ One line per iteration: what changed, and what to do next.
   or two equally-hard questions are separated by the byte order of their ids. `PROGRESS_BANDS = 10` is
   swept rather than chosen: 4 is too coarse to interleave (second verb at 15), 20 and 60 buy no
   further interleave and cut the `overlap` term's reach from 18 of 216 to 14. Measured after the
-  change, overlap still decides 18 of hono's 216 served positions (was 24) and 29 of ark's 160 (was
-  42) — down about a quarter and not starved, which is the number this change was most at risk of
-  getting wrong.
+  change, overlap still decides 18 of hono's 216 served positions (was 24) and 32 of ark's 160 at
+  `c35e38a` (was 43) — down about a quarter and not starved, which is the number this change was most
+  at risk of getting wrong.
 
   Three new tests, each killed by a mutant; the third mutant **survived the test named for it** on
   the first draft, because that test asserted ascending difficulty over one verb, which is true either
@@ -3597,3 +3600,70 @@ One line per iteration: what changed, and what to do next.
   end is its peripheral end by construction, and about half the opening is still fixtures and
   benchmarks. Ranking the band above `tier` puts all four verbs inside the first twelve boards on
   every repo and is measured — it is an owner's call about what the curriculum is.
+
+- **A Fable review of PR #52 raised 19 findings; every one reproduced.** Six lenses over the branch
+  diff — `retain`'s arithmetic, the selector's band, prose-against-numbers, disclosure, whether the
+  new tests are real, and the residue. Ten of the nineteen were **a sentence contradicting a number
+  in the same document**, which is the failure this project's landmine list names first and which no
+  suite can see.
+
+  **Two of the tests shipped in this PR were decoration, and the review proved it by mutation.** The
+  fixture for *"spends each band on its most important entry"* placed every weighted entry within one
+  index of its band's anchor, so a mutant scanning only `[anchor − 1, anchor + 1]` passed it, both
+  tiebreak tests, the shape sweep and all 850 unit tests — while swapping **15 of hono's 54 Companion
+  boards** and dropping their mean subject elevation from 4.7 to 1.9, which is ADR-0039's own defect
+  reinstated with nothing red. And the whole file constrains the band geometry **only under flat
+  importance**, so a rival construction (evenly-spaced bands via `Math.round` with the anchor clamped
+  in) has zero diffs over all 49 sweep shapes and ships a different deck whenever importance is not
+  flat — the configuration three of the four verbs run in. Both are fixed: the fixture's weights now
+  sit 2–3 indices from their anchors, and a new property pins the geometry directly — with importance
+  a single spike at index `k`, the result must be the anchors with **the anchor nearest `k`**
+  replaced by `k`, which is what midpoint-split bands mean and is false of every other partition.
+  Both rivals now die.
+
+  **`the selector never imports the tally` was the assertion `tally.test.ts` calls "the one that
+  matters", and it greps one file.** `SelectorState` is built in `main.ts`, so the cursor ADR-0011
+  decision 2 forbids can be wired in without touching `selector.ts`: five lines that read
+  `parseTally(storedTally())` into a map and hand it over as `attempts` — the **outermost** key of
+  the rank, so a count stored by a previous session would decide which board a restored one opens
+  with. The reviewer applied exactly that mutant and all 850 tests stayed green, because no test
+  imports `player/main.ts` at all. Two source-structure assertions now cover the shell — the state
+  starts at `NO_HISTORY`, and every later `attempts` is derived from the previous `selector.attempts`
+  — and they are labelled as source assertions rather than dressed as behavioural ones. The mutant
+  dies.
+
+  **One live fragility in the code**: `withinVerbRank` grouped ties by float `===`, which is sound
+  only because every generator routes difficulty through `round2` — an invariant `validateAtlas` does
+  not state or enforce (it checks finite and 0..1). A verb emitting `0.1 + 0.2` beside boards at `0.3`
+  would render two identical `0.30`s into different bands and make every term below `progress`
+  unreachable between them. It now groups on `round2`, which removes the dependency instead of
+  documenting it — **served order byte-identical on all four repos**, since nothing violates the
+  invariant today. The `Math.min` clamp in the same loop was **dead** (`at ≤ len − 1` bounds the band
+  at `PROGRESS_BANDS − 1` on its own) and its comment described an impossible case; it is gone.
+
+  **The prose corrections, because they are the point.** ADR-0039 claimed *"every other quantile is
+  unchanged to two decimal places"* — three more moved, and the data was in the run it was written
+  from; it named two mute hono landmarks and five kysely ones where its own table forces three and
+  six, hiding `src/utils/types.ts` (16 importers) from the record that exists to list them.
+  ADR-0040 gave hono's Companion range as 0.49–**0.96** in `selector.ts`'s load-bearing comment and
+  in the CHANGELOG — it is 0.49–**0.91**, and 0.96 was kysely's number under hono's name; it put
+  Archaeology and Placement's first appearance at 68–150 and 116–221, which are the **bands=20/60**
+  sweep rows rather than the shipped configuration (70–150 and 119–221); it said the first-15
+  elevation *"moves from below the deck's mean to at or above it on three repos of four"*, true of
+  two (ark's opening was already above and **falls**; graphql-js rises furthest and is still below);
+  it said *"twenty and sixty buy no further interleave"* four lines under a table whose ark column
+  shows sixty moving the second verb from board 5 to 2; it called `withinVerbRank` a once-per-grade
+  cost when `main.ts` calls it per dirty frame in world mode (measured 0.219 ms on django's 358-board
+  deck, ~13 ms per 60 frames — inside budget, but not what was written); and the CHANGELOG merged two
+  repos' openings into one clause that put ten files in six boards.
+
+  **The worst of them is the one that reached a decision.** ADR-0040 §6 priced the owner-level
+  alternative — rank the band above `tier` — as *"all four verbs inside the first twelve boards on
+  every repo, three each"*. Measured with the **shipped banding**, hono gets three verbs and no
+  Placement, graphql-js and kysely get two apiece; only ark gets four. The figure came from the
+  scratch probe that ranked on a bare **position**, which §4 of the same document rejects as broken —
+  a measurement of a mechanism the document does not propose, quoted to inform a decision. That is
+  the counterfactual landmine, in the one paragraph written for someone else to act on.
+
+  **Next**: unchanged — twelve participants for `docs/experiments/0001` (owner-only), then region
+  arches. The tier-1/tier-2 gap stands, and §6's real price for the tier swap is now in the record.

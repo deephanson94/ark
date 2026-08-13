@@ -57,16 +57,67 @@ describe('retain', () => {
    * most likely to click rather than to whichever entry landed on a computed
    * index.
    */
-  it('spends each band on its most important entry', () => {
-    // Four bands of three. The important entry sits at a different offset in
-    // each band, so a rule that took a fixed index could not pass by luck.
-    const pool = [
-      entry('a0', 0.10, 0), entry('a1', 0.11, 9), entry('a2', 0.12, 0),
-      entry('b0', 0.20, 7), entry('b1', 0.21, 0), entry('b2', 0.22, 0),
-      entry('c0', 0.30, 0), entry('c1', 0.31, 0), entry('c2', 0.32, 5),
-      entry('d0', 0.40, 0), entry('d1', 0.41, 3), entry('d2', 0.42, 0),
-    ];
-    expect(retain(pool, 4, weightOf).map((k) => k.challenge.id)).toEqual(['a1', 'b0', 'c2', 'd1']);
+  /**
+   * **The important entry is deliberately far from its band's anchor.** The
+   * first version of this fixture was twelve entries in four bands, which put
+   * every weighted entry within one index of an anchor — so a mutant that
+   * scanned only `[anchor − 1, anchor + 1]` instead of the whole band passed
+   * this assertion, both tiebreak tests, the shape sweep and all 850 unit tests,
+   * while swapping 15 of hono's 54 Companion boards and dropping their mean
+   * subject elevation from 4.7 to 1.9. That is ADR-0039's own defect, reinstated
+   * with nothing red. Twenty entries in four bands gives anchors at 0, 6, 13, 19
+   * and bands `[0,3) [3,10) [10,16) [16,20)`; the weights below sit 2, 3, 3 and
+   * 3 indices from their anchors.
+   */
+  it('spends each band on its most important entry, however far from the anchor', () => {
+    const weights = new Map([[2, 9], [9, 7], [10, 5], [16, 3]]);
+    const pool = Array.from({ length: 20 }, (_, i) =>
+      entry(`c${String(i).padStart(2, '0')}`, 0.05 * (i + 1), weights.get(i) ?? 0),
+    );
+    expect(retain(pool, 4, weightOf).map((k) => k.challenge.id)).toEqual([
+      'c02', 'c09', 'c10', 'c16',
+    ]);
+  });
+
+  /**
+   * **What the bands actually are, which nothing else here pins.** Every other
+   * assertion runs under flat importance or with the weights where all plausible
+   * band constructions agree, so a rival geometry — evenly-spaced bands with the
+   * old index clamped in, using `Math.round` rather than `Math.floor` — passes
+   * all of them and still ships a different deck on real repos whenever
+   * importance is non-flat, which is the configuration three of the four verbs
+   * run in.
+   *
+   * The property that fixes the geometry: with importance a single spike at
+   * index `k`, the result must be the anchors with **the anchor nearest `k`**
+   * replaced by `k`. That is exactly what splitting each gap at its midpoint
+   * means, and it is false for any other partition. Ties (`k` equidistant from
+   * two anchors) go to the later band, which is what `Math.ceil` on the midpoint
+   * gives.
+   */
+  it('gives each band the entries nearest its anchor, and nothing else', () => {
+    const shapes: readonly (readonly [number, number])[] = [[20, 4], [37, 7], [125, 19], [64, 8], [9, 3]];
+    for (const [length, max] of shapes) {
+      const anchors = Array.from({ length: max }, (_, band) =>
+        Math.round((band * (length - 1)) / (max - 1)),
+      );
+      for (let spike = 0; spike < length; spike++) {
+        const pool = Array.from({ length }, (_, i) =>
+          entry(`c${String(i).padStart(4, '0')}`, i / length, i === spike ? 1 : 0),
+        );
+        // The anchor nearest the spike, ties to the later one.
+        let owner = 0;
+        for (let band = 1; band < max; band++) {
+          if (spike >= Math.ceil(((anchors[band - 1] as number) + (anchors[band] as number)) / 2)) {
+            owner = band;
+          }
+        }
+        const expected = anchors.map((at, band) => (band === owner ? spike : at));
+        expect(retain(pool, max, weightOf).map((k) => k.challenge.id)).toEqual(
+          expected.map((i) => `c${String(i).padStart(4, '0')}`),
+        );
+      }
+    }
   });
 
   /**
