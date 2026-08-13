@@ -84,6 +84,43 @@ function claimAbout(claim: string): string {
   return claim.split(' — ')[0] ?? claim;
 }
 
+/**
+ * Click Submit, and say **why** when it will not take the click.
+ *
+ * A disabled Submit means nothing is ticked — which is real information, and
+ * Playwright renders it as thirty seconds of `retrying click action` followed by
+ * a stack trace with no mention of the board. This file already carries a
+ * landmine about hanging on a correctly-disabled Submit; that entry was written
+ * about a step that ticked nothing *deterministically*, and the same hang has
+ * now cost a run that reproduced on neither side of it. Whatever the cause, a
+ * timeout is the wrong instrument: the tally is on screen and it says what the
+ * board thought was selected.
+ */
+async function submitBoard(page: Page, what: string): Promise<void> {
+  const submit = page.locator('.console-submit');
+  try {
+    await submit.waitFor({ state: 'attached', timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const button = document.querySelector('.console-submit');
+        return button instanceof HTMLButtonElement && !button.disabled;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+  } catch {
+    const tally = await page
+      .locator('.console-tally')
+      .innerText()
+      .catch(() => '(no tally)');
+    const ticked = await page.locator('.choice-button.is-picked').count().catch(() => -1);
+    throw new Error(
+      `${what}: Submit never became clickable — tally says "${tally.trim()}", ${ticked} rows carry the picked class`,
+    );
+  }
+  await submit.click();
+}
+
 async function indexForPlayer(): Promise<Atlas> {
   const atlas = await buildAtlas(indexOptions(ROOT));
   await mkdir(dirname(ATLAS_OUT), { recursive: true });
@@ -545,7 +582,7 @@ async function main(): Promise<number> {
       }
 
       const headingBeforeGrade = await heading();
-      await page.locator('.console-submit').click();
+      await submitBoard(page, 'grade a board');
       await page.waitForSelector('.console-score', { timeout: 5000 });
       const score = (await page.locator('.console-score').innerText()).replace(/\s+/g, ' ').trim();
       const evidence = (await page.locator('.console-evidence').innerText()).trim();
@@ -610,7 +647,7 @@ async function main(): Promise<number> {
         });
       }
 
-      await page.locator('.console-submit').click(); // "back to the map"
+      await submitBoard(page, 'rotation: back to the map'); // "back to the map"
       await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
       await settle();
       // Frame the whole map at the new heading before anything scans it again:
@@ -968,7 +1005,7 @@ async function main(): Promise<number> {
           const button = page.locator('.choice-button').nth(i);
           if (wanted.has((await button.innerText()).trim())) await button.click();
         }
-        await page.locator('.console-submit').click();
+        await submitBoard(page, 'companion board');
         await page.waitForSelector('.console-score', { timeout: 5000 });
 
         // The reveal must promise only what the map will actually draw. The
@@ -979,7 +1016,7 @@ async function main(): Promise<number> {
           .trim();
         process.stdout.write(`e2e: companion summary → ${summary.replace(/\s+/g, ' ')}\n`);
 
-        await page.locator('.console-submit').click();
+        await submitBoard(page, 'companion: back to the map');
         await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
         // That was a second grade, so a second turn is running.
         await settle();
@@ -1198,7 +1235,7 @@ async function main(): Promise<number> {
           if (!picked) {
             failures.push({ what: 'witness', detail: `${spoken.label} was not on the board` });
           }
-          await page.locator('.console-submit').click();
+          await submitBoard(page, 'witness board');
           await page.waitForSelector('.console-score', { timeout: 5000 });
           const witnesses = (await page.locator('.note-witness').allInnerTexts()).map((text) =>
             text.trim(),
@@ -1221,7 +1258,7 @@ async function main(): Promise<number> {
             });
           }
           await page.screenshot({ path: join(SHOT_DIR, 'witness.png') });
-          await page.locator('.console-submit').click();
+          await submitBoard(page, 'witness: back to the map');
         }
       }
 
@@ -1670,7 +1707,7 @@ async function main(): Promise<number> {
             });
           }
           await seededPage.screenshot({ path: join(SHOT_DIR, 'placement.png') });
-          await seededPage.locator('.console-submit').click();
+          await submitBoard(seededPage, 'placement board');
           await seededPage.waitForSelector('.console-score', { timeout: 5000 });
           const score = (await seededPage.locator('.console-score').innerText())
             .replace(/\s+/g, ' ')
@@ -1689,7 +1726,7 @@ async function main(): Promise<number> {
             });
           }
           await seededPage.screenshot({ path: join(SHOT_DIR, 'placement-graded.png') });
-          await seededPage.locator('.console-submit').click();
+          await submitBoard(seededPage, 'placement: back to the map');
           await seededPage.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
 
           // The note. `notes.ts` looked a subject up through `refById`, which
@@ -1831,7 +1868,7 @@ async function main(): Promise<number> {
             detail: `${clicked} of ${target.truth.length} answer commits were on the board`,
           });
         }
-        await seededPage.locator('.console-submit').click();
+        await submitBoard(seededPage, 'archaeology board');
         await seededPage.waitForSelector('.console-score', { timeout: 5000 });
         const score = (await seededPage.locator('.console-score').innerText())
           .replace(/\s+/g, ' ')
@@ -1859,7 +1896,7 @@ async function main(): Promise<number> {
         }
         await seededPage.screenshot({ path: join(SHOT_DIR, 'archaeology-graded.png') });
 
-        await seededPage.locator('.console-submit').click();
+        await submitBoard(seededPage, 'archaeology: back to the map');
         await seededPage.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
         await seededPage.locator('.hud-notes').click();
         await seededPage.waitForSelector('.notes-panel', { timeout: 5000 });
@@ -1923,7 +1960,7 @@ async function main(): Promise<number> {
         await exploitPage.waitForSelector('.choice-button', { timeout: 5000 });
         const rows = await exploitPage.locator('.choice-button').allInnerTexts();
         for (const button of await exploitPage.locator('.choice-button').all()) await button.click();
-        await exploitPage.locator('.console-submit').click();
+        await submitBoard(exploitPage, 'select-all exploit');
         await exploitPage.waitForSelector('.console-score', { timeout: 5000 });
         const shown = (await exploitPage.locator('.console-panel').innerText()).trim();
         // Every row's own rendered label, compared against rendered text — the
@@ -2041,7 +2078,7 @@ async function main(): Promise<number> {
           }
           await armPage.waitForSelector('.choice-button', { timeout: 5000 });
           await armPage.locator('.choice-button').first().click();
-          await armPage.locator('.console-submit').click();
+          await submitBoard(armPage, 'tally inside an arm');
           await armPage.waitForSelector('.console-score', { timeout: 5000 });
           const afterTally = (await armPage.evaluate(
             '(globalThis.arkTally ? globalThis.arkTally() : null)',
