@@ -234,6 +234,14 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   of graphql-js's 6. `HoldoutBar` now refuses to hold out a board whose subject shares a cone with
   anything else: it bars **11 of ark's 40, 24 of graphql-js's 69, 26 of kysely's 75, 6 of hono's
   54**, costs no repo its k=6, and leaves **0 of 6** held-out subjects in a twin class on all four.
+- **A served Placement reveal assembles a held-out Companion key, and it beat band A on kysely.** A
+  Placement reveal names the files a commit touched, so any two are co-commit partners — and *changed
+  in the same commit* is the relation Companion grades, reached without the co-change matrix. It beats
+  band A on **1 of 6** held-out boards on ark (best F1 0.800) and **1 of 6 on kysely (best 0.909)**,
+  one of the two repos the experiment runs on; 0 of 6 on graphql-js and hono. Barred: **0 of 6 on all
+  four**, best ≤ 0.500, costing 2 / 2 / 5 / 1 boards. This is the `unchecked` cell with a body —
+  `placement.discloses` declares these atoms honestly, but they name a **commit** while a Companion
+  key relates **files**, so `keyFacts` cannot connect them.
 - **A board the map already answers is not a quiz item, and 2 of 6 were.** Hovering paints a node's
   direct importers for everyone in every arm (ADR-0008 decision 1); on the easy end that is the
   answer rather than a hint — mean F1 **0.890** below difficulty 0.50 against **0.095** above 0.80
@@ -246,6 +254,13 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street
   (ADR-0032 §9.6). A legibility gap, and a smaller lie than a misplaced landmark.
+- **`src/player/ties.ts`'s header records a leak at a figure that predates the fix.** It says mutual
+  Companion carrying reaches *"up to 6 of 6 on this repo, measured"*; `companion/generate.ts`'s
+  `claimed` set is keyed on an **unordered** pair, so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide and the
+  measured value is now **0 on all four repos** (ark, graphql-js, kysely, hono). Same verb, same repo,
+  two documents disagreeing — the old number came from the pre-dedupe generator. Not fixed here
+  because it is `ties.ts`'s own argument to restate, and ADR-0016's gate may still be right for a
+  reason the stale number was standing in for.
 - **The world's frame cost is unmeasured.** `npm run raster` has never been pointed at it, P1′ is
   owner-only, and django's 10,162 roads inside `VIEW_DISTANCE` are the case to watch. `VIEW_DISTANCE`
   itself is 620 and was picked by eye, which ADR-0033 records rather than dressing up as derived.

@@ -105,7 +105,25 @@ close this channel; the same measurement takes it to 0 of 6. It was rejected bec
 taking **one end of the range**, and §6 names a floor and a ceiling as one instrument failure wearing
 two signs. A bar removes the compromised items and leaves the spread.
 
-## Decision 5 — mutual membership is reported, not refused on, and returns `null` where it cannot be asked
+## Decision 5 — a Companion board a served Placement reveal already assembles is barred
+
+The third channel, found by the review fan-out rather than by this session, and the one that reaches
+the quiz's **other** verb. A Placement reveal names the files a commit touched, so any two of them are
+co-commit partners — and *"changed in the same commit"* is the relation Companion grades, arrived at
+without touching the co-change matrix.
+
+Measured on the held-out sets: it beats band A on **1 of 6** boards on ark (best F1 **0.800**) and on
+**1 of 6** on kysely (best **0.909**) — *one of the two repos the experiment is actually run on* — and
+does not fire on graphql-js (0.500) or hono (0.286). Barred, it is **0 of 6 on all four**, best 0.444
+/ 0.500 / 0.000 / 0.286, at a cost of **2 / 2 / 5 / 1** boards. The apparatus stays live afterwards
+(722–866 co-commit pairs, 1–3 boards still holding an atom), so the zero is a measurement.
+
+**This is decision 1's blindness with a body.** `placement.discloses` declares these atoms honestly
+and the accumulator holds them; they are `touched` facts about a **commit**, and a Companion key is a
+relation between files, so `keyFacts` cannot connect the two. The inexpressibility is not merely a
+missing string — it was hiding a channel that fires on half the measured repos.
+
+## Decision 6 — mutual membership is reported, not refused on, and returns `null` where it cannot be asked
 
 Two boards of one verb that name each other. Stated structurally, so it names no verb and therefore no
 relation: on Companion it is the symmetric co-change pair, on Blast Radius the same shape is a
@@ -137,7 +155,22 @@ exactly.
 held-out subjects carry an incident wire, and **6 of 6** boards' candidates appear in the wire graph
 on every repo. The join found rows; there is nothing in them.
 
-## Decision 6 — taking a verb's whole supply is a shortfall
+### A third vacuous zero, named because two were not enough
+
+On **Companion** this channel is 0 *by construction on every repo*, and not because repos are clean:
+`companion/generate.ts`'s `claimed` set is keyed on an **unordered** pair — *"one matrix cell, one
+question"* — so `T ∈ truth(S) ⟹ S ∉ truth(T)`, deck-wide. Mutual Companion membership is
+unrepresentable. The channel is therefore live only on **Blast Radius**, where the same shape is an
+import cycle, and where it fires (1 on hono).
+
+Two consequences. The `mutual 0` printed against Companion is a *third* kind of zero in a column that
+already carries two, and it is recorded here rather than given another spelling because the honest
+fix — a per-verb "can this even be asked" flag — is the same `null` decision 1 already makes, and
+nothing yet needs it. And **`src/player/ties.ts`'s header is stale**: it records this leak at *"up to
+6 of 6 on this repo, measured"*, a figure that predates the `claimed` set. Same verb, same repo, two
+documents disagreeing — the instrument that decided the old number was the pre-dedupe generator.
+
+## Decision 7 — taking a verb's whole supply is a shortfall
 
 `shortfall = k − held` fires only when `k > eligible`, never at `k === eligible` — so `-k 40` on a
 40-board verb removed **every** board of that verb, reported `shortfall 0`, and exited 0. The played

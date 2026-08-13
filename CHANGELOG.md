@@ -3363,3 +3363,25 @@ One line per iteration: what changed, and what to do next.
   now, with the two other gaps beside it: a board opened and abandoned is not an attempt (and the arms
   differ in what it costs to reach one), and the record does not reset between a dry run and the
   participant who follows it.
+
+- **The completeness critic found a third channel, on the quiz's other verb, and it beat band A on one
+  of the two experiment repos.** A served **Placement** reveal names the files a commit touched, so
+  any two of them are co-commit partners — and *"changed in the same commit"* is the relation
+  **Companion** grades, reached without the co-change matrix at all. Reproduced independently on all
+  four repos: it beats band A on **1 of 6** held-out Companion boards on ark (best F1 0.800) and **1
+  of 6 on kysely (best 0.909)**, and does not fire on graphql-js (0.500) or hono (0.286). Barred, it
+  is **0 of 6 on all four**, best ≤ 0.500, costing 2 / 2 / 5 / 1 boards and no repo its k=6 — with the
+  apparatus still live afterwards (722–866 co-commit pairs, 1–3 boards holding an atom).
+
+  **This is what the `unchecked` cell was hiding.** `placement.discloses` declares those atoms
+  honestly and the accumulator holds them; they name a **commit** while a Companion key relates
+  **files**, so `keyFacts` cannot connect the two. Decision 1's blindness was not merely a missing
+  string — it was covering a channel that fires on half the measured repos.
+
+  **And a third kind of zero, named because two were not enough.** `mutual 0` against Companion is
+  structural on *every* repo: `companion/generate.ts`'s `claimed` set is keyed on an **unordered**
+  pair, so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide and mutual Companion membership is
+  unrepresentable. The channel is live only on Blast Radius, where the shape is an import cycle.
+  Which also makes **`src/player/ties.ts`'s header stale**: it records that leak at *"up to 6 of 6 on
+  this repo, measured"*, a figure taken before the `claimed` set existed — same verb, same repo, two
+  documents disagreeing, and the old number came from the pre-dedupe generator.

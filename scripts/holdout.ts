@@ -199,9 +199,57 @@ function naiveBar(atlas: Atlas): HoldoutBar {
   };
 }
 
-/** Both bars, first reason wins. */
+/**
+ * A Companion board whose key a served **Placement** reveal already assembles.
+ *
+ * The third channel, and the one that reaches the quiz's *other* verb. A
+ * Placement reveal names the files a commit touched, so any two of them are
+ * co-commit partners — and "changed in the same commit" is the relation Companion
+ * grades, arrived at without touching the co-change matrix. Ticking the
+ * candidates that share a served reveal's commit with the subject beats band A on
+ * **1 of 6** held-out boards on ark (best F1 0.800) and on **1 of 6** on kysely
+ * (best **0.909**), which is one of the two repos the experiment is run on. On
+ * graphql-js and hono it does not fire (best 0.500 and 0.286).
+ *
+ * Note what this is *not*: it is not `discloses` failing. `placement.discloses`
+ * declares these atoms honestly and the accumulator holds them — but they are
+ * `touched` facts about a **commit**, and a Companion key is a relation between
+ * files, so `keyFacts` cannot see the connection. Decision 1's blindness is not
+ * merely a missing string; it hides a channel that fires.
+ *
+ * Built from the **whole** deck rather than the served remainder, deliberately:
+ * holding a Placement board out only removes reveals, so the full deck is the
+ * conservative superset and the bar cannot become weaker because of what else was
+ * removed. That also keeps it outside the fixpoint.
+ */
+function coCommitBar(atlas: Atlas): HoldoutBar {
+  const partners = new Map<string, Set<string>>();
+  for (const challenge of atlas.challenges) {
+    if (challenge.verb !== 'placement') continue;
+    for (const a of challenge.truth) {
+      let bucket = partners.get(a);
+      if (bucket === undefined) {
+        bucket = new Set();
+        partners.set(a, bucket);
+      }
+      for (const b of challenge.truth) if (a !== b) bucket.add(b);
+    }
+  }
+  return (challenge) => {
+    if (challenge.verb !== 'companion') return null;
+    const shared = partners.get(challenge.subject);
+    if (shared === undefined) return null;
+    const picked = challenge.candidates.filter((id) => shared.has(id));
+    if (picked.length === 0) return null;
+    const score = scoreSet(picked, challenge.truth).score;
+    if (score < CTRL_F_THRESHOLD) return null;
+    return `a served Placement reveal's co-commit set scores ${score.toFixed(3)} on this key`;
+  };
+}
+
+/** Every bar, first reason wins. */
 function barsFor(atlas: Atlas): HoldoutBar {
-  const bars = [twinBar(atlas), naiveBar(atlas)];
+  const bars = [twinBar(atlas), naiveBar(atlas), coCommitBar(atlas)];
   return (challenge) => {
     for (const bar of bars) {
       const reason = bar(challenge);
