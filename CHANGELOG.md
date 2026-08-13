@@ -3199,3 +3199,52 @@ One line per iteration: what changed, and what to do next.
   nobody noticed), the legend clips silently at 17 of 36 regions, **Placement is unreachable from
   the map** (25% of the deck, reachable only at the chronicle in walk mode), the guide serves the
   four lowest-difficulty boards first with no skip, and there is no help key. Then S1.
+
+- **The hold-out split ships, and its headline result is that it refuses nothing — which is two
+  different facts wearing one number.** `docs/experiments/0001` §9's first piece of harness:
+  `npm run holdout <repo> --out <dir>` cuts a built atlas into the atlas both arms play and the fixed
+  quiz they are scored on, and checks every removed key against the served deck's `discloses` output.
+  Measured at k=6 per verb across **all four** verbs, on full clones of named commits — ark
+  `75b6117`, `graphql/graphql-js` `9c245018`, `kysely-org/kysely` `f24018c7`, `honojs/hono`
+  `7075369e` — it refuses **0 on every repo** and the swap loop runs **once**.
+
+  **The two zeroes are not the same and the script refuses to print them the same way.** On Placement
+  and Archaeology the check *ran*: their keys are expressible as disclosed facts, and ADR-0019
+  decision 7 already excluded the overlap at generation time — so a zero here proves that exclusion
+  survives an arbitrary subset of the deck, which was not obvious, because decision 7 was computed
+  against the **full** deck and the served deck is a subset of it. On Blast Radius and Companion the
+  check is **blind**: their keys are relations between *files* and every fact in `disclosure.ts` is
+  keyed on a commit, so no accumulated fact can state one. Those two are §4.4's entire discriminating
+  tier, so **the check §9 specifies is structurally vacuous on exactly the items the experiment is
+  scored on** — the finding this session did not expect and the reason the split is not simply "done".
+
+  So `Verb.keyFacts` returns **`null`, never `[]`**, and the shell prints `unchecked` where it would
+  otherwise print `0 refused`. That is `CLAUDE.md`'s absence-assertion landmine met in the type
+  system rather than in a comment: both spellings render as *no leaks found*, and only one of them
+  means the instrument ran. It is a third direction and not `discloses` renamed — Placement's
+  `discloses` also yields a `widthFact`, which names a *size* and no member, so reusing it would
+  refuse a board because some reveal printed how big its answer is. A mutant that reuses it dies.
+
+  **The channel that can fire on those two verbs is mutual membership** — two boards of one verb
+  naming each other — stated structurally so it names no verb and therefore no relation: on Companion
+  it is the symmetric co-change pair, on Blast Radius the same shape is a **cycle**, which is
+  ADR-0034 §4's SCC finding arriving from the other side. It reads **1 on kysely**
+  (`src/dialect/dialect-adapter.ts` ⇄ `src/parser/expression-parser.ts`) and 0 on the other three. It
+  is **reported and not refused on**, and that is a judgement written down as one.
+
+  **What was measured and deliberately *not* called a leak**: a served Blast Radius board about `D`
+  where `D` transitively imports `S` discloses `dependents(D) ⊆ dependents(S)`, covering part of the
+  key on **29 of ark's 40** boards. Exploiting it requires knowing `D` depends on `S` and reasoning
+  transitively, which is tier 3's construct in as many words — ADR-0019's rule is that an *implied
+  relation* is accepted where a *stated atom* is refused. Recorded so the next session does not
+  "fix" the thing being measured.
+
+  Every branch of the new machinery is dead on all four repos, so the apparatus is proved by a
+  **positive control** rather than by its own silence: `tests/unit/holdout.test.ts` hand-builds the
+  collision a generated atlas cannot contain and asserts the swap happens (2 rounds). Six mutants
+  die, including one that reddened nothing on its first draft because it mutated the map *builder*
+  instead of the matcher — a bad mutant looks exactly like a robust one.
+
+  **Next**: M2's instrumentation — nothing persists attempt counts, so the engagement half of S1
+  cannot be read off a finished session. Note that `selector.ts`'s `attempts` counts only boards that
+  did **not** pass, so it is not the datum §3 says it is even before persistence.

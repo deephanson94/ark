@@ -457,6 +457,37 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * and that is a measured answer rather than a default.
    */
   decidedBy(graph: Graph, challenge: C): Iterable<DisclosedFact>;
+  /**
+   * The facts that would state an atom of **this board's own answer key**, or
+   * `null` when the disclosure vocabulary cannot express one.
+   *
+   * The third direction, and it is not `discloses` renamed. `discloses` asks
+   * *what does my reveal give away about other boards?*; this asks *what would
+   * another board's reveal have to say to give away mine?* They coincide on the
+   * two history verbs and nowhere else, which is exactly the coincidence that
+   * would have made reusing one for the other look correct — Placement's
+   * `discloses` also yields a `widthFact`, which is a *size* and not a member,
+   * so a check built on it would refuse a board over a fact that names none of
+   * its answers.
+   *
+   * It exists for `docs/experiments/0001` §4.4: a held-out quiz item whose key
+   * some served reveal already states is not held out, and the split has to be
+   * able to say so.
+   *
+   * **`null` is the load-bearing return and it is not `[]`.** Blast Radius and
+   * Companion answer keys are relations between *files*, and every fact in
+   * `disclosure.ts` is keyed on a commit — so no accumulated fact can state one,
+   * ever, and a check over them cannot fire. An empty iterable would report that
+   * as *nothing was disclosed*, which is the same cell as *nothing could be*,
+   * and `CLAUDE.md`'s landmine is that an absence assertion passes whether or
+   * not the rule exists. `null` forces the caller to print **unchecked** where
+   * it would otherwise print a clean zero — on the two verbs the experiment's
+   * discriminating tier is actually made of.
+   *
+   * Required for `discloses`'s reason: a verb author who is never asked never
+   * answers.
+   */
+  keyFacts(challenge: C): Iterable<DisclosedFact> | null;
 }
 
 /**

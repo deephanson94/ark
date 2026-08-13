@@ -33,7 +33,7 @@ import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet, keyRule } from '../score.js';
 import { counted } from '../members.js';
-import { decidedByNothing, disclosesNothing } from '../disclosure.js';
+import { decidedByNothing, disclosesNothing, keyNotExpressible } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -157,6 +157,19 @@ export const companion: Verb = {
   /** Its candidates are files, and a hint about a relation between files is
    * this verb's own question rather than a shortcut past it. ADR-0022. */
   decidedBy: decidedByNothing,
+  /**
+   * **Inexpressible** — a member of this key is a file that co-changes with the
+   * subject, and every fact in `disclosure.ts` names a commit.
+   *
+   * The blindness is worth stating in the one place a reader will look for it,
+   * because this verb's key *is* leakable and not through this channel: the
+   * relation is symmetric, so a served board about `Y` whose key holds `X`
+   * states an atom of `X`'s board, and `ties.ts` draws the pair on the map once
+   * it is answered. `holdout.ts` measures that separately and reports it beside
+   * this `null`; what must not happen is the two being added together, because
+   * one is a count and the other is the absence of a way to count.
+   */
+  keyFacts: keyNotExpressible,
 };
 
 export type { CoChangeIndex, CoChangeRow } from './cochange.js';
