@@ -272,12 +272,14 @@ describe('legendRows', () => {
     expect(rows[rows.length - 1]).toBe(terrain[0]);
     expect(terrain[0]?.nodeCount).toBe(407);
     expect(terrain[0]?.index).toBe(TERRAIN_INDEX);
-    expect(terrain[0]?.label).toBe('terrain (2 areas)');
+    expect(terrain[0]?.text).toBe('terrain (407 in 2 areas)');
   });
 
   it('names a lone terrain region without an area count', () => {
+    // Templating the regions' `label (count)` over a summary row printed
+    // "terrain (4 areas) (56)" on this repo's own map, so the row owns its text.
     const rows = legendRows({ regions: regions.filter((region) => region.id !== 'd-terrain') });
-    expect(rows[rows.length - 1]?.label).toBe('terrain');
+    expect(rows[rows.length - 1]?.text).toBe('terrain (400)');
   });
 
   it('accounts for every node exactly once', () => {

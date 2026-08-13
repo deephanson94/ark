@@ -125,6 +125,16 @@ export interface LegendRow {
   readonly label: string;
   readonly nodeCount: number;
   readonly kind: RegionKind;
+  /**
+   * The row exactly as it is printed.
+   *
+   * Here rather than in `ui.ts` because the terrain row is not a region name
+   * plus a count — it is a summary of several — and templating it into the
+   * regions' `${label} (${count})` produced *"terrain (4 areas) (56)"* on this
+   * repo's own map. A view that formats gets to invent wording no test reads;
+   * this way the sentence is asserted where the rule that builds it lives.
+   */
+  readonly text: string;
 }
 
 /**
@@ -155,6 +165,7 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
       label: region.label,
       nodeCount: region.nodeCount,
       kind: region.kind,
+      text: `${region.label} (${region.nodeCount})`,
     }))
     .sort((a, b) => b.nodeCount - a.nodeCount || a.index - b.index);
 
@@ -163,9 +174,13 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
     const nodeCount = terrain.reduce((sum, region) => sum + region.nodeCount, 0);
     rows.push({
       index: TERRAIN_INDEX,
-      label: terrain.length === 1 ? 'terrain' : `terrain (${terrain.length} areas)`,
+      label: 'terrain',
       nodeCount,
       kind: 'terrain',
+      text:
+        terrain.length === 1
+          ? `terrain (${nodeCount})`
+          : `terrain (${nodeCount} in ${terrain.length} areas)`,
     });
   }
   return rows;

@@ -3817,3 +3817,72 @@ effect; on its fixture Louvain returns the triangle and the star, which is a def
 **Next**: unchanged — the owner's call on ADR-0041, part 1 (legend) not owner-gated, part 2 needing a
 licensed layout epoch. The highest-value follow-up inside it is a naming rule for cross-directory
 communities, now clearly separable from the clustering decision.
+
+## Louvain replaces label propagation, and the legend is fixed — the owner licensed the layout epoch
+
+**Both halves of ADR-0041 land**, which required a decision no session may take: regions reach
+`computeLayout` through `groupByRef`, so this **moved every node on every map**. The owner licensed
+it on 2026-08-13. The cost is stated rather than absorbed — **every player's spatial memory of every
+repo is gone, once** — and no saved progress went with it, because `nodeIdFor` hashes `originPath`
+and nothing in `save.ts`, `progress.ts`, `notes.ts` or `fog.ts` reads a region.
+
+**Clustering.** `src/indexer/louvain.ts` at γ = 1 replaces label propagation, its connector hold-out
+and its connector placement pass. Measured on full clones of named commits: region counts land at
+**9–22** across eight repos (django **175 → 22**, hono **57 → 20**, ark 19 → 9), modularity rises on
+all eight, hugo's **78.9%**-of-the-map region becomes **20.1%**, and django comes back inside pillar
+4's own spread ceiling (0.244 → 0.191 against a bar of 0.20 — which also showed that assertion has
+only ever run on ark). The shipped indexer reproduces the scratch-copy figures exactly.
+
+γ is fixed **a priori** at the textbook resolution of the objective the algorithm already optimises,
+identically for every repo — not selected from a sweep, and nameability plays no part in it. Per-repo
+tuning would be pillar 2 in a new costume. The sweep is a robustness check and happens to agree.
+
+**Legend.** Rows were ordered by region **id** — alphabetical, therefore unrelated to size — and the
+panel clips, so *which* rows a reader lost was arbitrary: the visible 17 accounted for 36% of
+graphql-js and 14% of django. Now ordered by size, with all terrain collapsed into the one row its
+single palette slot has always implied (13 identical grey swatches on prometheus). And `.legend`
+carried `overflow-y: auto` **and** `pointer-events: none` in one rule block, so the clipped rows were
+*unreachable* rather than below the fold; the scroll moves to `.legend-list`, which alone takes
+pointer events back so the map underneath stays draggable. **Together the two changes account for
+100% of the map from the legend on all eight repos** — neither alone does, since Louvain still
+overflows 17 rows on four of them.
+
+**What survived, counted rather than assumed.** `absorbSmallRegions` is not vestigial: Louvain ships
+sub-`MIN_REGION` communities on hono (2), graphql-js (2) and kysely (1). Its test is rewritten around
+that, and **the first fixture written for it was vacuous** — a pair hanging off a small cluster is
+merged by Louvain itself, so absorption never ran and the test would have passed with the pass
+deleted. The shipped fixture uses a five-clique whose degree mass makes Louvain refuse the merge;
+disabling absorption reddens it.
+
+**The legend ordering is extracted as `scene.ts`'s `legendRows`** so it is testable without a DOM.
+Five new assertions, four mutants, all die. One defect that only a screenshot caught: the row text
+was templated as `label (count)` in the view, which printed **"terrain (4 areas) (56)"** on this
+repo's own map — the summary row is not a name plus a number, so the row now owns its whole string
+and the string is what the tests assert.
+
+**A stale figure this change invalidated, found by looking for it.** ADR-0032 §9.6 defers region
+arches because *"118 of django's 175 region centroids have their nearest node in a different
+region"*. That partition no longer exists. Re-measured: **0 of django's 22, 0 of hono's 20, 0 of
+ark's 9** — interleaved regions put centroids in each other's territory and cohesive ones do not. The
+stated blocker on region arches is closed; the feature is still unbuilt, and the ADR says so rather
+than claiming more.
+
+**Two of my own defects worth recording.** `scripts/prototype-louvain.ts` was *copied* into
+`src/indexer/` rather than moved, briefly leaving two definitions of one 313-line algorithm; git
+records it as a rename now. And three raw NUL bytes had crept into `probe-stability.ts` while
+patching it, which made git treat a TypeScript source as **binary** and silently unreviewable — they
+were doing real work as a composite-map-key separator, so they are written as unicode escapes rather
+than deleted.
+
+Stale prose corrected in `regions.ts`'s header and `docs/atlas-format.md` §3.4, both of which still
+described label propagation; §3.4's "not from the directory tree" is now a *measured* claim, since
+ADR-0041 scores the folder tree as a rival clustering and it reads **Q = −0.095 on django**, worse
+than a random partition.
+
+858 unit, 112 atlas, determinism byte-identical, `test:e2e` clean with no console errors, build
+clean.
+
+**Next**: a **naming rule for cross-directory regions**. Region *count* no longer blocks NORTH-STAR
+§5 tier 1 and naming now does — visibly, since this repo's own 40-file region whose best directory is
+`tests` is labelled `src/atlas/index`. ADR-0041 §7 shows the problem is separable from the clustering
+and that the obvious metric cannot arbitrate it. Then region arches, whose blocker just closed.

@@ -465,7 +465,7 @@ export function createLegend(scene: Scene): HTMLElement {
     // Straight from the same function the canvas uses — a legend that computes
     // its own colours is a legend that will eventually disagree with the map.
     swatch.style.background = regionColor(row.index, 1);
-    return el('li', 'legend-item', [swatch, `${row.label} (${row.nodeCount})`]);
+    return el('li', 'legend-item', [swatch, row.text]);
   });
   return el('div', 'legend', [
     el('div', 'legend-title', ['regions']),

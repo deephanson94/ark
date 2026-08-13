@@ -102,8 +102,8 @@ row**, because a row naming 3 of 425 nodes and one naming 49 are not the same am
 
 **One comparator and one collapsed row take six repos of eight to ≥ 89%.** The legend is ordered by
 region **id** — alphabetical, so what falls off the end is arbitrary. On six of eight repos the
-clustering is **not** the binding constraint. These changes are not owner-gated and should be made
-whatever is decided about §8.
+clustering is **not** the binding constraint. These changes are not owner-gated and were the right thing to do
+whatever was decided about the clustering (§10).
 
 **What they do not buy**: seventeen rows covering 95% is still seventeen regions, so NORTH-STAR §5
 tier 1 (*"what are the top-level regions?"*) is untouched — the five largest cover **31% of hono**
@@ -288,7 +288,7 @@ partition**. It also fails the problem it appears to solve: its largest region h
 88% of graphql-js, 69% of django**, so the folder tree is one giant `src` blob. Five lines that
 would move every node and buy nothing.
 
-The consequence for §7's own criterion is that **"nameability is a wash" costs much less than it
+The consequence for this section's own criterion is that **"nameability is a wash" costs much less than it
 looked**. It remains true — under the directory-prefix metric Louvain improves on three repos,
 worsens on three, django going 14% → 1% of nodes in a nameable region — and a segment-based naming
 rule was built and scored on the identical partition and moves no repo's mean F1 by more than 0.068.
@@ -390,7 +390,27 @@ If the owner declines the epoch, **do (1) anyway.**
 
 ---
 
-## 11. What would change this
+## 11. A consequence nobody was looking for: ADR-0032 §9.6 is closed
+
+That section refuses to place a region arch at `Region.centroid`, because **118 of django's 175
+region centroids had their nearest node in a *different* region** — an arch there would stand in
+someone else's street. That measurement was taken against a partition this decision replaced, so it
+was re-run rather than left to rot (`scripts/probe-centroids.ts`, at `decc8a2`):
+
+| | django | hono | ark |
+|---|---:|---:|---:|
+| centroids whose nearest node is elsewhere | **0 of 22** | **0 of 20** | **0 of 9** |
+
+Fragmented regions are interleaved, so their centroids land in each other's territory; cohesive ones
+are not. The stated blocker on region arches is gone. **That is not the same as the feature being
+ready** — nothing about arch placement, occlusion or wording has been designed since — and this
+document is not claiming it. It is recorded because a figure that decided a deferral must be
+re-measured when the thing it measured changes, which is the rule this repo has broken more often
+than any other.
+
+---
+
+## 12. What would change this
 
 - **A naming rule that can name a cross-directory community.** The single highest-value follow-up:
   it is what still blocks tier 1, and §7 shows it is separable from the clustering.
