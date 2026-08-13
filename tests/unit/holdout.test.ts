@@ -271,6 +271,44 @@ describe('mutual membership — the channel the disclosure check is blind to', (
   });
 });
 
+describe('the bar — the leak the hold-out itself creates', () => {
+  it('keeps a barred board out of the quiz and takes the next one instead', () => {
+    const atlas = atlasWithDeck([
+      blastBoard('b-1', 'src/a.ts', ['src/b.ts'], 0.1),
+      blastBoard('b-2', 'src/c.ts', ['src/d.ts'], 0.9),
+    ]);
+    const split = splitDeck(atlas, { blastRadius: 1 }, VERBS, (c) =>
+      c.id === 'b-1' ? 'has a twin' : null,
+    );
+    const blast = split.report.perVerb.find((v) => v.verb === 'blastRadius');
+    expect(blast?.heldOut).toEqual(['b-2']);
+    expect(blast?.barred.map((b) => b.id)).toEqual(['b-1']);
+    expect(blast?.barred[0]?.reason).toBe('has a twin');
+    expect(blast?.shortfall).toBe(0);
+    // Barred at supply, so it never enters the loop and never counts as a round.
+    expect(split.report.rounds).toBe(1);
+  });
+
+  it('reports a shortfall when the bar leaves too little supply', () => {
+    const atlas = atlasWithDeck([blastBoard('b-1', 'src/a.ts', ['src/b.ts'], 0.1)]);
+    const split = splitDeck(atlas, { blastRadius: 1 }, VERBS, () => 'barred');
+    const blast = split.report.perVerb.find((v) => v.verb === 'blastRadius');
+    expect(blast?.heldOut).toEqual([]);
+    expect(blast?.shortfall).toBe(1);
+    // A barred board is still counted as eligible: the row has to show that the
+    // supply existed and the bar took it, not that the verb had no boards.
+    expect(blast?.eligible).toBe(1);
+    expect(summary(split.report).join('\n')).toContain('barred 1');
+  });
+
+  it('bars nothing by default, so a caller that has not thought about it is not silently protected', () => {
+    const atlas = atlasWithDeck([blastBoard('b-1', 'src/a.ts', ['src/b.ts'], 0.1)]);
+    const split = splitDeck(atlas, { blastRadius: 1 }, VERBS);
+    expect(split.report.perVerb[0]?.barred).toEqual([]);
+    expect(split.quiz.map((c) => c.id)).toEqual(['b-1']);
+  });
+});
+
 describe('the preference order', () => {
   it('spreads across the difficulty range instead of taking one end', () => {
     const deck = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((d, i) =>

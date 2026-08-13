@@ -90,6 +90,38 @@ export type HoldoutVerbs = Readonly<
 /** How many boards to hold out, per verb. */
 export type HoldoutSizes = Readonly<Partial<Record<VerbId, number>>>;
 
+/**
+ * A board that may not be held out, and why — **the leak the hold-out itself
+ * creates**.
+ *
+ * Removing a board is not a neutral act on the player. ADR-0030's twin surface
+ * names a class *"only when no member still carries an unanswered Blast Radius
+ * board"*, and `main.ts` asks that question as `challengesById.get(id) ?? []` —
+ * so a **held-out** board is not *unanswered*, it is **absent**, the bucket is
+ * empty, and the gate passes **vacuously**. The class gets named, `cone(T) =
+ * cone(S)` by definition of a twin, and ADR-0008's invariant
+ * `candidates ∩ dependents(subject, ∞) = truth` then makes `candidates(S) ∩
+ * cone(T)` the held-out key **byte-exact**. Measured: **4 of kysely's 6** held-out
+ * Blast Radius boards recover at F1 **1.000**, 19 of 19 under leave-one-out
+ * (25.3% of that deck), and 3 of graphql-js's 6.
+ *
+ * The player is not wrong — a board that does not exist cannot be open — so the
+ * repair belongs here, in the thing that made it not exist. Injected rather than
+ * computed, because `findTwins` lives in `src/player/` and a second definition of
+ * *twin* is the one thing worse than this leak.
+ */
+export type HoldoutBar = (challenge: Challenge) => string | null;
+
+/** No board is barred. Fixtures and tests, and the honest default for a caller
+ * that has not thought about it — `scripts/holdout.ts` supplies the real one. */
+export const NOTHING_BARRED: HoldoutBar = () => null;
+
+export interface BarredItem {
+  readonly id: string;
+  readonly verb: VerbId;
+  readonly reason: string;
+}
+
 export interface RefusedItem {
   readonly id: string;
   readonly verb: VerbId;
@@ -132,6 +164,11 @@ export interface VerbSplit {
    * verbs** — reported, never refused on. See `mutualMembership`.
    */
   readonly mutual: readonly MutualItem[];
+  /**
+   * Boards this verb could not hold out because removing them would open a
+   * surface that states their own key. See `HoldoutBar`.
+   */
+  readonly barred: readonly BarredItem[];
   /**
    * Set when the verb could not supply `requested` boards after refusals. A
    * short quiz is a fact about the instrument and is never silently absorbed.
@@ -319,7 +356,12 @@ const MAX_ROUNDS = 64;
  * refuse a board that was fine a moment ago. Settling that is the fixpoint, and
  * `report.rounds` says how many passes it took — 1 meaning nothing moved.
  */
-export function splitDeck(atlas: Atlas, sizes: HoldoutSizes, verbs: HoldoutVerbs): Split {
+export function splitDeck(
+  atlas: Atlas,
+  sizes: HoldoutSizes,
+  verbs: HoldoutVerbs,
+  bar: HoldoutBar = NOTHING_BARRED,
+): Split {
   const byVerb = new Map<VerbId, Challenge[]>();
   for (const challenge of atlas.challenges) {
     const bucket = byVerb.get(challenge.verb);
@@ -337,14 +379,28 @@ export function splitDeck(atlas: Atlas, sizes: HoldoutSizes, verbs: HoldoutVerbs
   const order = new Map<VerbId, Challenge[]>();
   const held = new Map<VerbId, Challenge[]>();
   const refusedEver = new Map<VerbId, RefusedItem[]>();
+  const barredEver = new Map<VerbId, BarredItem[]>();
   const barred = new Set<string>();
   for (const verb of wanted) {
     const deck = byVerb.get(verb) ?? [];
     const size = sizes[verb] ?? 0;
-    const sequence = preferenceOrder(deck, size);
+    // The bar is applied to the *supply*, before anything is picked. It is a
+    // property of the board and of the atlas, not of what else was held out, so
+    // filtering here keeps it out of the fixpoint loop — which is where a rule
+    // that is not actually iterative would acquire a branch nobody can reason
+    // about.
+    const allowed: Challenge[] = [];
+    const rejected: BarredItem[] = [];
+    for (const challenge of deck) {
+      const reason = bar(challenge);
+      if (reason === null) allowed.push(challenge);
+      else rejected.push({ id: challenge.id, verb, reason });
+    }
+    const sequence = preferenceOrder(allowed, size);
     order.set(verb, sequence);
     held.set(verb, sequence.slice(0, size));
     refusedEver.set(verb, []);
+    barredEver.set(verb, rejected.sort((a, b) => byteCompare(a.id, b.id)));
   }
 
   let rounds = 0;
@@ -420,6 +476,7 @@ export function splitDeck(atlas: Atlas, sizes: HoldoutSizes, verbs: HoldoutVerbs
       expressible,
       refused: refusedEver.get(verb) ?? [],
       mutual: mutualMembership(bucket, servedChallenges),
+      barred: barredEver.get(verb) ?? [],
       shortfall: Math.max(0, size - bucket.length),
     };
   });
@@ -448,7 +505,8 @@ export function summary(report: HoldoutReport): string[] {
     lines.push(
       `${split.verb.padEnd(12)} held ${String(split.heldOut.length).padStart(3)}` +
         ` of ${String(split.eligible).padStart(4)} eligible   ${refusals}` +
-        `   mutual ${split.mutual.length}${short}`,
+        `   mutual ${split.mutual.length}` +
+        `   barred ${split.barred.length}${short}`,
     );
   }
   lines.push(`rounds ${report.rounds}${report.exhausted ? '  EXHAUSTED — did not settle' : ''}`);

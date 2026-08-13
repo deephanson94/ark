@@ -220,6 +220,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   verb naming each other — which reads **1 on kysely** (`src/dialect/dialect-adapter.ts` ⇄
   `src/parser/expression-parser.ts`, a cycle, which is ADR-0034 §4's finding arriving from the other
   side) and 0 on the other three. It is reported and **not** refused on.
+- **Removing a board opens ADR-0030's twin gate on its own answer key — the hold-out *created* a
+  leak, and it is closed.** `main.ts` gates the twin class on *"no member still carrying an
+  **unanswered** Blast Radius board"* and asks it as `challengesById.get(id) ?? []`, so a held-out
+  board is not unanswered but **absent**: the bucket is empty and the guard passes vacuously. Since
+  `cone(S) = cone(T)` defines a twin and ADR-0008's invariant makes `candidates ∩ dependents(subject,
+  ∞) = truth`, the inspector's sentence hands back the key **byte-exact** — measured at **4 of
+  kysely's 6** held-out boards at F1 1.000 (19 of 19 under leave-one-out, 25.3% of that deck) and 3
+  of graphql-js's 6. `HoldoutBar` now refuses to hold out a board whose subject shares a cone with
+  anything else: it bars **11 of ark's 40, 24 of graphql-js's 69, 26 of kysely's 75, 6 of hono's
+  54**, costs no repo its k=6, and leaves **0 of 6** held-out subjects in a twin class on all four.
 - **Districts are unmarked at street level.** Region arches are designed (ADR-0032 §3.2) and
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street

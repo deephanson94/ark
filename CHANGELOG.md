@@ -3232,6 +3232,23 @@ One line per iteration: what changed, and what to do next.
   (`src/dialect/dialect-adapter.ts` ⇄ `src/parser/expression-parser.ts`) and 0 on the other three. It
   is **reported and not refused on**, and that is a judgement written down as one.
 
+  **And then the fan-out found the leak the hold-out *creates*, which is the finding of this
+  session.** ADR-0030's twin surface names a class *"only when no member still carries an unanswered
+  Blast Radius board"*, and `main.ts` asks that as `challengesById.get(id) ?? []`. A held-out board is
+  not *unanswered* — it is **absent** — so the bucket is empty, the guard passes **vacuously**, and
+  the inspector volunteers `cone(S) = cone(T)` for a subject the participant is about to be quizzed
+  on. With ADR-0008's invariant that is the key **byte-exact**: **4 of kysely's 6 held-out Blast
+  Radius boards recover at F1 1.000**, 19 of 19 under leave-one-out (25.3% of that deck), and 3 of
+  graphql-js's 6. The gate is real and the removal is what opens it — treating every blast board as
+  open closes 4 of 4.
+
+  The player is not wrong (a board that does not exist cannot be open), so the repair is in the thing
+  that made it not exist: `HoldoutBar` refuses to hold out a board whose subject shares a cone with
+  anything else. It fires **11 of ark's 40, 24 of graphql-js's 69, 26 of kysely's 75, 6 of hono's
+  54** — and no repo goes short of k=6. After it, **0 of 6 held-out Blast Radius subjects sit in a
+  twin class on any of the four**. `findTwins` is imported from `src/player/` rather than
+  reimplemented, because two definitions of *twin* is worse than the leak.
+
   **What was measured and deliberately *not* called a leak**: a served Blast Radius board about `D`
   where `D` transitively imports `S` discloses `dependents(D) ⊆ dependents(S)`, covering part of the
   key on **29 of ark's 40** boards. Exploiting it requires knowing `D` depends on `S` and reasoning

@@ -39,11 +39,12 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { Atlas, VerbId } from '../src/atlas/index.js';
-import { VERB_IDS, serializeAtlas, validateAtlas } from '../src/atlas/index.js';
+import { VERB_IDS, buildGraph, serializeAtlas, validateAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 import { VERBS } from '../src/verbs/index.js';
-import type { HoldoutSizes } from '../src/verbs/holdout.js';
+import type { HoldoutBar, HoldoutSizes } from '../src/verbs/holdout.js';
 import { splitDeck, summary } from '../src/verbs/holdout.js';
+import { findTwins } from '../src/player/twins.js';
 
 /**
  * §4.4's quiz: six Blast Radius boards and six Companion boards.
@@ -108,12 +109,52 @@ async function loadAtlas(target: string): Promise<Atlas> {
   return buildAtlas(indexOptions(target));
 }
 
+/**
+ * A board may not be held out if removing it would let the twin surface name its
+ * own answer key.
+ *
+ * `main.ts` gates ADR-0030's class on *"no member still carries an **unanswered**
+ * Blast Radius board"*, and asks it as `challengesById.get(id) ?? []`. A held-out
+ * board is not unanswered — it is **absent** — so the bucket is empty, the guard
+ * passes vacuously, and the inspector volunteers `cone(S) = cone(T)` for a
+ * subject the participant is about to be quizzed on. With ADR-0008's invariant
+ * that is the key byte-exact: **4 of kysely's 6 held-out Blast Radius boards at
+ * F1 1.000**, 3 of graphql-js's 6.
+ *
+ * So the bar is *"the subject shares a cone with anything else"*, which is
+ * deliberately blunter than the gate it protects. The precise rule — bar only
+ * when a sibling still carries a **served** board — depends on what else was held
+ * out, which would put it inside the fixpoint; and at quiz time the participant
+ * has cleared the served deck, so every sibling's board is answered and the gate
+ * is open regardless of which of them were removed. The blunt rule and the
+ * precise one agree on the state the quiz is actually taken in.
+ *
+ * `findTwins` is the player's own, imported rather than reimplemented: two
+ * definitions of *twin* is the failure this repo has a landmine about, and the
+ * one that matters is the one the inspector uses.
+ */
+function twinBar(atlas: Atlas): HoldoutBar {
+  const graph = buildGraph(atlas);
+  const twins = findTwins(graph, atlas.nodes.map((n) => n.id));
+  return (challenge) => {
+    // Only Blast Radius keys are reconstructible from a shared cone. A commit
+    // subject has no cone at all, and `refById` would not resolve it.
+    if (challenge.verb !== 'blastRadius') return null;
+    const ref = graph.refById.get(challenge.subject);
+    if (ref === undefined) return null;
+    const index = twins.classOf.get(ref);
+    if (index === undefined) return null;
+    const size = twins.classes[index]?.members.length ?? 0;
+    return `twin class of ${String(size)} — removing this board opens ADR-0030's gate on its own key`;
+  };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const atlas = await loadAtlas(args.target);
 
   const sizes: HoldoutSizes = Object.fromEntries(args.verbs.map((v) => [v, args.k]));
-  const split = splitDeck(atlas, sizes, VERBS);
+  const split = splitDeck(atlas, sizes, VERBS, twinBar(atlas));
 
   // The played atlas must be a *valid* atlas, not merely a smaller object.
   // Removing challenges preserves the id sort and every referential check, but
