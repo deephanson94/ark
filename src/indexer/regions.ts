@@ -2,29 +2,34 @@
  * Region detection — the derived clusters the map is coloured by.
  *
  * Regions come from the import graph, not the directory tree (pillar 4: a node
- * is never placed for aesthetic or filing reasons). Label propagation is used
- * because it is linear, needs no parameter tuning, and — with a fixed visiting
- * order and ties broken by lowest label — is fully deterministic.
+ * is never placed for aesthetic or filing reasons). Clustering is **`louvain.ts`
+ * at γ = 1**, made deterministic by construction rather than by seeding.
  *
- * The complication, learned by looking at the map: a codebase with a barrel
- * module has one node that everything imports, and plain label propagation
- * happily concludes that the whole repo is a single community. On this repo
- * that put 36 of 64 files in one region, which is technically a connected
- * component and useless as a map.
+ * **It was label propagation until ADR-0041**, with a high-degree connector
+ * hold-out bolted on to stop one barrel swallowing the map, and a small-region
+ * absorption pass bolted on to repair what the hold-out stranded. Two patches to
+ * an algorithm with no objective function, exactly as `CLAUDE.md` predicted, and
+ * the third one would have been the fragmentation fix — so it was replaced
+ * instead. The measured failure was two-sided: hono got **57 regions for 425
+ * nodes** while hugo put **78.9% of its linked nodes in one region** at a
+ * modularity of 0.089. Louvain lands every measured repo at 9–22 regions and
+ * raises modularity on all eight.
  *
- * So high-degree **connectors** are held out of the vote. A file that everything
- * imports tells you nothing about which neighbourhood anything is in — it is a
- * bridge, not a resident. Propagation runs over the rest, and the connectors are
- * then placed in whichever region most of their neighbours ended up in. This is
- * still purely topological; it just stops one hub from swallowing the map.
+ * Adopting it moved every node on every map, because regions reach
+ * `computeLayout` through `groupByRef`. That is a **layout epoch**, which
+ * NORTH-STAR §7 reserves to the owner; it was licensed on 2026-08-13 and no
+ * session may take one on its own initiative.
  *
- * Files with no import edges are the honest exception. Topology says nothing
- * about a standalone markdown file, so those — and components too small to be
- * worth a region — aggregate into coarse `terrain` regions, one per top-level
- * path segment. They stay on the map and out of the legend's way (ADR-0010).
+ * `absorbSmallRegions` **survived** the replacement and is not vestigial:
+ * Louvain ships communities below `MIN_REGION` on hono (2), graphql-js (2) and
+ * kysely (1), measured. Files with no import edges are the honest exception —
+ * topology says nothing about a standalone markdown file, so those, and
+ * components still below the floor, aggregate into coarse `terrain` regions,
+ * one per top-level path segment (ADR-0010).
  */
 
 import { byteCompare } from '../atlas/index.js';
+import { louvain } from './louvain.js';
 
 export interface RegionEdge {
   readonly from: number;
@@ -48,20 +53,8 @@ export interface DetectedRegion {
   readonly members: readonly number[];
 }
 
-const MAX_PASSES = 20;
-/** A node is a connector at this multiple of the median degree, or above. */
-const CONNECTOR_MULTIPLE = 3;
-const CONNECTOR_FLOOR = 5;
 /** Regions smaller than this are folded into their strongest neighbour. */
 const MIN_REGION = 3;
-
-function medianOf(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[middle] ?? 0;
-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
-}
 
 export function detectRegions(
   paths: readonly string[],
@@ -79,69 +72,42 @@ export function detectRegions(
   for (const list of neighbours) list.sort((a, b) => a - b);
 
   const degrees = neighbours.map((list) => list.length);
-  const linked = degrees.filter((degree) => degree > 0);
-  const connectorCutoff = Math.max(CONNECTOR_FLOOR, medianOf(linked) * CONNECTOR_MULTIPLE);
-  const isConnector = degrees.map((degree) => degree >= connectorCutoff);
 
+  // ---- clustering (ADR-0041) --------------------------------------------
+  // Louvain runs over the **linked subgraph only**. An edgeless node is terrain
+  // by ADR-0010 and would otherwise found a singleton community, which is the
+  // failure that rule exists to prevent.
   const labels = new Int32Array(count);
   for (let i = 0; i < count; i++) labels[i] = i;
 
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
-    let changed = false;
-    for (let i = 0; i < count; i++) {
-      if (isConnector[i] === true) continue;
-      const list = neighbours[i];
-      if (list === undefined || list.length === 0) continue;
-
-      const tally = new Map<number, number>();
-      for (const neighbour of list) {
-        // Connectors do not get a vote: they are adjacent to everything, so
-        // their label would win everywhere and mean nothing.
-        if (isConnector[neighbour] === true) continue;
-        const label = labels[neighbour] ?? neighbour;
-        tally.set(label, (tally.get(label) ?? 0) + 1);
-      }
-      if (tally.size === 0) continue;
-
-      let best = labels[i] ?? i;
-      let bestCount = tally.get(best) ?? 0;
-      // Iterate in ascending label order so ties resolve the same way on every
-      // run, whatever order the map happened to be filled in.
-      for (const label of [...tally.keys()].sort((a, b) => a - b)) {
-        const votes = tally.get(label) ?? 0;
-        if (votes > bestCount || (votes === bestCount && label < best)) {
-          best = label;
-          bestCount = votes;
-        }
-      }
-      if (best !== labels[i]) {
-        labels[i] = best;
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  // Connectors join whichever region most of their neighbours settled in.
+  const slotOf = new Int32Array(count).fill(-1);
+  const nodeOf: number[] = [];
   for (let i = 0; i < count; i++) {
-    if (isConnector[i] !== true) continue;
-    const tally = new Map<number, number>();
-    for (const neighbour of neighbours[i] ?? []) {
-      if (isConnector[neighbour] === true) continue;
-      const label = labels[neighbour] ?? neighbour;
-      tally.set(label, (tally.get(label) ?? 0) + 1);
-    }
-    let best = labels[i] ?? i;
-    let bestCount = 0;
-    for (const label of [...tally.keys()].sort((a, b) => a - b)) {
-      const votes = tally.get(label) ?? 0;
-      if (votes > bestCount) {
-        best = label;
-        bestCount = votes;
-      }
-    }
-    labels[i] = best;
+    if ((neighbours[i] ?? []).length === 0) continue;
+    slotOf[i] = nodeOf.length;
+    nodeOf.push(i);
   }
+  const louvainEdges: { from: number; to: number }[] = [];
+  for (const edge of edges) {
+    if (edge.from === edge.to) continue;
+    const a = slotOf[edge.from] ?? -1;
+    const b = slotOf[edge.to] ?? -1;
+    if (a < 0 || b < 0 || a === b) continue;
+    louvainEdges.push({ from: a, to: b });
+  }
+  const communities = louvain(nodeOf.length, louvainEdges, {
+    resolution: 1,
+    maxSweeps: 32,
+    maxLevels: 16,
+  }).labels;
+  // Community ids live in [count, count + nodeOf.length). Terrain ids are
+  // handed out from `nextSynthetic`, which starts at `count` too — so this
+  // offset MUST be followed by moving terrain past the end of this range, or
+  // a community and a terrain lump share a label and silently merge.
+  for (let slot = 0; slot < nodeOf.length; slot++) {
+    labels[nodeOf[slot] ?? 0] = count + (communities[slot] ?? 0);
+  }
+  const terrainBase = count + nodeOf.length + 1;
 
   absorbSmallRegions(labels, neighbours, count);
 
@@ -159,7 +125,7 @@ export function detectRegions(
   /** Label id → the top-level segment it stands for. Names them directly. */
   const terrainName = new Map<number, string>();
   const terrain = new Set<number>();
-  let nextSynthetic = count;
+  let nextSynthetic = terrainBase;
   const terrainLabelFor = (path: string): number => {
     const slash = path.indexOf('/');
     const top = slash === -1 ? '' : path.slice(0, slash);

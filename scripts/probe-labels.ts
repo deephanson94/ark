@@ -1,7 +1,7 @@
 /** Throwaway: print ONLY the partition, so a mutation test hashes the answer
  *  and not the clock. `npx tsx scripts/probe-labels.ts <dumpdir>` */
 import process from 'node:process';
-import { louvain } from './prototype-louvain.js';
+import { louvain } from '../src/indexer/louvain.js';
 import { loadDumps } from './probe-region-stats.js';
 const dumps = await loadDumps(process.argv[2] ?? '');
 for (const dump of dumps) {

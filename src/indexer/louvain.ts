@@ -1,11 +1,12 @@
 /**
- * PROTOTYPE — deterministic Louvain, with Leiden's connectivity guarantee.
+ * Deterministic Louvain, with Leiden's connectivity guarantee.
  *
- * **Not wired into the indexer.** It lives in `scripts/` on purpose: regions
- * feed `computeLayout` through `groupByRef` (`src/indexer/build.ts`), so
- * adopting any of this moves every node on every map, which NORTH-STAR §7
- * forbids without an owner-licensed layout epoch. This file exists to measure
- * what the replacement *would* produce, and nothing else.
+ * This is how `regions.ts` clusters. It replaced label propagation, its
+ * connector hold-out and its small-region side effects under the **layout epoch
+ * the owner licensed on 2026-08-13** ([ADR-0041](../../docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md)).
+ * Regions feed `computeLayout` through `groupByRef`, so adopting this moved
+ * every node on every map — which NORTH-STAR §7 reserves to the owner, and
+ * which no session may do on its own initiative.
  *
  * ## Determinism
  *

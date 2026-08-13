@@ -1,12 +1,15 @@
-# The exact wiring measured in ADR-0041 §5 and §8. NOT applied to this branch.
+# The wiring measured in ADR-0041 §5 and §8. **APPLIED** — the owner licensed
+# the layout epoch on 2026-08-13, so this is now the record of exactly what
+# those measurements were taken against, not an instruction.
 #
-# Apply with:  git apply docs/decisions/0041-wiring.patch
-#              cp scripts/prototype-louvain.ts src/indexer/louvain.ts
+# Applied as: git apply docs/decisions/0041-wiring.patch
+#             (the algorithm itself now lives at src/indexer/louvain.ts)
 #
-# It moves every node's X,Y, which NORTH-STAR §7 reserves to the owner.
+# It moved every node's X,Y, which NORTH-STAR §7 reserves to the owner.
 # Measured under it: test:determinism byte-identical on 8 repos, 852/853
-# unit, 112/112 atlas. The one failure is regions.test.ts's stranded-file
-# test, which encodes label propagation's repair for its own side effect.
+# unit, 112/112 atlas. The one failure was regions.test.ts's stranded-file
+# test, which encoded label propagation's repair for its own side effect and
+# has been rewritten around the absorption pass that survived.
 
 --- a/src/indexer/regions.ts	2026-08-13 14:52:03.727740907 +0000
 +++ b/src/indexer/regions.ts	2026-08-13 15:33:37.711287339 +0000

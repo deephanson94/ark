@@ -50,25 +50,51 @@ describe('detectRegions', () => {
     expect(byPath.get('left/a.ts')).not.toBe(byPath.get('right/x.ts'));
   });
 
-  it('folds a stranded file into the region it is most connected to', () => {
-    // Holding connectors out of the vote leaves some files with no voters at
-    // all. Without absorption each became its own region — 22 of them here.
-    const paths = ['hub.ts', 'a.ts', 'b.ts', 'c.ts', 'lonely.ts', 'd.ts', 'e.ts'];
-    const links: [string, string][] = [
-      ['a.ts', 'b.ts'],
-      ['b.ts', 'c.ts'],
-      ['c.ts', 'a.ts'],
-      ['a.ts', 'hub.ts'],
-      ['b.ts', 'hub.ts'],
-      ['c.ts', 'hub.ts'],
-      ['d.ts', 'hub.ts'],
-      ['e.ts', 'hub.ts'],
-      ['lonely.ts', 'hub.ts'],
-      ['lonely.ts', 'a.ts'],
-    ];
+  it('folds an undersized community into the region it is most connected to', () => {
+    // Louvain ships communities below MIN_REGION and absorption folds them, so
+    // this is live machinery rather than a leftover: measured on real repos it
+    // fires on hono (2 communities of 2), graphql-js (2) and kysely (1), and
+    // not at all on ark, django, flask, hugo or prometheus (ADR-0041).
+    //
+    // **The fixture has to be chosen, not invented.** The obvious one — a pair
+    // hanging off a small cluster — is vacuous, because Louvain merges it
+    // itself and absorption never runs; the first draft of this test did
+    // exactly that and would have passed with the pass deleted. Modularity's
+    // gain for moving `i` into `C` is `k_i,in − γ·k_i·Σ_tot(C)/2m`, so a pair
+    // joined to a *large, dense* community by single edges is refused: the one
+    // internal edge it gains is outweighed by that community's degree mass.
+    // Hence a five-clique, and `probe-fixture2` in this ADR's working set
+    // confirms Louvain really does leave `edge/*` standing alone here.
+    const core = ['core/1.ts', 'core/2.ts', 'core/3.ts', 'core/4.ts', 'core/5.ts'];
+    const side = ['side/1.ts', 'side/2.ts', 'side/3.ts', 'side/4.ts'];
+    const paths = [...core, ...side, 'edge/1.ts', 'edge/2.ts'];
+    const links: [string, string][] = [];
+    for (const group of [core, side]) {
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) links.push([group[i] ?? '', group[j] ?? '']);
+      }
+    }
+    links.push([core[0] ?? '', side[0] ?? '']);
+    links.push(['edge/1.ts', 'edge/2.ts']);
+    // Both of the pair's outward edges go to `core`, none to `side` — so this
+    // asserts *which* region absorbed it, not merely that something did. A rule
+    // that folded into the lowest label, or the largest region, or the first
+    // neighbour found, would still have to pick `core` here, so the discriminating
+    // half is the assertion below it.
+    links.push(['edge/1.ts', core[1] ?? '']);
+    links.push(['edge/2.ts', core[2] ?? '']);
+
     const { regions, byPath } = assignment(paths, links);
-    expect(byPath.get('lonely.ts')).toBe(byPath.get('a.ts'));
-    for (const region of regions) expect(region.members.length).toBeGreaterThan(0);
+    expect(byPath.get('edge/1.ts')).toBe(byPath.get('edge/2.ts'));
+    expect(byPath.get('edge/1.ts')).toBe(byPath.get('core/1.ts'));
+    expect(byPath.get('edge/1.ts')).not.toBe(byPath.get('side/1.ts'));
+    // The invariant `test:atlas` and `docs/atlas-format.md` §3.4 both rest on:
+    // no topology region is smaller than the floor, which is what bounds the
+    // region count without a magic cap.
+    for (const region of regions) {
+      if (region.kind !== 'topology') continue;
+      expect(region.members.length, `${region.id}`).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it('groups unlinked files by directory, since topology says nothing', () => {

@@ -24,7 +24,7 @@
 
 import process from 'node:process';
 
-import { louvain } from './prototype-louvain.js';
+import { louvain } from '../src/indexer/louvain.js';
 import type { Dump } from './probe-region-stats.js';
 import { loadDumps } from './probe-region-stats.js';
 

@@ -1,10 +1,20 @@
 # ADR-0041 — The legend was most of the complaint, and deterministic Louvain is the rest
 
-**Status**: **proposed** — not accepted. Adopting §8 moves every node on every map, which
-NORTH-STAR §7 reserves to the owner. Nothing here has been merged to `master`.
+**Status**: **accepted, and it carries a layout epoch.**
 **Date**: 2026-08-13
 **Supersedes**: nothing. Extends [ADR-0010](./0010-terrain-islands-and-the-ctrl-f-gate.md)'s terrain
 rule, which is held fixed throughout and is **not** what this is about.
+
+> **The layout epoch, recorded because it is the expensive half.** This document was written and
+> reviewed as `proposed`, because adopting §5 moves every node on every map and NORTH-STAR §7
+> reserves that to the owner. **The owner licensed it on 2026-08-13**, in the same breath as asking
+> for the change to land. Both halves shipped: §10's part 1 (the legend) and part 2 (Louvain).
+>
+> What that cost, stated plainly rather than buried: **every player's spatial memory of every repo is
+> gone, once.** No saved progress was lost — `nodeIdFor` hashes `originPath`, so no node id moved and
+> §9 held — but every map anyone had learned is a different picture now. The deployed page rebuilds
+> from `master` on push, so it changed under whoever was reading it. That is what an epoch is, and
+> the reason it is not a session's decision to take.
 
 ---
 
@@ -109,8 +119,9 @@ fixes the one place a path-based grouping is allowed, and that place is terrain.
 
 ## 3. The prototype
 
-`scripts/prototype-louvain.ts` — deterministic Louvain with Leiden's connectivity guarantee, 313
-lines. Built like `layout.ts`: **no `Math.random`** (textbook Louvain randomises the visit order and
+`src/indexer/louvain.ts` — deterministic Louvain with Leiden's connectivity guarantee, 313 lines.
+*(Written as `scripts/prototype-louvain.ts` and **moved** on adoption, not copied — two definitions
+of one algorithm is the thing the conventions forbid most plainly.)* Built like `layout.ts`: **no `Math.random`** (textbook Louvain randomises the visit order and
 published Leiden samples its refinement; here it is ascending node index at every level), **ties to
 the lowest community id**, **only `+ - * /`**, every accumulation in index order, `Map`s read only
 through sorted key lists.
@@ -296,8 +307,7 @@ without reading it. It fails where a repo's directories do not follow its coupli
 
 The prototype was wired into a scratch copy of the tree and the **real** suite run against it. The
 exact diff is [`0041-wiring.patch`](./0041-wiring.patch), which is **not applied to this branch** —
-`git apply` it plus `cp scripts/prototype-louvain.ts src/indexer/louvain.ts` reproduces everything
-below.
+it reproduces everything below, and **has since been applied** — see the status line.
 
 ```
 npm run test:determinism  (ark, under the wired prototype, full git history)

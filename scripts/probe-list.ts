@@ -1,7 +1,7 @@
 /** Throwaway probe: print the Louvain regions themselves, so they can be read
  *  as names rather than as a number. `npx tsx scripts/probe-list.ts <dumps> <repos> <gamma>` */
 import process from 'node:process';
-import { louvain } from './prototype-louvain.js';
+import { louvain } from '../src/indexer/louvain.js';
 import { loadDumps } from './probe-region-stats.js';
 import { bestDirectory } from './probe-nameable.js';
 

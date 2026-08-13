@@ -179,18 +179,28 @@ body {
 
 /* ---- legend ------------------------------------------------------------ */
 
+/*
+ * The scroll lives on the list, not the panel — and that is the fix, not a
+ * tidy-up (ADR-0041). The panel used to carry `overflow-y: auto` and
+ * `pointer-events: none` in this same block, which are contradictory: nothing
+ * could deliver a wheel event to it, so the rows past `max-height` were
+ * unreachable rather than merely below the fold. django hid 158 of them.
+ *
+ * Putting the overflow on `.legend-list` and giving *only that* pointer events
+ * back means the list scrolls while the panel's padding and title stay
+ * click-through, so the map underneath is still draggable — which is why the
+ * `none` was there in the first place and must not simply be deleted.
+ */
 .legend {
   position: absolute;
   bottom: 16px;
   left: 16px;
-  max-height: 42vh;
   width: 260px;
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   backdrop-filter: blur(8px);
-  overflow-y: auto;
   pointer-events: none;
 }
 
@@ -207,6 +217,9 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 
 .legend-item {

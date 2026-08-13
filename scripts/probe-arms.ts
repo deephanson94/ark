@@ -31,7 +31,7 @@
 
 import process from 'node:process';
 
-import { louvain, modularityOf } from './prototype-louvain.js';
+import { louvain, modularityOf } from '../src/indexer/louvain.js';
 import { bestDirectory } from './probe-nameable.js';
 import type { Dump } from './probe-region-stats.js';
 import { loadDumps } from './probe-region-stats.js';

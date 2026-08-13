@@ -19,7 +19,7 @@
 import process from 'node:process';
 
 import { DEFAULT_LAYOUT_OPTIONS, computeLayout } from '../src/indexer/layout.js';
-import { louvain } from './prototype-louvain.js';
+import { louvain } from '../src/indexer/louvain.js';
 import { loadDumps } from './probe-region-stats.js';
 
 /** The ratio `atlas.test.ts` pins: intra-region spread over inter-region spacing. */

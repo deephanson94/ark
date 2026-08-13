@@ -279,8 +279,13 @@ truth set is sound and only the distractors are at risk) is set out in
 | `centroid` | `[number, number]` | Mean member position, 2dp. |
 | `kind` | `"topology" \| "terrain"` | Whether the graph produced this cluster, or the graph had nothing to say. |
 
-Regions are derived from the import graph by label propagation, **not** from the directory tree
-(pillar 4). [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+Regions are derived from the import graph by **deterministic Louvain at γ = 1**
+(`src/indexer/louvain.ts`), **not** from the directory tree (pillar 4). It was label propagation
+until [ADR-0041](decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md),
+which replaced it under an owner-licensed layout epoch. That document also measures the directory
+tree as a rival clustering and refuses it at **Q = −0.095 on django** — worse than a random
+partition — so the "not from the directory tree" above is now a measured claim rather than only a
+principled one. [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
 
 #### `topology` versus `terrain`
 
@@ -298,6 +303,12 @@ desaturated wash so colour stays reserved for claims the graph actually supports
 There is deliberately **no cap** on region count. The bound is a consequence rather than a tuning:
 `regions ≤ nodes / 3 + topLevelDirectories`, asserted in `test:atlas`.
 [ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
+
+That bound is loose by two orders of magnitude and was never what kept the number readable — it
+permits 1,021 regions on django. What keeps it readable is the clustering: measured across eight
+repositories, ADR-0041 puts every one at **9–22 regions** (django 175 → 22, hono 57 → 20). The floor
+the bound rests on still holds because `absorbSmallRegions` survived the replacement, and it is not
+vestigial — Louvain ships communities under it on hono, graphql-js and kysely.
 
 ### 3.5 `history`
 
