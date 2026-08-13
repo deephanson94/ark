@@ -22,7 +22,7 @@ import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet, keyRule } from '../score.js';
 import { counted } from '../members.js';
-import { decidedByNothing, disclosesNothing } from '../disclosure.js';
+import { decidedByNothing, disclosesNothing, keyNotExpressible } from '../disclosure.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -139,6 +139,19 @@ export const blastRadius: Verb = {
   /** Its candidates are files, and a hint about a relation between files is
    * this verb's own question rather than a shortcut past it. ADR-0022. */
   decidedBy: decidedByNothing,
+  /**
+   * **Inexpressible, and that is the answer the hold-out check has to print.**
+   *
+   * A member of this key is a file that transitively imports the subject. Every
+   * fact `disclosure.ts` can build is keyed on a commit, so there is no string
+   * an accumulator could hold that would state one — the check is blind here by
+   * construction rather than satisfied. It is the same reasoning that makes
+   * `discloses` nothing, read from the other end, and it lands on `null` rather
+   * than `[]` because this verb is half of `docs/experiments/0001` §4.4's
+   * discriminating tier: a zero printed here would be read as *the quiz is
+   * clean* on precisely the items the experiment is scored on.
+   */
+  keyFacts: keyNotExpressible,
 };
 
 export type { Corpus, DistractorChoice, DistractorContext, StrategyId } from './distractors.js';

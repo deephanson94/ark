@@ -60,7 +60,7 @@
  */
 
 import type { Challenge, AtlasId } from '../atlas/index.js';
-import { byteCompare } from '../atlas/index.js';
+import { byteCompare, round2 } from '../atlas/index.js';
 import { answerKey } from './progress.js';
 
 export interface SelectorState {
@@ -137,10 +137,130 @@ function overlapWith(previous: Challenge | null, challenge: Challenge): number {
   return union === 0 ? 0 : shared / union;
 }
 
+/**
+ * Where each challenge sits in **its own verb's** difficulty range, `0..1`.
+ *
+ * §8.4's difficulty is `w₁·log(breadth) + w₂·reach + w₃·surprise`, computed from
+ * whatever each verb's inputs are — so the numbers are not commensurable across
+ * verbs, and comparing them raw is a category error rather than a preference.
+ * Measured on four repos, the ranges barely overlap: Blast Radius spans
+ * **0.03–0.94** and Companion **0.49–0.91** on hono, so ascending raw difficulty
+ * serves *every* Blast Radius board below 0.49 before the first Companion one.
+ * A player met the second verb at board **25 on hono, 19 on graphql-js and 17
+ * here** — the git-as-rubric thesis is M4's whole point and a first session never
+ * reached it.
+ *
+ * The cost is not only monotony, and this is the part that took measuring. Blast
+ * Radius's difficulty is strongly **positively** correlated with how
+ * load-bearing its subject is (Spearman **ρ = 0.96 / 0.84 / 0.38 / 0.84** against
+ * the count of a node's transitive dependents that themselves have dependents),
+ * because `breadth` is a term in both. So its easy end is *by construction* its
+ * peripheral end, and the opening was `benchmarks/jsx/src/preact.ts`,
+ * `src/middleware/jwk/keys.test.json` and six `src/__testUtils__/*` files.
+ * Companion's correlation runs the **other way** (**−0.30 / −0.24 / −0.65 /
+ * −0.06**) and its easiest boards are `GraphQLError.ts`, `insert-query-node.ts`
+ * and `http-status.ts` — easy questions about landmarks already existed and were
+ * simply unreachable.
+ *
+ * **This is why the obvious fix is refused.** Adding a "prefer a load-bearing
+ * subject" term above difficulty was the proposal; measured, it opens graphql-js
+ * at difficulty **0.71–0.91**, because that term is a re-encoding of difficulty
+ * on the verb that dominates the opening. It is ADR-0039's rejected alternative
+ * one layer up: a deck with no easy end, where a cold player's first question is
+ * the most connected file in the repository.
+ *
+ * Ranks are computed from the deck rather than stored, so this stays a property
+ * of the atlas the player was given and needs no schema change.
+ *
+ * **It is a band over ties, and both halves of that are load-bearing.**
+ *
+ * *A band*, because a bare position is a **total** order on each verb's deck —
+ * everything below it in the rank, including `overlapWith`, which this file's
+ * second amendment measured into place, becomes unreachable between two
+ * challenges of the same verb. The first version of this function did exactly
+ * that and silently killed the overlap term.
+ *
+ * *Over ties*, because the band must be a function of the **difficulty**, not of
+ * the sorted index. Banding by index separates two *equally hard* questions
+ * purely by the byte order of their ids, which is the opposite of what a
+ * progression means and is what the two unit tests that caught the first version
+ * are actually about. So a challenge's band is set by how much of its verb's
+ * deck is **strictly** easier, which collapses ties by construction — and, being
+ * rank-based rather than range-based, it equalises the two verbs' *distributions*
+ * rather than just their endpoints. Normalising by `(d − min) / (max − min)`
+ * instead was tried and does not interleave: Companion's difficulties are packed
+ * against the top of its own range (hono: min 0.49, p25 0.74), so its first band
+ * holds three boards where Blast Radius's holds fifteen.
+ */
+/**
+ * Ten, and the number has an objective function rather than a taste behind it —
+ * this file's own comment about "a magic number with no objective function"
+ * applies to it. Measured on hono `7075369e` and this repo, sweeping the value
+ * and reading two quantities: which board the second verb first appears at, and
+ * how many served positions the `overlap` term below still decides.
+ *
+ * | bands | 2nd verb (hono / ark) | overlap reach (hono) |
+ * |---|---|---|
+ * | 4  | 15 / 10 | 18 of 216 |
+ * | **10** | **7 / 5** | **18 of 216** |
+ * | 20 | 7 / 5 | 14 of 216 |
+ * | 60 | 7 / 2 | 14 of 216 |
+ *
+ * Four is too coarse to interleave. Past ten the reach of the term underneath
+ * drops and stays down. **Ark keeps improving past ten — its second verb reaches
+ * board 2 at sixty bands** — so this is a knee on hono and a trade on ark, not a
+ * plateau on both; the first draft of this comment said "twenty and sixty buy no
+ * further interleave", which the ark column of its own table refutes. Ten is
+ * chosen for the column where the term below still fires.
+ */
+const PROGRESS_BANDS = 10;
+
+function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
+  const byVerb = new Map<string, Challenge[]>();
+  for (const challenge of deck) {
+    const seen = byVerb.get(challenge.verb);
+    if (seen === undefined) byVerb.set(challenge.verb, [challenge]);
+    else seen.push(challenge);
+  }
+  const out = new Map<string, number>();
+  for (const [, challenges] of byVerb) {
+    const sorted = [...challenges].sort(
+      (a, b) => a.difficulty - b.difficulty || byteCompare(a.id, b.id),
+    );
+    let at = 0;
+    while (at < sorted.length) {
+      // **Grouped on `round2`, not on raw equality.** Every generator routes
+      // difficulty through `round2` today (measured: 0 non-fixed-points across
+      // five real atlases), so this changes no shipped band — but the tie
+      // contract above would otherwise rest on an invariant nothing states.
+      // `validateAtlas` checks difficulty is finite and in 0..1 and no more, so
+      // one verb emitting `0.1 + 0.2` beside boards at `0.3` would render as two
+      // identical 0.30s in different bands, and every term below `progress` —
+      // including the overlap term this banding exists to protect — would go
+      // unreachable between them. Rounding here removes the dependency instead
+      // of documenting it.
+      const difficulty = round2((sorted[at] as Challenge).difficulty);
+      let end = at;
+      while (end < sorted.length && round2((sorted[end] as Challenge).difficulty) === difficulty) {
+        end++;
+      }
+      // `at` is the number of boards strictly easier than this one, so it is at
+      // most `sorted.length - 1` and the band is at most `PROGRESS_BANDS - 1`
+      // without a clamp. There was a `Math.min` here and it could never bind —
+      // a dead branch whose comment described an impossible case.
+      const band = Math.floor((at * PROGRESS_BANDS) / sorted.length);
+      for (let i = at; i < end; i++) out.set((sorted[i] as Challenge).id, band);
+      at = end;
+    }
+  }
+  return out;
+}
+
 interface Rank {
   readonly attempts: number;
   readonly sameRegion: number;
   readonly tier: number;
+  readonly progress: number;
   readonly difficulty: number;
   readonly overlap: number;
   readonly id: string;
@@ -153,11 +273,19 @@ function rankLess(a: Rank, b: Rank): boolean {
   // it could have had for free. A unit test pins that.
   if (a.attempts !== b.attempts) return a.attempts < b.attempts;
   if (a.sameRegion !== b.sameRegion) return a.sameRegion < b.sameRegion;
-  // `(tier, difficulty)` rather than bare difficulty because §5's tiers *are*
-  // the progression. Every challenge is tier 3 today, so this reduces to
-  // ascending difficulty — writing it now stops an M4 session re-deriving the
-  // ordering when the git verbs land.
+  // `(tier, …)` rather than bare difficulty because §5's tiers *are* the
+  // progression. This was written when every challenge was tier 3, against the
+  // day the git verbs landed; they landed, and the term below it was the one
+  // that needed the amendment.
   if (a.tier !== b.tier) return a.tier < b.tier;
+  // **Ascending through each verb's own range, not through a shared number.**
+  // See `withinVerbRank`: raw difficulties are not comparable across verbs, and
+  // ranking on them served every one of hono's Blast Radius boards below 0.49
+  // before its first Companion board. Raw difficulty stays directly underneath,
+  // so among challenges at the same relative position the genuinely easier one
+  // wins — which is what makes the two tier-3 verbs alternate rather than
+  // arriving in blocks.
+  if (a.progress !== b.progress) return a.progress < b.progress;
   if (a.difficulty !== b.difficulty) return a.difficulty < b.difficulty;
   // **Below difficulty, and that placement was measured rather than argued.**
   // Ranked above it, a continuous overlap swamps the progression: it always
@@ -193,6 +321,11 @@ export function suggestNext(
   // shared *absence* of region is not the same-neighbourhood signal this rank
   // term exists to penalise.
   const previousRegion = state.previous === null ? null : regionOf(state.previous.subject);
+  // Over the *whole* deck, not the unanswered remainder: a challenge's place in
+  // its verb's difficulty range is a property of the repository, and recomputing
+  // it over what is left would make the progression re-scale as the player
+  // clears boards — the tenth question would rank as the easiest remaining.
+  const progressOf = withinVerbRank(deck);
 
   let best: Challenge | null = null;
   let bestRank: Rank | null = null;
@@ -202,6 +335,7 @@ export function suggestNext(
       attempts: state.attempts.get(answerKey(challenge.verb, challenge.subject)) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
+      progress: progressOf.get(challenge.id) ?? 0,
       difficulty: challenge.difficulty,
       overlap: overlapWith(state.previous, challenge),
       id: challenge.id,

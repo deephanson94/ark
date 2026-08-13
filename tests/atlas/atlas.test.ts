@@ -386,6 +386,41 @@ describe('challenges', () => {
     }
   });
 
+  /**
+   * **The invariant `src/player/ties.ts`'s endpoint gate now rests on, checked on
+   * the real deck rather than on a fixture.**
+   *
+   * `companion/generate.ts`'s `claimed` set makes a co-change pair answerable
+   * once — `T ∈ truth(S) ⟹ S ∉ truth(T)` — which is what closed the leak
+   * `ties.ts` used to record as open at *"up to 6 of 6 on this repo"*. The unit
+   * suite pins it with a hand-built two-board atlas; nothing checked it on a
+   * generated deck, which is the half that decides whether the gate is guarding
+   * anything today. Measured across ark, hono, kysely and graphql-js: 0.
+   *
+   * If this goes red the gate stops being defence in depth and becomes
+   * load-bearing again, and `ties.ts`'s header says so.
+   */
+  it('no two Companion boards carry each other — one matrix cell, one question', () => {
+    const companion = atlas.challenges.filter((challenge) => challenge.verb === 'companion');
+    const keys = new Map(companion.map((challenge) => [challenge.subject, new Set(challenge.truth)]));
+    const mutual: string[] = [];
+    for (const challenge of companion) {
+      for (const member of challenge.truth) {
+        if (keys.get(member)?.has(challenge.subject) === true) {
+          mutual.push(`${challenge.subject} ↔ ${member}`);
+        }
+      }
+    }
+    expect(mutual, `mutual companion keys: ${mutual.join(', ')}`).toEqual([]);
+    // The apparatus, so a zero here is a measurement rather than an empty deck:
+    // members that *could* have carried the subject back, because they carry a
+    // board of their own at all.
+    const reachable = companion.flatMap((challenge) =>
+      challenge.truth.filter((member) => keys.has(member)),
+    );
+    expect(reachable.length).toBeGreaterThan(0);
+  });
+
   it('no shipped challenge can be passed by selecting everything', () => {
     for (const challenge of atlas.challenges) {
       expect(isGameable(challenge), `${challenge.id} is gameable`).toBe(false);

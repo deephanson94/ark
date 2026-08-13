@@ -194,6 +194,24 @@ export const placement: Verb = {
     if (challenge.evidence.kind === 'commit') yield widthFact(challenge.subject);
   },
   /**
+   * The members of this key, as the facts that would state them.
+   *
+   * **The same atoms `discloses` yields and deliberately not the same call.**
+   * That one also yields `widthFact`, which names a *size* and no member at
+   * all — reusing it would refuse a held-out board because some served reveal
+   * printed its file count, which gives away how big the answer is and not one
+   * of the answers. `CLAUDE.md`'s landmine about a class label standing in for
+   * a class description is this exact substitution, and the two functions
+   * agreeing on every other line is what would have made it look right.
+   *
+   * Not `null`: a commit-membership atom is precisely what the vocabulary was
+   * built to express, so a zero here is a measurement.
+   */
+  *keyFacts(challenge: Challenge) {
+    if (!isCommitId(challenge.subject)) return;
+    for (const member of challenge.truth) yield touchedFact(challenge.subject, member);
+  },
+  /**
    * **Which co-change seeds decide this board** — ADR-0022, and the only verb
    * that answers this at all.
    *

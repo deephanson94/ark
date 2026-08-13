@@ -3199,3 +3199,471 @@ One line per iteration: what changed, and what to do next.
   nobody noticed), the legend clips silently at 17 of 36 regions, **Placement is unreachable from
   the map** (25% of the deck, reachable only at the chronicle in walk mode), the guide serves the
   four lowest-difficulty boards first with no skip, and there is no help key. Then S1.
+
+- **The hold-out split ships, and its headline result is that it refuses nothing — which is two
+  different facts wearing one number.** `docs/experiments/0001` §9's first piece of harness:
+  `npm run holdout <repo> --out <dir>` cuts a built atlas into the atlas both arms play and the fixed
+  quiz they are scored on, and checks every removed key against the served deck's `discloses` output.
+  Measured at k=6 per verb across **all four** verbs, on full clones of named commits — ark
+  `75b6117`, `graphql/graphql-js` `9c245018`, `kysely-org/kysely` `f24018c7`, `honojs/hono`
+  `7075369e` — it refuses **0 on every repo** and the swap loop runs **once**.
+
+  **The two zeroes are not the same and the script refuses to print them the same way.** On Placement
+  and Archaeology the check *ran*: their keys are expressible as disclosed facts, and ADR-0019
+  decision 7 already excluded the overlap at generation time. **How much that proves is bounded by
+  deck coverage, and this paragraph's first draft overstated it** — a review of the measurement
+  caught it. On hono only **52 of 332 key atoms** across both decks sit where the cross-verb channel
+  could fire at all (a Placement board covers 54 of 500 retained commits, an Archaeology board 54 of
+  425 nodes), so decision 7 is confirmed on those 52 and a k=6 sample contains almost none of them.
+  The honest reading is *regression detection on decision 7*, not *the hold-out is safe*. On Blast Radius and Companion the
+  check is **blind**: their keys are relations between *files* and every fact in `disclosure.ts` is
+  keyed on a commit, so no accumulated fact can state one. Those two are §4.4's entire discriminating
+  tier, so **the check §9 specifies is structurally vacuous on exactly the items the experiment is
+  scored on** — the finding this session did not expect and the reason the split is not simply "done".
+
+  So `Verb.keyFacts` returns **`null`, never `[]`**, and the shell prints `unchecked` where it would
+  otherwise print `0 refused`. That is `CLAUDE.md`'s absence-assertion landmine met in the type
+  system rather than in a comment: both spellings render as *no leaks found*, and only one of them
+  means the instrument ran. It is a third direction and not `discloses` renamed — Placement's
+  `discloses` also yields a `widthFact`, which names a *size* and no member, so reusing it would
+  refuse a board because some reveal printed how big its answer is. A mutant that reuses it dies.
+
+  **The channel that can fire on those two verbs is mutual membership** — two boards of one verb
+  naming each other — stated structurally so it names no verb and therefore no relation: on Companion
+  it is the symmetric co-change pair, on Blast Radius the same shape is a **cycle**, which is
+  ADR-0034 §4's SCC finding arriving from the other side. It reads **1 on kysely**
+  (`src/dialect/dialect-adapter.ts` ⇄ `src/parser/expression-parser.ts`) and 0 on the other three. It
+  is **reported and not refused on**, and that is a judgement written down as one.
+
+  **And then the fan-out found the leak the hold-out *creates*, which is the finding of this
+  session.** ADR-0030's twin surface names a class *"only when no member still carries an unanswered
+  Blast Radius board"*, and `main.ts` asks that as `challengesById.get(id) ?? []`. A held-out board is
+  not *unanswered* — it is **absent** — so the bucket is empty, the guard passes **vacuously**, and
+  the inspector volunteers `cone(S) = cone(T)` for a subject the participant is about to be quizzed
+  on. With ADR-0008's invariant that is the key **byte-exact**: **4 of kysely's 6 held-out Blast
+  Radius boards recover at F1 1.000**, 19 of 19 under leave-one-out (25.3% of that deck), and 3 of
+  graphql-js's 6. The gate is real and the removal is what opens it — treating every blast board as
+  open closes 4 of 4.
+
+  The player is not wrong (a board that does not exist cannot be open), so the repair is in the thing
+  that made it not exist: `HoldoutBar` refuses to hold out a board whose subject shares a cone with
+  anything else. It fires **11 of ark's 40, 24 of graphql-js's 69, 26 of kysely's 75, 6 of hono's
+  54** — and no repo goes short of k=6. After it, **0 of 6 held-out Blast Radius subjects sit in a
+  twin class on any of the four**. `findTwins` is imported from `src/player/` rather than
+  reimplemented, because two definitions of *twin* is worse than the leak.
+
+  **A second bar, from the same fan-out: a board the map already answers is not a quiz item.**
+  Hovering a node paints its direct importers for everyone in every arm (ADR-0008 decision 1), and on
+  the easy end of the deck that is not a hint but the answer — mean F1 **0.890** below difficulty
+  0.50 against **0.095** above 0.80, ρ = −0.826, beating band A on **17 of hono's 54** boards. In the
+  quiz it decided **2 of 6** held-out boards on graphql-js and on hono and 1 of 6 on kysely, **best
+  F1 1.000** — an item answerable by pointing, spending one of six slots. Barred, using the product's
+  own bar (`CTRL_F_THRESHOLD`) and metric (`scoreSet`): now **0 of 6 on all four repos**, best 0.667
+  / 0.667 / 0.667 / 0.750. Ranking the quiz by descending difficulty would also have closed it and
+  was rejected — §6 names a floor and a ceiling as one instrument failure wearing two signs, so the
+  bar removes the compromised items and leaves the spread. Both bars together take **19 of ark's 40,
+  39 of graphql-js's 69, 31 of kysely's 75, 20 of hono's 54**, and no repo goes short of k=6.
+
+  **What was measured and deliberately *not* called a leak**: a served Blast Radius board about `D`
+  where `D` transitively imports `S` discloses `dependents(D) ⊆ dependents(S)`, covering part of the
+  key on **29 of ark's 40** boards. Exploiting it requires knowing `D` depends on `S` and reasoning
+  transitively, which is tier 3's construct in as many words — ADR-0019's rule is that an *implied
+  relation* is accepted where a *stated atom* is refused. Recorded so the next session does not
+  "fix" the thing being measured.
+
+  Every branch of the new machinery is dead on all four repos, so the apparatus is proved by a
+  **positive control** rather than by its own silence: `tests/unit/holdout.test.ts` hand-builds the
+  collision a generated atlas cannot contain and asserts the swap happens (2 rounds). Six mutants
+  die, including one that reddened nothing on its first draft because it mutated the map *builder*
+  instead of the matcher — a bad mutant looks exactly like a robust one.
+
+  **Next**: M2's instrumentation — nothing persists attempt counts, so the engagement half of S1
+  cannot be read off a finished session. Note that `selector.ts`'s `attempts` counts only boards that
+  did **not** pass, so it is not the datum §3 says it is even before persistence.
+
+- **M2's instrumentation, and the datum that did not exist.** `docs/experiments/0001` §3 pre-registers
+  engagement as *"challenges attempted within the fixed 20 minutes"* and said `noteAttempt` kept the
+  count in session state. It did not: `main.ts` increments that map **only when the grade did not
+  pass**, so `selector.attempts` counts **failures**, and persisting it would have answered
+  *"challenges attempted"* with a number that **falls as participants do better** — anti-correlated
+  with the quantity, on exactly the between-arm comparison §3 exists to make. Persistence was the
+  second problem. The class-label landmine in a schema: the name says attempts, the docstring says
+  failures, the experiment's prose says attempts.
+
+  **The first draft was refuted by three independent reviewers and the shipped shape is theirs**
+  (**[ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)**). It put
+  a tally in `Progress`, arguing that a write-only field is not the cursor ADR-0011 decision 2 forbids
+  because *"position in the progression is recomputed from the answered set on every load"*. That
+  promotes the ADR's **reason** to its operative test — decision 2 says *"neither is a cursor"* and
+  prints the record's schema as a literal, so any new key changes it. `selector.ts` had already
+  classified this exact datum the other way, in code, citing the same ADR. And the proposed proof —
+  *"delete the read path and nothing changes"* — is vacuous: it passes on every tree containing the
+  field, including one where the next session wires it in.
+
+  So: `src/player/tally.ts`, its own key beside the save, **written only when `?arm=` locked the
+  session**. The ordinary player stores nothing, which leaves ADR-0011 decision 2 untouched rather
+  than argued with. The field is `graded` and never `attempts`, and the shapes are deliberately
+  incompatible with `SelectorState.attempts` — a sorted array against a `ReadonlyMap` — so wiring it
+  into `suggestNext` is a rewrite, not a one-word edit. That is the enforcement a comment cannot give.
+  `passedOn` latches which attempt first passed, which is the figure that prices any rule spending a
+  player's first attempt.
+
+  **And a readout, because a record with no reader is not an instrument.** §9 offered *"a counter in
+  the save, or a facilitator's tally"* and missed the option that beats both: the count already
+  existed in memory and what M2 lacked was a way to get it out. `arkTally()` exists in an arm only and
+  is never shown to the participant, since showing someone their pre-registered measure changes it.
+
+  **Proved to fire in a browser, because a unit suite structurally cannot see shell wiring** — this
+  repo's scar is a mutant that deleted the guide's attempt-count seed and reddened no unit test at
+  all. `test:e2e` plays a board under `?arm=map`, asserts the reading moved, reloads, asserts it
+  survived; deleting the write reddens both. Writing that step also cost two rounds: `.guide-go` was a
+  selector I invented (it is `.guide-action`) and the guide takes you to a landmark rather than
+  opening a board — both invisible to `tsc` and both caught only by running it.
+
+  **One pre-existing e2e step went red and it was mine indirectly.** The world's walking check held
+  `w` for a fixed burst and asserted `surveyed` rose. Ark indexes itself, so adding two source files
+  re-rolled the layout and the hero's straight line met only already-surveyed buildings — green on
+  `origin/master`, red here, on a commit that changed nothing about walking. It now sweeps with a
+  deadline, which keeps a genuinely dead surveyor failing.
+
+  **Next**: `docs/experiments/0001` §9 is down to **twelve participants**, which is owner-only.
+  Then region arches in the world (ADR-0032 §9.6), then django's index budget (17.6–18.6 s against a
+  10 s ceiling, ~40% force-directed layout).
+
+- **A review sweep found two defects in the split, both in this session's own decisions rather than in
+  the code they describe.** `mutualMembership` printed **0 for Placement and Archaeology** — where a
+  subject is a commit and its members are nodes, so the lookup misses **by construction** and the zero
+  says nothing about the repo. That is the two-zeroes rule this module's docstring is mostly about,
+  broken in the channel it added second, by the author of the paragraph forbidding it. It returns
+  `null` now and the report prints `n/a`. And `shortfall = k − held` never fired at `k === eligible`,
+  so `-k 40` on a 40-board verb removed **every** board of that kind, reported 0 short, and exited 0 —
+  handing participants an atlas whose guide says *"every question answered"* over a deck that was
+  taken from them (`empty.ts` forks a zero on two causes and a hold-out is a third). It exits 2 now.
+  Neither was reachable by mutating a line; the sweep is a different instrument from the mutation run.
+
+  **ADR-0016's wire gate has the same absent-versus-unanswered shape as the twin gate, and it was
+  measured rather than assumed.** `openBoards` is built from *unanswered* Companion challenges, so a
+  held-out board suppresses nothing. The leak reduces to mutual membership and is **0 atoms on all
+  four repos**, because a wire needs a served board naming the held subject *and* that board's subject
+  to be a candidate on the held one — which ADR-0014's certification turns back into mutual
+  membership. Apparatus, since it is another zero: **172 / 329 / 348 / 194** wires drawn, 1–2 of 6
+  held subjects carrying an incident wire, and 6 of 6 boards' candidates present in the wire graph.
+
+- **The sweep also found a hazard in the instrumentation's own wiring, and an over-claim this session
+  had just written.** `main.ts` tested `locked` **twice** — once to update the tally, once to write it
+  — and the two drifting apart is not cosmetic: `tally` is `EMPTY_TALLY` in an unlocked session, so a
+  write escaping the guard puts `{"entries":[]}` over a finished arm's record and **erases a
+  participant's data**. One guard now. Its `store.getItem` was also the player's only unguarded one,
+  where `save.ts` wraps the identical call because reading storage throws outright in some sandboxed
+  frames.
+
+  And §9 briefly said *"both pieces of harness are built"* while **§5's pre-registered "time to first
+  correct answer" had no clock behind it** — a document claiming a behaviour the code does not have,
+  which is this repo's most-repeated defect, committed by the session writing the note about it. Named
+  now, with the two other gaps beside it: a board opened and abandoned is not an attempt (and the arms
+  differ in what it costs to reach one), and the record does not reset between a dry run and the
+  participant who follows it.
+
+- **The completeness critic found a third channel, on the quiz's other verb, and it beat band A on one
+  of the two experiment repos.** A served **Placement** reveal names the files a commit touched, so
+  any two of them are co-commit partners — and *"changed in the same commit"* is the relation
+  **Companion** grades, reached without the co-change matrix at all. Reproduced independently on all
+  four repos: it beats band A on **1 of 6** held-out Companion boards on ark (best F1 0.800) and **1
+  of 6 on kysely (best 0.909)**, and does not fire on graphql-js (0.500) or hono (0.286). Barred, it
+  is **0 of 6 on all four**, best ≤ 0.500, costing 2 / 2 / 5 / 1 boards and no repo its k=6 — with the
+  apparatus still live afterwards (722–866 co-commit pairs, 1–3 boards holding an atom).
+
+  **This is what the `unchecked` cell was hiding.** `placement.discloses` declares those atoms
+  honestly and the accumulator holds them; they name a **commit** while a Companion key relates
+  **files**, so `keyFacts` cannot connect the two. Decision 1's blindness was not merely a missing
+  string — it was covering a channel that fires on half the measured repos.
+
+  **And a third kind of zero, named because two were not enough.** `mutual 0` against Companion is
+  structural on *every* repo: `companion/generate.ts`'s `claimed` set is keyed on an **unordered**
+  pair, so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide and mutual Companion membership is
+  unrepresentable. The channel is live only on Blast Radius, where the shape is an import cycle.
+  Which also makes **`src/player/ties.ts`'s header stale**: it records that leak at *"up to 6 of 6 on
+  this repo, measured"*, a figure taken before the `claimed` set existed — same verb, same repo, two
+  documents disagreeing, and the old number came from the pre-dedupe generator.
+
+- **django's index budget: 5.73 → 5.25 ms/file, byte-identically, and the ceiling turns out to be a
+  rate.** (**[ADR-0038](./docs/decisions/0038-the-index-budget-is-a-rate-the-layout-may-not-move-to-meet-it-and-the-sort-was-the-cost.md)**,
+  on a full clone of `c9eb16a87e` — 3,035 nodes, 10,167 edges, reproducing ADR-0028's figures.)
+
+  **The headline was the wrong number to lead with.** `README.md` said *"17.6–18.6 s against a 10 s
+  ceiling"*, which reads as a 76% breach; `CLAUDE.md` writes that ceiling **at 2,000 files** and
+  django has 3,035, so the honest measure is the hard `ms/file` row `scripts/budget.ts` already
+  enforces. The rate was in the same paragraph, two sentences down. It is 15.9 s and **5% over**, from
+  17.4 s and 15%.
+
+  **And the prescription was wrong.** *"Fixing it is a `layout.ts` change"* — the layout is 35.4% of
+  the index and **98% of it is one loop**, whose 3×3 grid neighbourhood holds **937 nodes** at
+  django's shape (853M pair tests, growing superlinearly: 0.41 ms/node at 190 nodes against 2.78 at
+  3,035). `layout.ts`'s claim that a uniform grid *"keeps this linear in practice"* is corrected in
+  place. But **the obvious fix is forbidden**: a finer grid changes the order contributions are summed
+  in, floating-point addition is not associative, and NORTH-STAR §7 freezes the layout. A speedup that
+  moves a coordinate is a *re-layout*, which is an owner-level amendment to the north star.
+
+  So: constant-factor only, with **byte-identity as the acceptance test** rather than a benchmark. A
+  conservative squared-distance pre-filter (59.4% of pair tests are beyond the cutoff and every one
+  paid a `Math.sqrt`; the padded bound means anything it rejects would certainly have failed the exact
+  test, which still runs on every survivor), accumulation into locals, and an indexed inner loop —
+  **8.4 s → 6.4 s**. Plus a concurrent prefetch in the walk, which was doing ~6,000 sequential
+  `stat`/`readFile` round trips: idle **3.57 s → 2.85 s**, smaller than hoped and said so. The
+  prefetch fires for every file (190 / 425 / 3,035) and its fall-back fires **0** times.
+
+  **Byte-identical on five repositories** — django, ark, hono, kysely, graphql-js — compared with
+  `cmp` over the same trees. **Nothing checked that before**: eleven layout tests asserted *properties*
+  and not one pinned a value, so an optimisation moving every node by a hundredth passed them all. The
+  freeze NORTH-STAR §7 describes was a promise nothing tested. There is a **golden layout** now, on
+  both branches, and two mutants die on it — the tempting `squared > cutoff * cutoff` and a reordered
+  accumulation.
+
+  **Next**: the remaining ~1.5 s is not the layout. `placement/distractors.ts` is **1.43 s (8.9%)** and
+  is roughly the size of the gap — and it already avoids the per-subject tokenisation landmine, so
+  whatever it is doing wants measuring before it wants changing. The one layout lever left is
+  parallelism across nodes, which preserves each node's accumulation order and therefore byte-identity;
+  it wants its own decision rather than a paragraph in this one.
+
+- **And the budget breach is closed: 4.44 ms/file against a 5.00 ceiling, byte-identically.** The
+  entry above stopped at 5.25 and named `placement/distractors.ts` as the next lever. It was, and the
+  first attempt at it is the finding worth keeping.
+
+  `treeSibling` is **75.7%** of that file, and it scores `max` over the changed files of the shared
+  directory prefix by widening outward per anchor — `anchors × candidates`, **1.73M steps** on django.
+  So a prefix trie, giving the same maximum in `candidates × depth`. Built, verified byte-identical on
+  five repositories, and it left the strategy at **1,138 ms against 1,094**. **The scan was never the
+  cost**; the rewrite is reverted and lives only in ADR-0038.
+
+  The cost is the line after it. `[...scored.keys()].sort(…).slice(0, limit)` orders **1,136,093
+  candidates across django's deck** to keep 19 apiece — **792 ms**, 5% of the whole index, spent
+  ordering candidates nobody looks at. `src/verbs/rank.ts`'s `topBy` keeps a bounded shortlist and is
+  *exactly* sort-then-slice under a total order, which every caller has because each comparator ends
+  on a unique node id. `nameSimilar` and `structural` share the pattern and were **not** converted —
+  they were not measured hot, and converting an unmeasured caller is how the trie happened.
+
+  Two smaller proven wins in the same file: `sharedPrefix(segments, …)` inside the widening walk **is
+  always `depth`** (asserted over every pair on three repos — **0 mismatches in 1,971,833**), and the
+  bucket walk is not worth restructuring (visits are **1.08×** unique refs).
+
+  Measured with **interleaved** rounds through `scripts/budget.ts` after a discarded warm-up, because
+  a batched before/after reads this container's ±25% drift as a result — an un-interleaved run of the
+  same code produced 23.1 s and 26.5 s first-of-batch outliers. Three rounds, `topBy` ahead in all
+  three: **16.01 s → 14.54 s → 13.48 s** across master, layout+walk, and this.
+
+  **Two mutants of `topBy` survive its test file and both are equivalent** under the documented
+  total-order precondition — recorded in the test rather than chased, since killing them would pin
+  behaviour the module refuses to promise.
+
+  **Next**: `docs/experiments/0001` needs twelve participants (owner-only). Then region arches in the
+  world (ADR-0032 §9.6). The layout's remaining lever is parallelism across nodes, which preserves each
+  node's accumulation order and therefore byte-identity; it wants its own decision.
+
+- **A comment claiming an open leak that had been closed, and a gate measured for what it still does.**
+  `src/player/ties.ts`'s header recorded mutual Companion carrying at *"up to 6 of 6 on this repo,
+  measured"* and prescribed the fix: *"generator-side work — window mutual members the way ADR-0012
+  re-asks colliding subjects"*. **That fix shipped**, as `companion/generate.ts`'s `claimed` set of
+  unordered pairs, citing the same measurement — so `T ∈ truth(S) ⟹ S ∉ truth(T)` deck-wide, and the
+  value is now **0 on ark, hono, kysely and graphql-js**. The header described a defect the product no
+  longer has, which is this repo's most-repeated class of error pointed at its own comment.
+
+  **So what is ADR-0016's endpoint gate still for?** Measured across those four repos by replaying the
+  Companion deck in served order: it **fires 16 / 28 / 26 / 43 times**, and **0** of those withheld
+  wires could have disclosed anything — not a member of the open board's key, not even a candidate on
+  it. Two independent generator invariants rule it out: `claimed`, and a candidate pool that excludes
+  *every* file the matrix pairs with the subject.
+
+  **Kept rather than deleted, and the judgement is written down.** The precedent for deleting it is
+  `selector.ts`'s `sameTruth`, removed once `dedupe()` made it unreachable — but that flag could no
+  longer *fire*, and this one fires and is merely ineffective, so removing it changes what is on
+  screen and is a pillar-3 call rather than a cleanup. It is defence in depth for an invariant two
+  files away. What was missing is a check: the `claimed` invariant was pinned only by a hand-built
+  two-board fixture, so `tests/atlas/atlas.test.ts` now asserts it on the **generated deck**, with an
+  apparatus assertion so a zero is a measurement rather than an empty deck. Disabling `claimed`
+  produces **22 mutual pairs** on this repo and the test goes red.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), then region
+  arches in the world (ADR-0032 §9.6), then the layout's remaining lever, parallelism across nodes.
+
+- **Close-out: the documents this session's claims live in, brought into line.** `CLAUDE.md`'s Next
+  action still sent a session to build both halves of experiment 0001's harness and to fix django's
+  index budget as *"a `layout.ts` change"*; all three are done and the last of them was the wrong
+  prescription. Its own rule is that the Next line and `README.md`'s move together — *"two places, one
+  fact"* — so both now say the same thing: **twelve participants**, then region arches, then the
+  layout's parallelism lever. The document map said **31 ADRs** against 38 on disk, which is the
+  measured-constant drift this file has a landmine about, sitting in the table that points at the
+  landmines. Link integrity checked across every ADR reference in `README.md`, `CHANGELOG.md`,
+  `docs/experiments/` and `docs/decisions/`: none broken.
+
+- **The deck's slots go to the landmarks now, and `retain` has tests for the first time**
+  ([ADR-0039](./docs/decisions/0039-a-capped-deck-spends-each-band-on-its-most-load-bearing-subject.md)).
+  Every verb builds every board it can and then caps at `max(40, ⌈n/8⌉)`, and **the cap bites on
+  every repo measured** — hono `7075369e` builds 149 Blast Radius boards and ships 54, kysely
+  `f24018c7` builds 279 and ships 75. Which 54 was decided by where a subject happened to land in a
+  difficulty sort, and what that discarded was the thing a player clicks first: **6 of hono's 15
+  most-imported files carried any board at all, and 7 of kysely's**. `src/context.ts` (76 importers),
+  `src/hono.ts` (72), `src/router.ts` (32) and kysely's `src/util/object-utils.ts` (**183**) had
+  none. A cold playtester had already found it from the other end — *"the map begs you to click
+  landmarks and the landmarks are mute"* — and the cause was 20 lines of arithmetic between the
+  generator and the atlas that **had no tests of any kind**.
+
+  `retain` now partitions the difficulty-sorted list into contiguous bands and spends each band on
+  its most **load-bearing** member. `importance` is the caller's — `elevation` for the three verbs
+  whose subject is a file (ADR-0013, which is *also* the map's vertical channel, so the deck agrees
+  with the picture the player is looking at) and a flat function for Placement, whose subject is a
+  commit and has no elevation. There is no default, because a silent `() => 0` would read as a
+  decision somebody took. Measured on clean clones: **6 → 12 of hono's fifteen, 7 → 9 of kysely's**,
+  top elevation decile with a Blast Radius board **6/22 → 10/22** and **5/34 → 15/34**, deck sizes
+  unchanged at 216 and 300, and every difficulty quantile unchanged to two decimals except the
+  maximum, which drops 1.000 → 0.890 and 1.000 → 0.950 as the top band trades its hardest board for
+  its most-depended-upon one. That trade is the decision.
+
+  **The interesting failure was mine and it was in the sentence I was proudest of.** The docstring
+  claimed flat importance reproduces the previous deck *exactly* — the property that makes this a
+  generalisation rather than a replacement, and the only cheap check that the range-preserving half
+  survived. It was false. Anchors are `(L−1)/(max−1)` apart and evenly-spaced bands are `L/max`
+  wide, so with `L > max` the anchors drift **forward** of their bands, by `(L−max)/max` bands over
+  the list; on hono's 183 Placement entries in 54 bands that is 2.4 bands, so band 52's anchor sits
+  inside band 53 and my clamp dragged it back. **Placement — a verb with constant importance — moved
+  on 3 of hono's boards and 7 of kysely's.** The fix is to build the bands *around* the anchors
+  rather than clamping anchors into independently-chosen bands. Both hand-written examples in the new
+  test file passed while it was wrong; what caught it was diffing the real atlas, and what pins it is
+  a sweep over 49 `(L, max)` shapes against the old rule transcribed verbatim. Mutating back to
+  clamped bands fails **exactly that one assertion of nine**. (Two things about the old code, while
+  it is still legible: its collision padding was **unreachable**, and its index sequence was never
+  one-per-band under any even partition.)
+
+  **The rejected alternative was measured, and it wins the metric this change is about.** Sorting by
+  importance and taking the top `max` gets **14 of hono's 15** and **22 of 22** of the top decile —
+  better than what shipped — and raises the Blast Radius floor from **0.030 to 0.550** and p25 from
+  0.080 to 0.710. A repo's hubs are hard questions, so that deck has no easy end: the first board a
+  new player sees is a mid-difficulty transitive-closure question about the most connected file in
+  the repository. A mute landmark is a disappointment; an unanswerable first question is a stopping
+  point. Nine tests, four mutants killed, byte-identical determinism, budget within ceiling, e2e
+  clean, `test:pack` ok.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), then region
+  arches in the world (ADR-0032 §9.6). Newly on the list and *not* done here: the deck contains no
+  tier 1 or tier 2 content at all (NORTH-STAR §5 says tiers 1–3 ship first), and the cap's *size*
+  — as opposed to how it is spent — has never been measured against anything.
+
+- **A progression ascends through each verb's own range, and the obvious fix for the opening is
+  refuted** ([ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md)).
+  The guide's opening was trivia, and on both of `docs/experiments/0001`'s matched repos: a
+  pass-everything player's **first fifteen boards were all Blast Radius** at difficulty 0.03–0.10 on
+  hono and 0.03–0.28 on graphql-js. Hono's first six held **`src/middleware/jwk/keys.test.json`** — a
+  JSON fixture — and two benchmark scripts; seven of graphql-js's first **ten** are
+  `src/__testUtils__/*`. (A first draft of this sentence attached all of that to graphql-js, which
+  put ten files in six boards and gave one repo another's opening.) The second verb first appeared at
+  board **25 / 19 / 9 / 17** (hono / graphql-js / kysely / ark), so a first session never reached the
+  git-graded half of the product, which is M4's entire thesis.
+
+  The cause is a category error rather than a design choice: §8.4 computes `difficulty` from each
+  verb's own inputs, and the scales do not overlap — Blast Radius spans 0.03–0.94 on hono where
+  Companion spans 0.49–0.91 — so a rank comparing the raw numbers serves *every* Blast Radius board
+  below 0.49 first. `progress`, a band within the verb's own range, now sits between `tier` and
+  `difficulty`. Second verb at **7 / 8 / 7 / 5**, and the first fifteen boards' mean subject elevation
+  rises on three repos of four, crossing from below the deck's mean to above it on two — hono
+  1.87 → 3.20 against a deck mean of 3.14, kysely 4.53 → 4.67 against 4.55. graphql-js rises furthest
+  (2.80 → 4.40) and is still below its 4.50; ark's opening was already above its deck mean and falls.
+  No atlas change and no reindex: the band is derived from the deck the player already has.
+
+  **The proposal that was on the table is refused, on a measurement.** Adding a "prefer a
+  load-bearing subject" term above difficulty reads as the obvious fix and is very nearly difficulty
+  wearing another name: scoring subjects by non-leaf dependent count — which separates
+  `__testUtils__/dedent.ts` (22 direct importers, **0** non-leaf) from `GraphQLError.ts` (**112**) —
+  Spearman ρ against Blast Radius difficulty is **0.961 / 0.842 / 0.378 / 0.836**, because `breadth`
+  is a term in both. Ranked that way the measured opening is d **0.71–0.91** on graphql-js: a deck
+  with no easy end, which is ADR-0039's rejected alternative one layer up. The same table carries the
+  fix — Companion's correlation runs the *other* way (**−0.30 / −0.24 / −0.65 / −0.06**) and its
+  easiest boards are `GraphQLError.ts`, `insert-query-node.ts` and `http-status.ts`. **Easy questions
+  about landmarks already existed in every deck; they were unreachable.**
+
+  Two things were learned by breaking them. `progress` must be a **band** and not a position — a
+  position totally orders each verb's deck, which made everything below it unreachable and silently
+  killed the `overlap` term ADR-0011's second amendment had measured into place; two existing unit
+  tests caught it and the tests were right. And it must band **over ties, not over the sorted index**,
+  or two equally-hard questions are separated by the byte order of their ids. `PROGRESS_BANDS = 10` is
+  swept rather than chosen: 4 is too coarse to interleave (second verb at 15), 20 and 60 buy no
+  further interleave and cut the `overlap` term's reach from 18 of 216 to 14. Measured after the
+  change, overlap still decides 18 of hono's 216 served positions (was 24) and 32 of ark's 160 at
+  `c35e38a` (was 43) — down about a quarter and not starved, which is the number this change was most
+  at risk of getting wrong.
+
+  Three new tests, each killed by a mutant; the third mutant **survived the test named for it** on
+  the first draft, because that test asserted ascending difficulty over one verb, which is true either
+  way. Rewritten with a two-board verb whose hardest member re-enters band 0 under the mutant. 850
+  unit, 112 atlas, byte-identical determinism, e2e clean.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), but read
+  ADR-0040 §6 first: **the deck still has no tier 1 or tier 2 content at all**, Blast Radius's easy
+  end is its peripheral end by construction, and about half the opening is still fixtures and
+  benchmarks. Ranking the band above `tier` puts all four verbs inside the first twelve boards on
+  every repo and is measured — it is an owner's call about what the curriculum is.
+
+- **A Fable review of PR #52 raised 19 findings; every one reproduced.** Six lenses over the branch
+  diff — `retain`'s arithmetic, the selector's band, prose-against-numbers, disclosure, whether the
+  new tests are real, and the residue. Ten of the nineteen were **a sentence contradicting a number
+  in the same document**, which is the failure this project's landmine list names first and which no
+  suite can see.
+
+  **Two of the tests shipped in this PR were decoration, and the review proved it by mutation.** The
+  fixture for *"spends each band on its most important entry"* placed every weighted entry within one
+  index of its band's anchor, so a mutant scanning only `[anchor − 1, anchor + 1]` passed it, both
+  tiebreak tests, the shape sweep and all 850 unit tests — while swapping **15 of hono's 54 Companion
+  boards** and dropping their mean subject elevation from 4.7 to 1.9, which is ADR-0039's own defect
+  reinstated with nothing red. And the whole file constrains the band geometry **only under flat
+  importance**, so a rival construction (evenly-spaced bands via `Math.round` with the anchor clamped
+  in) has zero diffs over all 49 sweep shapes and ships a different deck whenever importance is not
+  flat — the configuration three of the four verbs run in. Both are fixed: the fixture's weights now
+  sit 2–3 indices from their anchors, and a new property pins the geometry directly — with importance
+  a single spike at index `k`, the result must be the anchors with **the anchor nearest `k`**
+  replaced by `k`, which is what midpoint-split bands mean and is false of every other partition.
+  Both rivals now die.
+
+  **`the selector never imports the tally` was the assertion `tally.test.ts` calls "the one that
+  matters", and it greps one file.** `SelectorState` is built in `main.ts`, so the cursor ADR-0011
+  decision 2 forbids can be wired in without touching `selector.ts`: five lines that read
+  `parseTally(storedTally())` into a map and hand it over as `attempts` — the **outermost** key of
+  the rank, so a count stored by a previous session would decide which board a restored one opens
+  with. The reviewer applied exactly that mutant and all 850 tests stayed green, because no test
+  imports `player/main.ts` at all. Two source-structure assertions now cover the shell — the state
+  starts at `NO_HISTORY`, and every later `attempts` is derived from the previous `selector.attempts`
+  — and they are labelled as source assertions rather than dressed as behavioural ones. The mutant
+  dies.
+
+  **One live fragility in the code**: `withinVerbRank` grouped ties by float `===`, which is sound
+  only because every generator routes difficulty through `round2` — an invariant `validateAtlas` does
+  not state or enforce (it checks finite and 0..1). A verb emitting `0.1 + 0.2` beside boards at `0.3`
+  would render two identical `0.30`s into different bands and make every term below `progress`
+  unreachable between them. It now groups on `round2`, which removes the dependency instead of
+  documenting it — **served order byte-identical on all four repos**, since nothing violates the
+  invariant today. The `Math.min` clamp in the same loop was **dead** (`at ≤ len − 1` bounds the band
+  at `PROGRESS_BANDS − 1` on its own) and its comment described an impossible case; it is gone.
+
+  **The prose corrections, because they are the point.** ADR-0039 claimed *"every other quantile is
+  unchanged to two decimal places"* — three more moved, and the data was in the run it was written
+  from; it named two mute hono landmarks and five kysely ones where its own table forces three and
+  six, hiding `src/utils/types.ts` (16 importers) from the record that exists to list them.
+  ADR-0040 gave hono's Companion range as 0.49–**0.96** in `selector.ts`'s load-bearing comment and
+  in the CHANGELOG — it is 0.49–**0.91**, and 0.96 was kysely's number under hono's name; it put
+  Archaeology and Placement's first appearance at 68–150 and 116–221, which are the **bands=20/60**
+  sweep rows rather than the shipped configuration (70–150 and 119–221); it said the first-15
+  elevation *"moves from below the deck's mean to at or above it on three repos of four"*, true of
+  two (ark's opening was already above and **falls**; graphql-js rises furthest and is still below);
+  it said *"twenty and sixty buy no further interleave"* four lines under a table whose ark column
+  shows sixty moving the second verb from board 5 to 2; it called `withinVerbRank` a once-per-grade
+  cost when `main.ts` calls it per dirty frame in world mode (measured 0.219 ms on django's 358-board
+  deck, ~13 ms per 60 frames — inside budget, but not what was written); and the CHANGELOG merged two
+  repos' openings into one clause that put ten files in six boards.
+
+  **The worst of them is the one that reached a decision.** ADR-0040 §6 priced the owner-level
+  alternative — rank the band above `tier` — as *"all four verbs inside the first twelve boards on
+  every repo, three each"*. Measured with the **shipped banding**, hono gets three verbs and no
+  Placement, graphql-js and kysely get two apiece; only ark gets four. The figure came from the
+  scratch probe that ranked on a bare **position**, which §4 of the same document rejects as broken —
+  a measurement of a mechanism the document does not propose, quoted to inform a decision. That is
+  the counterfactual landmine, in the one paragraph written for someone else to act on.
+
+  **Next**: unchanged — twelve participants for `docs/experiments/0001` (owner-only), then region
+  arches. The tier-1/tier-2 gap stands, and §6's real price for the tier swap is now in the record.

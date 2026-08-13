@@ -61,7 +61,7 @@ import type { Atlas, Challenge, NodeRef } from '../../atlas/index.js';
 import { buildGraph, byteCompare, nodeAt } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
-import { retain, truthCap } from '../sample.js';
+import { elevationOf, retain, truthCap } from '../sample.js';
 import { encodeWitness } from '../../atlas/witness.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { HISTORY_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
@@ -378,7 +378,9 @@ export function generateWithReport(
   }
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
-  const kept = retain(distinct, limit);
+  // Elevation: same rule as the other file-subject verbs, so a landmark that
+  // has no import question can still have a history one.
+  const kept = retain(distinct, limit, (entry) => elevationOf(entry, graph));
   for (let i = kept.length; i < distinct.length; i++) note('capped');
 
   const totals = new Map<StrategyId, number>();

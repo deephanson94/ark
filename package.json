@@ -23,6 +23,7 @@
     "build": "tsc --noEmit && tsc -p tsconfig.player.json --noEmit && npm run index:player && vite build && npm run build:cli",
     "build:cli": "tsc -p tsconfig.cli.json",
     "prepack": "npm run build",
+    "holdout": "tsx scripts/holdout.ts",
     "test:pack": "tsx scripts/pack-check.ts",
     "budget": "tsx scripts/budget.ts",
     "test": "vitest run",

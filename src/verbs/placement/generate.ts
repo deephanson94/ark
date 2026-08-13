@@ -321,7 +321,17 @@ export function generateWithReport(
   }
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
-  const kept = retain(distinct, limit);
+  // **Flat, and that is the honest answer rather than an oversight.** This
+  // verb's subject is a *commit*, which has no elevation and no place on the
+  // map — there is no landmark here to be mute. Every entry scores 0, so each
+  // band falls through to its **anchor** — the index the pre-ADR-0039 rule would
+  // have taken — and this verb's deck is byte-identical to what it always was,
+  // verified on hono, kysely and graphql-js. Not to the challenge id: an earlier
+  // version of this comment said id, which names the one fallthrough that would
+  // *not* reproduce the old deck (`sample.ts` records that dropping the anchor
+  // discards the ends of the difficulty range), so the sentence contradicted the
+  // identity it was claiming.
+  const kept = retain(distinct, limit, () => 0);
   for (let i = kept.length; i < distinct.length; i++) note('capped');
 
   const totals = new Map<StrategyId, number>();

@@ -223,6 +223,29 @@ export const archaeology: Verb = {
    * those — the mirror of why `directory` is not in its gate set. ADR-0022.
    */
   decidedBy: decidedByNothing,
+  /**
+   * The commits in this key, as the facts that would state them.
+   *
+   * Byte-identical to `discloses` here, and the duplication is the honest
+   * shape rather than an oversight: this verb's reveal happens to state exactly
+   * its own key, so the two questions have one answer *on this verb*. Placement
+   * is the counter-example one file over — same relation, and its `discloses`
+   * carries a `widthFact` that belongs to neither key — so collapsing them into
+   * one call would be right here and wrong there, which is the way a seam
+   * usually breaks.
+   *
+   * This is the direction that actually fires: ADR-0019 measured a served
+   * Placement reveal stating **55.6% of this repo's Archaeology key members**,
+   * so a hold-out that ignored it would ship quiz items whose answers are
+   * printed in the deck the participant plays.
+   */
+  *keyFacts(challenge: Challenge) {
+    if (!isNodeId(challenge.subject)) return;
+    const subject: NodeId = challenge.subject;
+    for (const member of challenge.truth) {
+      if (isCommitId(member)) yield touchedFact(member, subject);
+    }
+  },
 };
 
 export type { GenerationReport, GenerationResult, SkipReason } from './generate.js';

@@ -145,6 +145,28 @@ export function disclosesNothing(): readonly DisclosedFact[] {
 }
 
 /**
+ * **No fact in this vocabulary can state an atom of this verb's answer key.**
+ *
+ * Not "nothing is disclosed" — *nothing is expressible*. Every constructor above
+ * is keyed on a `CommitId`, so a key whose members are files related to a file
+ * (an import cone, a co-change pair) has no representation here at all, and a
+ * hold-out check over such a board is structurally blind rather than clean.
+ *
+ * The distinction is the whole reason `keyFacts` returns `null` instead of `[]`.
+ * Both would print `0 disclosed`; only one of them means the instrument ran.
+ * `CLAUDE.md`: *"a test that asserts an absence passes whether or not the rule
+ * exists"* — and the direction of that error is the one that gets believed,
+ * because a clean bill is what a session hopes to see.
+ *
+ * If a later verb's answer key ever becomes expressible — a fact over a
+ * (file, file) relation, say — this is the call that changes, in one verb, and
+ * the check starts firing without the harness learning a verb's name.
+ */
+export function keyNotExpressible(): null {
+  return null;
+}
+
+/**
  * Nothing would decide this board that another verb could say.
  *
  * Required rather than optional for `discloses`'s reason exactly: an optional

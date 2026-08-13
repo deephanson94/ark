@@ -46,15 +46,42 @@
  * *identities*, and ADR-0011 decision 3 is precisely the rule that a count may
  * be shown while the names must be earned.
  *
- * ## What this does not fix, stated rather than hidden
+ * ## The leak this used to name as open is closed, and it was closed upstream
  *
- * Two partners can each carry the other in their answer key, so answering P
- * discloses a member of Q's key — up to **6 of 6** on this repo, measured. That
- * leak is real, it is committed by the *reveal panel*, and it is a property of
- * how the deck is generated (ADR-0012 dedupes identical keys, not overlapping
- * ones). The endpoint gate below keeps it off the map; it cannot take it out of
- * the panel. Fixing it is generator-side work — window mutual members the way
- * ADR-0012 re-asks colliding subjects — and ADR-0016 records it as open.
+ * This paragraph used to read: *"Two partners can each carry the other in their
+ * answer key, so answering P discloses a member of Q's key — **up to 6 of 6 on
+ * this repo, measured** … Fixing it is generator-side work — window mutual
+ * members the way ADR-0012 re-asks colliding subjects — and ADR-0016 records it
+ * as open."*
+ *
+ * **That fix shipped.** `companion/generate.ts` keeps a `claimed` set of
+ * *unordered* pairs — "one matrix cell, one question" — which is ADR-0012's rule
+ * applied one level down, to the fact rather than to the key, and it cites the
+ * same measurement this paragraph did. So `T ∈ truth(S) ⟹ S ∉ truth(T)`,
+ * deck-wide, on any repo. Re-measured on the shipped decks: **0 mutual key
+ * members on ark, hono, kysely and graphql-js**, where the figure above says 6
+ * of 6. The old sentence was true when written and describes a defect the
+ * product no longer has.
+ *
+ * ## What that leaves the endpoint gate doing, measured
+ *
+ * The gate below still **fires** — 16 / 28 / 26 / 43 suppressions across those
+ * four repos while a partner's board is open — and on none of them could the
+ * withheld wire have disclosed anything. Two generator invariants each rule it
+ * out independently: `claimed` means the partner's key cannot contain this
+ * subject, and the candidate pool excludes *every* file the matrix pairs with
+ * the subject, so it cannot even be on the partner's board to be narrowed
+ * toward. Measured: **0 wires naming a key member, 0 naming a candidate**, on
+ * all four.
+ *
+ * It is kept rather than deleted, and that is a judgement worth stating. The
+ * precedent for deleting it is `selector.ts`'s `sameTruth` flag, removed when
+ * `dedupe()` made it unreachable — but that flag could no longer *fire*, and
+ * this one fires and is merely ineffective, so removing it changes what is on
+ * screen. It is defence in depth for an invariant two files away: relax
+ * `claimed`, or let a matrix partner into the pool, and it is load-bearing again
+ * the same day. `tests/atlas/atlas.test.ts` now pins the first of those on the
+ * real deck rather than on a fixture, so the day it stops holding is a red test.
  */
 
 import type { Atlas, Challenge, NodeRef } from '../atlas/index.js';
