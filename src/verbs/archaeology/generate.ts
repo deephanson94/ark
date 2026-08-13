@@ -68,7 +68,7 @@ import type { Atlas, Challenge, NodeRef } from '../../atlas/index.js';
 import { buildGraph, byteCompare, commitIdFor, nodeAt } from '../../atlas/index.js';
 import type { GenerateOptions } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
-import { retain, spread, truthCap } from '../sample.js';
+import { elevationOf, retain, spread, truthCap } from '../sample.js';
 import { encodeWitness } from '../../atlas/witness.js';
 import { difficultyOf, surpriseOf } from '../difficulty.js';
 import { COMMIT_TRACE_HEURISTICS, gradeCommitHeuristics } from '../gate.js';
@@ -424,7 +424,10 @@ export function generateWithReport(
   }
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
-  const kept = retain(distinct, limit);
+  // Elevation: this verb's subject is a file, and the map draws that file's
+  // height from the same number. A cap that ignored it left hono's three most
+  // imported files without a board of any verb.
+  const kept = retain(distinct, limit, (entry) => elevationOf(entry, graph));
   for (let i = kept.length; i < distinct.length; i++) note('capped');
 
   const totals = new Map<StrategyId, number>();

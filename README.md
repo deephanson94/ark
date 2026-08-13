@@ -153,6 +153,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Git history, co-change, rename lineage | ✅ | Locale-pinned, capped by policy, every cap that bites is reported. |
 | Deterministic layout + regions + elevation | ✅ | Byte-identical atlas across three platforms, checked in CI. |
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
+| Which subjects a capped deck is spent on | ✅ | The cap bites on every repo measured, so `retain` decides more about a deck than any strategy — and it shipped for two milestones **with no tests**. It now bands the difficulty-sorted list and spends each band on its most **load-bearing** subject (`elevation`, ADR-0013 — which is also the map's vertical channel, so the deck agrees with the picture). Measured on clean clones, the 15 most-imported files carrying any board go **6 → 12 on hono `7075369e` and 7 → 9 on kysely `f24018c7`**, deck sizes unchanged; `src/context.ts` (76 importers), `src/hono.ts` (72) and `src/util/object-utils.ts` (183) had none. Flat importance reproduces the old deck **byte-identically**, which is checked on both repos and over 49 shapes — the first implementation claimed that identity in a comment and moved 3 and 7 Placement boards ([ADR-0039](./docs/decisions/0039-a-capped-deck-spends-each-band-on-its-most-load-bearing-subject.md)). |
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. Its one *accepted* exposure is now closed rather than held under the bar — the structure-blind subtree hint is withheld, since a margin of 0.011 on a self-indexing repo lasted three milestones. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
@@ -179,6 +180,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
   cycles today; this is a standing constraint on anything that would.
 
+- **Some landmarks are still mute, and the cap is why.** ADR-0039 changed *which* subjects a capped
+  deck spends itself on; it did not raise the cap. On hono `7075369e` three of the fifteen
+  most-imported files still carry no board — `benchmarks/routers/src/tool.mts` (23 importers),
+  `src/http-exception.ts` (20), `src/utils/types.ts` (16) — and six of kysely `f24018c7`'s. Each
+  loses its band to something taller or is refused by guardrail 4. The measured alternative is
+  instructive and is **not** the fix: ranking by importance alone gets **14 of 15** on hono and
+  **22 of 22** of the top elevation decile, and raises the deck's difficulty floor from 0.03 to
+  **0.55** — a repo's hubs are hard questions, so that deck has no easy end and a new player's first
+  board is a mid-difficulty transitive-closure question about the most connected file in the repo.
+  Whether the cap itself (`max(40, ⌈n/8⌉)` per verb) is the right size is unmeasured.
 - **Five independent playtests now, and the walkable world still teaches nothing the flat map does
   not.** The first two rated it **3/10** then **5/10** (ADR-0033 §8.1, §8.4). Three more, run cold at
   `f370a55` on `graphql-js` and on ark, rated the product **4/10 · 5/10 · 4/10** on first-contact
@@ -388,18 +399,19 @@ two different reasons the script keeps apart (see Known gaps). **M2's instrument
 participants from outside the project**, which is owner-only and the wall S1 was always going to hit
 · then **region arches in the world** — districts are unmarked at street level, and ADR-0032 §9.6 is
 why the obvious derivation (`Region.centroid`) cannot be used: 118 of django's 175 centroids have
-their nearest node in a *different* region · then **build ADR-0030's twin surface**, whose decision,
-gate and measurement are done and whose code is not: an inspector line, its wiring to the deck, and
-its tests · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
+their nearest node in a *different* region · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
 were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60
 this line used to claim — the rest measure the scanner, the norm, or an unreachable bar. Its best
 entry is an answer key: naming a cycle decides **109 of hugo's 156** Blast Radius boards with
-precision 1.000 · then **django's
-index budget** (17.6–18.6 s against 10 s; the layout is ~40% of it, ADR-0028 §6) · and one measurement
+precision 1.000 · and one measurement
 only a human can take: **`npm run raster` on real hardware**, on a *turned* map — and now also on the
 walkable world, whose frame cost has never been measured anywhere.
 
-*(Six items left this list rather than being done here. **Overlapping Companion answer keys** closed
+*(Eight items left this list rather than being done here. **`django`'s index budget** closed as
+ADR-0038 — at **4.44 ms/file against a 5.00 hard ceiling**, the 10 s absolute being quoted at 2,000
+files where django has 3,035 — and the cost was not where this line said: the layout's obvious fix
+moves a coordinate, which NORTH-STAR §7 forbids, and the biggest single win was **a sort**; **ADR-0030's
+twin surface** is built (`src/player/twins.ts`, one gated inspector line, exercised by `test:e2e`). **Overlapping Companion answer keys** closed
 at `01202ac` and three documents went on listing it for a milestone; the **co-change distractor
 strategy for Placement** shipped as ADR-0023 — as a board improvement, not as the fix to ADR-0022's
 exposure, which it was measured against and does not move; the **Markdown-map defect** shipped as

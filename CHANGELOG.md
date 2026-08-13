@@ -3494,3 +3494,55 @@ One line per iteration: what changed, and what to do next.
   measured-constant drift this file has a landmine about, sitting in the table that points at the
   landmines. Link integrity checked across every ADR reference in `README.md`, `CHANGELOG.md`,
   `docs/experiments/` and `docs/decisions/`: none broken.
+
+- **The deck's slots go to the landmarks now, and `retain` has tests for the first time**
+  ([ADR-0039](./docs/decisions/0039-a-capped-deck-spends-each-band-on-its-most-load-bearing-subject.md)).
+  Every verb builds every board it can and then caps at `max(40, ⌈n/8⌉)`, and **the cap bites on
+  every repo measured** — hono `7075369e` builds 149 Blast Radius boards and ships 54, kysely
+  `f24018c7` builds 279 and ships 75. Which 54 was decided by where a subject happened to land in a
+  difficulty sort, and what that discarded was the thing a player clicks first: **6 of hono's 15
+  most-imported files carried any board at all, and 7 of kysely's**. `src/context.ts` (76 importers),
+  `src/hono.ts` (72), `src/router.ts` (32) and kysely's `src/util/object-utils.ts` (**183**) had
+  none. A cold playtester had already found it from the other end — *"the map begs you to click
+  landmarks and the landmarks are mute"* — and the cause was 20 lines of arithmetic between the
+  generator and the atlas that **had no tests of any kind**.
+
+  `retain` now partitions the difficulty-sorted list into contiguous bands and spends each band on
+  its most **load-bearing** member. `importance` is the caller's — `elevation` for the three verbs
+  whose subject is a file (ADR-0013, which is *also* the map's vertical channel, so the deck agrees
+  with the picture the player is looking at) and a flat function for Placement, whose subject is a
+  commit and has no elevation. There is no default, because a silent `() => 0` would read as a
+  decision somebody took. Measured on clean clones: **6 → 12 of hono's fifteen, 7 → 9 of kysely's**,
+  top elevation decile with a Blast Radius board **6/22 → 10/22** and **5/34 → 15/34**, deck sizes
+  unchanged at 216 and 300, and every difficulty quantile unchanged to two decimals except the
+  maximum, which drops 1.000 → 0.890 and 1.000 → 0.950 as the top band trades its hardest board for
+  its most-depended-upon one. That trade is the decision.
+
+  **The interesting failure was mine and it was in the sentence I was proudest of.** The docstring
+  claimed flat importance reproduces the previous deck *exactly* — the property that makes this a
+  generalisation rather than a replacement, and the only cheap check that the range-preserving half
+  survived. It was false. Anchors are `(L−1)/(max−1)` apart and evenly-spaced bands are `L/max`
+  wide, so with `L > max` the anchors drift **forward** of their bands, by `(L−max)/max` bands over
+  the list; on hono's 183 Placement entries in 54 bands that is 2.4 bands, so band 52's anchor sits
+  inside band 53 and my clamp dragged it back. **Placement — a verb with constant importance — moved
+  on 3 of hono's boards and 7 of kysely's.** The fix is to build the bands *around* the anchors
+  rather than clamping anchors into independently-chosen bands. Both hand-written examples in the new
+  test file passed while it was wrong; what caught it was diffing the real atlas, and what pins it is
+  a sweep over 49 `(L, max)` shapes against the old rule transcribed verbatim. Mutating back to
+  clamped bands fails **exactly that one assertion of nine**. (Two things about the old code, while
+  it is still legible: its collision padding was **unreachable**, and its index sequence was never
+  one-per-band under any even partition.)
+
+  **The rejected alternative was measured, and it wins the metric this change is about.** Sorting by
+  importance and taking the top `max` gets **14 of hono's 15** and **22 of 22** of the top decile —
+  better than what shipped — and raises the Blast Radius floor from **0.030 to 0.550** and p25 from
+  0.080 to 0.710. A repo's hubs are hard questions, so that deck has no easy end: the first board a
+  new player sees is a mid-difficulty transitive-closure question about the most connected file in
+  the repository. A mute landmark is a disappointment; an unanswerable first question is a stopping
+  point. Nine tests, four mutants killed, byte-identical determinism, budget within ceiling, e2e
+  clean, `test:pack` ok.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), then region
+  arches in the world (ADR-0032 §9.6). Newly on the list and *not* done here: the deck contains no
+  tier 1 or tier 2 content at all (NORTH-STAR §5 says tiers 1–3 ship first), and the cap's *size*
+  — as opposed to how it is spent — has never been measured against anything.

@@ -37,7 +37,7 @@ import { DEFAULT_GENERATE_OPTIONS, maxChallengesFor } from '../types.js';
 import type { DistractorChoice, StrategyId } from './distractors.js';
 import { analyse, mixOf, selectDistractors } from './distractors.js';
 import { encodeWitness } from '../../atlas/witness.js';
-import { retain, truthCap } from '../sample.js';
+import { elevationOf, retain, truthCap } from '../sample.js';
 import { difficultyOf, hopReach, surpriseOf } from '../difficulty.js';
 import { PATH_HEURISTICS, gradeHeuristics, pathSubject } from '../gate.js';
 
@@ -703,7 +703,10 @@ export function generateWithReport(
   const { kept: built, reasked } = dedupe(pending, assemble, eligible, tainted, note);
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
-  const shortlist = retain(built, limit);
+  // Elevation, so the cap spends its slots on load-bearing files. `capped`
+  // was 95 on hono against `uncertain` 7, and what it cut was `src/context.ts`
+  // (76 importers) and `src/hono.ts` (72).
+  const shortlist = retain(built, limit, (entry) => elevationOf(entry, graph));
   for (let i = shortlist.length; i < built.length; i++) note('capped');
 
   // The authoritative guardrail-4 check, on the exact sets the player will see.

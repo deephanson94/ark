@@ -475,6 +475,22 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   relation is accepted where a stated atom is refused (ADR-0019) — but *"we withheld it"* is not the
   same as *"the player cannot get it"*, and which one you have depends on a count nobody was taking.
   Take it: how many classes are silent, and how many rows does each ship?
+- **Two evenly-spaced things are not the same evenly-spaced thing, and the one you clamp is the one
+  that was right.** `retain` was generalised to spend each difficulty band on its most load-bearing
+  subject, with the old rule's index kept as the band's anchor so that flat importance would
+  reproduce the previous deck *exactly* — the property that makes it a generalisation rather than a
+  replacement. It did not. Evenly-spaced **anchors** are `(L−1)/(max−1)` apart and evenly-spaced
+  **bands** are `L/max` wide, and `L > max`, so the anchors drift forward by `(L−max)/max` bands
+  across the list — 2.4 bands on hono's 183 Placement entries in 54 — and the last of them leave
+  their bands entirely, where the clamp dragged them back one place. **Placement, whose importance
+  function is a constant, moved on 3 of hono's boards and 7 of kysely's.** The fix is ordering: build
+  the bands *around* the anchors (split each gap at its midpoint) rather than clamping anchors into
+  bands chosen independently. Two hand-written examples in the brand-new test file both passed while
+  it was wrong, because an example is a point and this is a defect in a *rate*; a sweep over 49
+  `(L, max)` shapes against the old rule transcribed verbatim kills it, and kills **nothing else** —
+  it is the only one of nine assertions that the clamped version fails. **When you preserve an old
+  behaviour as a special case of a new one, assert the special case over shapes, not over examples**,
+  and diff the real artifact: the atlas said `changed` on a verb that could not have changed.
 - **Adding the fourth of something reveals the first three never had it.** Writing Archaeology's
   invariant into `tests/atlas/` showed that **Placement's had never been checked on the real atlas**
   — `candidates ∩ files(commit) = truth` lived only in a unit fixture, for a whole milestone, in a
