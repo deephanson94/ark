@@ -340,6 +340,16 @@ of unbuilt harness (§9).
   otherwise with a p-value would be the dressing-up this project spends its ADRs refusing.
 - **Reported alongside, never substituted**: tiers 1 and 2, M2's two engagement measures, and time to
   first correct answer.
+
+  > **Time to first correct answer is facilitator-timed and is *not* instrumented**, and this line is
+  > here because §9 briefly claimed the harness was complete while a pre-registered reported measure
+  > had no clock behind it — the same defect §3's own note exists to record. Nothing the player stores
+  > carries a timestamp: `TallyEntry` holds `verb`, `subject`, `graded` and `passedOn` and nothing
+  > else. The facilitator is already timing the fixed twenty minutes, so a noted wall-clock reading at
+  > the first pass costs nothing and adds no persistence surface; instrumenting it would mean
+  > per-grade timestamps, which is a larger change and a product question nobody has raised. It is a
+  > *reported* measure and never the gate, so a facilitator's reading is adequate — but it must be
+  > **taken**, not assumed to be in the record.
 - **Blind scoring**: quizzes are scored by arm-blinded transcript, because tier 3 is F1 over a set
   and tier 2 is a rank correlation — both mechanical, so blinding costs nothing and removes the
   obvious hole.
@@ -422,6 +432,18 @@ be the wall.
    ([ADR-0037](../decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)). Counts every
    graded submission inside an arm; the facilitator calls **`arkTally()`** at minute 20. See §3 for
    what it reads and what it deliberately is not.
+
+   **Two things the facilitator must do, because the record cannot do them.** *Clear the key between
+   participants* — it is `ark:tally:<root commit>` and it accumulates, so a dry-run on the same
+   machine and repo lands in the same record as the participant who follows; the reading carries no
+   provenance and no reset. And *note the wall-clock time of the first correct answer*, which §5
+   pre-registers and nothing stores.
+
+   **Still not instrumented, and named rather than left implied**: time to first correct answer (§5,
+   facilitator-timed), and a board **opened and abandoned**, which counts as no attempt because the
+   record counts graded submissions. The arms differ in what it costs to reach a board, so that gap
+   is not symmetric between them — report it as a limitation rather than treating `graded` as a count
+   of engagement events.
 3. **Recruiting twelve people from outside the project.** Owner-only, and the wall S1 was always
    going to hit. Everything above exists so that the answer to *"why has this not run?"* is this line
    and nothing else.

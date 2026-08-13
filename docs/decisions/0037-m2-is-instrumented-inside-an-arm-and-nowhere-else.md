@@ -124,6 +124,20 @@ the guide's attempt-count seed reddened **no unit test at all**. So `test:e2e` p
 `?arm=map`, asserts the reading moved to 1, reloads, and asserts it survived. Deleting the `noteGrade`
 call reddens **both** assertions — checked, not assumed.
 
+## What it does not measure, named rather than left implied
+
+A post-ship sweep found three, and the first is a correction to this session's own §9 edit:
+
+- **Time to first correct answer** (§5, a *reported* measure) has no clock behind it. Nothing the
+  player stores carries a timestamp. Facilitator-timed, and §9 now says so — briefly it said the
+  harness was complete instead, which is the exact defect §3's note exists to record.
+- **A board opened and abandoned** is not an attempt here, because the record counts graded
+  submissions. The arms differ in what it costs to *reach* a board — in the world arm Enter opens one
+  only when the hero is in range — so the gap is not symmetric between them.
+- **The record does not reset.** A facilitator dry-run on the same machine and repo accumulates into
+  the same key, and the reading carries no provenance. §9 tells the facilitator to clear it; that is
+  a procedure rather than a mechanism, and it is written down as one.
+
 ## Revisit when
 
 - **A use needs the window rather than the total.** Then this needs per-grade timestamps, which is a

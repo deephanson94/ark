@@ -3348,3 +3348,18 @@ One line per iteration: what changed, and what to do next.
   to be a candidate on the held one — which ADR-0014's certification turns back into mutual
   membership. Apparatus, since it is another zero: **172 / 329 / 348 / 194** wires drawn, 1–2 of 6
   held subjects carrying an incident wire, and 6 of 6 boards' candidates present in the wire graph.
+
+- **The sweep also found a hazard in the instrumentation's own wiring, and an over-claim this session
+  had just written.** `main.ts` tested `locked` **twice** — once to update the tally, once to write it
+  — and the two drifting apart is not cosmetic: `tally` is `EMPTY_TALLY` in an unlocked session, so a
+  write escaping the guard puts `{"entries":[]}` over a finished arm's record and **erases a
+  participant's data**. One guard now. Its `store.getItem` was also the player's only unguarded one,
+  where `save.ts` wraps the identical call because reading storage throws outright in some sandboxed
+  frames.
+
+  And §9 briefly said *"both pieces of harness are built"* while **§5's pre-registered "time to first
+  correct answer" had no clock behind it** — a document claiming a behaviour the code does not have,
+  which is this repo's most-repeated defect, committed by the session writing the note about it. Named
+  now, with the two other gaps beside it: a board opened and abandoned is not an attempt (and the arms
+  differ in what it costs to reach one), and the record does not reset between a dry run and the
+  participant who follows it.

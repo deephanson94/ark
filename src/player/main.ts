@@ -231,7 +231,17 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // measurement rather than the cursor ADR-0011 decision 2 forbids. See
   // `tally.ts`; `tests/unit/tally.test.ts` asserts the selector never imports it.
   const tallyKey = tallyKeyFor(scene.atlas.repo);
-  let tally: Tally = locked ? parseTally(store?.getItem(tallyKey) ?? null) : EMPTY_TALLY;
+  // `getItem` is wrapped for the reason `save.ts`'s `loadProgress` wraps the
+  // identical call: reading storage throws outright in some sandboxed frames,
+  // and this was the player's only unguarded `getItem`.
+  const storedTally = (): string | null => {
+    try {
+      return store?.getItem(tallyKey) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  let tally: Tally = locked ? parseTally(storedTally()) : EMPTY_TALLY;
   // **The readout, and the reason it is here rather than on screen.** M2's datum
   // has to leave a finished session somehow, and showing a participant their own
   // pre-registered measure changes the thing being measured. So it is a function
@@ -623,16 +633,24 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // session stores nothing at all, and ADR-0011 decision 2 has no surface to
       // be argued about. The instrument exists for the twenty minutes it is
       // measuring and at no other time.
+      //
+      // **One guard, not two.** The first version tested `locked` twice — once
+      // to update the record and once to write it — and the two drifting apart
+      // is not a cosmetic bug: `tally` is `EMPTY_TALLY` in an unlocked session,
+      // so a write that escaped the guard would put `{"entries":[]}` over a
+      // finished arm's record and **erase a participant's data**. A rule that
+      // lives twice, in a file whose own comments call that the failure mode.
       if (locked) {
         tally = noteGrade(tally, challenge.verb, challenge.subject, progression.unlocked);
-      }
-      try {
-        if (locked) store?.setItem(tallyKey, serializeTally(tally));
-      } catch {
-        // Quota or a private-mode store. An instrument that cannot write must
-        // not take the session down with it — the run is still valid, the
-        // engagement half of it is simply unrecorded, and the facilitator finds
-        // out by the key being absent rather than by a stack trace at minute 3.
+        try {
+          store?.setItem(tallyKey, serializeTally(tally));
+        } catch {
+          // Quota or a private-mode store. An instrument that cannot write must
+          // not take the session down with it — the run is still valid, the
+          // engagement half of it is simply unrecorded, and the facilitator
+          // finds out by the key being absent rather than by a stack trace at
+          // minute 3.
+        }
       }
       retally();
       refreshNotes();
