@@ -287,18 +287,29 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   **proposed, not accepted**). **Fragmentation**: hono `7075369e` gets **57 regions for 425 nodes**
   and django `c9eb16a8` **175 for 3,035**, putting **71%** and **86%** of their nodes in legend rows
   the panel never shows. **Collapse**: hugo `44da0860` puts **161 of 204 linked nodes — 78.9% — in
-  one region** at **Q = 0.089**, and reads *healthiest* in the set on region count, which is why the
-  count is not the measurement. Two rendering defects sit on top and neither is the clustering's
-  fault: the legend is ordered by region **id** (alphabetical, so what falls off the end is
-  arbitrary), and `.legend` carries `overflow-y: auto` **and** `pointer-events: none` in the same
-  rule block, so the clipped rows are *unreachable* rather than below the fold. Ordering by size and
-  collapsing terrain to one row takes **six repos of eight to ≥ 89%** of the map accounted for — 36%
-  → 89% on graphql-js, 43% → 95% on prometheus — and **moves no node**. A deterministic Louvain
-  prototype (`scripts/prototype-louvain.ts`, 56/56 paired runs byte-identical, γ = 1 the modularity
-  argmax on all eight repos) lands **every repo at 5–15 regions**, raises modularity on all eight,
-  and takes hugo's blob to 20.1% — but **nameability is a wash** (improves on three repos, worsens on
-  three, django 14% → 1% of nodes in a nameable region), so it does not by itself unblock tier 1.
-  Adopting it moves every node, which is owner-only.
+  one region** at **Q = 0.089**, while showing 18 regions and 0% clipped, which is the healthiest row
+  in the table and the sickest repo — the count is not the measurement. Two rendering defects sit on
+  top and neither is the clustering's fault: the legend is ordered by region **id** (alphabetical, so
+  what falls off the end is arbitrary), and `.legend` carries `overflow-y: auto` **and**
+  `pointer-events: none` in the same rule block, so the clipped rows are *unreachable* rather than
+  below the fold. Ordering by size and collapsing terrain to one row takes **six repos of eight to
+  ≥ 89%** of the map accounted for — 36% → 89% on graphql-js, 43% → 95% on prometheus — and **moves
+  no node**.
+
+  A deterministic Louvain prototype (`scripts/prototype-louvain.ts`) was **wired into a scratch copy
+  of `regions.ts` and run for real**: `npm run test:determinism` byte-identical under it, plus eight
+  repos byte-identical across two independent processes, **852/853 unit and 112/112 atlas**. It takes
+  regions to **9–22** (hono 57 → 20, django 175 → 22), raises modularity on all eight repos, takes
+  hugo's blob to 20.1%, and brings django back inside pillar 4's own spread ceiling (0.244 → 0.191).
+  **It is not a substitute for the legend fix** — four repos still overflow 17 rows; both together
+  reach 100% on all eight. Two costs are real: it is **less stable across adjacent commits** (worst
+  single commit moves **38 of hono's 425 nodes against label propagation's 4**), and **nameability
+  cannot arbitrate it** — a third control arm, `region = top-level directory`, wins the nameability
+  column on **8 of 8** and the modularity column on **0 of 8**, scoring **Q = −0.095 on django**,
+  worse than a random partition. `docs/atlas-format.md` §3.4 says a region is derived from the import
+  graph *"**not** from the directory tree"*, so a prefix-based nameability score measures the thing
+  the spec forbids. Tier 1 is unblocked on **count** and still blocked on **naming**, which is now
+  clearly a separable problem. Adopting any of it moves every node, which is owner-only.
 - **Districts are unmarked at street level.** Region arches are designed (ADR-0032 §3.2) and
   deliberately not built: 118 of django's 175 region centroids have their nearest node in a
   *different* region, so an arch placed at a centroid would stand in someone else's street

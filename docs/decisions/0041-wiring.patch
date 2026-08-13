@@ -1,0 +1,151 @@
+# The exact wiring measured in ADR-0041 §5 and §8. NOT applied to this branch.
+#
+# Apply with:  git apply docs/decisions/0041-wiring.patch
+#              cp scripts/prototype-louvain.ts src/indexer/louvain.ts
+#
+# It moves every node's X,Y, which NORTH-STAR §7 reserves to the owner.
+# Measured under it: test:determinism byte-identical on 8 repos, 852/853
+# unit, 112/112 atlas. The one failure is regions.test.ts's stranded-file
+# test, which encodes label propagation's repair for its own side effect.
+
+--- a/src/indexer/regions.ts	2026-08-13 14:52:03.727740907 +0000
++++ b/src/indexer/regions.ts	2026-08-13 15:33:37.711287339 +0000
+@@ -25,6 +25,7 @@
+  */
+ 
+ import { byteCompare } from '../atlas/index.js';
++import { louvain } from './louvain.js';
+ 
+ export interface RegionEdge {
+   readonly from: number;
+@@ -48,21 +49,9 @@
+   readonly members: readonly number[];
+ }
+ 
+-const MAX_PASSES = 20;
+-/** A node is a connector at this multiple of the median degree, or above. */
+-const CONNECTOR_MULTIPLE = 3;
+-const CONNECTOR_FLOOR = 5;
+ /** Regions smaller than this are folded into their strongest neighbour. */
+ const MIN_REGION = 3;
+ 
+-function medianOf(values: readonly number[]): number {
+-  if (values.length === 0) return 0;
+-  const sorted = [...values].sort((a, b) => a - b);
+-  const middle = Math.floor(sorted.length / 2);
+-  if (sorted.length % 2 === 1) return sorted[middle] ?? 0;
+-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+-}
+-
+ export function detectRegions(
+   paths: readonly string[],
+   edges: readonly RegionEdge[],
+@@ -79,69 +68,42 @@
+   for (const list of neighbours) list.sort((a, b) => a - b);
+ 
+   const degrees = neighbours.map((list) => list.length);
+-  const linked = degrees.filter((degree) => degree > 0);
+-  const connectorCutoff = Math.max(CONNECTOR_FLOOR, medianOf(linked) * CONNECTOR_MULTIPLE);
+-  const isConnector = degrees.map((degree) => degree >= connectorCutoff);
+ 
++  // ---- WIRED PROTOTYPE (ADR-0041) --------------------------------------
++  // Deterministic Louvain replaces label propagation, the connector hold-out and
++  // the connector placement pass. Everything downstream is untouched: small
++  // region absorption still runs, terrain is still ADR-0010, naming unchanged.
+   const labels = new Int32Array(count);
+   for (let i = 0; i < count; i++) labels[i] = i;
+ 
+-  for (let pass = 0; pass < MAX_PASSES; pass++) {
+-    let changed = false;
+-    for (let i = 0; i < count; i++) {
+-      if (isConnector[i] === true) continue;
+-      const list = neighbours[i];
+-      if (list === undefined || list.length === 0) continue;
+-
+-      const tally = new Map<number, number>();
+-      for (const neighbour of list) {
+-        // Connectors do not get a vote: they are adjacent to everything, so
+-        // their label would win everywhere and mean nothing.
+-        if (isConnector[neighbour] === true) continue;
+-        const label = labels[neighbour] ?? neighbour;
+-        tally.set(label, (tally.get(label) ?? 0) + 1);
+-      }
+-      if (tally.size === 0) continue;
+-
+-      let best = labels[i] ?? i;
+-      let bestCount = tally.get(best) ?? 0;
+-      // Iterate in ascending label order so ties resolve the same way on every
+-      // run, whatever order the map happened to be filled in.
+-      for (const label of [...tally.keys()].sort((a, b) => a - b)) {
+-        const votes = tally.get(label) ?? 0;
+-        if (votes > bestCount || (votes === bestCount && label < best)) {
+-          best = label;
+-          bestCount = votes;
+-        }
+-      }
+-      if (best !== labels[i]) {
+-        labels[i] = best;
+-        changed = true;
+-      }
+-    }
+-    if (!changed) break;
+-  }
+-
+-  // Connectors join whichever region most of their neighbours settled in.
++  const slotOf = new Int32Array(count).fill(-1);
++  const nodeOf: number[] = [];
+   for (let i = 0; i < count; i++) {
+-    if (isConnector[i] !== true) continue;
+-    const tally = new Map<number, number>();
+-    for (const neighbour of neighbours[i] ?? []) {
+-      if (isConnector[neighbour] === true) continue;
+-      const label = labels[neighbour] ?? neighbour;
+-      tally.set(label, (tally.get(label) ?? 0) + 1);
+-    }
+-    let best = labels[i] ?? i;
+-    let bestCount = 0;
+-    for (const label of [...tally.keys()].sort((a, b) => a - b)) {
+-      const votes = tally.get(label) ?? 0;
+-      if (votes > bestCount) {
+-        best = label;
+-        bestCount = votes;
+-      }
+-    }
+-    labels[i] = best;
++    if ((neighbours[i] ?? []).length === 0) continue;
++    slotOf[i] = nodeOf.length;
++    nodeOf.push(i);
++  }
++  const louvainEdges: { from: number; to: number }[] = [];
++  for (const edge of edges) {
++    if (edge.from === edge.to) continue;
++    const a = slotOf[edge.from] ?? -1;
++    const b = slotOf[edge.to] ?? -1;
++    if (a < 0 || b < 0 || a === b) continue;
++    louvainEdges.push({ from: a, to: b });
++  }
++  const communities = louvain(nodeOf.length, louvainEdges, {
++    resolution: 1,
++    maxSweeps: 32,
++    maxLevels: 16,
++  }).labels;
++  // Community ids live in [count, count + nodeOf.length). Terrain ids are
++  // handed out from `nextSynthetic`, which starts at `count` too — so this
++  // offset MUST be followed by moving terrain past the end of this range, or
++  // a community and a terrain lump share a label and silently merge.
++  for (let slot = 0; slot < nodeOf.length; slot++) {
++    labels[nodeOf[slot] ?? 0] = count + (communities[slot] ?? 0);
+   }
++  const terrainBase = count + nodeOf.length + 1;
+ 
+   absorbSmallRegions(labels, neighbours, count);
+ 
+@@ -159,7 +121,7 @@
+   /** Label id → the top-level segment it stands for. Names them directly. */
+   const terrainName = new Map<number, string>();
+   const terrain = new Set<number>();
+-  let nextSynthetic = count;
++  let nextSynthetic = terrainBase;
+   const terrainLabelFor = (path: string): number => {
+     const slash = path.indexOf('/');
+     const top = slash === -1 ? '' : path.slice(0, slash);
