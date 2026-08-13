@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 38 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 40 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 38 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 40 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -155,7 +155,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Distractor generation (§8.3) | ✅ | Per-verb strategies; a real subsystem, not a helper. Every verb now carries §8.3's *historically-coupled-but-not-structurally* class, **both clauses of it** — Placement was the last without one (ADR-0023). |
 | Which subjects a capped deck is spent on | ✅ | The cap bites on every repo measured, so `retain` decides more about a deck than any strategy — and it shipped for two milestones **with no tests**. It now bands the difficulty-sorted list and spends each band on its most **load-bearing** subject (`elevation`, ADR-0013 — which is also the map's vertical channel, so the deck agrees with the picture). Measured on clean clones, the 15 most-imported files carrying any board go **6 → 12 on hono `7075369e` and 7 → 9 on kysely `f24018c7`**, deck sizes unchanged; `src/context.ts` (76 importers), `src/hono.ts` (72) and `src/util/object-utils.ts` (183) had none. Flat importance reproduces the old deck **byte-identically**, which is checked on both repos and over 49 shapes — the first implementation claimed that identity in a comment and moved 3 and 7 Placement boards ([ADR-0039](./docs/decisions/0039-a-capped-deck-spends-each-band-on-its-most-load-bearing-subject.md)). |
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. Its one *accepted* exposure is now closed rather than held under the bar — the structure-blind subtree hint is withheld, since a margin of 0.011 on a self-indexing repo lasted three milestones. |
-| Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. |
+| Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. The guide ascends through **each verb's own** difficulty range, not through a shared number ([ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md)) — §8.4's difficulty is computed per verb, so comparing the values raw served every Blast Radius board below 0.49 before hono's first Companion one and a player met the second verb at board **25 / 19 / 9 / 17**. Now **7 / 8 / 7 / 5**, and the first fifteen boards' mean subject elevation moves from below the deck's mean to at or above it on three repos of four. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
 | Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
@@ -180,6 +180,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
   cycles today; this is a standing constraint on anything that would.
 
+- **The deck has no tier 1 and no tier 2 content, and that is what the opening still needs.**
+  NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs
+  emit tiers 3, 3, 5 and 6, so **Orientation** (*where does execution start? what are the top-level
+  regions?*) and **Topology** (*which way do dependencies point? what is a hub?*) have no questions
+  at all. ADR-0040 reached the easy landmark questions that already existed, and the measurement
+  that motivated it also bounds it: Blast Radius's difficulty correlates with how load-bearing its
+  subject is at Spearman **ρ = 0.96 / 0.84 / 0.38 / 0.84** (hono / graphql-js / kysely / ark),
+  because `breadth` is a term in §8.4 — so **its easy end is its peripheral end by construction** and
+  no ordering can make it otherwise. About half of the first fifteen boards are still benchmarks,
+  fixtures and `__testUtils__`. Two related facts: **no entry point is recorded in the atlas**
+  (every TypeScript manifest points into an excluded `dist/`, so tier 1's first question has
+  uncertain ground truth and guardrail 4 refuses it), and Archaeology and Placement still first
+  appear at board **68–150** and **116–221**, so a first session never reaches the git-graded verbs.
+  Ranking the progression band above `tier` puts all four inside the first twelve on every repo and
+  is measured in ADR-0040 §6 — it is an owner's call about what the curriculum is, not a selector's.
 - **Some landmarks are still mute, and the cap is why.** ADR-0039 changed *which* subjects a capped
   deck spends itself on; it did not raise the cap. On hono `7075369e` three of the fifteen
   most-imported files still carry no board — `benchmarks/routers/src/tool.mts` (23 importers),
@@ -389,9 +404,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**:
-the matched repos are named with commits, the arms are staged with a stop rule, and the quiz is a
-fixed held-out item set (owner's decisions of 2026-08-11, recorded in ADR-0009). **The hold-out split
+**Run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
+though **[ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md) is a
+reason to look at the opening first**: on both of that experiment's matched repos a participant's
+first fifteen boards were one verb at the difficulty floor, and seven of graphql-js's first ten were
+`src/__testUtils__/*`. That is fixed as far as ordering can fix it; the residue is the missing tier
+1–2 content in Known gaps, and twelve recruited participants are the least repeatable resource in
+the plan. The blockers themselves are closed: the matched repos are named with commits, the arms are
+staged with a stop rule, and the quiz is a fixed held-out item set (owner's decisions of 2026-08-11,
+recorded in ADR-0009). **The hold-out split
 ships** — `npm run holdout <repo> --out <dir>` writes the played atlas and the quiz and checks every
 removed key against the served deck's `discloses` output, which refuses **0 across four repos** for
 two different reasons the script keeps apart (see Known gaps). **M2's instrumentation ships too**
@@ -507,7 +528,7 @@ Six, and four of them forbid something — a pillar you cannot violate is decora
 | `README.md` | **Where we are**: architecture and status — this file | Arriving, or checking what's built |
 | [`CHANGELOG.md`](./CHANGELOG.md) | **When**: one entry per iteration, what changed and what's next | On pickup |
 | [`docs/atlas-format.md`](./docs/atlas-format.md) | The versioned atlas schema — the contract between indexer and player | Before touching either side |
-| [`docs/decisions/`](./docs/decisions/) | **Why**: 38 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
+| [`docs/decisions/`](./docs/decisions/) | **Why**: 40 ADRs, each with the measurement that decided it | Before making a call the spec doesn't cover |
 | [`docs/prior-art.md`](./docs/prior-art.md) | Why ~30 years of code visualisers never verified comprehension | Before proposing a presentation change |
 
 > **How this file stays true.** The status above is a **live claim**, not a release note, so it moves

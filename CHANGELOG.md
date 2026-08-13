@@ -3546,3 +3546,54 @@ One line per iteration: what changed, and what to do next.
   arches in the world (ADR-0032 §9.6). Newly on the list and *not* done here: the deck contains no
   tier 1 or tier 2 content at all (NORTH-STAR §5 says tiers 1–3 ship first), and the cap's *size*
   — as opposed to how it is spent — has never been measured against anything.
+
+- **A progression ascends through each verb's own range, and the obvious fix for the opening is
+  refuted** ([ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md)).
+  The guide's opening was trivia, and on both of `docs/experiments/0001`'s matched repos: a
+  pass-everything player's **first fifteen boards were all Blast Radius** at difficulty 0.03–0.10 on
+  hono and 0.03–0.28 on graphql-js, whose first six included **`src/middleware/jwk/keys.test.json`**
+  — a JSON fixture — two benchmark scripts, and seven `src/__testUtils__/*`. The second verb first
+  appeared at board **25 / 19 / 9 / 17**, so a first session never reached the git-graded half of the
+  product, which is M4's entire thesis.
+
+  The cause is a category error rather than a design choice: §8.4 computes `difficulty` from each
+  verb's own inputs, and the scales do not overlap — Blast Radius spans 0.03–0.94 on hono where
+  Companion spans 0.49–0.96 — so a rank comparing the raw numbers serves *every* Blast Radius board
+  below 0.49 first. `progress`, a band within the verb's own range, now sits between `tier` and
+  `difficulty`. Second verb at **7 / 8 / 7 / 5**, and the first fifteen boards' mean subject elevation
+  moves from below the deck's mean to at or above it on three repos of four (hono 1.87 → 3.20 against
+  a deck mean of 3.14, graphql-js 2.80 → 4.40). No atlas change and no reindex: the band is derived
+  from the deck the player already has.
+
+  **The proposal that was on the table is refused, on a measurement.** Adding a "prefer a
+  load-bearing subject" term above difficulty reads as the obvious fix and is very nearly difficulty
+  wearing another name: scoring subjects by non-leaf dependent count — which separates
+  `__testUtils__/dedent.ts` (22 direct importers, **0** non-leaf) from `GraphQLError.ts` (**112**) —
+  Spearman ρ against Blast Radius difficulty is **0.961 / 0.842 / 0.378 / 0.836**, because `breadth`
+  is a term in both. Ranked that way the measured opening is d **0.71–0.91** on graphql-js: a deck
+  with no easy end, which is ADR-0039's rejected alternative one layer up. The same table carries the
+  fix — Companion's correlation runs the *other* way (**−0.30 / −0.24 / −0.65 / −0.06**) and its
+  easiest boards are `GraphQLError.ts`, `insert-query-node.ts` and `http-status.ts`. **Easy questions
+  about landmarks already existed in every deck; they were unreachable.**
+
+  Two things were learned by breaking them. `progress` must be a **band** and not a position — a
+  position totally orders each verb's deck, which made everything below it unreachable and silently
+  killed the `overlap` term ADR-0011's second amendment had measured into place; two existing unit
+  tests caught it and the tests were right. And it must band **over ties, not over the sorted index**,
+  or two equally-hard questions are separated by the byte order of their ids. `PROGRESS_BANDS = 10` is
+  swept rather than chosen: 4 is too coarse to interleave (second verb at 15), 20 and 60 buy no
+  further interleave and cut the `overlap` term's reach from 18 of 216 to 14. Measured after the
+  change, overlap still decides 18 of hono's 216 served positions (was 24) and 29 of ark's 160 (was
+  42) — down about a quarter and not starved, which is the number this change was most at risk of
+  getting wrong.
+
+  Three new tests, each killed by a mutant; the third mutant **survived the test named for it** on
+  the first draft, because that test asserted ascending difficulty over one verb, which is true either
+  way. Rewritten with a two-board verb whose hardest member re-enters band 0 under the mutant. 850
+  unit, 112 atlas, byte-identical determinism, e2e clean.
+
+  **Next**: unchanged — `docs/experiments/0001` wants twelve participants (owner-only), but read
+  ADR-0040 §6 first: **the deck still has no tier 1 or tier 2 content at all**, Blast Radius's easy
+  end is its peripheral end by construction, and about half the opening is still fixtures and
+  benchmarks. Ranking the band above `tier` puts all four verbs inside the first twelve boards on
+  every repo and is measured — it is an owner's call about what the curriculum is.

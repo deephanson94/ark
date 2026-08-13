@@ -48,6 +48,11 @@ function challenge(spec: Spec): Challenge {
   };
 }
 
+/** The same, in a second verb — the two decks' difficulty scales differ. */
+function other(spec: Spec): Challenge {
+  return { ...challenge(spec), id: `comp-${spec.name}`, verb: 'companion' };
+}
+
 /** Regions by subject number; anything unlisted is its own region. */
 const regions = new Map<number, string>();
 const regionOf = (subject: NodeId): string => {
@@ -167,6 +172,88 @@ describe('the overlap rank — how much of the last answer this one repeats', ()
       previous: first,
     });
     expect(next?.id).toBe('blast-twin');
+  });
+});
+
+describe('the progression band — each verb through its own range', () => {
+  /**
+   * **The defect this term exists for.** §8.4 computes difficulty from each
+   * verb's own inputs, so the numbers are not commensurable: on hono, Blast
+   * Radius spans 0.03–0.94 and Companion 0.49–0.96. Ranked on the raw number,
+   * every Blast Radius board below 0.49 is served before the first Companion
+   * one — a player met the second verb at board 25 there, 19 on graphql-js and
+   * 17 on this repo, so a first session never reached the git-graded half of
+   * the product at all.
+   */
+  it('interleaves two verbs whose difficulty scales do not overlap', () => {
+    const deck: Challenge[] = [];
+    for (let i = 0; i < 10; i++) {
+      deck.push(challenge({ name: `b${i}`, subject: 100 + i, truth: [10 + i], difficulty: 0.03 + i * 0.09 }));
+      deck.push(other({ name: `c${i}`, subject: 200 + i, truth: [20 + i], difficulty: 0.49 + i * 0.04 }));
+    }
+    const served: string[] = [];
+    const answered = new Set<string>();
+    let previous: Challenge | null = null;
+    for (let n = 0; n < 6; n++) {
+      const next = suggestNext(deck, regionOf, { ...NO_HISTORY, answered, previous });
+      if (next === null) break;
+      served.push(next.verb);
+      answered.add(answerKey(next.verb, next.subject));
+      previous = next;
+    }
+    // Both verbs inside the first six boards, rather than one verb's whole
+    // easy tail first. Ranked on raw difficulty this is six blastRadius.
+    expect(new Set(served).size).toBe(2);
+    expect(served.filter((v) => v === 'companion').length).toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * **The band is over ties, not over positions**, and this is the assertion
+   * that separates the two. The first implementation banded by *sorted index*,
+   * which gives two equally-hard questions different bands according to the
+   * byte order of their ids — so everything below the band in the rank became
+   * unreachable between challenges of one verb, and the `overlap` term above
+   * silently stopped deciding anything.
+   */
+  it('gives equally hard questions the same band, whatever their ids', () => {
+    const first = challenge({ name: 'first', subject: 1, truth: [10, 11], difficulty: 0.2 });
+    const twin = challenge({ name: 'a-twin', subject: 2, truth: [10, 11], difficulty: 0.2 });
+    const fresh = challenge({ name: 'z-fresh', subject: 3, truth: [13, 14], difficulty: 0.2 });
+    // `a-twin` sorts first by id and repeats the whole key. Only an equal band
+    // lets the overlap term below reach it.
+    const next = suggestNext([first, twin, fresh], regionOf, { ...NO_HISTORY, previous: first });
+    expect(next?.id).toBe('blast-z-fresh');
+  });
+
+  it('is a property of the whole deck, not of what is left', () => {
+    // **Recomputed over the unanswered remainder, a verb re-scales as it is
+    // cleared** — a small deck's last board becomes "the easiest remaining" and
+    // jumps to the front however hard it is. The first draft of this test
+    // asserted ascending difficulty over one verb, which is true either way; it
+    // survived the mutant and was checking nothing.
+    const deck: Challenge[] = [];
+    for (let i = 0; i < 20; i++) {
+      deck.push(challenge({ name: `a${String(i).padStart(2, '0')}`, subject: 100 + i, truth: [10 + i], difficulty: 0.1 + i * 0.025 }));
+    }
+    // Two boards only, one easy and one the hardest thing in the deck.
+    deck.push(other({ name: 'b-easy', subject: 300, truth: [50], difficulty: 0.5 }));
+    deck.push(other({ name: 'b-hard', subject: 301, truth: [51], difficulty: 0.9 }));
+
+    const served: string[] = [];
+    const answered = new Set<string>();
+    let previous: Challenge | null = null;
+    for (let n = 0; n < 8; n++) {
+      const next = suggestNext(deck, regionOf, { ...NO_HISTORY, answered, previous });
+      if (next === null) break;
+      served.push(next.id);
+      answered.add(answerKey(next.verb, next.subject));
+      previous = next;
+    }
+    expect(served).toContain('comp-b-easy');
+    // Its partner is the hardest board in the deck and belongs late. Banded
+    // over the remainder it is the only companion board left the moment
+    // `b-easy` is answered, so it re-enters band 0 and is served next.
+    expect(served).not.toContain('comp-b-hard');
   });
 });
 
