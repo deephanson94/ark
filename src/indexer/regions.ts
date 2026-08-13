@@ -100,14 +100,27 @@ export function detectRegions(
     maxSweeps: 32,
     maxLevels: 16,
   }).labels;
-  // Community ids live in [count, count + nodeOf.length). Terrain ids are
-  // handed out from `nextSynthetic`, which starts at `count` too — so this
-  // offset MUST be followed by moving terrain past the end of this range, or
-  // a community and a terrain lump share a label and silently merge.
+  // Three kinds of label share this array and **must not collide**: a node's
+  // own index (what an edgeless node still carries at this point), a community,
+  // and a terrain lump. Communities are offset past the node indices; terrain
+  // ids are then handed out from `terrainBase`.
+  //
+  // This is the bug that shipped in the first wiring of this change and was
+  // *not* caught by `test:determinism` — a wrong partition is a deterministic
+  // one. Terrain used to start at `count`, which is exactly where communities
+  // start, so a community and a terrain lump merged silently: ark came out with
+  // **one** topology region and prometheus with none.
+  //
+  // `terrainBase` is therefore derived from the largest label actually present
+  // rather than from arithmetic about how communities happen to be numbered.
+  // `count + nodeOf.length` would be correct today and would quietly stop being
+  // correct the moment `louvain` returned anything but a dense `0..k-1`.
   for (let slot = 0; slot < nodeOf.length; slot++) {
     labels[nodeOf[slot] ?? 0] = count + (communities[slot] ?? 0);
   }
-  const terrainBase = count + nodeOf.length + 1;
+  let highest = count - 1;
+  for (let i = 0; i < count; i++) highest = Math.max(highest, labels[i] ?? 0);
+  const terrainBase = highest + 1;
 
   absorbSmallRegions(labels, neighbours, count);
 
