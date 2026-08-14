@@ -13,7 +13,7 @@
 |---|---|---|
 | 0 — pre-flight | **done** | 20 repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
-| 2 — where the taint sits | pending | |
+| 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | pending | |
 | 4 — candidate B (taint stops at first unresolved edge) | pending | |
 | 5 — candidate C (bounded depth) | pending | |
@@ -127,4 +127,86 @@ arriving on a TypeScript repo.)*
 
 ---
 
-*Phases 2–7 follow.*
+## 2. Where the taint actually sits
+
+ADR-0028 §8.1's shape — *0.06% of sites causing 83.7% of the effect, by position rather than rate* —
+reproduces, and then goes further than that document had to.
+
+### 2.1 One file is the whole story on the worst repo
+
+`scripts/probe-taint.ts` ranks every unsound node by **blast subjects poisoned** (never by unresolved
+count — those are different orderings and only the first decides a deck).
+
+| repo | tainted subjects | unsound nodes | **nodes reaching 50% of the taint** | nodes reaching 90% | worst five together |
+|---|---|---|---|---|---|
+| typeorm | 1,921 | 276 | **1** | **1** | 99.7% |
+| excalidraw | 388 | 65 | **1** | **1** | 97.7% |
+| vue-core | 220 | 60 | **1** | 3 | 95.9% |
+| nest | 249 | 1,123 | **1** | 113 | 64.7% |
+
+typeorm's single worst file is `src/platform/PlatformTools.ts`, carrying **one** `require(<expression>)`,
+and it poisons **1,912 of 1,921** tainted subjects. That is **one import site of 13,805 — 0.007% —
+causing 99.5% of the starvation** on a 3,704-node repository.
+
+The two orderings disagree exactly as predicted. typeorm's most unresolved *file* carries 7
+specifiers and poisons **0** subjects; the file that poisons 1,912 carries **1**.
+
+### 2.2 The causes, weighted by subjects poisoned
+
+`scripts/probe-causes.ts` classifies every unresolved specifier. Two of the classes are resolver
+defects this session found while doing it:
+
+- **`dottedSegment`** — `extensionOf('./x.interface')` returns `.interface`, so `resolve.ts`'s
+  `candidatesFor` treats the specifier as already carrying an extension and **never appends `.ts`**.
+  `x.interface.ts` is on disk and is never a candidate. nest's whole naming convention is
+  `*.interface`, `*.enum`, `*.service`, `*.hook`: **1,942 specifiers across 976 files**.
+- **`rootSelfPath`** — `require('../')` from `test/` normalises to base `''`, and `candidatesFor('')`
+  builds `/index.ts` with a **leading slash**, which can never match a repo-relative node key. This
+  is ADR-0026's cobra defect — *a path prefix and a node key are not the same string* — living in the
+  ES resolver, unnoticed. express carries **96 of them in 96 files**.
+
+**A gate on the instrument, and it fired.** The first run of `probe-causes.ts` reported vue-core's
+starvation as `undeclaredBare` at 99.5%. `node.unresolved` records a CJS site as the **whole call
+expression** (`scan.ts`'s `raw` is `require('./x')`, not `./x`), so reading the field verbatim files
+every dynamic and CJS site under "bare specifier declared nowhere". Unwrapped, vue-core's top cause
+is `missingFromTree` at 99.1% — `require('./dist/shared.cjs.js')`, a relative path to a build
+artifact. The wrong reading pointed at a fixable cause; the right one points at an unfixable one.
+
+### 2.3 The finding that decides every candidate: taint is **overdetermined**
+
+On typeorm, `computed` poisons 99.6% of tainted subjects **and** `dottedSegment` poisons 99.4% —
+because both sit in the same hub cluster that everything reaches. So *"this cause poisons N
+subjects"* is **not a fix's ceiling**. The ceiling is how many subjects it un-taints *with the other
+causes left in place*.
+
+`scripts/probe-marginal.ts` computes that by re-running `taintedRefs`'s reverse walk with one cause's
+sites withheld. **What it holds fixed**: the graph, the deck cap, the generator, every other cause.
+One knob.
+
+| repo | blast subjects | tainted today | best single fix | **freed** | **all four resolver fixes together** | perfect resolution (unbuildable) |
+|---|---|---|---|---|---|---|
+| **typeorm** | 2,221 | 1,921 | workspaceSelfReference | 4 | **5 (0.2%)** | 1,921 (86.5%) |
+| **excalidraw** | 479 | 388 | siblingManifestDep | 3 | **6 (1.3%)** | 388 (81.0%) |
+| **vue-core** | 254 | 220 | workspaceSelfReference | 1 | **1 (0.4%)** | 220 (86.6%) |
+| **express** | 36 | 24 | rootSelfPath | 17 | **17 (47.2%)** | 24 (66.7%) |
+| **rxjs** | 295 | 141 | workspaceSelfReference | 125 | **127 (43.1%)** | 141 (47.8%) |
+| **apollo-client** | 348 | 217 | workspaceSelfReference | 192 | **192 (55.2%)** | 217 (62.4%) |
+| **nest** | 286 | 249 | dottedSegment | 74 | **215 (75.2%)** | 249 (87.1%) |
+
+**The corpus splits in two, and the split is not the one the starvation ranking suggests.**
+
+- **Group A — resolver work buys nothing.** typeorm, excalidraw and vue-core are the three *worst*
+  starved repos in the survey, and every resolver fix combined frees **12 subjects between them**
+  (5 + 6 + 1) out of 2,529 tainted. Their taint is `computed` (`require(<expression>)`) and
+  `missingFromTree` (`./dist/*` build output) — the two classes a resolver structurally cannot
+  address, because resolving them requires running the code (pillar 6) or building it (pillar 6).
+- **Group B — resolver work is large.** rxjs 43.1%, express 47.2%, apollo-client 55.2%, nest 75.2%
+  of *all* their blast subjects.
+
+The last row is worth reading on its own: **even perfect resolution leaves typeorm, excalidraw and
+vue-core exactly where they are**, because "perfect" is the row that cannot be built. What is
+buildable is the second-to-last column, and on the three worst repos it is 0.2%, 1.3% and 0.4%.
+
+---
+
+*Phases 3–7 follow.*
