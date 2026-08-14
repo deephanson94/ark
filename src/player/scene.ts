@@ -119,6 +119,73 @@ export function prepare(atlas: Atlas): Scene {
   return { atlas, graph, nodes, edges, regions, bounds: boundsOf(nodes) };
 }
 
+export interface LegendRow {
+  /** Palette index — `TERRAIN_INDEX` for the single terrain row. */
+  readonly index: number;
+  readonly label: string;
+  readonly nodeCount: number;
+  readonly kind: RegionKind;
+  /**
+   * The row exactly as it is printed.
+   *
+   * Here rather than in `ui.ts` because the terrain row is not a region name
+   * plus a count — it is a summary of several — and templating it into the
+   * regions' `${label} (${count})` produced *"terrain (4 areas) (56)"* on this
+   * repo's own map. A view that formats gets to invent wording no test reads;
+   * this way the sentence is asserted where the rule that builds it lives.
+   */
+  readonly text: string;
+}
+
+/**
+ * What the legend lists, in the order it lists it.
+ *
+ * Pure and here rather than in `ui.ts` because the *ordering* is the part with
+ * a defect history and the part worth asserting; `createLegend` is then a
+ * straight render of this list and has nothing left to get wrong.
+ *
+ * Two rules, both from ADR-0041:
+ *
+ *  - **Descending size**, ties by atlas index. The rows were ordered by region
+ *    id — alphabetical, so unrelated to size — and the panel clips, so *which*
+ *    rows a reader lost was arbitrary: the visible 17 accounted for 36% of
+ *    graphql-js and 14% of django.
+ *  - **Terrain is one row, and it is last.** Every terrain region already draws
+ *    the same grey (`TERRAIN_INDEX`), so a row each was the legend claiming
+ *    distinctions the palette does not make — 13 identical swatches on
+ *    prometheus. Last regardless of size, because terrain is ground rather than
+ *    a neighbourhood: hugo's 1,003-file `docs` lump at the top would be true,
+ *    useless, and would push every real region off the panel.
+ */
+export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] {
+  const rows: LegendRow[] = scene.regions
+    .filter((region) => region.kind !== 'terrain')
+    .map((region) => ({
+      index: region.index,
+      label: region.label,
+      nodeCount: region.nodeCount,
+      kind: region.kind,
+      text: `${region.label} (${region.nodeCount})`,
+    }))
+    .sort((a, b) => b.nodeCount - a.nodeCount || a.index - b.index);
+
+  const terrain = scene.regions.filter((region) => region.kind === 'terrain');
+  if (terrain.length > 0) {
+    const nodeCount = terrain.reduce((sum, region) => sum + region.nodeCount, 0);
+    rows.push({
+      index: TERRAIN_INDEX,
+      label: 'terrain',
+      nodeCount,
+      kind: 'terrain',
+      text:
+        terrain.length === 1
+          ? `terrain (${nodeCount})`
+          : `terrain (${nodeCount} in ${terrain.length} areas)`,
+    });
+  }
+  return rows;
+}
+
 /**
  * Nodes whose disc lands within `padding` px of the viewport. Radius is
  * included so a large node whose centre is just off screen still draws its

@@ -273,14 +273,41 @@ truth set is sound and only the distractors are at risk) is set out in
 
 | field | type | notes |
 |---|---|---|
-| `id` | `string` | Slug of the members' shared directory, `-2` suffixed on collision. |
-| `label` | `string` | The shared directory itself, or `"root"`. |
+| `id` | `string` | Slug of `label`, `-2` suffixed on collision. |
+| `label` | `string` | Either a **directory** holding at least half the region, or `"around <path>"` naming its hub. See below. |
 | `nodeCount` | `number` | Must equal the number of nodes claiming this region. |
 | `centroid` | `[number, number]` | Mean member position, 2dp. |
 | `kind` | `"topology" \| "terrain"` | Whether the graph produced this cluster, or the graph had nothing to say. |
 
-Regions are derived from the import graph by label propagation, **not** from the directory tree
-(pillar 4). [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
+#### What a label may claim
+
+A label is a sentence the player can check in one click, so it is only a
+directory name when that is **true of at least half the region**. Otherwise the
+region is named `around <path>` after its hub — the most-connected member —
+which is a different fact and equally checkable, and reads as one because a path
+ending in a file extension is visibly not a directory.
+
+The rule this replaced took the deepest directory *every* member shared and fell
+back to the busiest file's *directory*. Regions used to be mostly subtrees so it
+rarely mattered; Louvain's cross directories by design, and measured across eight
+repos **39 of 74 topology regions carried a label naming a directory holding
+under half their members** — several at 0%, because the `root` fallback plus
+collision refinement produced names like `root/hugolib`, a directory that does
+not exist. It is now **0 of 74**, with 26 using the hub form
+([ADR-0041](decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md) §12).
+
+Two regions cannot both be a directory: the one more of which is in it keeps the
+name and the other takes its hub. A **topology** region outranks a terrain lump
+for a contested name, because a derived cluster is a claim about structure and
+terrain is the absence of one.
+
+Regions are derived from the import graph by **deterministic Louvain at γ = 1**
+(`src/indexer/louvain.ts`), **not** from the directory tree (pillar 4). It was label propagation
+until [ADR-0041](decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md),
+which replaced it under an owner-licensed layout epoch. That document also measures the directory
+tree as a rival clustering and refuses it at **Q = −0.095 on django** — worse than a random
+partition — so the "not from the directory tree" above is now a measured claim rather than only a
+principled one. [ADR-0006](decisions/0006-layout-and-regions-are-computed-in-the-indexer.md).
 
 #### `topology` versus `terrain`
 
@@ -298,6 +325,14 @@ desaturated wash so colour stays reserved for claims the graph actually supports
 There is deliberately **no cap** on region count. The bound is a consequence rather than a tuning:
 `regions ≤ nodes / 3 + topLevelDirectories`, asserted in `test:atlas`.
 [ADR-0010](decisions/0010-terrain-islands-and-the-ctrl-f-gate.md).
+
+That bound is loose by two orders of magnitude and was never what kept the number readable — it
+permits 1,021 regions on django. What keeps it readable is the clustering: measured across eight
+repositories, ADR-0041 puts every one at **9–22 regions** (django 175 → 22, hono 57 → 20). The floor the bound
+rests on is enforced by the **terrain fold**, not by `absorbSmallRegions`: a connected component
+still under the floor after clustering becomes terrain. Louvain does ship sub-floor communities on
+hono, graphql-js and kysely, and every one is a two-node island the fold takes — absorption performs
+**0 merges on all eight repos** (ADR-0041 §5.2).
 
 ### 3.5 `history`
 

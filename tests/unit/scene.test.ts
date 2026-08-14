@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 import { NORTH } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
-import { blastRadius, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
+import { TERRAIN_INDEX, blastRadius, legendRows, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
 import { DISTRICT_SCALE, STREET_SCALE, levelFor, shortLabel, styleFor } from '../../src/player/zoom.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -229,5 +229,73 @@ describe('cost at scale', () => {
     }
     const perFrame = (performance.now() - started) / 60;
     expect(perFrame, `culling took ${perFrame.toFixed(2)} ms/frame`).toBeLessThan(8);
+  });
+});
+
+describe('legendRows', () => {
+  /**
+   * `scene.regions` is atlas order, which is sorted by **id** — alphabetical,
+   * and therefore unrelated to size. The legend clips, so before ADR-0041
+   * *which* rows a reader lost was arbitrary: the visible 17 accounted for 36%
+   * of graphql-js's map and 14% of django's.
+   *
+   * The fixture is deliberately built so that id order, size order and index
+   * order all disagree. A test whose fixture happens to be sorted already would
+   * pass against the old code.
+   */
+  const regions = [
+    { id: 'a-small', label: 'a-small', index: 0, x: 0, y: 0, nodeCount: 3, kind: 'topology' as const },
+    { id: 'b-terrain', label: 'docs', index: TERRAIN_INDEX, x: 0, y: 0, nodeCount: 400, kind: 'terrain' as const },
+    { id: 'c-big', label: 'c-big', index: 2, x: 0, y: 0, nodeCount: 90, kind: 'topology' as const },
+    { id: 'd-terrain', label: 'root', index: TERRAIN_INDEX, x: 0, y: 0, nodeCount: 7, kind: 'terrain' as const },
+    { id: 'e-mid', label: 'e-mid', index: 4, x: 0, y: 0, nodeCount: 40, kind: 'topology' as const },
+  ];
+
+  it('lists topology regions largest first', () => {
+    const rows = legendRows({ regions });
+    expect(rows.filter((row) => row.kind === 'topology').map((row) => row.label)).toEqual([
+      'c-big',
+      'e-mid',
+      'a-small',
+    ]);
+  });
+
+  it('collapses every terrain region into one row, and puts it last', () => {
+    // They already share a single palette slot (TERRAIN_INDEX), so a row each
+    // was the legend claiming distinctions the map does not draw — 13 identical
+    // grey swatches on prometheus. Last regardless of size: terrain is ground,
+    // and hugo's 1,003-file docs lump at the top would push out every real
+    // region while saying nothing.
+    const rows = legendRows({ regions });
+    const terrain = rows.filter((row) => row.kind === 'terrain');
+    expect(terrain).toHaveLength(1);
+    expect(rows[rows.length - 1]).toBe(terrain[0]);
+    expect(terrain[0]?.nodeCount).toBe(407);
+    expect(terrain[0]?.index).toBe(TERRAIN_INDEX);
+    expect(terrain[0]?.text).toBe('terrain (407 in 2 areas)');
+  });
+
+  it('names a lone terrain region without an area count', () => {
+    // Templating the regions' `label (count)` over a summary row printed
+    // "terrain (4 areas) (56)" on this repo's own map, so the row owns its text.
+    const rows = legendRows({ regions: regions.filter((region) => region.id !== 'd-terrain') });
+    expect(rows[rows.length - 1]?.text).toBe('terrain (400)');
+  });
+
+  it('accounts for every node exactly once', () => {
+    // The rows are what a reader adds up to decide how much of the map they can
+    // name, so a dropped or double-counted region is a false total.
+    const rows = legendRows({ regions });
+    expect(rows.reduce((sum, row) => sum + row.nodeCount, 0)).toBe(
+      regions.reduce((sum, region) => sum + region.nodeCount, 0),
+    );
+  });
+
+  it('breaks size ties by atlas index, so the order is total and reproducible', () => {
+    const tied = [
+      { id: 'y', label: 'y', index: 5, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
+      { id: 'x', label: 'x', index: 1, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
+    ];
+    expect(legendRows({ regions: tied }).map((row) => row.label)).toEqual(['x', 'y']);
   });
 });

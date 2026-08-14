@@ -179,18 +179,34 @@ body {
 
 /* ---- legend ------------------------------------------------------------ */
 
+/*
+ * The scroll lives on the list, not the panel — and that is the fix, not a
+ * tidy-up (ADR-0041). The panel used to carry `overflow-y: auto` and
+ * `pointer-events: none` in this same block, which are contradictory: nothing
+ * could deliver a wheel event to it, so the rows past `max-height` were
+ * unreachable rather than merely below the fold. django hid 158 of them.
+ *
+ * Putting the overflow on `.legend-list` and giving *only that* pointer events
+ * back is the smallest fix, and it is **not free**: the list is most of the
+ * panel, so a drag or wheel started over the rows no longer reaches the map,
+ * on every repo including the six whose legends never overflow. The padding
+ * ring and the title stay click-through and that is all. CSS cannot do better
+ * — an element cannot scroll on wheel and pass the same wheel through — so the
+ * trade is between a bottom-left 260px column that is inert to the map and a
+ * legend whose hidden rows are unreachable. It matches the convention
+ * `.inspector-action` and `.guide-action` already follow: inert panel,
+ * interactive controls opt in.
+ */
 .legend {
   position: absolute;
   bottom: 16px;
   left: 16px;
-  max-height: 42vh;
   width: 260px;
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   backdrop-filter: blur(8px);
-  overflow-y: auto;
   pointer-events: none;
 }
 
@@ -207,6 +223,9 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 
 .legend-item {
@@ -227,6 +246,19 @@ body {
 
 /* ---- inspector --------------------------------------------------------- */
 
+/*
+ * Same fix as `.legend`, and it is here because the first pass at it grepped
+ * one selector instead of the pattern (ADR-0041 §1.3, and CLAUDE.md's landmine
+ * about the bug you already fixed being one line down). This panel carried the
+ * identical contradiction: `overflow-y: auto` with `pointer-events: none`, so a
+ * long register — many field notes, a short window — put rows past
+ * `max-height` where no wheel event could ever reach them, and wheeling over
+ * the panel zoomed the map instead.
+ *
+ * The scroll therefore lives on `.inspector-body`, which takes pointer events
+ * back on its own; the panel's padding and the empty-state line stay
+ * click-through so a drag started over the map's top-right corner still works.
+ */
 .inspector {
   position: absolute;
   top: 16px;
@@ -238,8 +270,17 @@ body {
   border-radius: 8px;
   background: var(--panel);
   backdrop-filter: blur(8px);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   pointer-events: none;
+}
+
+.inspector-body {
+  /* `min-height: 0` is what lets a flex child actually shrink and scroll;
+     without it the body grows past the panel and the overflow never engages. */
+  min-height: 0;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 
 .inspector-empty {

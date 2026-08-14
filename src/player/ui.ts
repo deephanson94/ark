@@ -21,6 +21,7 @@ import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
+import { legendRows } from './scene.js';
 import type { TwinClass } from './twins.js';
 
 type Children = readonly (Node | string)[];
@@ -457,13 +458,14 @@ export function createError(message: string): HTMLElement {
   return el('div', 'fatal', [el('h1', undefined, ['This atlas will not load']), el('pre', undefined, [message])]);
 }
 
+/** Renders `legendRows`, which is where the ordering rules and their reasons live. */
 export function createLegend(scene: Scene): HTMLElement {
-  const items = scene.regions.map((region) => {
+  const items = legendRows(scene).map((row) => {
     const swatch = el('span', 'legend-swatch');
     // Straight from the same function the canvas uses — a legend that computes
     // its own colours is a legend that will eventually disagree with the map.
-    swatch.style.background = regionColor(region.index, 1);
-    return el('li', 'legend-item', [swatch, `${region.label} (${region.nodeCount})`]);
+    swatch.style.background = regionColor(row.index, 1);
+    return el('li', 'legend-item', [swatch, row.text]);
   });
   return el('div', 'legend', [
     el('div', 'legend-title', ['regions']),
