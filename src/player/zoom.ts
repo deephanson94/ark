@@ -71,5 +71,24 @@ export function styleFor(level: ZoomLevel): LevelStyle {
 /** `src/indexer/build.ts` → `build.ts` at street level, full path on hover. */
 export function shortLabel(path: string): string {
   const slash = path.lastIndexOf('/');
-  return slash === -1 ? path : path.slice(slash + 1);
+  const base = slash === -1 ? path : path.slice(slash + 1);
+  if (base.length <= LABEL_MAX) return base;
+  // **Head and tail, never a plain truncation.** These are files, and a file's
+  // extension is a fact a reader uses; the middle of a long name is where the
+  // least of it is. This repo's own decision records are the case that forced
+  // it — `0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md`
+  // is 62 characters and drew a label wider than the region it sat in, over the
+  // top of two neighbours.
+  const tail = base.length - Math.max(base.lastIndexOf('.'), 0);
+  const keepTail = Math.min(Math.max(tail, 4), 10);
+  return `${base.slice(0, LABEL_MAX - keepTail - 1)}…${base.slice(base.length - keepTail)}`;
 }
+
+/**
+ * The longest filename a map label may be, in characters.
+ *
+ * Not a pixel measurement: the collision pass already measures pixels and drops
+ * labels that will not fit, and a label dropped for being long is a file that
+ * can never be named on the map. Shortening keeps it nameable.
+ */
+const LABEL_MAX = 26;

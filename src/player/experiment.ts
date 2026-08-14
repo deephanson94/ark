@@ -76,19 +76,102 @@ export type View = 'map' | 'orbit' | 'world';
  * A locked arm additionally loses the two keys that would leave it.
  */
 export function keyHintFor(arm: Arm | null, view: View): string {
-  const parts: string[] = [];
-  if (view === 'orbit') parts.push('drag turn');
-  // `f` and `n` are the flat map's and the orbit's; the world has neither.
-  if (view === 'world') parts.push('wasd move', 'q/e turn');
-  else parts.push('f fit', 'n north');
+  return controlsFor(arm, view)
+    .filter((control) => control.brief !== null)
+    .map((control) => `${control.keys} ${control.brief ?? ''}`)
+    .join(' · ');
+}
+
+/** One control, as the HUD's line and the help card both need it. */
+export interface Control {
+  /** How the key or gesture is written. */
+  readonly keys: string;
+  /** The single word the HUD's line uses. `null` keeps it off that line. */
+  readonly brief: string | null;
+  /** What it does, in a sentence, for the help card. */
+  readonly what: string;
+}
+
+/**
+ * Every control live in this arm and this view, in the order they are offered.
+ *
+ * **One list, two surfaces, and that is the whole reason this exists.** The HUD
+ * line is a projection of this (`keyHintFor`), and the help card is the same
+ * list unfiltered. Before it, the short line was the *only* enumeration of the
+ * controls and the mouse gestures were written down nowhere at all — a cold
+ * playtester scored the controls 6 out of 10 and never found that the flat map
+ * could be panned from the keyboard, because it could not.
+ *
+ * The rule the header states applies to the card exactly as it does to the
+ * line: **do not advertise a key this arm has disabled.** A second hand-kept
+ * list would break it the first time an arm changed, which is the failure this
+ * file already has one screenshot of.
+ */
+export function controlsFor(arm: Arm | null, view: View): readonly Control[] {
+  const controls: Control[] = [];
+  if (view === 'world') {
+    controls.push(
+      { keys: 'wasd', brief: 'move', what: 'Walk. Hold shift to run.' },
+      { keys: 'q/e', brief: 'turn', what: 'Turn on the spot.' },
+    );
+  } else {
+    // **The orbit's pointer gestures are its own, and listing the map's beside
+    // them was this file's own recorded failure repeated.** The first version
+    // pushed the orbit's `drag — turn the world` and then fell through here, so
+    // the card carried **two `drag` rows with contradictory sentences** — and
+    // the map's *"hold shift to turn the map by hand"* is dead in the orbit,
+    // where every drag turns and `shiftKey` is only read when `orbit === null`.
+    // *"Zoom about the pointer"* was false there too: the wheel deliberately
+    // centre-anchors in the orbit, with a comment in `main.ts` explaining why.
+    // The e2e gate only opened the card in the map view, which is why nothing
+    // caught it — the gate covers both views now.
+    if (view === 'orbit') {
+      controls.push(
+        { keys: 'drag', brief: 'turn', what: 'Turn the world. Drag up and down to tip the eye.' },
+        { keys: 'scroll', brief: null, what: 'Zoom about the middle of the view.' },
+      );
+    } else {
+      controls.push(
+        { keys: 'drag', brief: null, what: 'Pan. Hold shift to turn the map by hand.' },
+        { keys: 'scroll', brief: null, what: 'Zoom about the pointer.' },
+      );
+    }
+    // `f` and `n` are the flat map's and the orbit's; the world has neither.
+    controls.push(
+      {
+        keys: 'f',
+        brief: 'fit',
+        what: 'Fit the whole map on screen — at the heading you are on, never back to north.',
+      },
+      { keys: 'n', brief: 'north', what: 'Face north again.' },
+      {
+        keys: 'arrows',
+        brief: null,
+        what: 'Pan, in the direction the screen is pointing rather than the map.',
+      },
+      { keys: '+ / −', brief: null, what: 'Zoom about the middle of the view.' },
+      { keys: 'click', brief: null, what: 'Survey a file — its name, its size and what imports it.' },
+    );
+  }
   if (arm === null) {
     // Where each key goes *from here*, not a fixed list: `o` returns to the map
     // from the orbit, and `g` returns to the map from the world.
-    parts.push(view === 'orbit' ? 'o map' : 'o orbit');
-    parts.push(view === 'world' ? 'g map' : 'g walk');
+    controls.push(
+      view === 'orbit'
+        ? { keys: 'o', brief: 'map', what: 'Back to the flat map.' }
+        : { keys: 'o', brief: 'orbit', what: 'Stand the map up and turn it. Height is how much depends on a file.' },
+      view === 'world'
+        ? { keys: 'g', brief: 'map', what: 'Back to the flat map.' }
+        : { keys: 'g', brief: 'walk', what: 'Walk the city. Roads are imports; buildings are files.' },
+    );
   }
-  parts.push(view === 'world' ? 'enter open' : 'enter ask');
-  return parts.join(' · ');
+  controls.push(
+    view === 'world'
+      ? { keys: 'enter', brief: 'open', what: 'Open the board you are standing at.' }
+      : { keys: 'enter', brief: 'ask', what: 'Ask about the file you have selected.' },
+    { keys: '?', brief: 'keys', what: 'Show this card. Escape closes it.' },
+  );
+  return controls;
 }
 
 /**

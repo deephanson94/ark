@@ -38,14 +38,14 @@ import type { BoardMarks } from './draw.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
 import type { Box } from './labels.js';
 import type { Fog } from './fog.js';
-import type { Arm } from './experiment.js';
+import type { Arm, View } from './experiment.js';
 import { armFromSearch, keyHintFor, worldHintFor } from './experiment.js';
 import { coverage, landmarks } from './fog.js';
 import { GOLDEN_TURN, TURN_MS, bearingDuring } from './heading.js';
 import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
-import { VERBS, channelOf } from '../verbs/index.js';
+import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
 import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
@@ -59,13 +59,14 @@ import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
-import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
+import { NO_HISTORY, noteAttempt, noteSkip, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
 import {
   createError,
   createGuide,
   createHud,
   createInspector,
+  createHelp,
   createLegend,
   createNotebook,
 } from './ui.js';
@@ -74,6 +75,16 @@ import { DISTRICT_SCALE } from './zoom.js';
 const ATLAS_URL = 'atlas.json';
 /** Pointer movement below this is a click, not a drag. */
 const DRAG_THRESHOLD = 4;
+/**
+ * How far one arrow press moves the view, in screen pixels. Shift multiplies it.
+ *
+ * Screen pixels rather than world units on purpose: a keyboard pan should cover
+ * the same fraction of the screen whatever the zoom, which is what a reader
+ * means by "a bit to the left".
+ */
+const PAN_STEP = 90;
+/** One `+`/`-` press. The wheel's own factor, so the two feel like one control. */
+const ZOOM_STEP = 1.2;
 
 async function loadAtlas(url: string): Promise<Atlas> {
   const response = await fetch(url, { cache: 'no-cache' });
@@ -629,8 +640,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // ("drawn once both files' questions are answered"). An earlier version
       // drew them on every grade like the cone, and 79% of what it promised was
       // gone by the next click — ADR-0016 decision 3.
-      const progression = applyGrade(progress, challenge, grade);
+      // The real `liveness`, not the default: a `graded` key certifies the board
+      // it was earned on, and a board whose pass has decayed is a new question
+      // with the same name (ADR-0047, `gradedKeys`). Passing `UNCHECKED` here
+      // would make every re-rolled board permanently unprovable.
+      const progression = applyGrade(progress, challenge, grade, PASS_THRESHOLD, liveness);
       remember(progression.progress);
+      // Handed back to the console so the panel can say which register this
+      // answer landed in while the board that decided it is still on screen.
+      const register = progression.register;
       // Every graded submission, pass or fail — which is the difference between
       // this and the `attempts` map below, and the reason M2's datum did not
       // exist before. That one counts only the boards that did *not* pass, so a
@@ -667,6 +685,13 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // answer key is felt the same however the question arrived.
       selector = {
         ...selector,
+        // The run this board continues, or the start of a new one. Maintained
+        // here because this is where "the player was served a board" happens —
+        // both paths into a challenge converge on this handler.
+        verbRun:
+          selector.previous !== null && selector.previous.verb === challenge.verb
+            ? selector.verbRun + 1
+            : 1,
         previous: challenge,
         attempts: progression.unlocked
           ? selector.attempts
@@ -705,6 +730,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       turnPending = true;
       describe(selected);
       invalidate();
+      return register;
     },
     onClose() {
       if (turnPending) {
@@ -755,9 +781,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     tieFocus = focusFor(node);
     describe(node);
     invalidate();
+  }, () => {
+    // Skip: wave this board away for the session and re-suggest. The deck is
+    // untouched — `noteSkip` clears the list rather than let the player run it
+    // to empty, so "158 left" can never sit over a guide with nothing to offer.
+    const challenge = nextUp();
+    if (challenge === null) return;
+    const remaining = scene.atlas.challenges
+      .map((board) => answerKey(board.verb, board.subject))
+      .filter((key) => !selector.answered.has(key));
+    selector = {
+      ...selector,
+      skipped: noteSkip(selector.skipped, answerKey(challenge.verb, challenge.subject), remaining),
+    };
+    retally();
+    invalidate();
   });
 
   const legend = createLegend(scene);
+  const help = createHelp();
   root.replaceChildren(
     canvas,
     hud.root,
@@ -765,8 +807,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     inspector.root,
     guide.root,
     notebook.root,
+    help.root,
     challengePanel.root,
   );
+
+  /** Which of the three views is on screen, for the arm-aware control list. */
+  const viewNow = (): View => (world.isActive() ? 'world' : orbit === null ? 'map' : 'orbit');
 
   /**
    * Where the DOM panels stand over the canvas, so labels are not placed
@@ -1097,7 +1143,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // two claims, so it is the one more likely to be quietly false: a gate
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
         openQuestions,
         unanswered.size,
         camera.bearing,
@@ -1303,6 +1349,17 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   });
 
   window.addEventListener('keydown', (event) => {
+    // **The help card first, and Escape closes it before anything else.** It is
+    // the one control that has to work from every view, or it is not help.
+    if (event.key === '?' && !challengePanel.isOpen() && !notebook.isOpen()) {
+      help.toggle(arm, viewNow());
+      if (world.isActive()) world.releaseAll();
+      return;
+    }
+    if (event.key === 'Escape' && help.isOpen()) {
+      help.close();
+      return;
+    }
     if (event.key === 'Escape' && challengePanel.isOpen()) {
       challengePanel.close();
       return;
@@ -1373,6 +1430,43 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         event.preventDefault();
         invalidate();
       }
+      return;
+    }
+    // **Keyboard pan and zoom, and the map had neither.** A cold playtester
+    // scored the controls 6 of 10; the flat map could only be moved with a
+    // mouse, which is a real gap on a laptop trackpad and an absolute one for
+    // anyone who does not use a pointer. Screen-space deltas through the same
+    // `pan` the drag uses, so the arrows move the *view* and keep meaning the
+    // same thing after the map has turned — which it does between every
+    // challenge (ADR-0017).
+    const nudge = PAN_STEP * (event.shiftKey ? 3 : 1);
+    const arrow: Record<string, readonly [number, number]> = {
+      ArrowLeft: [nudge, 0],
+      ArrowRight: [-nudge, 0],
+      ArrowUp: [0, nudge],
+      ArrowDown: [0, -nudge],
+    };
+    const step = arrow[event.key];
+    if (step !== undefined) {
+      event.preventDefault();
+      landTurn();
+      camera = pan(camera, step[0], step[1]);
+      invalidate();
+      return;
+    }
+    if (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      landTurn();
+      // About the middle of the view rather than the pointer, which may be
+      // anywhere or nowhere: a keyboard zoom has no anchor to keep fixed except
+      // the one the player is looking at.
+      camera = zoomAt(
+        camera,
+        viewport,
+        { x: viewport.width / 2, y: viewport.height / 2 },
+        event.key === '+' || event.key === '=' ? ZOOM_STEP : 1 / ZOOM_STEP,
+      );
+      invalidate();
       return;
     }
     if (event.key === 'f') {

@@ -66,7 +66,14 @@ beforeAll(async () => {
   // store instead — so the clone has to go through the file:// transport to
   // actually be shallow.
   await git(shallow, ['clone', '-q', '--depth', '1', `file://${origin}`, 'clone']);
-}, 30_000);
+  // **120s, not 30, and the reason is that a timeout here does not go red.**
+  // This setup runs four real `git` invocations plus a clone over the `file://`
+  // transport, and under load on a shared runner it has exceeded 30s — at which
+  // point vitest reports *"9 tests | 9 skipped"* and the suite still prints a
+  // pass line. A suite that goes quiet is worse than one that fails, because
+  // nothing distinguishes it from a suite with nothing to say. The guard below
+  // is the other half: it turns a skipped setup into a visible failure.
+}, 120_000);
 
 afterAll(async () => {
   await rm(origin, { recursive: true, force: true });
@@ -74,6 +81,17 @@ afterAll(async () => {
 });
 
 describe('repo.root', () => {
+  it('has a fixture at all — the setup is real git and can time out', () => {
+    // Deliberately the cheapest possible assertion, and it is here because the
+    // failure it catches is *silence*. If `beforeAll` times out these variables
+    // are still their empty-string initialisers, and every assertion below would
+    // then be reading a repo at `''` — which either skips or fails for a reason
+    // that reads as "the indexer broke" rather than "the fixture never built".
+    expect(origin).not.toBe('');
+    expect(shallow).not.toBe('');
+    expect(firstCommit).toMatch(/^[0-9a-f]{40}$/);
+  });
+
   it('is the first commit, not HEAD', async () => {
     const history = await readGitHistory(origin, 100);
     expect(history.root).toBe(firstCommit);

@@ -205,7 +205,15 @@ export function revealOf(
       // not. The rule used to live on a `route: []` beside this field; it moved here
       // when that field went, because prose is where it can actually be broken.
       note: truth.has(id)
-        ? whyYes(namesIt, shared, id === earliest, id === latest, gapAfter.get(id) ?? null)
+        ? whyYes(
+            namesIt,
+            shared,
+            id === earliest,
+            id === latest,
+            gapAfter.get(id) ?? null,
+            keyByDate.indexOf(id) + 1,
+            keyByDate.length,
+          )
         : whyNot(commit.files, namesIt, shared, adjacent, partners, node.path),
     });
   };
@@ -276,10 +284,43 @@ function namesTheFile(message: string, path: string, tokens: ReadonlySet<string>
   return tokens.size > 0 && [...tokens].every((token) => words.has(token));
 }
 
-/** The shared word, quoted, for a sentence the player can check on screen. */
-function quoteShared(shared: readonly string[]): string {
-  return `“${shared[0] ?? ''}”`;
+/**
+ * The shared token this row may quote as evidence, or `null` if it has none.
+ *
+ * **It used to be `shared[0]`, and a cold playtester was shown *"its message
+ * talks about “a”, and so does this file's name"*.** The path `…/a.ts`
+ * tokenises to `['a']`, English messages contain the article, and `shared` is
+ * in message order — so the sentence was literally true and carried no
+ * information at all. That is the class-label landmine arriving in a witness
+ * line: the strategy picked the row correctly and the gloss explaining it was a
+ * separate claim nobody checked.
+ *
+ * Two changes and both are needed. **Longest, not first**, because message order
+ * has nothing to do with how much a word tells you; and a **floor**, because on
+ * most of these rows there is no good token to promote. Measured over every
+ * gloss a shipped board can print (`npx tsx scripts/probe-gloss.ts`, at
+ * `9b13cf6`): 36.0% of this repo's 161 glossed rows quoted a token under three
+ * characters — 43 of them the word `a` — against 8.1% on graphql-js, 1.0% on
+ * django and 0.0% on hono. Picking the longest rescues 11 of ark's 58 and none
+ * of graphql-js's 25; the rest fall through to a weaker sentence that is true.
+ *
+ * Byte order breaks a length tie so the sentence is the same on every machine.
+ */
+const MIN_EVIDENCE_TOKEN = 3;
+
+function evidenceWord(shared: readonly string[]): string | null {
+  let best: string | null = null;
+  for (const word of shared) {
+    if (word.length < MIN_EVIDENCE_TOKEN) continue;
+    if (best === null || word.length > best.length || (word.length === best.length && word < best)) {
+      best = word;
+    }
+  }
+  return best;
 }
+
+/** `1` → `first`, up to the key sizes ADR-0007 allows. */
+const ORDINAL = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
 
 function whyYes(
   namesIt: boolean,
@@ -287,23 +328,45 @@ function whyYes(
   isEarliest: boolean,
   isLatest: boolean,
   gap: number | null,
+  position: number,
+  total: number,
 ): string {
   // Where in the file's life this landed, and how long the file sat still
   // before it. Both are facts the player can check against the board; the
   // naming clause below is the lesson.
+  //
+  // **The same-day arm used to say only *"landing the same day as the change
+  // before it"*, and on a busy repo that is every row.** Measured over every
+  // shipped Archaeology board (`npx tsx scripts/probe-sameday.ts`): **27.5% of
+  // this repo's 40 boards** carry the identical clause on every row after the
+  // first, and 49.5% of all rows are same-day — against 0.0% of hono's and
+  // kysely's boards and 5.8% of graphql-js's. So it is worst on the bootstrap
+  // repo, which is the one every session and every playtester looks at, and it
+  // is ADR-0018's own `whyYes` defect — *"six words that told the player nothing
+  // they could check"* — in the clause written to avoid it.
+  //
+  // The replacement is the one fact that still differs per row when the dates do
+  // not: **where this commit sits in the board's own date order**. Checkable,
+  // because every row's label leads with its date; derived, because the order is
+  // the key's; and it degrades rather than lies when the key is long, since the
+  // ordinal falls back to a number.
+  const ordinal = ORDINAL[position] ?? `${position}th`;
+  const sameDay = `the ${ordinal} of the ${total} changes this board asked about, landing the same day as the one before it`;
   const place = isEarliest
     ? 'the oldest change this board asked about'
     : gap === null
       ? 'part of this file’s history'
       : gap === 0
-        ? `landing the same day as the change before it${isLatest ? ', and the most recent here' : ''}`
+        ? `${sameDay}${isLatest ? ', and the most recent here' : ''}`
         : `${gap} day${gap === 1 ? '' : 's'} after the change before it${isLatest ? ', and the most recent here' : ''}`;
   if (namesIt) return `changed this file and says so in its message — ${place}.`;
   // The middle case is the common one and used to be told as the strong one.
   // It is still worth saying: the message is *about* something this file's name
-  // is about, which is a weaker and checkable claim.
-  if (shared.length > 0) {
-    return `changed this file, and its message talks about ${quoteShared(shared)} — ${place}.`;
+  // is about, which is a weaker and checkable claim. `evidenceWord` is what
+  // keeps it checkable rather than merely true — see its header.
+  const word = evidenceWord(shared);
+  if (word !== null) {
+    return `changed this file, and its message talks about “${word}” — ${place}.`;
   }
   return `changed this file without ever naming it — ${place}. A log of subjects is not a log of files.`;
 }
@@ -324,8 +387,9 @@ function whyNot(
   // The same lesson, on the weaker fact that is actually true of most of these
   // rows. Quoting the word makes it checkable against the message on screen,
   // which the old sentence was not: a player could read both and see it lie.
-  if (shared.length > 0) {
-    return `its message talks about ${quoteShared(shared)}, and so does this file’s name — but its diff does not touch it. A message says what someone meant to do.`;
+  const word = evidenceWord(shared);
+  if (word !== null) {
+    return `its message talks about “${word}”, and so does this file’s name — but its diff does not touch it. A message says what someone meant to do.`;
   }
   // **Relations, not identities — and a relation over a set of one *is* an
   // identity.** Naming the file would hand over an atom of this commit's

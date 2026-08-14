@@ -14,6 +14,8 @@
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
 import { guideExhausted, notesEmpty, questsLine } from './empty.js';
+import type { Arm, View } from './experiment.js';
+import { controlsFor } from './experiment.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS, wordsFor } from '../verbs/index.js';
@@ -117,15 +119,31 @@ export interface Guide {
  * decay (ADR-0011 decision 3) and a reindex can resurrect its question, so a
  * stored "done" would go on lying.
  */
-export function createGuide(onSuggest: () => void): Guide {
+export function createGuide(onSuggest: () => void, onSkip: () => void): Guide {
   const button = el('button', 'guide-action');
   button.type = 'button';
   button.addEventListener('click', onSuggest);
+  /**
+   * **"Not this one."** A cold playtester's first three suggestions were the
+   * same shape and there was no way past them but to answer one, because *"Where
+   * next?"* offered exactly one next. The board is not refused or hidden — it
+   * keeps its rank and comes back when the skip list empties (`noteSkip`) — so
+   * this is a *preference about the next ten minutes*, which is why it is
+   * session-only and never reaches the save.
+   */
+  const skip = el('button', 'guide-skip', ['not this one']);
+  skip.type = 'button';
+  skip.title = 'Suggest a different question. Nothing is removed from the deck.';
+  skip.addEventListener('click', onSkip);
   const caption = el('div', 'guide-caption');
-  const root = el('div', 'guide', [button, caption]);
+  const root = el('div', 'guide', [button, skip, caption]);
   return {
     root,
     update({ next, refusal, path, placed, arrived, questionsLeft }) {
+      // Nothing to skip *to* when there is nothing left, and a live control that
+      // does nothing reads as broken rather than as a refusal (`main.ts`'s own
+      // rule about advertising a dead key).
+      skip.style.display = next === null ? 'none' : '';
       if (next === null) {
         button.disabled = true;
         // The fork itself lives in `empty.ts` and is unit-tested there. Written
@@ -335,7 +353,11 @@ export function createInspector(
       const atlasNode: AtlasNode | undefined = scene.atlas.nodes[node.ref];
       if (atlasNode === undefined) return;
 
-      const dependencies = (scene.graph.out[node.ref] ?? []).length;
+      // Distinct targets, for the same reason `dependentCount` counts distinct
+      // sources: `import { x }` beside `import type { y }` from one module is
+      // two edges and one imported file. Both numbers on this panel are counts
+      // of files or neither is, and the pair is read as a pair.
+      const dependencies = new Set((scene.graph.out[node.ref] ?? []).map((edge) => edge.to)).size;
       const region = scene.regions[node.regionIndex];
 
       body.append(
@@ -471,6 +493,52 @@ export function createLegend(scene: Scene): HTMLElement {
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
   ]);
+}
+
+/**
+ * The help card: every control this arm and this view actually has.
+ *
+ * **Built from `controlsFor` and never from a list kept here.** A cold
+ * playtester scored the controls 6 out of 10, and the reason was not that they
+ * are bad — it is that the HUD's one-line hint was the *only* enumeration of
+ * them, so the mouse gestures were written down nowhere and the keyboard pan
+ * did not exist. A second hand-kept list would break `experiment.ts`'s rule the
+ * first time an arm changed, which is a failure that file already has a
+ * screenshot of.
+ *
+ * `rebuild` rather than a static render, because the live set changes with the
+ * view: `f` and `n` are dead in the world, and `o` says *map* from the orbit.
+ */
+export interface Help {
+  readonly root: HTMLElement;
+  isOpen(): boolean;
+  toggle(arm: Arm | null, view: View): void;
+  close(): void;
+}
+
+export function createHelp(): Help {
+  const list = el('dl', 'help-list');
+  const root = el('div', 'help', [el('div', 'help-title', ['controls']), list]);
+  root.style.display = 'none';
+  let open = false;
+
+  return {
+    root,
+    isOpen: () => open,
+    toggle(arm, view) {
+      open = !open;
+      root.style.display = open ? 'block' : 'none';
+      if (!open) return;
+      list.replaceChildren();
+      for (const control of controlsFor(arm, view)) {
+        list.append(el('dt', 'help-keys', [control.keys]), el('dd', 'help-what', [control.what]));
+      }
+    },
+    close() {
+      open = false;
+      root.style.display = 'none';
+    },
+  };
 }
 
 export interface Notebook {

@@ -4399,3 +4399,105 @@ the representative path; the deadline is untouched, so a dead surveyor still fai
 **Next**: `docs/experiments/0001`. Every review in this lineage has said it outranks the work around
 it, and this change's value is mostly that hono and graphql-js — the repos its participants meet —
 stop opening on `keys.test.json` and `viralSchema.ts`.
+
+---
+
+## 2026-08-14 — the reveal stops being a gate, and the map gets ground
+
+Four fixes, all pointed at the same complaint: cold playtesters rated intuitiveness 5/10, the core
+loop 5/10, the controls 6/10 and the visuals 6/10.
+
+**Two numbers on screen were false, and a player caught both from arithmetic rather than from code.**
+`imported by` counted **edges**: one file reaches another by an `import` *and* a `type` edge
+routinely, so 14 of this repo's 255 nodes printed a *direct* dependent count larger than their own
+*transitive* cone — impossible on its face (22.9% of edges are a second kind on a pair that already
+had one; measured on a clean clone of `9b13cf6`). And Archaeology quoted `shared[0]`, which is
+**message order**, producing *"its message talks about “a”"* on 36.0% of this repo's glossed rows,
+43 of them the article. Both mutation-checked.
+
+**[ADR-0047](./docs/decisions/0047-proof-is-what-the-first-answer-earned.md) — the reveal gate is
+deleted and the defence moves to the save. This reverses owner-decided ADR-0035 and is awaiting
+ratification.** The gate could not do its job: a single pick scores `2/(K+1) > 0` exactly when it is
+in the key, so the **score** is a membership oracle — 952 of 952 boards on four repos — and guardrail
+6 makes retries free, so the whole key reads off in 20 clicks without ever opening a reveal. Worse,
+the case ADR-0035 called *"untouched"* and *"not farmable"* **was** the exploit: pick one file
+correctly, take precision 1.0, get the entire annotated key and the drawn cone without passing, then
+reopen and type it back. So every answer is explained now, and `proved` is minted only by a board's
+**first** graded submission — the justification being that `gate.ts` certifies a board against
+guesses from a known information state, which models the first submission and nothing after it.
+Guardrail 6 is untouched clause by clause; the only thing a retry cannot do is relabel a fact the
+player was handed. `SAVE_VERSION` 1 → 2.
+
+A post-ship review found the rule outliving its own justification: a `graded` key never decayed while
+passes do, so a fully-decayed board came back **permanently unprovable** and two panels claimed it
+had "already explained itself" when the explanation was what had decayed. `gradedKeys` fixes it. The
+same review found decision 5 — the note's proved/shown register — had **no test at all**, and its
+mutant survived 920 unit tests, 116 atlas tests and the e2e, because the e2e's select-all step names
+the notebook as its reason for being a browser test and never opened it. Both closed, both
+mutation-checked.
+
+**The map had no ground.** Every region was a scatter of coloured discs on the same black as the space
+between them, so pillar 4's *geography is topology* had nowhere to land. Each region now gets a
+landmass — the union of its own discs, inflated, two stacked fills for a coast. A union rather than a
+hull: a hull claims ground other regions' files stand on. Terrain at 45% weight, because 50 Markdown
+files were reading as this repo's largest region. The question rings were spending the salience budget
+uniformly — a third of the map in a dashed halo twice the radius of the disc inside it — and are thin
+and tight now. Value range lifted out of its bottom fifth. Long names shortened head-and-tail.
+
+**The map can be moved from the keyboard, and the controls are written down.** Arrows pan, `+`/`-`
+zoom, `?` opens a card built from a new `controlsFor` — with the HUD's one-line hint reduced to a
+projection of it, so the two cannot diverge. Gated on canvas hashes, not on "no error".
+
+926 unit, 116 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001` still outranks everything here — but ADR-0047 needs the owner's
+ratification first, since a between-subjects run should not start on a rule that might be reverted.
+The open gaps a session could take meanwhile: the invisible fog, the guide's missing skip, mute
+landmarks, `UNREAD` being a whitelist, and Placement being reachable only through the chronicle.
+
+---
+
+## 2026-08-14 (later) — the loop's reward becomes visible, and the opening varies
+
+ADR-0047 ratified by the owner. Three more gaps from the cold playtest, each
+measured before it was fixed.
+
+**The core loop's reward was one pixel.** `fog.ts` names three states and
+`drawFrame` drew two: `understood` shared `surveyed`'s fill and differed only by
+a stroke width of 2.5px against 1.4px. So passing a board — the thing NORTH-STAR
+§4 says lifts the fog — changed a line's thickness. `regionKnown` is the third
+rung, and the claim is stated as measured contrast rather than as three HSL
+numbers that look evenly spaced, because HSL lightness is not perceptual and
+these fills sit on a near-black ground: **1.49 : 2.16 : 3.75** against the
+ground, steps of **1.45×** and **1.73×** (`npx tsx scripts/probe-ramp.ts`). That
+probe paid for itself immediately — the first draft of the comment asserted
+"1.9 : 3.4 : 6.6" from no measurement at all. The unit test measures the same
+ratios; against the shipped version before this, the top step read **1.00**.
+
+**The guide offered exactly one next.** A player who did not want that board had
+no move, and the tester's first three were the same shape. "Not this one" skips
+for the session; the board keeps its rank and returns when the list clears,
+which `noteSkip` forces as soon as every *unanswered* board is on it — otherwise
+skipping the last one leaves the guide saying "every question answered" over a
+HUD saying "158 left", which is the count-of-zero landmine with a third cause.
+
+**And the shapes repeated.** The longest same-verb run in the first fifteen was
+3 here, 4 on hono and kysely and **5** on graphql-js; now **2** on all four.
+Two things were measured rather than argued: the rank position (above `tier` and
+below it are indistinguishable on all four repos, so the tie broke on which is
+safer where they *would* differ) and the run cap (forbidding any repeat spends a
+starved verb's hardest board third, which is the term overriding the very
+progression it sits under).
+
+Three fixtures were written before one could run. Two verbs with equal supply
+alternate on their own, because `withinVerbRank` normalises each to its own
+range — so the first two drafts passed with the term deleted. **Unequal supply**
+is what produces a run, and is what a real deck has.
+
+934 unit, 116 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001` — now unblocked, since ADR-0047 is ratified.
+The gaps left are smaller: Placement is reachable only through the guide (a
+player clicking the map never meets 25% of the deck), the same-day commit gloss
+says nothing when a repo lands several commits a day, `UNREAD` is still a
+whitelist, and there is no deck browser.

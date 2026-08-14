@@ -34,6 +34,51 @@ describe('prepare', () => {
     expect(scene.nodes[at('docs/readme.md')]?.dependentCount).toBe(0);
   });
 
+  it('counts the files that import it, not the edges arriving at it', () => {
+    // `graph.in` holds **edges**, and one file reaches another by more than one
+    // kind of edge all the time: `import { x }` beside `import type { y }` from
+    // the same module is an `import` and a `type`, two true and distinct facts
+    // about one pair of files. The validator refuses a repeated
+    // `(from, to, kind)`, so nothing upstream was wrong — the inspector prints
+    // the sum under the label `imported by`, which made it a count of *edges*
+    // wearing the name of a count of *files*.
+    //
+    // A cold playtester caught it from the arithmetic rather than from the code:
+    // `src/atlas/index.ts` printed `imported by 165` over a **transitive** cone
+    // of 144, and direct dependents are a subset of transitive ones, so the pair
+    // is impossible on its face. **22.9%** of this repo's edges are a second kind
+    // on a pair that already had one, and **14 of its 255** nodes printed a
+    // number larger than their own cone — 14 of hono's 425 too. Measured on a
+    // *clean clone* of `9b13cf6` (`npx tsx scripts/probe-indegree.ts`), which is
+    // the only way a figure about a self-indexing repo stays checkable: the
+    // first version of this comment read 22.7% / 14 of 257 / 165 over 144,
+    // taken from the working tree mid-session, and reproduces at no commit at
+    // all.
+    let seenBA = 0;
+    const twoKinded = atlasWith(
+      ['a.ts', 'b.ts', 'c.ts'],
+      [
+        ['b.ts', 'a.ts'],
+        ['b.ts', 'a.ts'],
+        ['c.ts', 'a.ts'],
+      ],
+      (node) => node,
+      (edge, from, to) =>
+        from === 'b.ts' && to === 'a.ts' && seenBA++ === 1 ? { ...edge, kind: 'type' } : edge,
+    );
+    const twice = prepare(twoKinded);
+    const subject = twice.nodes.findIndex((node) => node.path === 'a.ts');
+    expect(twice.nodes[subject]?.dependentCount).toBe(2);
+    // The invariant the playtester actually applied: direct ≤ transitive, on
+    // every node. It is what makes the number checkable without reading the
+    // scanner, and it is the assertion that would have caught this.
+    for (const node of twice.nodes) {
+      expect(node.dependentCount).toBeLessThanOrEqual(
+        blastRadius(twice, node.ref, Number.POSITIVE_INFINITY).dependents.size,
+      );
+    }
+  });
+
   it('shortens labels to the filename', () => {
     expect(scene.nodes[at('docs/readme.md')]?.label).toBe('readme.md');
   });
@@ -194,6 +239,24 @@ describe('semantic zoom', () => {
   it('shortens a path to its filename', () => {
     expect(shortLabel('src/indexer/build.ts')).toBe('build.ts');
     expect(shortLabel('package.json')).toBe('package.json');
+  });
+
+  it('keeps a long name nameable, head and tail, extension intact', () => {
+    // This repo's own decision records are the case: 62 characters drew a label
+    // wider than the region it sat in and over the top of two neighbours. The
+    // collision pass would otherwise drop it, and a label it drops is a file
+    // that can never be named on the map.
+    const long = 'docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md';
+    const short = shortLabel(long);
+    expect(short.length).toBeLessThanOrEqual(26);
+    expect(short.startsWith('0041-the-legend')).toBe(true);
+    // The extension survives, because it is a fact a reader uses and the middle
+    // of a long name is where the least of it is.
+    expect(short.endsWith('.md')).toBe(true);
+    expect(short).toContain('…');
+    // A name at the limit is untouched — the rule is a ceiling, not a style.
+    expect(shortLabel('a'.repeat(26))).toBe('a'.repeat(26));
+    expect(shortLabel('a'.repeat(27))).toContain('…');
   });
 });
 

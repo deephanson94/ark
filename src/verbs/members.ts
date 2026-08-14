@@ -26,7 +26,7 @@
  */
 
 import type { AtlasId, CommitRecord, Graph } from '../atlas/index.js';
-import type { Words } from './types.js';
+import type { NoteRegister, Words } from './types.js';
 import { commitAt, nodeAt } from '../atlas/index.js';
 
 /** A singular and a plural, for a sentence that has to count something. */
@@ -93,6 +93,21 @@ function nounOf(graph: Graph, id: AtlasId): Noun {
 /** `4 files`, `1 package`. The count and its noun, agreeing. */
 export function counted(count: number, noun: Noun): string {
   return `${count} ${count === 1 ? noun.one : noun.many}`;
+}
+
+/**
+ * How a field note opens: `You proved 4 files` or `You were shown 4 files`.
+ *
+ * **A shared prefix under a verb-written predicate**, which is the safe half of
+ * ADR-0027's rule rather than an exception to it. The thing that must stay with
+ * the verb is the *claim* — "that depend on X", "that change with X", "that
+ * landed on X" — because a shared clause there is how *"Map its companion"*
+ * happened. Which register the note is in is a fact about the **pass**, not
+ * about the question, and every verb says it the same way; a copy per verb would
+ * be the rule living four times, which this repository has a landmine about.
+ */
+export function credited(register: NoteRegister, count: number, noun: Noun): string {
+  return `${register === 'proved' ? 'You proved' : 'You were shown'} ${counted(count, noun)}`;
 }
 
 /**

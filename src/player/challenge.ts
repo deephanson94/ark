@@ -21,9 +21,8 @@
  */
 
 import type { AtlasId, Challenge } from '../atlas/index.js';
-import type { Grade, Reveal, RevealNote } from '../verbs/index.js';
+import type { Grade, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
 import { VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
-import { asEarned } from '../verbs/withhold.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -68,7 +67,14 @@ export interface Console {
 
 export interface ConsoleHandlers {
   /** Fired once per submitted answer, before the player closes the panel. */
-  onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): void;
+  /**
+   * Fold the grade into the record, and say which register it landed in.
+   *
+   * The return value is the one fact the console cannot work out for itself:
+   * whether this board had already been answered, which is what decides whether
+   * a passing answer *proves* anything (ADR-0047). `null` means it did not pass.
+   */
+  onGraded(challenge: Challenge, grade: Grade, reveal: Reveal): NoteRegister | null;
   onClose(): void;
   /**
    * The board's picks or pointer moved, so the frame behind is stale.
@@ -207,14 +213,20 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     submit.addEventListener('click', () => {
       const grade = verb.grade(challenge, { picked: [...picked] });
       // The reveal is computed once and handed on, so the map and the panel
-      // cannot disagree about what was just revealed — and `asEarned` is applied
-      // *here*, before either sees it, for the same reason. It withholds the
-      // identities of correct answers the player did not pick when precision is
-      // below the bar, and moves the map unlock with them, because withholding
-      // the words while drawing the cone changes nothing (ADR-0035).
-      const reveal = asEarned(verb.reveal(scene.atlas, scene.graph, challenge, grade), grade);
-      handlers.onGraded(challenge, grade, reveal);
-      renderResult(challenge, grade, reveal);
+      // cannot disagree about what was just revealed.
+      //
+      // **Every answer gets it, and ADR-0047 is why the gate that used to sit
+      // here is gone.** ADR-0035 withheld the reveal below a precision bar, to
+      // stop select-all buying the answer key. It could not: a single-pick
+      // answer scores above zero exactly when the pick is in the key, so the
+      // *score* is a membership oracle and guardrail 6 makes retries free. Worse,
+      // the gate's own showcase case was the exploit — pick one file correctly,
+      // take precision 1.0, get the whole annotated key and the drawn cone
+      // without passing, reopen and type it back. What is defended instead is
+      // the ledger: `applyGrade` mints proof only on a board's first submission.
+      const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
+      const register = handlers.onGraded(challenge, grade, reveal);
+      renderResult(challenge, grade, reveal, register);
     });
 
     body.replaceChildren(
@@ -227,7 +239,12 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     refresh();
   }
 
-  function renderResult(challenge: Challenge, grade: Grade, reveal: Reveal): void {
+  function renderResult(
+    challenge: Challenge,
+    grade: Grade,
+    reveal: Reveal,
+    register: NoteRegister | null,
+  ): void {
     // The board is over: its markers come off the map before the reveal names
     // the truth set.
     live = null;
@@ -256,6 +273,20 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // the verb knows what its answer key sampled away.
       el('p', 'console-instruction', [reveal.summary]),
       notes(reveal.notes),
+      // **Said here as well as in the notebook, because this is where it is
+      // acted on.** A pass on a board that had already explained itself is a
+      // pass — the deck retires, the map draws — and it does not prove
+      // anything, which the notebook records and this is the only surface that
+      // can say *why* while the reason is still on screen. About the rule, so
+      // the console still knows nothing about verbs.
+      ...(register === 'shown'
+        ? [
+            el('p', 'console-register', [
+              'Recorded as shown rather than proved — this board had already ' +
+                'explained itself. The first answer is the one that counts as knowledge.',
+            ]),
+          ]
+        : []),
       el('div', 'console-footer', [el('div', 'console-tally', []), done]),
     );
   }

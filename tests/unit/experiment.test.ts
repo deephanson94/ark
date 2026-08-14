@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { LOCKED_KEYS, armFromSearch, keyHintFor, worldHintFor } from '../../src/player/experiment.js';
+import { LOCKED_KEYS, armFromSearch, controlsFor, keyHintFor, worldHintFor } from '../../src/player/experiment.js';
 import { prepare } from '../../src/player/scene.js';
 import { buildWorld } from '../../src/player/world/build.js';
 import { drawMinimap } from '../../src/player/world/minimap.js';
@@ -123,6 +123,49 @@ function countingContext(): { context: CanvasRenderingContext2D; lines: () => nu
   }) as unknown as CanvasRenderingContext2D;
   return { context, lines: () => lines, arcs: () => arcs };
 }
+
+describe('the controls card', () => {
+  it('names each gesture once per view, with one sentence', () => {
+    // **The orbit card listed `drag` twice with contradictory sentences.** The
+    // orbit's own row said "turn the world" and the map's fall-through said
+    // "pan, hold shift to turn" — dead in the orbit, where every drag turns. A
+    // duplicated key is the shape of that bug whatever the wording, so this
+    // asserts the shape.
+    for (const arm of [...VIEWS, null] as const) {
+      for (const view of VIEWS) {
+        const keys = controlsFor(arm, view).map((control) => control.keys);
+        expect(new Set(keys).size, `${arm} / ${view}: ${keys.join(', ')}`).toBe(keys.length);
+      }
+    }
+  });
+
+  it('offers no gesture that is dead in the view it is offered in', () => {
+    // The same rule this file already enforces for keys, applied to the pointer.
+    // `f` and `n` do nothing in the world; the map's shift-drag does nothing in
+    // the orbit; the orbit's wheel is centre-anchored, not pointer-anchored.
+    const world = controlsFor(null, 'world').map((control) => control.keys);
+    expect(world).not.toContain('f');
+    expect(world).not.toContain('n');
+    const orbit = controlsFor(null, 'orbit');
+    const orbitDrag = orbit.find((control) => control.keys === 'drag')?.what ?? '';
+    expect(orbitDrag).toContain('Turn');
+    expect(orbitDrag).not.toContain('shift');
+    expect(orbit.find((control) => control.keys === 'scroll')?.what ?? '').not.toContain('pointer');
+    // …and the flat map keeps both, because both are live there.
+    const map = controlsFor(null, 'map');
+    expect(map.find((control) => control.keys === 'drag')?.what ?? '').toContain('shift');
+    expect(map.find((control) => control.keys === 'scroll')?.what ?? '').toContain('pointer');
+  });
+
+  it('is the list the HUD line is a projection of', () => {
+    // One list, two surfaces. If the line stopped being derived from the card
+    // they could drift, which is the failure this file has a screenshot of.
+    for (const view of VIEWS) {
+      const brief = controlsFor(null, view).filter((control) => control.brief !== null);
+      expect(keyHintFor(null, view).split(' · ')).toHaveLength(brief.length);
+    }
+  });
+});
 
 describe("the world arm's minimap", () => {
   const atlas = atlasWith(

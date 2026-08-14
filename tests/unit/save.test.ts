@@ -17,6 +17,7 @@ import type { NodeId } from '../../src/atlas/index.js';
 import {
   EMPTY_PROGRESS,
   SAVE_VERSION,
+  answerKey,
   applyGrade,
   recordPass,
   recordSurvey,
@@ -78,8 +79,29 @@ describe('storageKeyFor', () => {
 
 describe('parseProgress', () => {
   it('round-trips a real record', () => {
-    const progress = recordPass(recordSurvey(EMPTY_PROGRESS, [id(1), id(2)]), 'blastRadius', id(3), [id(1)]);
-    expect(parseProgress(serializeProgress(progress))).toEqual(progress);
+    // Built through `applyGrade` rather than `recordPass`, because that is what
+    // writes `graded` — and the invariant below is what made the difference
+    // visible: `parseProgress` re-seeds `graded` from `passes`, so a record
+    // hand-built without it does not round-trip, correctly.
+    const progress = recordPass(recordSurvey(EMPTY_PROGRESS, [id(1), id(2)]), 'blastRadius', id(3), [id(1)], 'proved');
+    const whole = { ...progress, graded: [{ key: answerKey('blastRadius', id(3)), members: [id(1)] }] };
+    expect(parseProgress(serializeProgress(whole))).toEqual(whole);
+  });
+
+  it('covers every pass in `graded`, whatever the file said', () => {
+    // A save is untrusted input. A record whose `graded` omits a key its
+    // `passes` carries would let that board be proved a second time, which is
+    // ADR-0047's rule undone by a hand-edit — reachable only that way today
+    // (NORTH-STAR §7.1 opts out of it), and one line to make impossible.
+    const forged = JSON.stringify({
+      version: SAVE_VERSION,
+      surveyed: [],
+      graded: [],
+      passes: [{ verb: 'blastRadius', subject: id(3), proved: [id(1)], shown: [] }],
+    });
+    expect(parseProgress(forged).graded).toEqual([
+      { key: answerKey('blastRadius', id(3)), members: [id(1)] },
+    ]);
   });
 
   it('returns an empty record for nothing, junk, and the wrong root type', () => {
@@ -119,7 +141,7 @@ describe('parseProgress', () => {
     });
     const parsed = parseProgress(text);
     expect(parsed.passes).toHaveLength(1);
-    expect(parsed.passes[0]).toEqual({ verb: 'blastRadius', subject: id(3), proved: [id(1)] });
+    expect(parsed.passes[0]).toEqual({ shown: [], verb: 'blastRadius', subject: id(3), proved: [id(1)] });
   });
 
   it('survives a record whose fields are the wrong container type', () => {
@@ -206,7 +228,7 @@ describe('a commit subject survives a round trip', () => {
   it('keeps a pass whose subject is a commit', () => {
     const restored = parseProgress(JSON.stringify(commitPass));
     expect(restored.passes).toEqual([
-      { verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] },
+      { shown: [], verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] },
     ]);
   });
 

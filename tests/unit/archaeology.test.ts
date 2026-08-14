@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { Atlas, Challenge } from '../../src/atlas/index.js';
 import {
   buildGraph,
+  byteCompare,
   challengeOrder,
   commitIdFor,
   encodeWitness,
@@ -33,7 +34,7 @@ import { spread } from '../../src/verbs/sample.js';
 import { archaeology, generateWithReport } from '../../src/verbs/archaeology/index.js';
 import { COMMIT_TRACE_HEURISTICS, gradeCommitHeuristics } from '../../src/verbs/gate.js';
 import { commitSupply } from '../../src/verbs/commits.js';
-import { atlasWith } from '../fixtures/atlas.js';
+import { atlasWith, challengeFor } from '../fixtures/atlas.js';
 
 /**
  * Twenty-two files, with `src/core/engine.ts` as the busy one and a handful of
@@ -555,6 +556,141 @@ describe('the reveal', () => {
     return reveal.notes.filter((note) => witness.has(note.id)).map((note) => note.witness);
   }
 
+  /**
+   * A repo whose subject shares two tokens with a message — one useless.
+   *
+   * `src/io/a-reader-queue.ts` tokenises to `['a', 'reader', 'queue']`, and
+   * `"a faster reader"` shares `a` **first** and `reader` second. That ordering
+   * is the whole fixture: `shared` is in message order, so the first token is
+   * the article. Not all three tokens are shared, so `namesTheFile` stays false
+   * and the row falls to the gloss arm rather than the strong one.
+   */
+  function glossRepo(): Atlas {
+    const paths = ['src/io/a-reader-queue.ts', 'src/io/sink.ts', 'src/io/tap.ts'];
+    const base = atlasWith(paths, [['src/io/sink.ts', 'src/io/a-reader-queue.ts']]);
+    const ref = (path: string): number => base.nodes.findIndex((node) => node.path === path);
+    const commits = [
+      { sha: 'bb0000000002', date: '2026-02-02', subject: 'a faster reader' },
+      { sha: 'bb0000000001', date: '2026-01-05', subject: 'a small fix' },
+    ];
+    return validateAtlas({
+      ...base,
+      repo: { ...base.repo, head: 'f'.repeat(40), headDate: '2026-06-15', root: '0'.repeat(40) },
+      history: {
+        ...base.history,
+        present: true,
+        commitsWalked: commits.length,
+        commitsRetained: commits.length,
+        window: { from: '2026-01-05', to: '2026-06-15' },
+        commits: commits.map((commit) => ({
+          ...commit,
+          files: [ref('src/io/a-reader-queue.ts')],
+          wide: false,
+          issue: null,
+        })),
+      },
+    });
+  }
+
+  it('quotes a word that carries information, or does not quote one', () => {
+    // **A cold playtester was told *"its message talks about “a”"*.** `shared`
+    // is in message order and the gloss took `shared[0]`, so a path with a
+    // one-letter token plus an English article produced a sentence that is
+    // literally true and says nothing — the class-label landmine arriving in a
+    // witness line. 36.0% of this repo's own 161 glossed rows quoted a token
+    // under three characters, 43 of them the word `a`
+    // (`npx tsx scripts/probe-gloss.ts`, at `9b13cf6`).
+    const atlas = glossRepo();
+    const graph = buildGraph(atlas);
+    const subject = atlas.nodes.find((node) => node.path === 'src/io/a-reader-queue.ts')?.id ?? '';
+    const ids = atlas.history.commits.map((commit) => commitIdFor(commit.sha));
+    const [rich, thin] = ids;
+    if (rich === undefined || thin === undefined) throw new Error('fixture lost its commits');
+    const board = challengeFor(atlas, {
+      verb: 'archaeology',
+      subject,
+      candidates: [...ids].sort(byteCompare),
+      truth: [rich],
+      evidence: { kind: 'history', touchedBy: 2 },
+    });
+    const notes = archaeology.reveal(
+      atlas,
+      graph,
+      board,
+      archaeology.grade(board, { picked: [...ids] }),
+    ).notes;
+    const noteFor = (id: string): string =>
+      notes.find((note) => note.id === id)?.note ?? '(no note)';
+
+    // The row that has a real word promotes it over the article.
+    expect(noteFor(rich)).toContain('“reader”');
+    // The row whose only shared token is the article says nothing about words at
+    // all, rather than quoting one. Asserting the *absence of the quote* rather
+    // than the presence of a particular fall-through keeps this a claim about
+    // the gloss and not about the sentence that replaced it.
+    expect(noteFor(thin)).not.toContain('“');
+    for (const note of notes) expect(note.note).not.toContain('“a”');
+  });
+
+  it('says something different on each row when every commit lands the same day', () => {
+    // **ADR-0018's `whyYes` defect, in the clause written to avoid it.** The
+    // same-day arm said only *"landing the same day as the change before it"*,
+    // which on a repo that lands several commits a day is every row after the
+    // first: measured over every shipped board (`npx tsx
+    // scripts/probe-sameday.ts`), **27.5% of this repo's 40** carry the
+    // identical clause on all of them, and 49.5% of all rows are same-day —
+    // against 0.0% on hono and kysely. Worst on the bootstrap repo, which is the
+    // one every session looks at.
+    const paths = ['src/io/tap.ts', 'src/io/sink.ts', 'src/io/vent.ts'];
+    const base = atlasWith(paths, [['src/io/sink.ts', 'src/io/tap.ts']]);
+    const ref = base.nodes.findIndex((node) => node.path === 'src/io/tap.ts');
+    // Four commits, one date. Subjects share no token with the path, so every
+    // row falls to the arm under test rather than to the naming one.
+    // Same date throughout, so the validator's order is sha ascending.
+    const shas = ['cc0000000001', 'cc0000000002', 'cc0000000003', 'cc0000000004'];
+    const atlas = validateAtlas({
+      ...base,
+      repo: { ...base.repo, head: 'f'.repeat(40), headDate: '2026-06-15', root: '0'.repeat(40) },
+      history: {
+        ...base.history,
+        present: true,
+        commitsWalked: shas.length,
+        commitsRetained: shas.length,
+        window: { from: '2026-02-02', to: '2026-06-15' },
+        commits: shas.map((sha, at) => ({
+          sha,
+          date: '2026-02-02',
+          subject: `rework the ${['loop', 'guard', 'frame', 'shelf'][at] ?? 'thing'}`,
+          files: [ref],
+          wide: false,
+          issue: null,
+        })),
+      },
+    });
+    const ids = shas.map((sha) => commitIdFor(sha));
+    const board = challengeFor(atlas, {
+      verb: 'archaeology',
+      subject: atlas.nodes[ref]?.id ?? '',
+      candidates: [...ids].sort(byteCompare),
+      truth: [...ids].sort(byteCompare),
+      evidence: { kind: 'history', touchedBy: shas.length },
+    });
+    const notes = archaeology.reveal(
+      atlas,
+      buildGraph(atlas),
+      board,
+      archaeology.grade(board, { picked: [...ids] }),
+    ).notes;
+    expect(notes).toHaveLength(4);
+    // **The claim: four rows, four different sentences.** Asserting they are
+    // distinct rather than asserting a particular wording — the test is that the
+    // player learns something per row, not that the clause reads a certain way.
+    expect(new Set(notes.map((note) => note.note)).size).toBe(4);
+    // And each still says where in the arc it sits, which is the fact that
+    // replaced the dead one.
+    for (const note of notes.slice(1)) expect(note.note).toContain('changes this board asked about');
+  });
+
   it('withholds the `sibling` class, whatever the row', () => {
     // **The most expensive silence in the product, and the measurement is why.**
     // This class used to say *"a commit that touched this file's own corner of
@@ -719,6 +855,7 @@ describe('what a pass is worth', () => {
       population: 9,
       noun: { one: 'commit', many: 'commits' },
       populationNoun: { one: 'commit', many: 'commits' },
+      register: 'proved',
     });
     expect(prose.claim).toContain('1 commit that changed src/core/engine.ts');
     expect(prose.claim).not.toContain('hops');

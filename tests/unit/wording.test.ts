@@ -47,8 +47,17 @@ describe('the board states its own rule', () => {
     expect(rule).not.toContain('cost you nothing');
     expect(rule).toContain('one of these 3');
     expect(rule).toContain('lower the score');
-    // Guardrail 6 survives and is still said: no lockout, no fail state.
-    expect(rule).toContain('Nothing is locked');
+    // Guardrail 6 survives and is still said: answer as often as you like.
+    expect(rule).toContain('as often as you like');
+    // **And the *second* false sentence is barred by name.** *"Nothing is locked
+    // by a wrong answer"* was true of the score and the deck and false of the
+    // explanation, which ADR-0035's gate locked — a cold playtester read this
+    // promise and *"this board is not explained here"* in one panel and called
+    // the pair the worst thing in the product. The gate is gone (ADR-0047) and
+    // the phrase stays barred, because the thing that is now locked is *proof*,
+    // which the sentence below says outright rather than denying.
+    expect(rule).not.toContain('Nothing is locked');
+    expect(rule).toContain('only the first one can prove anything');
   });
 
   it('reaches every verb’s prompt, so no board can go back to promising it', () => {

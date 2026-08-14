@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { NodeId } from '../../src/atlas/index.js';
 import { buildGraph, commitIdFor, validateAtlas } from '../../src/atlas/index.js';
+import type { FieldNote } from '../../src/player/notes.js';
 import { fieldNotes, noteProse } from '../../src/player/notes.js';
 import { EMPTY_PROGRESS, livenessOf, recordPass } from '../../src/player/progress.js';
 import { VERBS } from '../../src/verbs/index.js';
@@ -34,7 +35,11 @@ const idFor = (path: string): NodeId => {
 };
 
 const passOn = (subject: string, proved: readonly string[]) =>
-  recordPass(EMPTY_PROGRESS, 'blastRadius', idFor(subject), proved.map(idFor));
+  recordPass(EMPTY_PROGRESS, 'blastRadius', idFor(subject), proved.map(idFor), 'proved');
+
+/** The same pass in the other register: answered after the board explained itself. */
+const shownOn = (subject: string, members: readonly string[]) =>
+  recordPass(EMPTY_PROGRESS, 'blastRadius', idFor(subject), members.map(idFor), 'shown');
 
 describe('what a note is built from', () => {
   it('names the files that were proved, with how far each reaches', () => {
@@ -72,14 +77,14 @@ describe('what a note is built from', () => {
   });
 
   it('goes dormant when the subject itself is gone', () => {
-    const ghost = recordPass(EMPTY_PROGRESS, 'blastRadius', 'n:ffffffffffff', [idFor('src/mid.ts')]);
+    const ghost = recordPass(EMPTY_PROGRESS, 'blastRadius', 'n:ffffffffffff', [idFor('src/mid.ts')], 'proved');
     expect(fieldNotes(graph, ghost, liveness)).toEqual([]);
   });
 
   it('orders by radius so the biggest thing you know comes first', () => {
     const both = recordPass(passOn('src/mid.ts', ['src/far.ts']), 'blastRadius', idFor('src/hub.ts'), [
       idFor('src/wide.ts'),
-    ]);
+    ], 'proved');
     const notes = fieldNotes(graph, both, liveness);
     expect(notes.map((note) => note.subjectLabel)).toEqual(['src/hub.ts', 'src/mid.ts']);
   });
@@ -183,7 +188,7 @@ describe('a note reads in the unit its verb measures in', () => {
     atlas.nodes[companionGraph.refByPath.get(path) ?? -1]?.id ?? '';
 
   it('states a companion claim in shared commits, not in hops', () => {
-    const progress = recordPass(EMPTY_PROGRESS, 'companion', id('src/a.ts'), [id('src/b.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'companion', id('src/a.ts'), [id('src/b.ts')], 'proved');
     const notes = fieldNotes(companionGraph, progress, livenessOf(companionGraph, VERBS));
     expect(notes).toHaveLength(1);
     const note = notes[0];
@@ -198,7 +203,7 @@ describe('a note reads in the unit its verb measures in', () => {
   });
 
   it('still states a blast-radius claim in hops', () => {
-    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', id('src/a.ts'), [id('src/c.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', id('src/a.ts'), [id('src/c.ts')], 'proved');
     const notes = fieldNotes(companionGraph, progress, livenessOf(companionGraph, VERBS));
     const prose = noteProse(notes[0]!);
     expect(prose.claim).toContain('depend');
@@ -238,7 +243,7 @@ describe('a note about a commit, which is not a file', () => {
   const commitGraph = buildGraph(withHistory);
   const commit = commitIdFor('0123456789ab');
   const first = withHistory.nodes[0]?.id ?? '';
-  const record = recordPass(EMPTY_PROGRESS, 'placement', commit, [first]);
+  const record = recordPass(EMPTY_PROGRESS, 'placement', commit, [first], 'proved');
 
   it('renders at all, rather than vanishing because the subject is not a node', () => {
     const notes = fieldNotes(commitGraph, record, livenessOf(commitGraph, VERBS));
@@ -268,5 +273,64 @@ describe('a note about a commit, which is not a file', () => {
       }),
     );
     expect(fieldNotes(slid, record, livenessOf(slid, VERBS))).toEqual([]);
+  });
+});
+
+/**
+ * NORTH-STAR §9's distinction, in the surface it is *about*.
+ *
+ * **This block exists because a post-ship review found the register had no test
+ * at all and its mutant survived everything.** Forcing `notes.ts`'s register to
+ * `'proved'` made the notebook claim *"You proved…"* over a farmed pass — the
+ * exact §9 violation ADR-0047 exists to close — and 920 unit tests, 116 atlas
+ * tests and the e2e all stayed green. The permissive default on `recordPass` is
+ * what let the whole suite compile without noticing, so that default is gone
+ * too: the register is now a required argument.
+ */
+describe('which register a note claims', () => {
+  it('says “You were shown” for a pass the board had already explained', () => {
+    const notes = fieldNotes(graph, shownOn('src/hub.ts', ['src/mid.ts', 'src/far.ts']), liveness);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.register).toBe('shown');
+    const prose = noteProse(notes[0] as FieldNote);
+    expect(prose.claim).toContain('You were shown');
+    expect(prose.claim).not.toContain('You proved');
+    // The sentence about the *rule* is shared, and it is what tells the player
+    // why this note reads differently from the one above it.
+    expect(prose.revealed ?? '').toContain('shown rather than proved');
+  });
+
+  it('says “You proved” when the first answer earned it, and adds no rule line', () => {
+    // The control. Without it the assertions above pass against a notebook that
+    // says "You were shown" for everything, which claims less than the player
+    // earned and is the opposite failure.
+    const notes = fieldNotes(graph, passOn('src/hub.ts', ['src/mid.ts', 'src/far.ts']), liveness);
+    expect(notes[0]?.register).toBe('proved');
+    const prose = noteProse(notes[0] as FieldNote);
+    expect(prose.claim).toContain('You proved');
+    expect(prose.revealed ?? '').not.toContain('shown rather than proved');
+  });
+
+  it('claims the proved half when a pass holds both, never a mixture', () => {
+    // A board answered twice: two members proved on the first answer, two more
+    // shown on the second. A sentence over the union would overclaim the shown
+    // half or underclaim the proved half, so the note is the proved half.
+    const first = recordPass(
+      EMPTY_PROGRESS,
+      'blastRadius',
+      idFor('src/hub.ts'),
+      [idFor('src/mid.ts')],
+      'proved',
+    );
+    const both = recordPass(
+      first,
+      'blastRadius',
+      idFor('src/hub.ts'),
+      [idFor('src/mid.ts'), idFor('src/far.ts')],
+      'shown',
+    );
+    const notes = fieldNotes(graph, both, liveness);
+    expect(notes[0]?.register).toBe('proved');
+    expect(notes[0]?.proved.map((member) => member.label)).toEqual(['src/mid.ts']);
   });
 });

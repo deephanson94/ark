@@ -18,13 +18,13 @@ import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
 import type { Box, LabelCandidate, PlaceOptions, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
-import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
+import { INK, regionColor, regionKnown, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
 import { projectAll } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import type { Tie, Ties } from './ties.js';
 import { tieWidth, tiesAt } from './ties.js';
-import { visibleEdges, visibleNodes } from './scene.js';
+import { TERRAIN_INDEX, visibleEdges, visibleNodes } from './scene.js';
 import { levelFor, styleFor } from './zoom.js';
 
 export interface FrameInput {
@@ -112,7 +112,34 @@ export interface FrameStats {
    * wearing a comment that says otherwise.
    */
   readonly boardDrawn: number;
+  /**
+   * Regions whose landmass was filled this frame.
+   *
+   * Counted for the same reason as every other layer here — a rendering nobody
+   * measures can silently stop happening — and **weaker than the standard this
+   * repo sets for itself**, which review caught: it counts the fill being
+   * *issued*, not any pixel changing, so a mutant setting the island alphas to
+   * zero keeps the number and draws nothing. It catches the layer being skipped
+   * outright, which is the failure that has actually happened here before, and
+   * it does not catch the layer going invisible. The honest gate would hash the
+   * canvas, which is what `npm run raster` learned to do after printing
+   * confident numbers about a map that was not moving.
+   */
+  readonly islandsDrawn: number;
 }
+
+/**
+ * How far a region's land reaches past its files, in screen pixels.
+ *
+ * Two stacked fills rather than one, which is what makes it read as a coast
+ * instead of a smudge: the outer is the shallows, the inner is the land, and
+ * the band between them is the only edge either of them has. A stroked outline
+ * would need the *union's* boundary, which Canvas will not give you from a set
+ * of overlapping arcs — stroking the arcs draws every internal circle too, and
+ * the result is the confetti this layer exists to replace.
+ */
+const ISLAND_SHELF = 30;
+const ISLAND_SHORE = 14;
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
 /** Tall enough for the label and its file count, which are drawn as a pair. */
@@ -161,6 +188,68 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   const inRadius = radius?.dependents ?? null;
   const project = (node: SceneNode): { x: number; y: number } =>
     worldToScreen(camera, viewport, node);
+
+  // ---- region landmasses -------------------------------------------------
+  //
+  // **The map had no ground.** Every region was a scatter of coloured discs on
+  // the same black as the empty space between them, so pillar 4's *geography is
+  // topology* had nowhere to land: a reader could see dots and could not see
+  // territories. Three cold playtests rated the map's legibility 5–6 out of 10
+  // and the owner's summary was that the bubbles are "not human-viewing fun or
+  // friendly".
+  //
+  // The fix is figure-ground, and it asserts nothing the layout does not already
+  // say. This is the **union of the region's own discs**, inflated — not a hull,
+  // not a blob fitted to the points. A convex hull would claim area between two
+  // distant members that contains other regions' files, which is inventing
+  // geography and loses to pillar 4 exactly as an interpolated contour did
+  // (see the summit comment below for the same argument made once already).
+  // A union covers only ground **within a fixed distance of a member** — much
+  // weaker than a hull's claim, and not the *"only ground a member is standing
+  // on"* the first draft of this comment said: the pads below are **screen**
+  // pixels, so the world area a coast claims grows as you zoom out. That is the
+  // glyph-radius-is-not-a-ground-area landmine's cousin, and it is harmless here
+  // because the claim degrades smoothly rather than inventing a corridor.
+  //
+  // Drawn first, under the edges, because it is ground.
+  let islandsDrawn = 0;
+  {
+    const byRegion = new Map<number, SceneNode[]>();
+    for (const node of nodes) {
+      const bucket = byRegion.get(node.regionIndex);
+      if (bucket === undefined) byRegion.set(node.regionIndex, [node]);
+      else bucket.push(node);
+    }
+    // Sorted, so two machines composite the same overlaps in the same order.
+    for (const index of [...byRegion.keys()].sort((a, b) => a - b)) {
+      const members = byRegion.get(index) ?? [];
+      // A region of one is a dot, and a halo round a dot reads as a mistake.
+      if (members.length < 3) continue;
+      // **Terrain gets a fainter island, and that is the same claim its colour
+      // makes.** Terrain is files with no edges — `palette.ts` refuses it a hue
+      // because *"a hue is a claim of topological kinship; terrain has none"* —
+      // so it is ground the map crosses rather than a territory the map is
+      // about. At the full weight this repo's 50 Markdown files read as its
+      // largest region, which is true of the file count and false of the
+      // architecture.
+      const weight = index === TERRAIN_INDEX ? 0.45 : 1;
+      for (const [pad, alpha] of [
+        [ISLAND_SHELF, 0.05 * weight],
+        [ISLAND_SHORE, 0.07 * weight],
+      ] as const) {
+        context.beginPath();
+        for (const node of members) {
+          const point = project(node);
+          const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+          context.moveTo(point.x + drawn + pad, point.y);
+          context.arc(point.x, point.y, drawn + pad, 0, Math.PI * 2);
+        }
+        context.fillStyle = regionWash(index, alpha);
+        context.fill();
+      }
+      islandsDrawn++;
+    }
+  }
 
   // ---- edges ------------------------------------------------------------
   context.lineWidth = Math.max(0.5, 0.9 * Math.min(1, camera.scale));
@@ -267,7 +356,13 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       context.globalAlpha = dimmed ? 0.45 : 1;
       context.fill();
     } else {
-      context.fillStyle = regionWash(node.regionIndex, 1);
+      // **Three states, three fills.** `understood` used to share `surveyed`'s
+      // fill and differ by a stroke width of 2.5px against 1.4px, which is the
+      // entire core loop's reward rendered as one pixel — see `regionKnown`.
+      context.fillStyle =
+        state === 'understood'
+          ? regionKnown(node.regionIndex, 1)
+          : regionWash(node.regionIndex, 1);
       context.globalAlpha = dimmed ? 0.4 : 1;
       context.fill();
       context.strokeStyle = regionColor(node.regionIndex, 1);
@@ -322,19 +417,26 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // A node carrying an unanswered question wears a broken accent ring: legible
   // at a glance across the whole map, and gone the moment you pass it, so the
   // map doubles as the progress display.
+  //
+  // **Rationed since the repaint, and the count is why.** This repo rings 82 of
+  // its 256 files at once — a third of the map wearing a dashed halo 2× the
+  // radius of the disc inside it, which at territory zoom is the loudest thing
+  // on screen and is the same mark 82 times over. A salience budget spent
+  // uniformly buys no salience. The dash is gone (it aliases into fuzz at the
+  // radius most nodes are drawn at), the ring sits tight against the disc
+  // instead of orbiting it, and it is thin: still findable at a glance across
+  // the map, no longer competing with the thing it is pointing at.
   if (questions.size > 0) {
     context.strokeStyle = INK.question;
-    context.lineWidth = 1.6;
-    context.setLineDash([2.5, 3.5]);
+    context.lineWidth = 1;
     for (const node of nodes) {
       if (!questions.has(node.ref)) continue;
       const point = project(node);
       const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
       context.beginPath();
-      context.arc(point.x, point.y, drawn + 3.5, 0, Math.PI * 2);
+      context.arc(point.x, point.y, drawn + 2, 0, Math.PI * 2);
       context.stroke();
     }
-    context.setLineDash([]);
   }
 
   // ---- subject and hover rings -----------------------------------------
@@ -491,6 +593,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     peaksDrawn,
     tiesDrawn,
     boardDrawn,
+    islandsDrawn,
   };
 }
 
@@ -625,7 +728,13 @@ export function drawOrbitFrame(
       context.fillStyle = regionSilhouette(node.regionIndex, 1);
       context.fill();
     } else {
-      context.fillStyle = regionWash(node.regionIndex, 1);
+      // The ramp is the map's, and the orbit is the same atlas from a different
+      // angle — a file reading as *known* flat and as merely surveyed standing
+      // up would be two answers to one question.
+      context.fillStyle =
+        state === 'understood'
+          ? regionKnown(node.regionIndex, 1)
+          : regionWash(node.regionIndex, 1);
       context.fill();
       context.strokeStyle = regionColor(node.regionIndex, 1);
       context.lineWidth = state === 'understood' ? 2.5 : 1.4;
@@ -703,6 +812,10 @@ export function drawOrbitFrame(
   return {
     nodesDrawn: ordered.length,
     edgesDrawn,
+    // The orbit draws no landmasses: the columns stand *on* the flat footings,
+    // so a fill in the ground plane would be underfoot and read as a shadow
+    // nothing is casting. Zero because it is zero, not because it is unwired.
+    islandsDrawn: 0,
     tiesDrawn: 0,
     labelsDrawn: placed.length,
     level,

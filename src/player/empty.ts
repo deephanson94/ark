@@ -70,7 +70,13 @@ export function notesEmpty(deckRefused: boolean): string {
     );
   }
   return (
-    'Nothing proved yet. Answer a question and what you establish is written down here — ' +
-    'only what you proved, never what you were shown.'
+    // **This used to end *"only what you proved, never what you were shown"*,
+    // and ADR-0047 made it false in the same commit that made it checkable one
+    // click later**: a board answered a second time writes a note that opens
+    // *"You were shown…"*, by design, because that is §9's other register and
+    // the notebook is where the distinction is kept rather than hidden. The
+    // sentence now says what the page will actually show.
+    'Nothing here yet. Answer a question and what you establish is written down — ' +
+    'and each note says whether you proved it or were shown it.'
   );
 }

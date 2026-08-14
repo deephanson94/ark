@@ -26,7 +26,7 @@ import type { Point, Viewport } from '../camera.js';
 import type { Box } from '../labels.js';
 import type { Fog } from '../fog.js';
 import { visibilityOf } from '../fog.js';
-import { INK, regionColor, regionSilhouette, regionWash } from '../palette.js';
+import { INK, regionColor, regionKnown, regionSilhouette, regionWash } from '../palette.js';
 import type { Eye, ViewPoint } from './camera.js';
 import { clipToNear, focalOf, projectView, toView } from './camera.js';
 import type { Arch, Chronicle, Road, Tower, World } from './build.js';
@@ -617,8 +617,19 @@ function drawTower(
   const base = corners.map(([cx, cy]) => toView(eye, cx, cy, 0));
   const top = corners.map(([cx, cy]) => toView(eye, cx, cy, tower.height));
 
+  // **Three states here too, and this view was the one left behind.** The flat
+  // map and the orbit got `regionKnown` when the ramp landed; the world went on
+  // filling surveyed and understood identically and separating them by a 1.2px
+  // roof stroke — which is the *exact* defect that change indicted, surviving in
+  // the third view. `draw.ts`'s orbit path states the rule this violated: a file
+  // reading as known flat and as merely surveyed standing up would be two
+  // answers to one question.
   const body =
-    state === 'silhouette' ? regionSilhouette(tower.node.regionIndex, 1) : regionWash(tower.node.regionIndex, 1);
+    state === 'silhouette'
+      ? regionSilhouette(tower.node.regionIndex, 1)
+      : state === 'understood'
+        ? regionKnown(tower.node.regionIndex, 1)
+        : regionWash(tower.node.regionIndex, 1);
   const crown =
     state === 'silhouette' ? regionSilhouette(tower.node.regionIndex, 1) : regionColor(tower.node.regionIndex, 1);
 
