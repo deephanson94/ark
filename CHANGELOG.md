@@ -4088,4 +4088,34 @@ fully supplied (hugo **23 boards against a cap of 156**, webpack 113 against 1,5
 dominated by `disclosed`, ADR-0019 decision 7 yielding to Placement, so it is a different mechanism
 and nothing in this session touches it. Companion is the most robust verb in the product.
 
-**Next**: the owner's two calls above. Then experiment 0001, which is still the wall.
+**Both owner's calls came back yes, and neither shipped as measured.** Workspace resolution is in —
+`resolve.ts` now resolves a specifier naming a package this repository defines, through the
+`exports` map when its target is on disk, the source mirror `<dir>/src/<rest>` when `exports` names
+a build artifact, and plain directory resolution only when `exports` says nothing. **The gaps
+between those three arms are the safety argument**, because a review found two defects inside the
+patch first: both fallback arms were **dead for a manifest at the repository root** (`${dir}/src` is
+`/src`, a leading slash no node key matches — 8 of the 12 corpus repos with a root manifest
+self-import their own name), and a declared-but-unresolvable `exports` subpath **fell through to the
+repository root**, resolving `myrepo/utils` to a root-level decoy over the real `src/utils.ts`,
+`certain` — a wrong answer key under ADR-0008's invariant. Four mutants die, one of them the
+original patch's own two-arm loop.
+
+Closing the dead arm made the change *better*: typeorm 97.6% → **99.6%** resolution, graphql-js →
+**99.8%**, and kysely's subject taint now **falls** 3.6% → 2.0% where the first measurement had it
+rising to 7.2%. **+250 boards** — apollo-client 46 → 108, nest 7 → 120, rxjs 75 → 150.
+
+**The certifying probe was widened before being believed a second time.** It skipped every
+non-relative specifier — *the whole form this change resolves* — and was blind to 62–64% of the
+dependency relation on the three repos that move. Its plant gate now catches **127 on 111 of rxjs's
+boards and 85 on 84 of nest's**, where the narrow probe caught **none** on either. Against the
+shipped resolver: **0 violations across 15 repos and 46,067 wrong-answer slots.**
+
+And **`typeorm/typeorm` `df07bf1e` joins the reference set** as its taint-limited member — 58 Blast
+Radius boards of 2,248 subjects, 2,120 refused by guardrail 4, the cap 8× from biting. Every other
+repo this project measures itself against is cap-limited, which is what made the whole class
+invisible.
+
+889 unit, 116 atlas, determinism byte-identical, e2e clean, `test:pack` ok — on the branch and on the
+reproduced CI merge commit.
+
+**Next**: experiment 0001, which is still the wall.
