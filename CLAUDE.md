@@ -1070,6 +1070,18 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   membership rule is silent. So when two guards act on one search, **build the fixture where only the
   guard under test can fire** — and note that the surviving mutant was invisible until mutation
   testing, because every assertion was green and the fixture *looked* adversarial.
+- **One fixture cannot test a pruning rule, because the pruning only bites on a configuration you
+  would not think to draw.** The arch search's nearest-neighbour query is a grid that stops when a
+  ring's distance floor clears both current bests, and **every invariant test passes against a grid
+  that stops a ring too early** — on any single field both neighbours are found before a break is
+  reachable. It takes a near member with a slightly further foreign, which you get by *varying* the
+  city rather than by designing one. Two escalations were needed and both were measured: 48 seeded
+  cities killed the early-break mutants, and half of those cities had to be built of **small**
+  buildings, because bucket size scales with the largest footprint and a city of monoliths steps the
+  floor in 30-unit jumps that almost never land where an answer changes. Then the `− maxFootprint`
+  term survived all 48 — a 2,000-city sweep found it changes **10 of 3,990** arches, and its first
+  five seeds are pinned. **A bound justified by a derivation still needs the evidence that it fires**,
+  which is the never-fires landmine pointed at a term instead of a branch.
 - **The nearest point satisfying an inequality is the point where the inequality is tightest.** A
   search that returns the *closest* place meeting a strict condition lands on that condition's
   boundary by construction — the arch stood **0.14 units** inside its own district in the fixture and

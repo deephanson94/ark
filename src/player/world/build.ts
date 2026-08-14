@@ -292,27 +292,11 @@ export function placeArches(
   towers: readonly Tower[],
 ): Arch[] {
   const arches: Arch[] = [];
+  const hood = neighbourhoodOf(towers);
   for (const region of regions) {
     if (region.kind !== 'topology') continue;
     const limit = spreadOf(region, towers);
-    // `standable` is O(towers) per sample and the search takes O(limit²)
-    // samples, so django — 3,035 towers — would pay 3,035 × tens of thousands
-    // fifteen times over on every entry to the world. Only towers near the
-    // search disc can change either of `standable`'s answers, and **near** has
-    // to cover the membership half as well as the overlap half: overlap needs
-    // `limit + footprint + ARCH_HALF`, but the *nearest* tower to a candidate
-    // can be further out, and pruning on the overlap bound alone would let a
-    // non-member disappear and a member be declared nearest — §9.6's first
-    // concern, reintroduced by an optimisation.
-    //
-    // A candidate sits within `limit` of the centroid and some member sits
-    // within `limit` of it too, so no candidate's nearest tower is more than
-    // `2·limit` away, hence never more than `3·limit` from the centroid.
-    const reach = limit * 3 + ARCH_HALF;
-    const local = towers.filter(
-      (tower) => Math.hypot(tower.node.x - region.x, tower.node.y - region.y) <= reach + tower.footprint,
-    );
-    const at = standingPlace(region, local, limit);
+    const at = standingPlace(region, hood, limit);
     if (at === null) continue;
     let tallest = 0;
     for (const tower of towers) {
@@ -359,10 +343,10 @@ function spreadOf(region: SceneRegion, towers: readonly Tower[]): number {
  */
 function standingPlace(
   region: SceneRegion,
-  towers: readonly Tower[],
+  hood: Neighbourhood,
   limit: number,
 ): { x: number; y: number; nudge: number } | null {
-  if (standable(region, region.x, region.y, towers)) {
+  if (standable(region, region.x, region.y, hood)) {
     return { x: region.x, y: region.y, nudge: 0 };
   }
   for (let radius = SEARCH_STEP; radius <= limit; radius += SEARCH_STEP) {
@@ -371,10 +355,60 @@ function standingPlace(
       const theta = (ring / rings) * Math.PI * 2;
       const x = region.x + radius * Math.cos(theta);
       const y = region.y + radius * Math.sin(theta);
-      if (standable(region, x, y, towers)) return { x, y, nudge: radius };
+      if (standable(region, x, y, hood)) return { x, y, nudge: radius };
     }
   }
   return null;
+}
+
+/**
+ * The towers, in square buckets, so `standable` is not a scan of the city.
+ *
+ * The search takes O(limit²) samples and `standable` asks two nearest-neighbour
+ * questions of each — which as a linear scan cost **830 ms on typeorm** against
+ * a 5 ms world build, on every press of `g`. It is a grid rather than a radius
+ * filter because the sound radius is the problem: a candidate's *nearest* tower
+ * can be much further out than anything that could overlap it, so pruning on the
+ * overlap bound alone would let a non-member vanish and a member be declared
+ * nearest — §9.6's first concern, reintroduced by an optimisation.
+ *
+ * Square buckets and the **Chebyshev** metric are the same shape, which is what
+ * makes the ring bound below exact rather than conservative.
+ */
+interface Neighbourhood {
+  readonly cell: number;
+  readonly maxFootprint: number;
+  readonly buckets: ReadonlyMap<string, readonly Tower[]>;
+  readonly rings: number;
+}
+
+function neighbourhoodOf(towers: readonly Tower[]): Neighbourhood {
+  let maxFootprint = 0;
+  for (const tower of towers) maxFootprint = Math.max(maxFootprint, tower.footprint);
+  const cell = Math.max(8, (maxFootprint + ARCH_HALF) * 2);
+  const buckets = new Map<string, Tower[]>();
+  let minGx = Infinity;
+  let maxGx = -Infinity;
+  let minGy = Infinity;
+  let maxGy = -Infinity;
+  for (const tower of towers) {
+    const gx = Math.floor(tower.node.x / cell);
+    const gy = Math.floor(tower.node.y / cell);
+    minGx = Math.min(minGx, gx);
+    maxGx = Math.max(maxGx, gx);
+    minGy = Math.min(minGy, gy);
+    maxGy = Math.max(maxGy, gy);
+    const bucket = buckets.get(`${gx},${gy}`);
+    if (bucket === undefined) buckets.set(`${gx},${gy}`, [tower]);
+    else bucket.push(tower);
+  }
+  // How many rings it can take to leave the occupied area entirely. The loop
+  // needs a stop even when nothing bounds it from the data — a region that is
+  // the only one on the map has no foreign tower, so `foreign` stays infinite
+  // and no measured distance will ever end the walk.
+  const rings =
+    towers.length === 0 ? 0 : Math.max(maxGx - minGx, maxGy - minGy) + 2;
+  return { cell, maxFootprint, buckets, rings };
 }
 
 /**
@@ -410,21 +444,37 @@ function standable(
   region: SceneRegion,
   x: number,
   y: number,
-  towers: readonly Tower[],
+  hood: Neighbourhood,
 ): boolean {
+  const gx = Math.floor(x / hood.cell);
+  const gy = Math.floor(y / hood.cell);
   let member = Infinity;
   let foreign = Infinity;
-  for (const tower of towers) {
-    // Square-to-square, because a tower is drawn as a box of half-width
-    // `footprint` — `hero.ts` collides with the inscribed *circle*, which is the
-    // smaller shape and would let an arch clip a corner it never touches.
-    const gap = Math.max(
-      Math.abs(tower.node.x - x) - tower.footprint,
-      Math.abs(tower.node.y - y) - tower.footprint,
-    );
-    if (gap < ARCH_HALF) return false;
-    if (tower.node.regionIndex === region.index) member = Math.min(member, gap);
-    else foreign = Math.min(foreign, gap);
+  for (let ring = 0; ring <= hood.rings; ring += 1) {
+    // Everything in this ring or beyond sits at least `(ring − 1)·cell` away in
+    // Chebyshev centre-distance, so its gap cannot beat this. Once that floor
+    // clears both bests, nothing further out can change either answer.
+    const floor = (ring - 1) * hood.cell - hood.maxFootprint;
+    if (floor > member && floor > foreign) break;
+    for (let cx = gx - ring; cx <= gx + ring; cx += 1) {
+      for (let cy = gy - ring; cy <= gy + ring; cy += 1) {
+        // The ring, not the block: the interior was scanned on earlier passes.
+        if (ring > 0 && Math.abs(cx - gx) !== ring && Math.abs(cy - gy) !== ring) continue;
+        for (const tower of hood.buckets.get(`${cx},${cy}`) ?? []) {
+          // Square-to-square, because a tower is drawn as a box of half-width
+          // `footprint` — `hero.ts` collides with the inscribed *circle*, which
+          // is the smaller shape and would let an arch clip a corner it never
+          // touches.
+          const gap = Math.max(
+            Math.abs(tower.node.x - x) - tower.footprint,
+            Math.abs(tower.node.y - y) - tower.footprint,
+          );
+          if (gap < ARCH_HALF) return false;
+          if (tower.node.regionIndex === region.index) member = Math.min(member, gap);
+          else foreign = Math.min(foreign, gap);
+        }
+      }
+    }
   }
   return member + ARCH_HALF <= foreign;
 }

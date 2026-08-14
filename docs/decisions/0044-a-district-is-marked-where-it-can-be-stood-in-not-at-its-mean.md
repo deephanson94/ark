@@ -164,11 +164,33 @@ which on a sprawling district is near its edge rather than at its middle. `Arch.
 far, so the claim is checkable rather than implied, and the invariant that survives the nudge is the
 one that matters: the nearest building is a member, by a margin, on all 142.
 
-## 4. What was checked, and what a suite could not see
+## 4. The search is a grid, because the scan was an 830 ms freeze
 
-Eight mutants of `placeArches`, each reverted by copying the file back rather than with
-`git checkout` (this repo has a landmine about that). **All eight die**, and two of them only after
-the test that should have caught them was rewritten:
+Nothing above says how `standable` finds the nearest tower, and the first version found it by scanning
+the city. The search takes O(limit²) samples and asks two nearest-neighbour questions of each, so on
+**typeorm that is 830 ms** against a **5 ms** world build — on every press of `g`, since `enter()`
+rebuilds. django was 198 ms. A 180× regression on the world's build, introduced by this change and
+therefore this change's to fix.
+
+It is a **grid** rather than a radius filter because the sound radius is the problem. A candidate's
+*nearest* tower can be much further out than anything that could overlap it, so pruning on the overlap
+bound alone would let a non-member vanish and a member be declared nearest — §9.6's first concern,
+reintroduced by an optimisation. The first draft did exactly that and needed a `3 × limit` bound to be
+sound, which prunes almost nothing on a repo with sprawling districts.
+
+Square buckets and the **Chebyshev** metric the rule already uses are the same shape, which makes the
+stopping bound exact: everything in ring `k` or beyond sits at least `(k−1)·cell − maxFootprint` away,
+so once that floor clears both current bests, nothing further out can change either answer.
+
+**typeorm 830 → 73 ms, django 198 → 18 ms**, and the acceptance test is that it changes nothing:
+all **142 arches on all twelve repos are byte-identical** to the scan's, position, nudge and height.
+An optimisation that moves an arch is not an optimisation.
+
+## 5. What was checked, and what a suite could not see
+
+Thirteen mutants of `placeArches`, each reverted by copying the file back rather than with
+`git checkout` (this repo has a landmine about that). **All thirteen die**, and four of them only
+after the test that should have caught them was written or rewritten:
 
 | mutant | killed by |
 |---|---|
@@ -180,14 +202,31 @@ the test that should have caught them was rewritten:
 | search bound replaced by 4,000 | *gives up rather than leaving the district it is naming* |
 | never nudges | four tests |
 | fixed samples per ring | *finds the nearest standable ground in any direction* |
+| grid ring bound not clearing the map | *gives up rather than leaving the district* |
+| ring floor over-estimated (×3 variants) | *places exactly what a scan would place* — one of them **only** on a pinned seed |
+| grid breaks when either best settles | *places exactly what a scan would place* |
 
-Two of those rewrites are the finding, not the housekeeping.
+Three of those are the finding, not the housekeeping.
 
 **The clearance assertion was vacuous over the mixed fixture.** The membership margin already pushes
 an arch away from *foreign* buildings, so deleting the clearance check changed nothing and the mutant
 lived. It takes a district whose own centroid sits inside *its own* monolith to exercise it — the
 degenerate-fixture landmine, and the fixture in question was written to reproduce §9.6 faithfully,
 which is exactly what made it blind to this.
+
+**One fixture cannot test a pruning rule, and the grid needed forty-eight cities plus five named
+seeds.** The invariant tests all pass against a grid that breaks a ring too early, because on any one
+field both nearest neighbours are found before a break is reachable. Over-pruning needs a *near member
+and a slightly further foreign*, which is a configuration you get by varying the city rather than by
+designing one. So the grid is pinned by an equivalence check against a longhand scan over 48 seeded
+fields — half of them built from **small** buildings, which is the half that matters, since the bucket
+size scales with the largest footprint and a city of monoliths steps the ring floor in 30-unit jumps
+that almost never land where an answer changes.
+
+Even that missed one: the `− maxFootprint` term in the floor survived all 48. A 2,000-city sweep run
+off-suite found it changes **10 of 3,990** arches, and the first five of those seeds are pinned in the
+test. The term was already required by the derivation; what was missing was any evidence it ever
+fires, which is this repo's rule about counting a branch before writing tests around it.
 
 **The isotropy assertion has no invariant behind it.** Decision 4 is a quality knob: a coarser search
 still satisfies every invariant above and simply parks the arch further out. The property that *does*
@@ -196,7 +235,7 @@ centroid and the nudge should barely move. Measured over fifteen rotations: **sp
 sample spacing, **spread 7** at eight samples a ring. The bar sits in that gap with both neighbours
 named, per ADR-0025's rule.
 
-## 5. What this does not claim
+## 6. What this does not claim
 
 It does not claim the world teaches better than the map. `docs/experiments/0001` is unrun and
 ADR-0033's S1 gate stands; the flat map is still the arrival state. It does not touch `node.layout`,

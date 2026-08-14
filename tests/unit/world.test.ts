@@ -479,6 +479,161 @@ describe('district arches', () => {
     expect(Math.max(...spun) - Math.min(...spun)).toBeLessThanOrEqual(5);
   });
 
+  it('agrees with a scan of the whole city, over a field it takes many rings to cross', () => {
+    // `standable` is a **grid** query, not a scan: it walks square buckets
+    // outward and stops when the ring's distance floor clears both bests. That
+    // is a pruning argument, and a wrong one does not throw — it silently
+    // returns a different arch, which every invariant above would still accept.
+    // The linear scan it replaced took **830 ms on typeorm** against a 5 ms
+    // world build, so the speed is not optional either.
+    //
+    // Two independent oracles, both written out longhand here: the predicate
+    // checked against every tower, and the nudge against a brute-force sweep.
+    // The second is the one that catches over-pruning — a grid that stops early
+    // misses a *nearer* standable point and lands further out, which nothing
+    // else in this block can see.
+    const field: Tower[] = [];
+    let seed = 7;
+    const next = (): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let i = 0; i < 60; i += 1) {
+      const gx = (i % 10) * 22 - 99;
+      const gy = Math.floor(i / 10) * 22 - 55;
+      field.push(tower(i, gx + next() * 8, gy + next() * 8, i % 2, 4 + next() * 18));
+    }
+    const home = region(0, 'home', 0, 0);
+    const placed = placeArches([home], field)[0];
+    expect(placed).toBeDefined();
+    if (placed === undefined) return;
+
+    const standable = (x: number, y: number): boolean => {
+      let member = Infinity;
+      let foreign = Infinity;
+      for (const built of field) {
+        const gap = Math.max(
+          Math.abs(built.node.x - x) - built.footprint,
+          Math.abs(built.node.y - y) - built.footprint,
+        );
+        if (gap < ARCH_HALF) return false;
+        if (built.node.regionIndex === 0) member = Math.min(member, gap);
+        else foreign = Math.min(foreign, gap);
+      }
+      return member + ARCH_HALF <= foreign;
+    };
+    expect(standable(placed.x, placed.y)).toBe(true);
+
+    let nearest = Infinity;
+    for (let x = -140; x <= 140; x += 0.5) {
+      for (let y = -140; y <= 140; y += 0.5) {
+        if (standable(x, y)) nearest = Math.min(nearest, Math.hypot(x - home.x, y - home.y));
+      }
+    }
+    expect(nearest).toBeLessThan(Infinity);
+    // Within one search step of the true nearest, in either direction: the
+    // sweep only sees its own half-unit lattice, so it can overshoot too.
+    expect(Math.abs(placed.nudge - nearest)).toBeLessThanOrEqual(1.5);
+  });
+
+  it('places exactly what a scan would place, over forty-eight different cities', () => {
+    // **One fixture cannot test a pruning rule.** The block above passes against
+    // a grid that breaks a ring too early, because on that particular field both
+    // nearest neighbours are found before any break is reachable. Over-pruning
+    // needs a *near member and a slightly further foreign*, which is a
+    // configuration you get by varying the city rather than by designing one.
+    //
+    // So: a longhand reference — the same outward lattice over a linear
+    // predicate — and forty-eight seeded fields of differing density, size and mix.
+    // The duplicated ring formula is deliberate; a shared helper would make the
+    // two agree by construction, which is the one thing this must not do.
+    const reference = (regions: readonly SceneRegion[], field: readonly Tower[]): (string | null)[] =>
+      regions.map((home) => {
+        let limit = 0;
+        for (const built of field) {
+          if (built.node.regionIndex !== home.index) continue;
+          limit = Math.max(limit, Math.hypot(built.node.x - home.x, built.node.y - home.y));
+        }
+        const ok = (x: number, y: number): boolean => {
+          let member = Infinity;
+          let foreign = Infinity;
+          for (const built of field) {
+            const gap = Math.max(
+              Math.abs(built.node.x - x) - built.footprint,
+              Math.abs(built.node.y - y) - built.footprint,
+            );
+            if (gap < ARCH_HALF) return false;
+            if (built.node.regionIndex === home.index) member = Math.min(member, gap);
+            else foreign = Math.min(foreign, gap);
+          }
+          return member + ARCH_HALF <= foreign;
+        };
+        const at = (x: number, y: number): string => `${x.toFixed(6)},${y.toFixed(6)}`;
+        if (ok(home.x, home.y)) return at(home.x, home.y);
+        for (let radius = 1; radius <= limit; radius += 1) {
+          const rings = Math.max(8, Math.ceil((2 * Math.PI * radius) / 1));
+          for (let ring = 0; ring < rings; ring += 1) {
+            const theta = (ring / rings) * Math.PI * 2;
+            const x = home.x + radius * Math.cos(theta);
+            const y = home.y + radius * Math.sin(theta);
+            if (ok(x, y)) return at(x, y);
+          }
+        }
+        return null;
+      });
+
+    let differing = 0;
+    let placedTotal = 0;
+    // Forty-eight for breadth, then five **witnesses**. The `− maxFootprint`
+    // term in the ring floor survived every one of the first forty-eight: it
+    // only bites when the true nearest neighbour sits in a window one footprint
+    // wide just below the break threshold. A 2,000-city sweep off-suite found
+    // ten such cities and these are the first five, so the term is pinned by
+    // evidence rather than by the derivation alone (`scripts/_sweep.ts`, run and
+    // discarded — the seeds are the artifact worth keeping).
+    for (const trial of [...Array.from({ length: 48 }, (_unused, index) => index), 296, 392, 450, 620, 934]) {
+      let seed = trial * 7919 + 13;
+      const next = (): number => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+      };
+      const spread = 40 + (trial % 12) * 6;
+      // **Half the cities are built of small buildings**, and that is the half
+      // that matters. The bucket size is `(maxFootprint + ARCH_HALF)·2`, so a
+      // city of monoliths steps the ring floor in 30-unit jumps and a premature
+      // break almost never lands in the window where it changes an answer. Small
+      // footprints make the steps short and the window reachable.
+      const wide = trial % 2 === 0;
+      const field: Tower[] = [];
+      for (let i = 0; i < 30 + (trial % 4) * 12; i += 1) {
+        field.push(
+          tower(
+            i,
+            (next() - 0.5) * spread * 2,
+            (next() - 0.5) * spread * 2,
+            next() < 0.5 ? 0 : 1,
+            wide ? 3.2 + next() * 20 : 3.2 + next() * 1.4,
+          ),
+        );
+      }
+      const homes = [region(0, 'a', 0, 0), region(1, 'b', 6, -4)];
+      const got = placeArches(homes, field);
+      const want = reference(homes, field);
+      placedTotal += got.length;
+      for (const [index, home] of homes.entries()) {
+        const arch = got.find((one) => one.region.index === home.index);
+        // The **position**, not the radius: two points on one ring share a nudge
+        // and are different places, so comparing the distance alone would let a
+        // whole class of disagreement through.
+        const mine = arch === undefined ? null : `${arch.x.toFixed(6)},${arch.y.toFixed(6)}`;
+        if (mine !== want[index]) differing += 1;
+      }
+    }
+    // The gate: a comparison over fields that all place nothing proves nothing.
+    expect(placedTotal).toBeGreaterThan(40);
+    expect(differing).toBe(0);
+  });
+
   it('puts the same arch in the same place every time', () => {
     // Spatial memory is the whole mechanic, and an arch that wandered between
     // sessions would be the re-layout NORTH-STAR §7 forbids, wearing a landmark.

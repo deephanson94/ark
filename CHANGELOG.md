@@ -4218,14 +4218,25 @@ arches). So the ADR states three things separately: `ARCH_HALF ≤ s` is *proven
 inequality, 15.5 is *measured*, and the band `[5.6, 11.2)` is neither — reachable in principle,
 unobserved, and cosmetic if reached.
 
-Eight mutants, all dead — two only after the test that should have caught them was rewritten. The
-clearance assertion was **vacuous** over a fixture built to reproduce §9.6 faithfully, because the
-membership margin already pushes an arch off foreign buildings; it takes a district blocked by *its
-own* monolith to exercise it. And the ring-density refinement has no invariant behind it, so it is
-pinned by **isotropy** instead: rotate the fixture and the nudge must barely move (spread 4 at
-constant sample spacing, 7 at eight samples a ring, bar in the gap).
+**The first version was an 830 ms freeze on typeorm** against a 5 ms world build, on every press of
+`g` — a 180× regression this change introduced and therefore owed. `standable` is a Chebyshev grid
+now, which is the same shape as the metric the rule already used, so its stopping bound is exact
+rather than conservative: **typeorm 830 → 73 ms, django 198 → 18 ms, and all 142 arches on all twelve
+repos byte-identical to the scan's.** An optimisation that moves an arch is not an optimisation.
 
-910 unit, 116 atlas, determinism byte-identical, build clean. `scripts/probe-arches.ts` and
+Thirteen mutants, all dead — four only after the test that should have caught them was written or
+rewritten. The clearance assertion was **vacuous** over a fixture built to reproduce §9.6 faithfully,
+because the membership margin already pushes an arch off foreign buildings; it takes a district
+blocked by *its own* monolith to exercise it. The ring-density refinement has no invariant behind it,
+so it is pinned by **isotropy** instead (spread 4 at constant sample spacing, 7 at eight samples a
+ring, bar in the gap). And **one fixture cannot test a pruning rule**: every invariant passes against
+a grid that breaks a ring early, because on any one field both nearest neighbours are found first.
+That needed an equivalence check against a longhand scan over 48 seeded cities — half built of small
+buildings, which is the half where the ring floor steps finely enough to matter — plus five seeds from
+a 2,000-city sweep, because the `− maxFootprint` term survived all 48 and changes **10 of 3,990**
+arches.
+
+912 unit, 116 atlas, determinism byte-identical, build clean. `scripts/probe-arches.ts` and
 `scripts/shot-world.ts` are new; `_arch.ts` and `_dump2.ts` are gone.
 
 **Next**: a naming rule for cross-directory regions — the arch now makes region *labels* load-bearing
