@@ -36,7 +36,18 @@ export interface SceneNode {
   readonly radius: number;
   /** Index into `atlas.regions` — drives colour. */
   readonly regionIndex: number;
-  /** In-degree. Used to rank which labels are worth the space. */
+  /**
+   * How many **files** import this one. Ranks which labels are worth the space,
+   * and is what the inspector prints under `imported by`.
+   *
+   * Distinct sources, not incoming edges. One file reaches another by more than
+   * one kind of edge routinely — `import { x }` beside `import type { y }` from
+   * the same module is an `import` and a `type` — and counting edges made this a
+   * count of statements under the name of a count of files. It read as a direct
+   * dependent count larger than the node's own **transitive** one on 14 of this
+   * repo's 257 nodes and 14 of hono's 425, which is impossible on its face; a
+   * cold playtester found it from the arithmetic, not from the code.
+   */
   readonly dependentCount: number;
   /** ADR-0013: bit length of the transitive dependent count. How tall it is. */
   readonly elevation: number;
@@ -95,7 +106,7 @@ export function prepare(atlas: Atlas): Scene {
     y: node.layout[1],
     radius: radiusFor(node.loc),
     regionIndex: regionIndexById.get(node.region) ?? 0,
-    dependentCount: (graph.in[ref] ?? []).length,
+    dependentCount: new Set((graph.in[ref] ?? []).map((edge) => edge.from)).size,
     elevation: node.elevation,
   }));
 

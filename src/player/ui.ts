@@ -335,7 +335,11 @@ export function createInspector(
       const atlasNode: AtlasNode | undefined = scene.atlas.nodes[node.ref];
       if (atlasNode === undefined) return;
 
-      const dependencies = (scene.graph.out[node.ref] ?? []).length;
+      // Distinct targets, for the same reason `dependentCount` counts distinct
+      // sources: `import { x }` beside `import type { y }` from one module is
+      // two edges and one imported file. Both numbers on this panel are counts
+      // of files or neither is, and the pair is read as a pair.
+      const dependencies = new Set((scene.graph.out[node.ref] ?? []).map((edge) => edge.to)).size;
       const region = scene.regions[node.regionIndex];
 
       body.append(

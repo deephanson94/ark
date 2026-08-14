@@ -34,6 +34,47 @@ describe('prepare', () => {
     expect(scene.nodes[at('docs/readme.md')]?.dependentCount).toBe(0);
   });
 
+  it('counts the files that import it, not the edges arriving at it', () => {
+    // `graph.in` holds **edges**, and one file reaches another by more than one
+    // kind of edge all the time: `import { x }` beside `import type { y }` from
+    // the same module is an `import` and a `type`, two true and distinct facts
+    // about one pair of files. The validator refuses a repeated
+    // `(from, to, kind)`, so nothing upstream was wrong — the inspector prints
+    // the sum under the label `imported by`, which made it a count of *edges*
+    // wearing the name of a count of *files*.
+    //
+    // A cold playtester caught it from the arithmetic rather than from the code:
+    // `src/atlas/index.ts` printed `imported by 165` over a **transitive** cone
+    // of 144, and direct dependents are a subset of transitive ones, so the pair
+    // is impossible on its face. 22.7% of this repo's edges are a second kind on
+    // a pair that already had one, and 14 of its 257 nodes printed a number
+    // larger than their own cone — 14 of hono's 425 too
+    // (`npx tsx scripts/probe-indegree.ts`, measured at `9b13cf6`).
+    let seenBA = 0;
+    const twoKinded = atlasWith(
+      ['a.ts', 'b.ts', 'c.ts'],
+      [
+        ['b.ts', 'a.ts'],
+        ['b.ts', 'a.ts'],
+        ['c.ts', 'a.ts'],
+      ],
+      (node) => node,
+      (edge, from, to) =>
+        from === 'b.ts' && to === 'a.ts' && seenBA++ === 1 ? { ...edge, kind: 'type' } : edge,
+    );
+    const twice = prepare(twoKinded);
+    const subject = twice.nodes.findIndex((node) => node.path === 'a.ts');
+    expect(twice.nodes[subject]?.dependentCount).toBe(2);
+    // The invariant the playtester actually applied: direct ≤ transitive, on
+    // every node. It is what makes the number checkable without reading the
+    // scanner, and it is the assertion that would have caught this.
+    for (const node of twice.nodes) {
+      expect(node.dependentCount).toBeLessThanOrEqual(
+        blastRadius(twice, node.ref, Number.POSITIVE_INFINITY).dependents.size,
+      );
+    }
+  });
+
   it('shortens labels to the filename', () => {
     expect(scene.nodes[at('docs/readme.md')]?.label).toBe('readme.md');
   });
