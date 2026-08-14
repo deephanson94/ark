@@ -11,12 +11,12 @@
 
 | phase | state | headline |
 |---|---|---|
-| 0 — pre-flight | **done** | 20 repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
+| 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
-| 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 20**, and none of them the three worst-starved. |
+| 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 19**, and none of them the three worst-starved. |
 | 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it ships wrong answer keys on **90–99%** of the subjects it unlocks on three repos. |
-| 5 — candidate C (bounded depth) | pending | |
+| 5 — candidate C (bounded depth) | **done** | **REFUSED on arithmetic, no code written.** A d=3 bound makes **542,282** of typeorm's real dependents eligible as wrong answers. ADR-0008's supporting claim *"depth-3 truth equals unbounded truth for every node"* is now false **on ark itself**. |
 | 6 — two smaller findings | pending | |
 | 7 — synthesis + adversarial review | pending | |
 
@@ -24,7 +24,7 @@
 
 ## 1. The survey
 
-Twenty repositories, cloned at **full depth** and pinned to a named commit
+Nineteen repositories, cloned at **full depth** and pinned to a named commit
 (`scripts/probe-repos.sh`), indexed through ark's own `buildIndex` so every figure is the instrument
 that decides the deck rather than a re-derivation of it (`scripts/probe-supply.ts`).
 
@@ -241,14 +241,14 @@ before implementing (`scripts/probe-workspace.ts`), in priority order — the `e
 | excalidraw | 18 | 0 | 2 | 0 | **16 (88.9%)** |
 | typeorm | 247 | 0 | 0 | 0 | **247 (100%)** |
 
-### 3.2 Built, measured on all 20 repos, reverted
+### 3.2 Built, measured on all 19 repos, reverted
 
 Three resolver changes were implemented together, because §2 found three fixable causes and
 measuring one at a time would price each against a baseline the others had already moved (the
 landmine ADR-0019's counterfactual table hit): workspace resolution as above, the `dottedSegment`
 extension append, and the `rootSelfPath` leading slash.
 
-**What the counterfactual holds fixed**: the same 20 pinned commits, the same deck cap, the same
+**What the counterfactual holds fixed**: the same 19 pinned commits, the same deck cap, the same
 generator, the same gate, the same everything downstream of resolution. One knob — `resolve.ts` and
 the config index feeding it.
 
@@ -320,7 +320,7 @@ them: past the cap, more supply buys nothing at all.
 
 ### 3.5 What it is worth
 
-Three repos of twenty move. **None of them is one of the three worst-starved** — typeorm, excalidraw
+Three repos of nineteen move. **None of them is one of the three worst-starved** — typeorm, excalidraw
 and vue-core gain 0, 0 and 0 boards, exactly as §2 predicted and for the reason §2 gave. The
 candidate is real, it is safe, and it is **not the answer to the starvation question**; it is the
 answer to a different and smaller question about monorepo resolution.
@@ -409,4 +409,68 @@ would put a right answer in the wrong-answer column on nearly every board it cre
 
 ---
 
-*Phases 5–7 follow.*
+## 5. Candidate C — bounded-depth truth. **Refused on arithmetic, and nothing was built.**
+
+ADR-0008 chose unbounded truth deliberately and named the defect a bound reintroduces: at
+`n = maxDepth`, §8.3's *"distance n±1"* distractor is a **real dependent presented as a wrong
+answer**. That objection is checkable straight off the shipped atlases — for a bound `d`, everything
+in `dependents(S, ∞) \ dependents(S, d)` becomes eligible as a distractor while genuinely depending
+on the subject. `scripts/probe-bounded.ts`:
+
+| repo | blast subjects | subjects where d=2 ≠ ∞ | **d=3** | d=4 | **real dependents beyond d=3** | worst subject |
+|---|---|---|---|---|---|---|
+| ark | 88 | 46 | **15** | 1 | **280** | `src/verbs/rank.ts` (48) |
+| hono | 218 | 86 | **72** | 54 | **2,086** | `src/utils/crypto.ts` (180) |
+| kysely | 331 | 250 | **239** | 237 | **17,834** | `src/operation-node/common-table-expression-name-node.ts` (126) |
+| graphql-js | 220 | 149 | **133** | 75 | **9,146** | `src/utilities/astFromValue.ts` (199) |
+| apollo-client | 348 | 101 | **36** | 6 | **76** | `src/core/QueryInfo.ts` (8) |
+| rxjs | 295 | 96 | **56** | 34 | **203** | `packages/rxjs/src/util/ctor-helpers.ts` (13) |
+| nest | 286 | 249 | **244** | 241 | **52,204** | `packages/common/file-stream/interfaces/index.ts` (784) |
+| excalidraw | 479 | 436 | **415** | 398 | **126,912** | `.../TTDDialog/mermaid-lang-lite.ts` (504) |
+| typeorm | 2,221 | 596 | **521** | 405 | **542,282** | `src/persistence/SubjectTopologicalSorter.ts` (2,980) |
+| vue-core | 254 | 172 | **142** | 97 | **5,181** | `.../compat/instanceChildren.ts` (136) |
+| prometheus | 288 | 231 | **181** | 148 | **1,987** | `web/ui/react-app/src/pages/graph/ColorPool.ts` (46) |
+| date-fns | 1,258 | 292 | **91** | 68 | **1,295** | `pkgs/core/src/constructFrom/index.ts` (114) |
+| hugo | 197 | 179 | **177** | 171 | **8,396** | `resources/resource_transformers/cssjs` (137) |
+| webpack | 4,250 | 891 | **730** | 687 | **354,170** | `lib/logging/truncateArgs.js` (565) |
+
+A d=3 bound would make **542,282 of typeorm's real dependents eligible as wrong answers**, 354,170
+of webpack's, 126,912 of excalidraw's. `SubjectTopologicalSorter.ts` alone has **2,980** dependents
+past hop 3. On hugo and excalidraw, **90% and 87% of subjects** have a bounded truth set that differs
+from the real one. Candidate C is dead, it cost twenty minutes, and no code was written.
+
+### 5.1 ADR-0008's *supporting* measurement has gone stale, and it is now false on ark itself
+
+That ADR recorded *"on this repo depth-3 truth equals unbounded truth for **every** node"*, measured
+on a 69-node atlas. On ark at `9b86d12b` — 226 nodes — **15 of 88 subjects differ at d=3**, and 280
+real dependents sit beyond the bound.
+
+The decision is unaffected and is in fact **more** justified than when it was taken: the ADR chose
+unbounded truth *anyway*, calling the bound a landmine that "protected nothing". The stale half is
+the reassurance, not the reasoning. This is `CLAUDE.md`'s measured-constant landmine in its least
+harmful form — a supporting figure rotting under a conclusion that stayed right — and it is recorded
+here rather than quietly corrected, because the sentence reads as a *general* property of import
+graphs and it is a property of one 69-node snapshot.
+
+## 6. The null option, priced
+
+If nothing changes, this is what the product is, over the 19 repositories measured:
+
+| what a player gets | repos | share |
+|---|---|---|
+| **Four verbs, Blast Radius fully supplied** (the cap is what bounds it) | 8 — ark, hono, kysely, graphql-js, date-fns, hugo, prometheus, webpack | **42%** |
+| **Three history verbs plus a token Blast Radius deck** (0.6%–25% of subjects) | 7 — rxjs, apollo-client, express, excalidraw, typeorm, vue-core, nest | **37%** |
+| **Three history verbs, no Blast Radius at all** | 3 Python — django, flask, system-design-primer | **16%** |
+| **Nothing to predict** (one package) | 1 — cobra | **5%** |
+
+So **Blast Radius — NORTH-STAR §6.1's v1 verb, the one M2's kill point is about — is fully supplied
+on fewer than half the repositories in this corpus**, and on 21% it does not exist.
+
+The three git-graded verbs are unaffected on almost all of them (§1.5). The product on a majority of
+real repositories is *already* a history product; what is missing is any document that says so. Every
+one of `README.md`'s four ✅ verb rows, the deployed player's own map, and NORTH-STAR §6.1's framing
+of Blast Radius as **the** v1 verb describe the 42%.
+
+---
+
+*Phases 7 follows.*
