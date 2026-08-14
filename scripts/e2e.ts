@@ -490,8 +490,16 @@ async function main(): Promise<number> {
       if (mapBox !== null) {
         const before = (await page.locator('.console-tally').innerText()).trim();
         let toggled = '';
-        for (let row = 1; row < 20 && toggled === ''; row++) {
-          for (let column = 1; column < 30 && toggled === ''; column++) {
+        // **The bounds have to reach their own denominators.** They did not:
+        // `column < 30` over a `/44` grid and `row < 20` over `/24` swept 66% by
+        // 79% of the canvas, so the step only ever looked at the top-left two
+        // thirds. It passed for milestones because the marks happened to land
+        // there — and went red on a commit that changed *no rendering at all*,
+        // because ark indexes itself and a re-rolled layout put all 19 of them
+        // outside the swept rectangle. A sweep that does not cover the thing it
+        // is searching is the `.first()` landmine with two loop bounds.
+        for (let row = 1; row < 24 && toggled === ''; row++) {
+          for (let column = 1; column < 44 && toggled === ''; column++) {
             const x = mapBox.x + (mapBox.width * column) / 44;
             const y = mapBox.y + (mapBox.height * row) / 24;
             if (
@@ -1534,20 +1542,25 @@ async function main(): Promise<number> {
     // red instead, with `17 towers · 0 roads` on screen. Arriving *in* the city
     // is both the representative path and the one with something to survey.
     const entryBox = await page.locator('canvas.map').boundingBox();
+    let entered = false;
     if (entryBox !== null) {
-      for (let row = 1; row < 20; row++) {
-        let landed = false;
-        for (let column = 1; column < 30; column++) {
+      for (let row = 1; row < 20 && !entered; row++) {
+        for (let column = 1; column < 30 && !entered; column++) {
           const x = entryBox.x + (entryBox.width * column) / 30;
           const y = entryBox.y + (entryBox.height * row) / 20;
           await page.mouse.move(x, y);
           if ((await page.locator('.inspector-path').count()) === 0) continue;
           await page.mouse.click(x, y);
-          landed = true;
-          break;
+          entered = true;
         }
-        if (landed) break;
       }
+    }
+    // **Loudly, not silently.** With no node found the hero falls back to the
+    // shore spawn and the walking assertion below inherits exactly the fragility
+    // this entry exists to remove — passing, or failing for a reason that has
+    // nothing to do with walking. A fallback nobody can see is worse than none.
+    if (!entered) {
+      failures.push({ what: 'world', detail: 'found no node to fast-travel from; entering at the shore' });
     }
     const beforeWorld = await hashCanvas();
     await page.keyboard.press('g');
@@ -1620,10 +1633,11 @@ async function main(): Promise<number> {
         /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
       );
     //
-    // **And the sweeps have to cross the city, not the shore.** The hero enters
-    // at the spawn point outside the map's north edge, so short bursts only ever
-    // meet the buildings nearest the shore — and this step's real assumption is
-    // that some of *those* are still unsurveyed when it runs. That assumption
+    // **And the sweeps have to cross the city, not the shore.** Entered from the
+    // map with nothing selected the hero *would* spawn outside the north edge,
+    // so short bursts only ever met the buildings nearest the shore — and this
+    // step's real assumption is that some of *those* are still unsurveyed when
+    // it runs. The fast-travel entry above is what removes that assumption. That assumption
     // gets weaker every time the deck improves. The entry above is the fix; the
     // extra sweeps here are the belt, and the deadline is untouched, so a
     // genuinely dead surveyor still fails.

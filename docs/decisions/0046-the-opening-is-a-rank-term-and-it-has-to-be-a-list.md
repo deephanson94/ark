@@ -10,7 +10,7 @@ deliberately.
 **Measured on** corpus clones: `ark` `9b86d12`, `honojs/hono` `7075369e`, `kysely-org/kysely`
 `f24018c7`, `graphql/graphql-js` `9c245018`. Reproduce with
 `npx tsx scripts/probe-opening.ts /tmp/ark-corpus ark hono kysely graphql-js`; `ARK_SHOW=1` prints
-the served fifteen with their flags.
+the served fifteen with their flags. §4 and §7 add eight further repos from a post-ship review.
 
 ---
 
@@ -57,8 +57,12 @@ the import graph separates them; the distinction lives in a layer the graph does
 `CLAUDE.md`'s entry-point landmine one level up — *a file whose dependents are all entry points is not
 peripheral*.
 
-Measured, it would have demoted four real modules of ark's served fifteen against two genuine
-fixtures. The cone-size floor is refused for a separate reason already on record: it re-derives
+Measured, it flags **seven** of ark's served fifteen, of which **five are real modules** —
+`challenge.ts`, `serve.ts`, `tally.ts`, `build.ts` and `experiment.ts`, the last being ADR-0037's
+shipped instrumentation — against two genuine fixtures. *(An earlier draft said "four real against
+two", which undercounts this document's own evidence against the property it is refusing.)*
+
+The cone-size floor is refused for a separate reason already on record: it re-derives
 ADR-0040 §3's rejected landmark term, and it sinks exactly the edgeless files Companion exists to
 reach.
 
@@ -81,8 +85,9 @@ was missing. The bar for putting a list in the product is therefore high, and it
 
 Both failures are soft. No other mechanism in this repository can say that about a whitelist.
 
-One clause is a **rule** rather than a list — a manifest (`.json`) is not a source file and so cannot
-be a module worth opening on, and it has no false-positive mode. The rule alone is not enough: it
+Part of it is a **rule** rather than a list — a manifest or a Markdown file is not a source file and
+so cannot be a module worth opening on, and neither has a false-positive mode; `testdata` is
+rule-grade too, since the Go toolchain reserves that directory name. The rule alone is not enough: it
 catches 1 of hono's 4 junk openings and 0 of graphql-js's 8. **The list is what carries the two repos
 that matter**, which is the honest statement of what is being bought.
 
@@ -109,15 +114,37 @@ The openings after the change: hono `src/jsx/dom/server.ts, http-status.ts, clie
 reg-exp-router/index.ts, jsx-runtime.ts`; kysely `readonly-driver.ts, src/index.ts,
 insert-query-node.ts, mysql-adapter.ts, on-duplicate-key-node.ts`; graphql-js
 `resources/strip-private-declarations.ts, characterClasses.ts, GraphQLError.ts, collectFields.ts,
-didYouMean.ts`. **ark's is character-identical to before**, which is the acceptance criterion for a
-repo that was not broken.
+didYouMean.ts`. **ark's first five are character-identical to before**, which is the acceptance
+criterion for a repo that was not broken — its *fifteen* move by two boards, `probe-nameable.ts` and
+`tests/fixtures/atlas.ts` out for `blastRadius/reveal.ts` and `world/hero.ts`, which is the term doing
+its job. Saying "ark's opening is unchanged" alongside "1 → 0 on ark" would be two claims that cannot
+both hold of the same fifteen.
 
-## 4. The known gap, stated rather than patched
+## 4. Two known gaps, stated rather than patched
 
-**graphql-js still opens on `resources/strip-private-declarations.ts`.** `resources/` is not on the
-list and is not being added: it is a plausible real-source directory on some other repository, and
-adding it blind is the failure mode this ADR is supposed to be honest about rather than repeat. This
-is the list's cost arriving on schedule, and it is the row a reader should check the decision against.
+Both were found by running the shipped predicate over eight repos this decision was not designed on —
+django, hugo, prometheus, typeorm, rxjs, excalidraw, flask, cobra.
+
+**Missing: `resources/`, `docs/`, `site/`, `tools/`.** graphql-js still opens on
+`resources/strip-private-declarations.ts`; rxjs opens on `apps/rxjs.dev/tools/*` website tooling and
+hugo on stray `docs/assets/js/*`. None is being added: each is a plausible real-source directory on
+some other repository, and adding them blind is the failure this ADR is supposed to be honest about
+rather than repeat.
+
+**Over-firing: a product module legitimately named `test`.** `django/test/client.py` is
+`django.test.Client`, real user-facing product source. rxjs publishes `@rxjs/test` from
+`packages/test/src/`, so five product files are demoted there. Measured across those eight repos this
+is the **only** false-positive shape the list has — typeorm's 242 flags are all `test/functional/*`,
+prometheus's 9 are testdata, `.test.tsx` and manifests, and hugo flags none. Demotion-only is what
+makes it soft: those files are served later, never lost.
+
+**Two clauses were widened on that evidence**, both to rule grade rather than list grade: `.md` joins
+`.json`, because a Markdown file is definitionally not a module and has no false-positive mode (it
+fixes cobra's and flask's openings, and is a no-op on an all-Markdown map, where uniform demotion
+falls through to the rank below); and `testdata` joins the segment list because the Go toolchain
+reserves and ignores that directory name. The `__…__` convention is a wrapper in the pattern rather
+than three more entries — enumerating it is how `__testdata__` was missed while `testdata` was
+present, which is a list inside a list with the same failure mode one level down.
 
 ## 5. What it cost elsewhere
 
@@ -141,3 +168,33 @@ manifest on the four measured repos. Whether the loop lands is what `docs/experi
 and it remains unrun; every review in this lineage has said the experiment outranks the work around
 it, and this change is worth its afternoon mainly because hono and graphql-js are the repos those
 participants will see.
+
+---
+
+## 7. Post-review
+
+Reviewed at `5e0b663` against eight repos this decision was not designed on. §4's second gap class,
+the two rule-grade widenings, and §2's and §3's corrected counts all come from it. Three further
+things it established:
+
+**The branch was red and the commit message said otherwise.** `npm run test:e2e` failed
+deterministically at `5e0b663` — twice, identically — on a step this change never touched:
+*"no click on the map ever ticked a candidate"*. The cause is that step's own sweep, whose loop bounds
+never reach their own denominators (`column < 30` over `/44`, `row < 20` over `/24`), so it searched
+66% by 79% of the canvas. It passed for milestones because the marks happened to land there; **ark
+indexes itself, so this commit re-rolled the layout and put all 19 of them outside the swept
+rectangle**. The e2e was clean on the working tree and not on the tree that contained the commit —
+the *measured-on-the-tree-that-does-not-yet-contain-it* landmine, arriving on a test claim rather than
+on a figure. Fixed by sweeping the whole canvas.
+
+**Demotion-only holds in the code and not merely in this document.** `isSideshow` has no consumer in
+`src/` outside `selector.ts`; `suggestNext` has exactly one caller; nothing in `src/verbs`,
+`src/indexer` or `src/atlas` imports the selector, so `retain`, the generator and the atlas are
+unreachable from the term. The default `pathOf` keeps every other caller's rank bit-identical, and a
+commit subject resolves to `null` and is never demoted.
+
+**The e2e entry change is not a loosening, with one hole now closed.** `surveyedBeforeWalk` is read
+*after* entry, so the entry click's own surveys land in the baseline, and the deadline preserves
+falsifiability — a dead surveyor still fails. But if the entry grid found no clickable node the step
+fell back to the shore *silently*, inheriting exactly the fragility the entry exists to remove. It
+now fails loudly instead.

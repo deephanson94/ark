@@ -289,19 +289,28 @@ function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
  *
  * ## What is a rule and what is a list
  *
- * The first line is a **rule** — a manifest is not a source file, so it cannot be
- * a module worth opening on, and it has no false-positive mode. The rest is the
- * list, and it carries the two repos that matter: the rule alone catches 1 of
- * hono's 4 junk openings and 0 of graphql-js's 8.
+ * The extension clause is a **rule** — a manifest or a Markdown file is not a
+ * source file, so neither can be a module worth opening on, and neither has a
+ * false-positive mode. `testdata` is rule-grade too: the Go toolchain reserves
+ * and ignores that directory name. The rest is the list, and it carries the two
+ * repos that matter: the rule alone catches 1 of hono's 4 junk openings and 0 of
+ * graphql-js's 8.
  *
- * **Known gap, stated rather than patched**: graphql-js still opens on
- * `resources/strip-private-declarations.ts`, because `resources/` is not here and
- * adding it blind would demote a plausible real-source directory on some other
- * repo. That is the list's failure mode arriving on schedule, and it is the row a
- * reader should check this against.
+ * **Two known gaps, stated rather than patched.** graphql-js still opens on
+ * `resources/strip-private-declarations.ts`; `resources/`, `docs/`, `site/` and
+ * `tools/` are not here because each is a plausible real-source directory
+ * elsewhere, and adding them blind is the failure this rule is meant not to
+ * repeat. And the list **over-fires on a product module legitimately named
+ * `test`** — `django/test/client.py` is `django.test.Client`, and rxjs publishes
+ * `@rxjs/test` from `packages/test/src/` — measured across eight repos this is
+ * the only false-positive shape it has. Demotion-only is what makes both soft.
  */
 const SIDESHOW =
-  /(^|\/)(tests?|__tests__|__testutils__|fixtures?|benchmarks?|scripts?|examples?)(\/|$)|\.(test|spec)\.|\.json$/i;
+  // The `(__)?` wrappers are the `__tests__` / `__testUtils__` / `__testdata__`
+  // convention, and they are a wrapper rather than three more entries because
+  // enumerating them is how `__testdata__` got missed while `testdata` was
+  // present — a list inside a list, with the same failure mode one level down.
+  /(^|\/)(__)?(tests?|testutils?|testdata|fixtures?|benchmarks?|scripts?|examples?)(__)?(\/|$)|\.(test|spec)\.|\.(json|md)$/i;
 
 /**
  * Whether a board is a poor thing to *open* a session on.

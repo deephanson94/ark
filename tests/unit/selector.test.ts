@@ -421,6 +421,11 @@ describe('the opening', () => {
       'example/src/util/errors.ts',
       'package.json',
       'src/middleware/jwk/keys.test.json',
+      // Rule-grade, added after eight more repos: a Markdown file is not a
+      // module, and `testdata` is a directory name the Go toolchain reserves.
+      'README.md',
+      'docs/decisions/0046-the-opening.md',
+      'web/ui/__testdata__/testdata.ts',
     ]) {
       expect(isSideshow(path), path).toBe(true);
     }
@@ -436,6 +441,8 @@ describe('the opening', () => {
       'src/scripting/engine.ts',
       'src/testing.ts',
       'src/examples.ts',
+      'src/testdata-loader.ts',
+      'src/markdown.ts',
     ]) {
       expect(isSideshow(path), path).toBe(false);
     }
