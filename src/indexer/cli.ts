@@ -130,17 +130,18 @@ export function parseArgs(argv: readonly string[]): Args | null {
  * figure and no way to know whether it was fine. `npm run budget` knows the ceilings and is a repo
  * script they do not have.
  *
- * The rule and the reason it distinguishes a *rate* breach from an *absolute* one live in
- * `src/atlas/budget.ts`, beside the ceilings themselves — a rate-only check fired on **no repo in
- * the ADR-0042 corpus**, which is the never-fires landmine, and an absolute-only one re-makes the
- * mistake ADR-0038 cost a milestone to clear up.
+ * Only the atlas-size total is reported here, and `src/atlas/budget.ts` records the three richer
+ * versions that were built, measured and withdrawn — a per-file *rate* breach fires on cobra's
+ * **145 KiB** atlas because the rate is fixed-overhead-dominated at small N, and an index-time
+ * verdict is not reproducible between runs. Enforcement stays in `scripts/budget.ts`, which has the
+ * scale context and the hard/soft distinction this line cannot carry.
  *
  * Nothing is printed when everything is inside its ceiling: a budget line on every run is noise, and
  * noise is how the one that matters stops being read (this repo's own `pages.yml` landmine).
  */
-function budgetLines(atlas: Atlas, bytes: number, milliseconds: number): string[] {
+function budgetLines(atlas: Atlas, bytes: number): string[] {
   const files = atlas.nodes.reduce((total, node) => total + node.fileCount, 0);
-  return budgetVerdicts(files, bytes, milliseconds).map((verdict) => `budget      ${verdict.line}`);
+  return budgetVerdicts(files, bytes).map((verdict) => `budget      ${verdict.line}`);
 }
 
 function summarise(
@@ -185,7 +186,7 @@ function summarise(
     // about the verbs that is not true (ADR-0025).
     lines.push(`deck        REFUSED: ${coverageSentence(coverage) ?? ''}`);
     lines.push(`atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`);
-    lines.push(...budgetLines(atlas, bytes, milliseconds));
+    lines.push(...budgetLines(atlas, bytes));
     for (const truncation of atlas.report.truncations) {
       lines.push(`truncated   ${truncation.what}: kept ${truncation.kept}, dropped ${truncation.dropped}`);
     }
@@ -205,7 +206,7 @@ function summarise(
     `placement   ${generation.placement.challenges.length} of ${placement.commitsConsidered} commits Ark may ask about`,
     `archaeology ${generation.archaeology.challenges.length} of ${archaeology.subjectsConsidered} files with a history worth asking about`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
-    ...budgetLines(atlas, bytes, milliseconds),
+    ...budgetLines(atlas, bytes),
   );
 
   // Which questions each verb refused to ship, and how much of each choice set

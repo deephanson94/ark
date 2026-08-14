@@ -18,6 +18,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -69,6 +70,11 @@ export interface GitHistory {
   readonly commits: readonly GitCommit[];
   /** Total commits reachable from HEAD, even if we only walked `commits`. */
   readonly totalCommits: number;
+  /**
+   * The repo-relative directory being indexed, when it is **not** the repository root — and `null`
+   * when it is. Non-null means rename detection was **off** for this walk; see `readGitHistory`.
+   */
+  readonly subtree: string | null;
 }
 
 export const NO_HISTORY: GitHistory = {
@@ -78,6 +84,7 @@ export const NO_HISTORY: GitHistory = {
   root: null,
   commits: [],
   totalCommits: 0,
+  subtree: null,
 };
 
 interface Isolation {
@@ -161,6 +168,30 @@ async function readRootCommit(root: string, env: NodeJS.ProcessEnv): Promise<str
 }
 
 /**
+ * The repo-relative directory being indexed, or `null` when it **is** the repository root.
+ *
+ * Both paths are canonicalised before comparing, because a session may be indexing through a
+ * symlink and `git rev-parse --show-toplevel` always answers with the real path — comparing the two
+ * raw would call every symlinked root a subtree and silently turn rename detection off.
+ */
+function subtreeOf(toplevel: string | null, root: string): string | null {
+  if (toplevel === null || toplevel === '') return null;
+  let a = toplevel;
+  let b = root;
+  try {
+    a = realpathSync(toplevel);
+    b = realpathSync(root);
+  } catch {
+    // An unreadable path is not a reason to guess; fall back to the raw strings.
+  }
+  const top = a.replace(/[/\\]+$/, '');
+  const here = b.replace(/[/\\]+$/, '');
+  if (here === top) return null;
+  const prefix = here.startsWith(`${top}/`) ? here.slice(top.length + 1) : null;
+  return prefix === null || prefix === '' ? null : prefix;
+}
+
+/**
  * Read history. Returns `NO_HISTORY` for a directory that is not a repo, or a
  * repo with no commits — tiers 1–4 must stay fully playable without git
  * (NORTH-STAR risk #7), so this is a normal outcome, not an error.
@@ -173,6 +204,24 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
     const gitDir = await tryGit(root, ['rev-parse', '--git-dir'], env);
     if (gitDir === null) return NO_HISTORY;
 
+    // **Where are we relative to the repository?** `--relative` below makes git report paths
+    // relative to `cwd`, which is what a subtree index needs — but it also restricts the tree diff
+    // to the prefix **before rename detection runs**, so `-M` re-pairs adds with deletes *inside*
+    // the subtree and invents renames the repository does not contain. Measured on `honojs/hono`:
+    // at the root git pairs `src/adapter.ts → deno_dist/helper/adapter/index.ts`, and from `src/`
+    // it pairs `adapter.ts → helper/adapter/index.ts` — a different rename graph, which
+    // `applyRenames` writes as `lineage: 'certain'` because the invented source path is dead and
+    // the `contested` branch never fires. Six such pairs on `hono/src`, and a synthetic fixture
+    // turns one into a Placement answer key naming a file the commit never touched.
+    //
+    // So rename detection is **on only where git can see the whole tree**. In a subtree a rename
+    // reports as delete + add: churn is split across the two paths and lineage is lost, which is
+    // the documented cost of dropping `-M` (CLAUDE.md) and is the safe direction — a missing
+    // lineage costs a challenge, an invented one is a wrong answer key. It is reported rather than
+    // absorbed: `subtree` is non-null exactly when this happened, and the CLI says so.
+    const toplevel = (await tryGit(root, ['rev-parse', '--show-toplevel'], env))?.trim() ?? null;
+    const subtree = subtreeOf(toplevel, root);
+
     const countText = await tryGit(root, ['rev-list', '--count', 'HEAD'], env);
     if (countText === null) return NO_HISTORY;
     const totalCommits = Number.parseInt(countText.trim(), 10);
@@ -183,7 +232,13 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
       [
         'log',
         '-z',
-        '-M',
+        // Rename detection only at the repository root — see the comment above `toplevel`.
+        //
+        // **`--no-renames` rather than merely dropping `-M`.** git has detected renames by
+        // default since 2.9, so removing the flag changes nothing: measured on `hono/src`, the
+        // default still reports **30** rename records and only `--no-renames` takes it to 0. A
+        // first version of this guard dropped `-M` and was silently inert.
+        ...(subtree === null ? ['-M'] : ['--no-renames']),
         // **`--name-status`, not `--numstat`** — a 13× difference, measured.
         //
         // Nothing downstream uses the added/deleted line counts: `parseLog`
@@ -234,6 +289,7 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
       head: head.sha,
       headDate: head.date,
       root: await readRootCommit(root, env),
+      subtree,
       commits,
       totalCommits,
     };

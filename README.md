@@ -175,7 +175,7 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **Blast Radius is starved on half of real repositories, and the reference set could not see it**
   ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md),
   proposed). Measured on **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
-  (the deck cap is what bounds it), ships a token deck on **7** (0.6%–25% of subjects), and does not
+  (the deck cap is what bounds it), ships a token deck on **7** (2.4%–25.4% of subjects), and does not
   exist on **4**. `typeorm` `df07bf1e` ships **58 boards of 2,221 subjects at 97.6% resolution**;
   `vue-core` 7 of 254; `nest` 7 of 286. The three git-graded verbs are unaffected on almost all of
   them, so **on a majority of real repositories the product is already a history product** — which no
@@ -189,12 +189,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   **Resolution rate is anti-predictive and `rate × mean closure depth` is not the metric either** —
   ADR-0024 decision 4's successor is *position*: typeorm's single `src/platform/PlatformTools.ts`
   carries **one** `require(<expression>)` of the repo's 13,805 import sites and poisons **1,912 of
-  1,921** tainted subjects. Two candidate fixes were refused with measurements (relaxing guardrail
-  4's transitive walk ships wrong answer keys on **90–99%** of the subjects it unlocks; a depth bound
-  makes **542,282** of typeorm's real dependents eligible as wrong answers). A third — monorepo
-  workspace resolution — is real, safe (**0 wrong answer keys** over 46,099 wrong-answer slots) and
-  **small**: +250 boards across **3 repos of 19**, none of them the three worst-starved. It is
-  measured, reverted and left as the owner's call, patch at `docs/decisions/0042-resolver.patch`.
+  1,921** tainted subjects. Two candidate fixes were refused with measurements: relaxing guardrail
+  4's transitive walk puts a real dependent in the wrong-answer pool of **30 of nest's 68** and 18 of
+  apollo-client's 47 unlocked subjects, and a depth bound creates **29,840 eligible wrong-answer
+  slots across typeorm's board-carrying subjects**. A third — monorepo workspace resolution —
+  is +250 boards across **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120),
+  with **0 directly-visible wrong answer keys** over 46,099 slots. It is measured, reverted and left
+  as the owner's call with three stated limits, patch at `docs/decisions/0042-resolver.patch`.
+
+  **Four adversarial reviewers raised ~50 findings against the draft and most reproduced** — one of
+  them a **wrong answer key in shipped code**: the first version of the subdirectory fix below made
+  git re-run rename detection inside the prefix, inventing six renames on `hono/src` and writing them
+  `lineage: 'certain'`. ADR-0042 §10 records what the review changed.
 
 - **A cycle is an answer key, and nothing may name one without a gate**
   ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md) §4).

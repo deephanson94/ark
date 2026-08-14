@@ -4047,20 +4047,38 @@ the binding constraint" measurement in this repo was taken where the cap binds.
 set — so a cause's ceiling is what it frees with the others left in place, which is **5 of typeorm's
 1,921**, 6 of excalidraw's 388, 1 of vue-core's 220.
 
-**Two candidates refused with measurements, one accepted and left to the owner.** Relaxing guardrail
-4's transitive walk has the largest ceiling of the night (+1,902 typeorm subjects) and ships wrong
-answer keys on **90–99%** of what it unlocks, measured from outside the atlas against a second graph.
-A depth bound makes **542,282** of typeorm's real dependents eligible as wrong answers — refuted on
-arithmetic in twenty minutes, no code. Workspace resolution is real and safe (**+250 boards, 0 lost,
-0 wrong answer keys** over 46,099 slots, suites green, determinism byte-identical) and moves **3 repos
-of 19**, none of them the three worst-starved; measured, reverted, patch kept.
+**Two candidates refused with measurements, one left to the owner.** Relaxing guardrail 4's
+transitive walk has the largest ceiling of the night (+1,902 typeorm subjects) and puts a real
+dependent in the wrong-answer pool of **30 of nest's 68** unlocked subjects, measured from outside
+the atlas against a second graph. A depth bound creates **29,840 eligible wrong-answer slots across
+typeorm's board-carrying subjects** — refuted on arithmetic in twenty minutes, no code. Workspace
+resolution is **+250 boards net, 0 directly-visible wrong answer keys** over 46,099 slots and moves
+**3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120); measured, reverted, patch
+kept, with three limits stated.
 
-**Two smaller things shipped.** Indexing a monorepo *subdirectory* silently kept **zero** commits —
-`git log` reports repository-relative paths whatever `cwd` is, so no commit intersected any node and
-all three history verbs died. rxjs's `packages/rxjs/src` goes from **1 challenge to 121**; `--relative`
-is byte-identical at repository roots on eight repos. And the CLI now names a budget it is over,
-distinguishing a *rate* breach from an *absolute* one — a rate-only check fired on no repo in the
-corpus, and the shipped rule fires on **1 of 19** (webpack's 9.18 MiB atlas).
+**Four adversarial reviewers raised ~50 findings and most reproduced.** The tables held — nineteen
+survey rows, the taint decomposition and the bounded-depth sweep all re-ran to the digit — and the
+defects were in the sentences beside them: a trio of "worst-starved" repos chosen after the argument
+(nest is worse than all three and is 75% fixable), a §4 headline measured over a population the
+candidate cannot serve, and a units error quoting pairs as nodes. One was a **wrong answer key in
+shipped code**.
+
+**Two smaller things shipped, and the first one had to be fixed twice.** Indexing a monorepo
+*subdirectory* silently kept **zero** commits — `git log` reports repository-relative paths whatever
+`cwd` is, so no commit intersected any node and all three history verbs died. rxjs's
+`packages/rxjs/src` goes from **1 challenge to 121**. But `--relative` also restricts the diff
+*before* rename detection, so git re-pairs adds with deletes inside the prefix and invents renames
+the repository does not contain — six on `hono/src`, written `lineage: 'certain'` because the
+invented source path is dead and the `contested` branch cannot fire. A reviewer found it with a
+synthetic fixture that turns one into a Placement key naming a file the commit never touched. Guarded
+with **`--no-renames`** in a subtree, which is not the same as dropping `-M`: git has detected renames
+by default since 2.9, and the first guard was silently inert (30 records still). Byte-identical
+against `origin/master` on eight repos; three mutants die.
+
+And the CLI now says when an atlas is over the 5 MiB total — **1 of 19** repos, webpack's 9.18 MiB.
+Three richer versions were built and withdrawn: a per-file rate rule calls cobra's **145 KiB** atlas
+`OVER BUDGET`, an index-time verdict is not reproducible between runs, and a second denominator gave
+one repo two rates from two tools.
 
 884 unit, 115 atlas, determinism byte-identical, e2e clean on the branch and on the CI merge commit.
 

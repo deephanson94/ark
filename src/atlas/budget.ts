@@ -1,94 +1,67 @@
 /**
- * The budgets from `CLAUDE.md`, in one place.
+ * The one budget the CLI is in a position to state, and the three it is not.
  *
- * They lived only in `scripts/budget.ts`, which `src/` cannot import — so the CLI, which prints the
- * two measurements these ceilings are about, printed them **naked**: `atlas 9399.5 KiB in 56400 ms`
- * with nothing on the line saying what either number is allowed to be. A user indexing a large repo
- * saw a figure and no verdict, and `npm run budget` (which knows) is a repo script they do not have.
+ * The ceilings live in `CLAUDE.md` and are enforced by `scripts/budget.ts`, which `src/` cannot
+ * import — so the CLI printed the measurements they are about **naked**: `atlas 9399.5 KiB in 56400
+ * ms`, with nothing saying what either number is allowed to be. A user of the packaged CLI has the
+ * figure and no verdict, and `npm run budget` is a repo script they do not have.
  *
- * ## Rate and absolute are different questions, and the first draft only asked one
+ * ## What this reports, and what three reviewers took out of it
  *
- * ADR-0038 spent a milestone establishing that `CLAUDE.md`'s 10 s and 5 MB are quoted **at 2,000
- * files**, so django's 13.5 s at 3,035 files is *inside* the budget and calling it a 35% breach was
- * the error. The first version of this module took that lesson and checked **only** the rate — and
- * fired on **nothing**: measured on the ADR-0042 corpus, typeorm reads 1,060 B/file and 3.99
- * ms/file, django 1,002 and 4.01, webpack 762 and 4.47, all inside 2,621 and 5.00. A check that
- * never fires is worse than no check, because it is code and comments asserting a behaviour the
- * product does not have (`CLAUDE.md`'s never-fires landmine).
+ * Only one thing: **the atlas is larger than the 5 MiB `CLAUDE.md` quotes.** That is worth saying
+ * because *the player loads the whole atlas in one request*, so the total is a first-paint fact
+ * whatever the file count. It is a pure function of bytes, so it is deterministic.
  *
- * The absolute is not redundant, and size is where the difference bites. **The player loads the
- * whole atlas over one request**, so 9.18 MiB is a first-paint fact whatever the file count — while
- * index *time* genuinely scales with the repo and an absolute is meaningless there. Both are
- * therefore reported, and each says which kind it is, so a reader cannot mistake one for the other.
+ * Three richer versions were built and measured, and each was withdrawn:
+ *
+ * - **A per-file *rate* breach** (`B/file`, `ms/file`), which ADR-0038 established is the row that
+ *   decides a *breach*. It is wrong at the low end: the rate is dominated by fixed per-atlas
+ *   overhead at small `N`, so it fires on **cobra at 2,801 B/file — a 145 KiB atlas, 2.8% of the
+ *   ceiling** — and on flask at 284 KiB. Reporting those as `OVER BUDGET` is ADR-0038's error
+ *   pointed the other way. It also fired on **2 of 19** repos, not the 0 an earlier draft of this
+ *   file claimed and reasoned from.
+ * - **An index-time verdict.** Not reproducible: express tripped `5.21 ms/file` on a cold run and
+ *   was silent on five afterwards; flask moved 688 → 563 ms between two runs. `scripts/budget.ts`
+ *   marks `index ms/file` `hard: false` for exactly this reason — *"a budget that fails at random
+ *   teaches people to ignore budgets"* — and a first version of this module dropped that
+ *   distinction and printed the same words for both.
+ * - **A second denominator.** `scripts/budget.ts` divides by `atlas.nodes.length`; this divided by
+ *   `Σ fileCount`, so the same repo got two rates from the two tools (cobra 7,814 vs 2,801 B/file).
+ *   Enforcement belongs to the script, which has the scale context and the hard/soft distinction.
+ *
+ * Measured on the ADR-0042 corpus, what is left fires on **1 of 19** repos — webpack, whose atlas
+ * is 9,399.5 KiB — and is silent on the other 18.
  */
 
 /** The scale `CLAUDE.md`'s absolute ceilings are quoted at. */
 export const REFERENCE_FILES = 2000;
 
+/**
+ * `CLAUDE.md` says "5 MB". Read as 5 MiB, which is what `scripts/budget.ts` has always enforced —
+ * noted because the sentence this module prints names its source, and 5 MB and 5 MiB differ by
+ * 237 KiB.
+ */
 export const MAX_ATLAS_BYTES = 5 * 1024 * 1024;
-export const MAX_INDEX_MS = 10_000;
-
-/** Per-file ceilings — the ones that scale, and therefore the ones that decide a *breach*. */
-export const MAX_BYTES_PER_FILE = MAX_ATLAS_BYTES / REFERENCE_FILES;
-export const MAX_MS_PER_FILE = MAX_INDEX_MS / REFERENCE_FILES;
 
 export interface BudgetVerdict {
-  readonly what: 'atlas size' | 'index time';
-  /**
-   * `rate` — over the per-file ceiling. This is a **breach**: the repo costs more per file than
-   * the budget allows, and it would still be over at any size.
-   *
-   * `absolute` — inside the per-file ceiling but past the figure `CLAUDE.md` quotes at 2,000 files.
-   * Not a breach. Reported because the player loads the whole atlas in one request, so the total is
-   * a fact about first paint that the rate does not carry.
-   */
-  readonly kind: 'rate' | 'absolute';
+  readonly what: 'atlas size';
   readonly line: string;
 }
 
 /**
- * What a finished index is over, if anything. Empty when it is inside everything — the caller
- * prints nothing in that case, because a budget line on every successful run is noise, and noise is
- * how the one that matters stops being read.
+ * What a finished index is over, if anything. Empty when it is inside — the caller prints nothing,
+ * because a budget line on every successful run is noise, and noise is how the one that matters
+ * stops being read.
  */
-export function budgetVerdicts(
-  files: number,
-  bytes: number,
-  milliseconds: number,
-): readonly BudgetVerdict[] {
-  if (files <= 0) return [];
-  const verdicts: BudgetVerdict[] = [];
-
-  const bytesPerFile = bytes / files;
+export function budgetVerdicts(files: number, bytes: number): readonly BudgetVerdict[] {
+  if (bytes <= MAX_ATLAS_BYTES) return [];
   const kib = (n: number): string => `${(n / 1024).toFixed(1)} KiB`;
-  if (bytesPerFile > MAX_BYTES_PER_FILE) {
-    verdicts.push({
+  return [
+    {
       what: 'atlas size',
-      kind: 'rate',
       line:
-        `atlas size OVER BUDGET: ${bytesPerFile.toFixed(0)} B/file against a ` +
-        `${MAX_BYTES_PER_FILE.toFixed(0)} B/file ceiling (${kib(bytes)} at ${files} files)`,
-    });
-  } else if (bytes > MAX_ATLAS_BYTES) {
-    verdicts.push({
-      what: 'atlas size',
-      kind: 'absolute',
-      line:
-        `atlas is ${kib(bytes)}, past the ${kib(MAX_ATLAS_BYTES)} CLAUDE.md quotes at ` +
-        `${REFERENCE_FILES} files — inside budget per file (${bytesPerFile.toFixed(0)} of ` +
-        `${MAX_BYTES_PER_FILE.toFixed(0)} B/file at ${files} files), but the player loads it all at once`,
-    });
-  }
-
-  const msPerFile = milliseconds / files;
-  if (msPerFile > MAX_MS_PER_FILE) {
-    verdicts.push({
-      what: 'index time',
-      kind: 'rate',
-      line:
-        `index time OVER BUDGET: ${msPerFile.toFixed(2)} ms/file against a ` +
-        `${MAX_MS_PER_FILE.toFixed(2)} ms/file ceiling (${milliseconds} ms at ${files} files)`,
-    });
-  }
-  return verdicts;
+        `atlas is ${kib(bytes)}, over the ${kib(MAX_ATLAS_BYTES)} CLAUDE.md quotes at ` +
+        `${REFERENCE_FILES} files (this repo has ${files}) — the player loads it all in one request`,
+    },
+  ];
 }

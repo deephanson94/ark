@@ -1,9 +1,11 @@
-# ADR-0042 — Blast Radius is taint-limited on half of real repositories, and the reference set could not see it
+# ADR-0042 — Blast Radius is taint-limited on 7 of 16 gradeable repositories, and the reference set could not see it
 
 - **Status**: proposed
 - **Date**: 2026-08-14
 - **Bears on**: ADR-0003 (an unresolved import produces no edge), ADR-0008 (truth is unbounded),
-  ADR-0024 (a language ships on its deck, not its map), ADR-0028 (Python is mapped and never graded);
+  ADR-0024 (a language ships on its deck, not its map), ADR-0026 (a check about a missing edge must
+  come from outside the atlas), ADR-0028 (Python is mapped and never graded), ADR-0038 (a budget is
+  a rate);
   NORTH-STAR §6.1 (the v1 verb), §13 M2 (the kill point), guardrail 4
 - **Code shipped by this ADR**: phase 6 only. The survey and the candidate measurements are probes.
 
@@ -13,11 +15,12 @@
 |---|---|---|
 | 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
+| 7 — synthesis + adversarial review | **done** | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
-| 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 19**, and none of them the three worst-starved. |
-| 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it ships wrong answer keys on **90–99%** of the subjects it unlocks on three repos. |
-| 5 — candidate C (bounded depth) | **done** | **REFUSED on arithmetic, no code written.** A d=3 bound makes **542,282** of typeorm's real dependents eligible as wrong answers. ADR-0008's supporting claim *"depth-3 truth equals unbounded truth for every node"* is now false **on ark itself**. |
-| 6 — two smaller findings | **done, and these ship** | A subdirectory index went from **1 challenge to 121**. The CLI names a budget it is over; it fires on **1 of 19** repos. |
+| 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 boards net, 0 directly-visible wrong answer keys** — on **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120). Three limits in decision 5. |
+| 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it puts a real dependent in the wrong-answer pool of **30 of nest's 68** and **18 of apollo-client's 47** unlocked subjects (corrected from 99% / 47%). |
+| 5 — candidate C (bounded depth) | **done** | **REFUSED on arithmetic, no code written.** A d=3 bound creates **29,840 eligible wrong-answer slots across typeorm's board-carrying subjects** (542,282 across all of them). ADR-0008's supporting figure — *"**on this repo**, depth-3 truth equals unbounded truth for every node"* — is now false on ark itself. |
+| 6 — two smaller findings | **done, and these ship** | A subdirectory index went from **1 challenge to 121** — and the first version of that fix **invented renames and shipped a wrong lineage as `certain`**, found by review and fixed with `--no-renames`. The CLI names an oversized atlas; **1 of 19** repos. |
 | 7 — synthesis + adversarial review | pending | |
 
 ---
@@ -60,7 +63,7 @@ look artificially *high* — the exact opposite of the effect being measured.
 bit (`skipped.capped > 0`): supply exceeded what the product chose to ship. *taint-limited* = the cap
 did not bite **and** guardrail 4 refused more subjects than the repo shipped boards
 (`capped = 0 ∧ uncertain > generated`). A repo that is neither is refused for a third reason — cobra
-has one package, so there is nothing to predict, which is ADR-0024 §5's diagnosis and not a defect.
+is two packages with one import edge between them, so there is nothing to predict, which is ADR-0024 §5's diagnosis and not a defect.
 
 ### 1.2 The gate
 
@@ -85,8 +88,17 @@ instance, because the ordering is not merely uninformative — it **inverts**:
 | rxjs | **51.7** | 47.8% | 75 / 295 (25.4%) |
 | apollo-client | **60.9** | 62.4% | 46 / 348 (13.2%) |
 
-The three worst-starved repos in the corpus resolve better than 96%. The two worst *resolvers* ship
-five to ten times the share of their subjects.
+Three of the four worst-starved repos resolve better than 96%, and the two worst *resolvers* ship
+3.0× to 9.8× the share of their subjects.
+
+**The fourth is `nest`, and an earlier draft of this document left it out of every list.** Ranked by
+boards ÷ subjects, the order is **nest 2.4%**, typeorm 2.6%, vue-core 2.8%, excalidraw 4.4% — so
+nest is the *worst-starved repo in the corpus* and resolves at **60.1%**, which is the opposite of
+this section's claim. The trio named throughout the first draft (typeorm, excalidraw, vue-core) was
+the set that made the argument, chosen after the argument. Two independent reviewers found it. The
+surviving claim is narrower and is the one the data supports: **resolution rate does not order
+starvation** — three of the four worst resolve above 96% and the fourth at 60.1%, while ark (100%)
+and hugo (99.2%) are unstarved and rxjs (51.7%) ships a quarter of its subjects.
 
 ### 1.4 Closure depth does not explain it either
 
@@ -104,6 +116,13 @@ closure 473) and excalidraw (397) and **wrong about the other two**:
 
 vue-core has a shallower median closure than hono and 62× its taint. nest's median closure is **1**.
 Whatever poisons those two is not depth, and §2 is where it is.
+
+*(ADR-0024 decision 4 and ADR-0028 §4 both report **means**, and the column above is a median — a
+different instrument wearing the same name, which this repo has a landmine about. The mean column
+is in §1.1's source data (`closure.mean`) and tells the same story: nest **41.4**, vue-core **28.2**
+against hono's 17.2 and hugo's 19.8, so a 1.6–2.4× spread cannot explain a 62× difference in taint.
+The refutation stands under either instrument; the first draft quoted only the one that made it
+starkest.)*
 
 ### 1.5 The other three verbs are not starved on the same repos
 
@@ -195,17 +214,28 @@ One knob.
 
 **The corpus splits in two, and the split is not the one the starvation ranking suggests.**
 
-- **Group A — resolver work buys nothing.** typeorm, excalidraw and vue-core are the three *worst*
-  starved repos in the survey, and every resolver fix combined frees **12 subjects between them**
-  (5 + 6 + 1) out of 2,529 tainted. Their taint is `computed` (`require(<expression>)`) and
-  `missingFromTree` (`./dist/*` build output) — the two classes a resolver structurally cannot
-  address, because resolving them requires running the code (pillar 6) or building it (pillar 6).
+- **Group A — resolver work buys nothing.** typeorm, excalidraw and vue-core are three of the four
+  worst-starved repos in the survey, and every resolver fix combined frees **12 subjects between
+  them** (5 + 6 + 1) out of 2,529 tainted.
+
+  Two of the three are unfixable by cause: typeorm's taint is `computed` (`require(<expression>)`,
+  99.6%) and vue-core's is `missingFromTree` (`./dist/*` build output, 99.1%), and resolving either
+  needs running the code or building it — both barred by pillar 6. **excalidraw is not**: its
+  joint-largest class is `siblingManifestDep` at 98.2% (a hoisted monorepo dependency declared in a
+  sibling package's manifest), which is fixable in principle. It is in Group A anyway, and for the
+  reason this section exists — **overdetermination**. Fixing it frees **3 subjects**, because
+  `computed` poisons 98.2% of the same set. An earlier draft wrote "the two classes a resolver
+  structurally cannot address" over all three repos, which is a claim about *causes* standing in for
+  a measurement about *marginal value*, and it is false of excalidraw.
 - **Group B — resolver work is large.** rxjs 43.1%, express 47.2%, apollo-client 55.2%, nest 75.2%
   of *all* their blast subjects.
 
-The last row is worth reading on its own: **even perfect resolution leaves typeorm, excalidraw and
-vue-core exactly where they are**, because "perfect" is the row that cannot be built. What is
-buildable is the second-to-last column, and on the three worst repos it is 0.2%, 1.3% and 0.4%.
+The last column says the opposite of what an earlier draft claimed for it, and says something more
+useful: **perfect resolution frees every tainted subject on every repo, tautologically** — it is the
+definition, not a finding. The point is that it **cannot be built**, because the causes it would have
+to remove are `require(<expression>)` (needs running the code) and `./dist/*` (needs building it),
+both barred by pillar 6. What *is* buildable is the second-to-last column, and on typeorm,
+excalidraw and vue-core it is **0.2%, 1.3% and 0.4%**.
 
 ---
 
@@ -252,6 +282,13 @@ extension append, and the `rootSelfPath` leading slash.
 generator, the same gate, the same everything downstream of resolution. One knob — `resolve.ts` and
 the config index feeding it.
 
+*(“Boards” below is a **count**. Ark's decks are re-rolled by any change to the graph, so an
+unchanged count is not an unchanged deck: comparing challenge ids, **86 boards disappear** across the
+ten atlases — 26 on apollo-client, 25 on hono, 21 on rxjs, 13 on prometheus, 1 on kysely. hono's
+count is identical and **46% of its Blast Radius deck is about different subjects**. "0 lost" in the
+first draft was `Σ max(0, −Δcount)` per repo, which is a different quantity and was quoted as if it
+were board identity.)*
+
 | repo | res% | subjects tainted% | **blast boards** | verdict |
 |---|---|---|---|---|
 | apollo-client | 60.9 → **98.8** | 62.4 → **16.8** | 46 → **108** *(at cap)* | **+62** |
@@ -263,29 +300,72 @@ the config index feeding it.
 | typeorm | 97.6 → 97.9 | 86.5 → 86.5 | 58 → **58** | — |
 | vue-core | 96.3 → 96.5 | 86.6 → 86.5 | 7 → **7** | — |
 | kysely | 92.1 → 92.9 | 3.6 → **7.2** | 75 → 75 *(at cap)* | — |
-| hono, ark, graphql-js, hugo, prometheus, webpack, cobra, django, flask, system-design-primer | ±0.7 | ±0.2 | unchanged | — |
+| hono, ark, graphql-js, hugo, prometheus, webpack, cobra, django, flask, system-design-primer | ≤ +0.7 | ≤ ±0.31 | unchanged | — |
 
-**+250 blast boards, 0 lost.** `test:unit` 878 passed, `test:atlas` 112 passed, `test:determinism`
-byte-identical.
+**+250 blast boards, net.** All suites green, determinism byte-identical.
+
+### 3.2.1 The taint-share column is computed over a denominator that moved, and two reviewers caught it
+
+Resolving specifiers creates edges, and an edge gives a previously-dependentless node its first
+dependent — so it becomes a **blast subject**. The population is not held fixed, which the column
+above does not say:
+
+| repo | blast subjects A → B | **tainted subjects A → B** | share as reported |
+|---|---|---|---|
+| **nest** | 286 → **1,168** (4.1×) | **249 → 822** | 87.1% → 70.4% |
+| rxjs | 295 → 372 | 141 → **70** | 47.8% → 18.8% |
+| apollo-client | 348 → 382 | 217 → **64** | 62.4% → 16.8% |
+| kysely | 331 → 345 | 12 → 25 | 3.6% → 7.2% |
+| typeorm | 2,221 → 2,248 | 1,921 → 1,945 | 86.5% → 86.5% |
+| excalidraw | 479 → 499 | 388 → 406 | 81.0% → 81.4% |
+
+**nest's "87.1% → 70.4%" is 249 → 822 tainted subjects**: the absolute count guardrail 4 refuses
+*rose by 573*, reported as a 16.7-point fall. rxjs and apollo-client improve on both instruments and
+are unaffected by the correction; nest, kysely, typeorm and excalidraw do not.
+
+**The board counts are unaffected** — they are absolute outputs of the generator, and +250 is +250.
+It is the *share* column that has two populations in it.
 
 ### 3.3 Does it ship a wrong answer key? Measured from outside the atlas — no
 
-`scripts/probe-wrongkey.ts`. ADR-0026 §6.1's rule applies: an atlas-derived check structurally
+`scripts/probe-wrongkey.ts`. ADR-0026 §4.1's rule applies: an atlas-derived check structurally
 cannot see a missing edge, so the only atlas input is the board itself (subject, candidates, truth)
 and each node's path. Everything else is the file text and the filesystem, read with the probe's
 **own** regex lexer rather than `scan.ts`, because ADR-0028 §8.1's defect survived two instruments
 that shared one blindness.
 
-**The gate.** `--plant` moves one member of each board's key into the distractor set. It catches 20
-of ark's and 33 of hono's — so a zero from this probe is a measurement rather than a silence.
+**The gate, and its reach.** `--plant` moves one member of each board's key into the distractor set;
+the probe catches **20 of ark's 40 boards and 28 of hono's 54**. It fires — but the denominators are
+the finding, and the first draft printed only the numerators.
+
+The probe matches a specifier that **names the subject's own path**, so it detects *direct*
+importers only, while the answer key is the *transitive* dependent set. Measured share of truth
+members that are direct importers: **hugo 12%, kysely 17%, prometheus 31%, hono 32%, ark 41%,
+webpack 74%**. And it skips non-relative specifiers entirely, which is the whole class candidate A
+creates: against every internal edge in the atlas, its lexer cannot see **64% of apollo-client's,
+63% of rxjs's and 63% of express's** — the three repos the +250 boards are on.
+
+**So the honest claim is narrower than the first draft's.** Not *"zero wrong answer keys"* but
+**zero directly-visible wrong answer keys**, on an instrument blind to most of the transitive
+relation and to the specifier form the fix introduces. It is a real regression detector and a weak
+safety proof, and the difference matters because §3's whole safety argument rested on it.
 
 | | wrong-answer slots | **violations** |
 |---|---|---|
 | original resolver, 15 repos | 42,585 | **0** |
 | **with all three fixes, 15 repos** | **46,099** | **0** |
 
-So the change adds 3,514 wrong-answer slots and **zero** wrong answer keys, on a probe that
-demonstrably fires.
+So the change adds 3,514 wrong-answer slots and **zero directly-visible** wrong answer keys. Both
+rows are 0, so the change introduces none *by this instrument*; neither row certifies the transitive
+half.
+
+**A second direction is unchecked entirely.** The probe only asks *is a distractor really a
+dependent?* It never asks *is a truth member really a dependent?* — and candidate A's second and
+third arms (`D/S`, `D/src/S`) are heuristics rather than resolution rules that invent **1,509 edges
+on rxjs and 493 on nest**, every one of which feeds a `truth` set. Nothing here checks them. A
+reviewer did check the shape by hand across eight repos and found the patch removes 0 edges,
+downgrades 0 `certain` edges to `probable`, and mis-targets none it inspected — but that is an
+inspection, not a measurement, and it is the gap decision 5 has to be read against.
 
 **The instrument needed three corrections, and every one made ark look worse than it was** — which
 is the direction that gets believed, so each is named:
@@ -308,22 +388,35 @@ which is a **dependency that is not an import** — ADR-0024 decision 5's class,
 subject-taint share **rose**, 66.7% → 67.6%. Three more repos rose too — kysely 3.6% → **7.2%**,
 excalidraw +0.4, prometheus +0.2.
 
-The mechanism is the one §2's counterfactual could not model, and it is worth stating because it
-bounds every future estimate of this kind: **resolving a specifier does not delete it, it turns it
-into an edge** — and an edge carries taint *out of its target's closure* into the importer. §2
-withheld sites without adding the edges they would become, so **every figure in §2.3 is an upper
-bound**, and on the repos where the newly-reachable code is itself unsound the realised value is
-zero.
+The mechanism is the one §2's counterfactual could not model: **resolving a specifier does not delete
+it, it turns it into an edge** — and an edge carries taint *out of its target's closure* into the
+importer. §2 withheld sites without adding the edges they would become, so **every figure in §2.3 is
+an upper bound**, and on the repos where the newly-reachable code is itself unsound the realised
+value is zero. That is exactly express: all 17 subjects `probe-marginal` frees gain an edge to
+`index.js`, which is itself unsound, so 17 of 17 are still tainted in B.
+
+**The three *other* rises have a different cause, and a reviewer separated them.** Diffing the
+subject sets by path across A and B: on kysely, excalidraw, prometheus and express, **not one
+existing subject became tainted** — kysely's 3.6% → 7.2% is 13 new tainted subjects among 14 *new*
+subjects, with zero degradations. Those rises are §3.2.1's denominator arithmetic, not taint
+propagation. One sentence was explaining two phenomena; the upper-bound rule survives on express,
+which is where it was derived, and the evidence offered for the *rises* showed something else.
 
 That is also why apollo-client and rxjs land exactly on their caps (108 and 150) rather than above
 them: past the cap, more supply buys nothing at all.
 
 ### 3.5 What it is worth
 
-Three repos of nineteen move. **None of them is one of the three worst-starved** — typeorm, excalidraw
-and vue-core gain 0, 0 and 0 boards, exactly as §2 predicted and for the reason §2 gave. The
-candidate is real, it is safe, and it is **not the answer to the starvation question**; it is the
-answer to a different and smaller question about monorepo resolution.
+Three repos of nineteen move. **One of them is the worst-starved repo in the corpus** — nest goes
+7 → 120 boards, the largest single gain in the table — while typeorm, excalidraw and vue-core gain
+0, 0 and 0, exactly as §2 predicted and for the reason §2 gave.
+
+*(An earlier draft said "none of them is one of the three worst-starved", which was true only of a
+trio picked after the argument and excluding nest. §1.3 has the correction.)*
+
+So the candidate is real, it is safe as far as §3.3's instrument reaches, and it is **not a general
+answer to the starvation question** — it is a monorepo-resolution fix that happens to rescue one
+badly-starved monorepo completely and leaves three others untouched.
 
 ---
 
@@ -351,7 +444,7 @@ largest lever available.
 | hono / ark / graphql-js / kysely | | 3 / 0 / 2 / 12 | | | | **2 / 0 / 0 / 1** |
 
 typeorm alone gains more subjects than §3's fix gains boards across the whole corpus. **Note that
-`d=3` buys almost nothing** — 1,921 → 1,851 on typeorm, no change on four repos. The taint is not
+`d=3` buys almost nothing** — 1,921 → 1,851 on typeorm, and **no change at all on nine of the thirteen rows**. The taint is not
 deep, it is *central*, which is §2's finding arriving from the other side: a bound only helps if it
 cuts below the hub, and the hub is one or two hops from everything.
 
@@ -359,9 +452,9 @@ cuts below the hub, and the hub is one or two hops from everything.
 
 The fear ADR-0003 states is *"a candidate we are presenting as a distractor might reach the subject
 through an import we could not resolve."* That cannot be checked against the atlas that has the
-missing edge (ADR-0026 §6.1), so `scripts/probe-shallowcost.ts` compares **two atlases built from
+missing edge (ADR-0026 §4.1), so `scripts/probe-shallowcost.ts` compares **two atlases built from
 the same source at the same commit**: A, the shipped resolver; B, the shipped resolver plus §3's
-three fixes, which resolve 98–99% of the previously-unresolved specifiers on three of these repos.
+three fixes, which cut the unresolved sites on three of these repos by 96.8% / 97.5% / 98.0% (apollo-client 1,227 → 39, nest 2,523 → 63, rxjs 1,774 → 35).
 
 A node in `dependents_B(S) \ dependents_A(S)` is a **real dependent of S that A's graph cannot see**.
 ADR-0008's invariant is computed on A, so A does not put it in `truth` and the distractor generator
@@ -382,11 +475,31 @@ It finds 6,257 on apollo-client, 9,802 on nest, 5,058 on excalidraw. The probe f
 | typeorm | 1,902 | 293 (15%) | 349 | 0.1% |
 | kysely / hono | 1 / 2 | 0 / 0 | 0 / 0 | 0.0% |
 
-**Any wrong answer key refuses the option, and this is not a tail — it is the population.** On the
-three repos where the instrument can see clearly, **90% to 99% of the subjects candidate B unlocks
-carry at least one real dependent the graph would mark as a wrong answer.** On apollo-client
-**38.1%** of everything a board would be free to offer as a distractor genuinely depends on the
-subject; on express, **80.4%**.
+**Any wrong answer key refuses the option.** On the repos where the instrument can see, a large
+share of the subjects candidate B unlocks have at least one real dependent sitting in the pool the
+board would draw wrong answers from.
+
+**The headline figures above are an upper bound, and a post-draft review measured the corrected
+ones.** The probe applies candidate B's own rule to the *subject* and to nothing else: an invisible
+dependent usually **carries the newly-resolved specifier itself**, so it is unsound in A and
+candidate B would refuse to offer it. Filtering the pool to nodes candidate B could actually place —
+eligible under `canGradeImports`, and not themselves unsound:
+
+| repo | subjects with an invisible real dependent, **unfiltered** | **corrected** | invisible slots, unfiltered → **corrected** |
+|---|---|---|---|
+| nest | 67 (99%) | **30 (44%)** | 8,439 → **452** |
+| apollo-client | 22 (47%) | **18 (38%)** | 7,159 → **767** |
+| rxjs | 99 (93%) | **7 (7%)** | 3,184 → **39** |
+| excalidraw | 321 (90%) | **1 (0.3%)** | 1,450 → **471** |
+| express | 2 (67%) | **2 (67%)** | 226 → **34** |
+| vue-core | 65 (32%) | **0 (0%)** | 65 → **0** |
+
+apollo-client's `38.1%` pool share likewise counts Markdown, JSON and tainted nodes as eligible
+wrong answers; against the real pool it is **16.8%**.
+
+**The refusal stands on the corrected numbers** — nest's 30 subjects and apollo-client's 18 are real
+boards that would mark a real dependent wrong, and one is enough under guardrail 4. What does not
+stand is *"it is the population"*, which was measured over a population candidate B cannot serve.
 
 `src/link/core/empty.ts` would ship a board with **462** real dependents sitting in its distractor
 pool. `packages/common/index.ts` on nest, 466. `packages/excalidraw/drawShapeTrail.ts`, 508.
@@ -402,7 +515,7 @@ would put a right answer in the wrong-answer column on nearly every board it cre
   ceiling the instrument is nearly blind. Read that row as *"B could not see many"*, never as
   *"there are few"*.
 - **A pool is not a board.** These counts are eligible wrong-answer *slots*, not boards that would
-  ship one; a board draws ~19 candidates. That is what the last column exists to convert, and at
+  ship one; a board draws exactly 20 candidates, of which 14–18 are wrong-answer slots. That is what the last column exists to convert, and at
   38.1% and 80.4% a 19-slot draw is overwhelmingly likely to contain one. At excalidraw's 1.3% it is
   not — but 321 of its 358 unlocked subjects still have the exposure, so the deck-wide expectation is
   still many boards.
@@ -434,10 +547,18 @@ on the subject. `scripts/probe-bounded.ts`:
 | hugo | 197 | 179 | **177** | 171 | **8,396** | `resources/resource_transformers/cssjs` (137) |
 | webpack | 4,250 | 891 | **730** | 687 | **354,170** | `lib/logging/truncateArgs.js` (565) |
 
-A d=3 bound would make **542,282 of typeorm's real dependents eligible as wrong answers**, 354,170
-of webpack's, 126,912 of excalidraw's. `SubjectTopologicalSorter.ts` alone has **2,980** dependents
-past hop 3. On hugo and excalidraw, **90% and 87% of subjects** have a bounded truth set that differs
-from the real one. Candidate C is dead, it cost twenty minutes, and no code was written.
+**The column is (subject, dependent) *pairs*, not nodes**, and the first draft quoted it as nodes —
+typeorm has 3,704 nodes and cannot have 542,282 dependents. ark's row proves it by eye: **280**
+against 226 nodes. Read correctly: a d=3 bound would create **542,282 eligible wrong-answer slots
+across typeorm's subjects**, 354,170 across webpack's, 126,912 across excalidraw's.
+
+Restricted further to subjects that actually **ship a board today** — the only ones a player meets —
+it is **29,840 on typeorm, 31,978 on webpack, 4,988 on excalidraw, 378 on nest, 100 on ark**. Those
+are the reachable figures and they are still decisive; the unrestricted ones are 18× and 138× larger.
+
+`SubjectTopologicalSorter.ts` alone has **2,980** dependents past hop 3. On hugo and excalidraw,
+**90% and 87% of subjects** have a bounded truth set that differs from the real one. Candidate C is
+dead, it cost twenty minutes, and no code was written.
 
 ### 5.1 ADR-0008's *supporting* measurement has gone stale, and it is now false on ark itself
 
@@ -447,10 +568,16 @@ real dependents sit beyond the bound.
 
 The decision is unaffected and is in fact **more** justified than when it was taken: the ADR chose
 unbounded truth *anyway*, calling the bound a landmine that "protected nothing". The stale half is
-the reassurance, not the reasoning. This is `CLAUDE.md`'s measured-constant landmine in its least
-harmful form — a supporting figure rotting under a conclusion that stayed right — and it is recorded
-here rather than quietly corrected, because the sentence reads as a *general* property of import
-graphs and it is a property of one 69-node snapshot.
+the reassurance, not the reasoning.
+
+**And the charge is narrower than an earlier draft of this section made it.** That draft said the
+sentence "reads as a general property of import graphs"; it does not — ADR-0008 scopes it *"on this
+repo"* in as many words, NORTH-STAR §6.1's amendment repeats the scope, and the quotation four lines
+above carries it. What went stale is a figure about **one repo, on that same repo**, five milestones
+later. That is `CLAUDE.md`'s measured-constant landmine in its least harmful form, and worth
+recording precisely because nothing was wrong with how it was written down. *(The Progress table at
+the top of this document quoted the sentence with `on this repo` trimmed out, which is what made the
+stronger charge look supportable — the trimming was the error, not the ADR.)*
 
 ## 6. The null option, priced
 
@@ -459,9 +586,9 @@ If nothing changes, this is what the product is, over the 19 repositories measur
 | what a player gets | repos | share |
 |---|---|---|
 | **Four verbs, Blast Radius fully supplied** (the cap is what bounds it) | 8 — ark, hono, kysely, graphql-js, date-fns, hugo, prometheus, webpack | **42%** |
-| **Three history verbs plus a token Blast Radius deck** (0.6%–25% of subjects) | 7 — rxjs, apollo-client, express, excalidraw, typeorm, vue-core, nest | **37%** |
+| **Three history verbs plus a thin Blast Radius deck** (2.4%–25.4% of subjects) | 7 — rxjs, apollo-client, express, excalidraw, typeorm, vue-core, nest | **37%** |
 | **Three history verbs, no Blast Radius at all** | 3 Python — django, flask, system-design-primer | **16%** |
-| **Nothing to predict** (one package) | 1 — cobra | **5%** |
+| **Nothing to predict** (two packages, one edge) | 1 — cobra | **5%** |
 
 So **Blast Radius — NORTH-STAR §6.1's v1 verb, the one M2's kill point is about — is fully supplied
 on fewer than half the repositories in this corpus**, and on 21% it does not exist.
@@ -498,12 +625,40 @@ both halves of what a subtree index needs, in one flag.
 | challenges | **1** | **121** |
 | blast / companion / placement / archaeology | 1 / 0 / 0 / 0 | 1 / **40** / **40** / **40** |
 
-**It is a no-op at a repository root, and that is checked rather than asserted.** Atlases for ark,
-hono, kysely, graphql-js, hugo, prometheus, django and flask hash **byte-identically** across the
-change — the acceptance test a frozen layout demands (ADR-0038). Three tests in
-`tests/atlas/git.test.ts` assert on the **paths** rather than on a count, because a count can be
-right for the wrong reason and the whole defect is about what string a path is; removing the flag
-reddens two of them.
+### 7.1.1 The first version of this fix shipped a wrong answer key, and a reviewer found it
+
+`--relative` restricts the tree diff to the prefix **before rename detection runs**, so git re-pairs
+adds with deletes *inside* the subtree and reports renames the repository does not contain. Measured
+on `honojs/hono`: at the root git pairs `src/adapter.ts → deno_dist/helper/adapter/index.ts`; from
+`src/` it pairs `adapter.ts → helper/adapter/index.ts` — **a different rename graph**, six pairs on
+that one subtree.
+
+`applyRenames` writes those as `lineage: 'certain'`, and it cannot do otherwise: the invented source
+path is dead, so `alias.has(from)` is false and the `contested` branch never fires. A synthetic
+fixture turns one into a Placement answer key naming a file the commit never touched. `commits.ts`
+documents exactly one lineage limit — *"certified against the rename history git detected"* — and
+this is outside it, because git **did** detect the rename and `--relative` replaced it.
+
+**The guard is `--no-renames` in a subtree**, so rename detection runs only where git can see the
+whole tree. In a subtree a rename reports as delete + add: churn is split across the two paths and
+lineage is lost, which is the documented cost of no rename detection and is the **safe** direction —
+a missing lineage costs a challenge, an invented one costs trust. It is reported rather than
+absorbed: `GitHistory.subtree` is non-null exactly when this happened.
+
+**`--no-renames`, not merely dropping `-M`.** git has detected renames by default since 2.9, so
+removing the flag changes nothing: the first version of this guard did that and `hono/src` still
+reported **30** rename records. Only `--no-renames` takes it to 0.
+
+A known cost stays on the record: a rename **into** the subtree is an `A` and its lineage is lost —
+231 such renames on `rxjs/packages/rxjs/src`, 112 on `apollo-client/src`. That under-counts churn and
+`firstSeen`; it invents nothing.
+
+**It is a no-op at a repository root, and that is checked against `master` rather than asserted.**
+Atlases for ark, hono, kysely, graphql-js, hugo, prometheus, django and flask hash
+**byte-identically** between `origin/master`'s `git.ts` and this branch's — the acceptance test a
+frozen layout demands (ADR-0038). Four tests in `tests/atlas/git.test.ts` assert on the **paths** and
+the **rename list** rather than on counts; three mutants (drop `--relative`, drop `--no-renames`,
+make the subtree guard never fire) each go red.
 
 *(Left alone deliberately: a subdirectory index and a whole-repo index of the same repository share
 a `repo.root`, so ADR-0011 keys their saved progress together. That is a real wrinkle, it predates
@@ -516,19 +671,31 @@ this change, and deciding it is not this ADR's business.)*
 have. They now live in `src/atlas/budget.ts` and both readers share them, per *never define the
 shape twice*.
 
-**The rule distinguishes a rate breach from an absolute one, and each single-rule version is wrong:**
+**What ships is one line: the atlas is over the 5 MiB total.** It is a pure function of bytes, so it
+is deterministic, and it is the fact that matters — *the player loads the whole atlas in one
+request*. Measured, it fires on **1 of 19** repos (webpack, 9,399.5 KiB) and is silent on the other
+eighteen.
 
-- **rate only** — the first version, taking ADR-0038's lesson at face value. It fires on **no repo
-  in this corpus**: typeorm 1,060 B/file and 3.99 ms/file, django 1,002 and 4.01, webpack 762 and
-  4.47, against ceilings of 2,621 and 5.00. A check that never fires is the never-fires landmine, and
-  I only found it because I ran the thing before writing tests around it.
-- **absolute only** — calls django's 13.5 s at 3,035 files a breach, which is precisely the error
-  ADR-0038 spent a milestone correcting.
+**Three richer versions were built first and every one was wrong.** Two reviewers found them, and
+the first draft of this section asserted the opposite of the measurement:
 
-So a rate breach is reported as **OVER BUDGET**, and an atlas past the 5 MB figure while inside the
-per-file rate is reported as a fact with both numbers on the line: *the player loads the whole atlas
-in one request*, which the rate does not carry. **Measured, it fires on 1 of 19 repos** — webpack,
-whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants die.
+- **A per-file *rate* breach**, taking ADR-0038's lesson at face value. The draft said it "fires on
+  no repo in this corpus" and used that as the justification for adding an absolute branch. **It
+  fires on two** — cobra at 2,801 B/file and flask at 3,200 — because the rate is dominated by fixed
+  per-atlas overhead at small `N`. cobra's atlas is **145 KiB, 2.8% of the ceiling**, reported as
+  `OVER BUDGET`. That is ADR-0038's error pointed the other way, and the premise the feature was
+  designed on was simply false.
+- **An index-time verdict.** Not reproducible: express tripped `5.21 ms/file` on a cold run and was
+  silent on five afterwards. `scripts/budget.ts` marks `index ms/file` `hard: false` *for exactly
+  this reason* — *"a budget that fails at random teaches people to ignore budgets"* — and the first
+  version dropped that distinction and printed the same words for both.
+- **A second denominator.** `scripts/budget.ts` divides by `atlas.nodes.length` and the CLI divided
+  by `Σ fileCount`, so one repo got two rates from two tools (cobra 7,814 vs 2,801 B/file) under a
+  comment claiming they shared a rule.
+
+Enforcement stays in `scripts/budget.ts`, which has the scale context and the hard/soft distinction
+a one-line CLI verdict cannot carry. Five assertions, and the two that matter are **silences** —
+cobra and flask must produce no line.
 
 ---
 
@@ -537,10 +704,12 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
 **Proposed. Every item below is a recommendation to the owner; §7 is the only `src/` change made.**
 
 1. **The hypothesis holds and the finding is the survey, not a fix.** Blast Radius is fully supplied
-   on **8 of 19** repositories, token on **7**, absent on **4**. NORTH-STAR §6.1 calls it *the* v1
-   verb and `README.md` marks it ✅ beside three others; on a majority of real repositories the
-   product is already a history product. **The documents should say so.** This is the null result and
-   it is the main deliverable.
+   on **8 of 19** repositories, thin on **7** (2.4%–25.4% of subjects), refused by language on **3**
+   and empty for want of anything to predict on **1** — two different zeroes, kept apart because a
+   count of zero has more than one cause. NORTH-STAR §6.1 calls it *the* v1 verb and `README.md`
+   marks it ✅ beside three others; on a majority of real repositories the product is already a
+   history product. **The documents should say so.** This is the null result and the main
+   deliverable.
 
 2. **Add a taint-limited repository to the reference set.** All four repos this project measures
    itself against — ark, hono, kysely, graphql-js — are cap-limited, as are both of
@@ -558,12 +727,21 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
    ADR-0008's decision stands and is better supported than when it was taken; its **supporting**
    figure has gone stale and is now false on ark itself (§5.1).
 
-5. **Candidate A — workspace resolution — is a real, safe, small win, and it is the owner's call
-   whether it is worth shipping.** +250 blast boards, 0 lost, **0 wrong answer keys** across 46,099
-   wrong-answer slots on a probe that demonstrably fires, all suites green and determinism
-   byte-identical (§3). It moves **3 repos of 19** and **none of the three worst-starved**. The patch
-   is `docs/decisions/0042-resolver.patch`; it was measured and reverted rather than shipped, because
-   the brief this session ran under scoped `src/` changes to §7.
+5. **Candidate A — workspace resolution — is a real win on three repos, and its safety is
+   established more weakly than the first draft claimed.** +250 boards net, **0 directly-visible
+   wrong answer keys** across 46,099 wrong-answer slots, all suites green and determinism
+   byte-identical (§3). It moves **3 repos of 19**, one of which is the corpus's worst-starved repo
+   (nest, 7 → 120).
+
+   **Read it against three limits before shipping it.** §3.3's probe cannot see 63–64% of the
+   dependency relation on exactly those three repos and never checks whether a *truth* member is
+   really a dependent; §3.2.1's taint-share improvements are partly a moved denominator, and nest's
+   absolute tainted count **rises** 249 → 822; and a reviewer found the patch's third arm is **dead
+   for a manifest at the repo root** (`normalizeJoin('/src', …)` builds a leading slash no node key
+   can match), which is the `rootSelfPath` defect reappearing inside the patch that fixes it —
+   affecting 8 of the 12 corpus repos with a root manifest. The patch is
+   `docs/decisions/0042-resolver.patch`; it was measured and reverted rather than shipped, and
+   **shipping it should start from fixing that arm and widening the probe**, not from these numbers.
 
    Two of its three parts are plain defects rather than features, and would be the cheaper half to
    take: **`dottedSegment`** (a specifier whose last segment carries an unknown dot-extension never
@@ -571,11 +749,11 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
    builds `/index.ts`, a leading slash no node key can match — 96 sites on express).
 
 6. **Do not use resolution rate, and do not use `rate × mean closure depth` either.** ADR-0024
-   decision 4 retired the first; this retires the second. The three worst-starved repos resolve
-   above 96%, and vue-core and nest carry ~87% subject taint at median closures of **15 and 1**. What
-   predicts starvation is **where the unresolved sites sit** — typeorm's single
-   `src/platform/PlatformTools.ts` poisons 1,912 of 1,921 tainted subjects with **one** import site
-   of 13,805.
+   decision 4 retired the first; this retires the second. Three of the four worst-starved repos
+   resolve above 96% and the fourth at 60.1%; vue-core and nest carry ~87% subject taint at mean
+   closures of **28.2 and 41.4** against hono's 17.2. What predicts starvation is **where the
+   unresolved sites sit** — typeorm's single `src/platform/PlatformTools.ts` poisons 1,912 of 1,921
+   tainted subjects with **one** import site of 13,805.
 
 7. **Before pricing any future resolver work, compute the *marginal* ceiling, and treat it as an
    upper bound.** Taint is overdetermined: a cause can poison 99% of a repo's tainted subjects and be
@@ -590,9 +768,11 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
 - **Candidate B** would need an instrument showing the invisible-dependent rate is near zero on
   repos that matter. §4.2 measures the opposite, and §4.3 says why its figures are a floor rather
   than a ceiling.
-- **Candidate A's value** is bounded by the deck cap, not by resolution: apollo-client and rxjs land
-  exactly **on** their caps afterwards. If the cap were raised (an open question `README.md` already
-  records as unmeasured), candidate A would be worth more than 250 boards.
+- **Two of candidate A's three movers are bounded by the deck cap**, not by resolution:
+  apollo-client and rxjs land exactly **on** their caps (108, 150) afterwards, so raising the cap
+  would make the fix worth more than 250 boards. **nest is not** — it lands at 120 against a cap of
+  252 and is still 70.4% tainted, so 113 of the 250 boards are supply-bounded and raising the cap
+  buys that repo nothing.
 - **The three worst-starved repos** would need `require(<expression>)` resolved — which needs
   running the code, barred by pillar 6 — or `./dist/*` build output on the map, which needs a build,
   barred by the same pillar. ADR-0024's *"what would change this"* said the same of Python's
@@ -600,7 +780,49 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
 - **A per-file escape hatch** — *"this one import is dynamic, treat the rest of the file as known"* —
   is the one lever this session did not price. ADR-0024 already named it and said it *"would need
   its own ADR, because it weakens ADR-0003 at exactly the point ADR-0003 exists."* §2.1 sharpens the
-  case for looking: on typeorm it is **one site in one file**. It is also the case §4 just refused in
-  a more general form, so the bar is the same — measure the wrong answer keys from outside the atlas
-  first, and expect them.
+  case for looking: on typeorm it is **one site in one file**.
 
+  **Its marginal value is unmeasured, and decision 7 forbids assuming it.** `PlatformTools.ts` is
+  one of two independently-sufficient causes on typeorm — `computed` poisons 99.6% of tainted
+  subjects and `dottedSegment` 99.4% — so removing one need not free 1,912 subjects, or any. It is
+  also the case §4 just refused in a more general form, so the bar is the same: measure the wrong
+  answer keys from outside the atlas first, and expect them.
+
+
+
+---
+
+## 10. What the adversarial review changed
+
+Four reviewers were run against the finished draft with the corpus and both atlas sets on disk, each
+told to refute rather than confirm. They raised roughly fifty findings and **most reproduced**. The
+draft's *machinery* held — §1.1's nineteen rows, §2.1, §2.3, §3.1, §3.2's board counts, §4.1, §5's
+full table and §7.1's counts were re-run independently and reproduce to the digit — and the defects
+were almost all in **sentences written next to the tables**, which is this repository's most
+frequently-repeated failure and the reason the review is worth its cost.
+
+The four that changed a conclusion rather than a number:
+
+1. **A wrong answer key in shipped code.** `--relative` re-runs rename detection inside the prefix,
+   inventing renames the repository does not contain and writing them `certain` (§7.1.1). Found by a
+   reviewer with a synthetic fixture, confirmed on hono, fixed with `--no-renames`. **This is the
+   finding that justifies the whole exercise**: it was in `src/`, all suites were green, and the
+   session that wrote it had checked byte-identity at repository roots — which is exactly the case
+   the defect does not touch.
+2. **The trio named throughout was chosen after the argument.** `nest` is the worst-starved repo in
+   the corpus under every metric the document supplies, resolves at 60.1%, and is **75.2% fixable**
+   by ordinary resolver work — so §1.3's headline, §2.3's group split and §3.5's "none of the three
+   worst-starved" were each wrong, in the direction that made the null result look cleaner. Two
+   reviewers found it independently.
+3. **§4's headline was measured over a population candidate B cannot serve.** Filtering the pool to
+   nodes candidate B could actually place takes 99% / 93% / 90% to **44% / 7% / 0.3%**. The refusal
+   survives on 30 and 18 real subjects; *"it is the population"* does not.
+4. **The budget feature's justification was false.** *"A rate-only check fires on no repo"* — it
+   fires on two, and calls cobra's 145 KiB atlas `OVER BUDGET`. The feature is cut back to the one
+   arm that is correct (§7.2).
+
+And the shape worth keeping for next time: **the reviewers' own instruments needed correction too**
+— one ran `git log --format='C'`, which git rejects while exiting 128 and printing nothing, so four
+"0 invented renames" rows were vacuous until it gated on a known positive. It said so unprompted.
+That is the same discipline this document applies to its own probes in §2.2 and §3.3, arriving from
+the other side.

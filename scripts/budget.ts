@@ -22,11 +22,10 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import {
-  MAX_ATLAS_BYTES,
-  MAX_INDEX_MS,
-  REFERENCE_FILES,
-} from '../src/atlas/budget.js';
+import { MAX_ATLAS_BYTES, REFERENCE_FILES } from '../src/atlas/budget.js';
+
+/** Not shared: the CLI reports no time verdict, because it is not reproducible between runs. */
+const MAX_INDEX_MS = 10_000;
 
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
