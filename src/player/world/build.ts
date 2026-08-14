@@ -152,10 +152,11 @@ export interface Chronicle {
  * Both of §9.6's conditions are one predicate here (`standable`), deliberately:
  * a rule that satisfied one and not the other is exactly how the first of them
  * came to be checked and the second forgotten for a milestone. The cost is
- * stated rather than absorbed: **60 of 61 districts are marked**, and the one
- * that is not (django's `around django/core/__init__.py`, 67 files) has no ground
- * inside its own extent that clears every building *and* stands a whole
- * arch-width inside its own territory.
+ * stated rather than absorbed: **142 of 147 districts are marked** across twelve
+ * repos, and the five that are not — django's `around django/core/__init__.py` at
+ * 67 files, three typeorm test directories, one rxjs region — have no ground
+ * inside their own extent that clears every building *and* stands a whole
+ * arch-width inside their own territory.
  *
  * ## Four pillars, not two
  *
@@ -384,13 +385,15 @@ function standingPlace(
  *
  * There is no third clause keeping two districts out of one doorway, and the
  * absence is deliberate. It was written, and then measured: the margin makes it
- * unreachable in the band that matters. If arches for A and B stand `s` apart,
- * each is `ARCH_HALF` deeper into its own territory than the other's, and the
- * triangle inequality over this same metric gives `ARCH_HALF ≤ s` outright — so
- * they can never interpenetrate. On six repos the closest pair is **59.3 units**
- * (django) against an 11.2-unit collision width. A branch that cannot fire is
- * code, comment and test surface asserting a behaviour the product does not
- * have.
+ * near-unreachable. If arches for A and B stand `s` apart, each is `ARCH_HALF`
+ * deeper into its own territory than the other's, and the triangle inequality
+ * over this same metric gives `ARCH_HALF ≤ s` outright — so no arch can contain
+ * another's centre. Measured, the closest pair over twelve repos and 142 arches
+ * is **15.5 units** (typeorm) against an 11.2-unit collision width; the first six
+ * read 59.3, which would have licensed a much stronger sentence than the data
+ * supports. The band `[5.6, 11.2)` is reachable in principle, was not observed,
+ * and would be cosmetic if reached — against a branch that has fired zero times
+ * in 142 placements. ADR-0044 decision 8 keeps the three claims apart.
  *
  * The margin is the part that is not obvious, and it was found by a fixture
  * rather than reasoned out. `standingPlace` returns the *nearest* standable

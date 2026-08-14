@@ -4200,10 +4200,10 @@ Shipped ([ADR-0044](./docs/decisions/0044-a-district-is-marked-where-it-can-be-s
 an arch stands on the nearest ground to the centroid that clears every building **and** sits a whole
 arch-width inside its own district, four pillars in the region's own hue, as tall as the district's
 tallest roof plus a clearance, carrying the region's name through the map's own label collision pass.
-**60 of 61 districts marked, 0 in the wrong district**, thinnest margin 6.28 units (django), closest
-pair 59.3. The one unmarked — django's `around django/core/__init__.py`, 67 files — has no such
-ground inside its own extent and is reported rather than rescued by a second pass that would fire
-once in 61. The world has drawn region colour since it shipped and never said what a colour meant;
+**142 of 147 districts marked across twelve repos, 0 in the wrong district**, thinnest margin 5.62
+units. The five unmarked — django's `around django/core/__init__.py` at 67 files, three typeorm test
+directories, one rxjs region — have no such ground inside their own extent and are reported rather
+than rescued by a second pass that would fire five times in 147. The world has drawn region colour since it shipped and never said what a colour meant;
 this is the flat map's legend, standing in the place it describes.
 
 Three things the measurement changed, none of which a suite could see. The **margin** was found by a
@@ -4212,8 +4212,11 @@ fixture, 0.53 on hugo — because the search returns the *nearest* standable poi
 inequality flips. The **search bound** is the district's own extent rather than a constant, so
 *unmarked* means "no standable ground in this district" and not "the search gave up" (a fixed 40
 units loses 4 arches; the extent loses 1). And a written **arch-vs-arch spacing check was deleted**
-after being measured: the margin already implies any two arches are `ARCH_HALF` apart by the triangle
-inequality, and the closest real pair is 59.3 against an 11.2 collision width.
+after being measured — but the six repos in hand read a closest pair of 59.3 units against an
+11.2-unit collision width, and adding six more took that to **15.5** (typeorm, which places 41
+arches). So the ADR states three things separately: `ARCH_HALF ≤ s` is *proven* by the triangle
+inequality, 15.5 is *measured*, and the band `[5.6, 11.2)` is neither — reachable in principle,
+unobserved, and cosmetic if reached.
 
 Eight mutants, all dead — two only after the test that should have caught them was rewritten. The
 clearance assertion was **vacuous** over a fixture built to reproduce §9.6 faithfully, because the

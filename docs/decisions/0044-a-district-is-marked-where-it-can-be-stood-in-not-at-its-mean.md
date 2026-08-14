@@ -2,9 +2,14 @@
 
 **Status**: accepted · built · 2026-08-14
 **Supersedes**: nothing. **Closes**: [ADR-0032](./0032-the-world-is-a-city-and-the-atlas-is-its-plan.md) §9.6.
-**Measured on**: clean clones of `ark` (`da8a276`), `honojs/hono` `7075369e`, `django/django`
-`c9eb16a87e`, `gohugoio/hugo` `44da0860`, `kysely-org/kysely` `f24018c7`,
-`graphql/graphql-js` `9c245018`. Reproduce with `npx tsx scripts/probe-arches.ts /tmp/ark-corpus <repo>…`.
+**Measured on**: twelve repos — `ark` (`da8a276`), `honojs/hono` `7075369e`, `django/django`
+`c9eb16a87e`, `gohugoio/hugo` `44da0860`, `kysely-org/kysely` `f24018c7`, `graphql/graphql-js`
+`9c245018`, `spf13/cobra`, `pallets/flask`, `prometheus/prometheus`, `typeorm/typeorm`,
+`ReactiveX/rxjs`, `excalidraw/excalidraw`. Reproduce with
+`npx tsx scripts/probe-arches.ts /tmp/ark-corpus <repo>…`.
+
+**The last six were added after the design was settled, and one of them moved a decision** — see §2
+decision 8. Six repos is not a sample, it is the set that was already cloned.
 
 ---
 
@@ -52,15 +57,15 @@ own district: true under the square metric the rule uses and **false under a Euc
 is what a claim holding by a rounding error looks like. On hugo the thinnest real margin was **0.53
 units** out of a 34-unit nudge.
 
-Requiring a whole arch-width takes the thinnest margin to **6.28** (django) and **15.05** (hugo), and
-costs **one district of 61** its name.
+Requiring a whole arch-width takes the thinnest margin to **5.62** at worst across twelve repos, and
+costs **five districts of 147** their names.
 
 **Decision 3 — the search is bounded by the district's own extent, so *unmarked* means something.**
 
 Not a constant. A fixed 40 units is nothing on django and off the edge of a small district; bounding
 by the distance from the centroid to the furthest member makes *"no arch"* mean **there is no
 standable ground inside this district** rather than *the search gave up*. It is also strictly better:
-at a fixed 40 the six repos lose 4 arches, at the district's extent they lose 1.
+on the first six repos a fixed 40 loses 4 arches where the district's extent loses 1.
 
 **Decision 4 — sample spacing is held constant along a ring, not the sample count.**
 
@@ -105,15 +110,25 @@ text. The chevron is what stops a row of pinned names reading as chrome: it says
 District names go through the **same collision pass** as file names, placed first. Two passes would
 let a district's name land on top of the file name of the tower it stands beside.
 
-**Decision 8 — there is no rule keeping two districts out of one doorway, and the absence is
-measured.**
+**Decision 8 — there is no rule keeping two districts out of one doorway. What is proven, what is
+measured, and what is neither, stated separately.**
 
-One was written. Then it was measured, and it cannot fire in the band that matters: if arches for A
-and B stand `s` apart, each is `ARCH_HALF` deeper into its own territory than the other's, and the
-triangle inequality over the same metric gives `ARCH_HALF ≤ s` outright — they can never
-interpenetrate. On six repos the **closest pair is 59.3 units** (django) against an 11.2-unit
-collision width, 5.3× headroom. A branch that cannot fire is code, comment and test surface asserting
-a behaviour the product does not have, so it is gone and this paragraph is what replaces it.
+One was written, then measured, then deleted. The three claims are not the same claim:
+
+- **Proven.** If arches for A and B stand `s` apart, each is `ARCH_HALF` deeper into its own
+  territory than the other's, and the triangle inequality over the same metric gives `ARCH_HALF ≤ s`
+  outright. No arch can ever contain another's centre.
+- **Measured.** Across **twelve** repos and 142 arches the closest pair is **15.5 units** (typeorm,
+  which places 41 of them) against an 11.2-unit collision width — 1.38× headroom. The first six repos
+  read 59.3 and would have licensed a much stronger sentence than the data supports; typeorm is the
+  only repo in the set dense enough in districts to test it, and it is the one that was added last.
+- **Neither.** The band `[5.6, 11.2)` is reachable in principle and was not observed. A repo denser
+  in districts than typeorm could put two arches close enough to overlap on screen.
+
+The consequence in that band is **cosmetic** — two names crowding, no claim made wrong — and the
+guard against it is a branch that has fired zero times in 142 placements, which is code, comment and
+test surface asserting a behaviour the product does not have. So it is gone, and this paragraph
+rather than a mutant nothing can kill is what records the exposure.
 
 ## 3. What it costs, stated
 
@@ -125,16 +140,29 @@ a behaviour the product does not have, so it is gone and this paragraph is what 
 | hugo | 9 | 2 | 9 | 34 | 11.8 | 44% | 0 | 15.05 | 72.2 |
 | kysely | 9 | 2 | 9 | 18 | 6.8 | 34% | 0 | 26.47 | 101.9 |
 | graphql-js | 11 | 2 | 11 | 17 | 5.8 | 19% | 0 | 17.18 | 69.5 |
+| cobra | **0** | 0 | 0 | — | — | — | 0 | — | — |
+| flask | 6 | 0 | 6 | 6 | 2.0 | 11% | 0 | 42.75 | 86.8 |
+| prometheus | 7 | 2 | 7 | 52 | 18.0 | **68%** | 0 | 40.71 | 115.4 |
+| typeorm | 44 | 4 | **41** | 88 | 12.8 | **87%** | 0 | 5.62 | **15.5** |
+| rxjs | 18 | 2 | **17** | 10 | 3.1 | 24% | 0 | 8.91 | 24.4 |
+| excalidraw | 11 | 3 | 11 | 43 | 8.0 | 36% | 0 | 19.91 | 61.6 |
 
-**60 of 61 districts are marked.** The one that is not is django's `around django/core/__init__.py`
-(67 files): no ground inside its own extent clears every building *and* stands a whole arch-width
-inside its own territory. That is a district going unnamed on a repo where 14 others are named, and
-it is reported here rather than rescued by a relaxed second pass — a fallback that fires once in 61
-is a fallback nothing tests.
+**142 of 147 districts are marked, 0 in the wrong district, on every repo measured.** The five that
+are not are django's `around django/core/__init__.py` (67 files), three typeorm test directories of
+3–4 files each, and one rxjs region: none has ground inside its own extent that clears every building
+*and* stands a whole arch-width inside its own territory. They are reported rather than rescued by a
+relaxed second pass — a fallback that fires five times in 147 is a fallback nothing tests.
 
-The **nudge** is the honest cost of the rest. An arch moves a mean of 5.8–12.4 units and at worst
-half a district's extent, so it marks the district's *nearest standable ground*, not its centre.
-`Arch.nudge` records how far, so the claim is checkable rather than implied.
+**cobra's row is the one to read twice.** Zero topology regions, so zero arches, and that is correct:
+cobra is two Go packages, below `MIN_REGION`. A repo with no districts shows no district names, which
+is what an absent phenomenon should look like — and it is why the e2e asserts the count on *this*
+repo, where six exist, rather than asserting it in general.
+
+The **nudge** is the honest cost of the rest. An arch moves a mean of 2.0–18.0 units, and at worst
+**87% of its district's extent** (typeorm) — so it marks the district's *nearest standable ground*,
+which on a sprawling district is near its edge rather than at its middle. `Arch.nudge` records how
+far, so the claim is checkable rather than implied, and the invariant that survives the nudge is the
+one that matters: the nearest building is a member, by a margin, on all 142.
 
 ## 4. What was checked, and what a suite could not see
 

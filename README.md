@@ -399,10 +399,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   landing **inside a monolith** — was live on **20 of the 61 topology centroids** across six repos.
   Re-checking one clause of a two-clause refusal reads exactly like re-checking the refusal.
   An arch now stands on the nearest ground to the centroid that clears every building *and* sits a
-  whole arch-width inside its own district: **60 of 61 districts marked** at `da8a276`, 0 in the wrong
-  district, thinnest margin 6.28 units. The one unmarked (django's `around django/core/__init__.py`,
-  67 files) has no such ground inside its own extent, and is reported rather than rescued.
-  `scripts/probe-arches.ts`.
+  whole arch-width inside its own district: **142 of 147 districts marked across twelve repos** at
+  `da8a276`, **0 in the wrong district**, thinnest margin 5.62 units. The five unmarked (django's
+  `around django/core/__init__.py` at 67 files, three typeorm test directories, one rxjs region) have
+  no such ground inside their own extent, and are reported rather than rescued. `scripts/probe-arches.ts`.
 - ~~**`src/player/ties.ts`'s header records a leak at a figure that predates the fix.**~~ **Closed.**
   It said mutual Companion carrying reaches *"up to 6 of 6 on this repo, measured"* and prescribed
   generator-side work; that work shipped as `companion/generate.ts`'s `claimed` set — one matrix cell,
@@ -544,9 +544,10 @@ removed key against the served deck's `discloses` output, which refuses **0 acro
 two different reasons the script keeps apart (see Known gaps). **M2's instrumentation ships too**
 (ADR-0037), so **both** pieces of that document's §9 are done and what is left is **twelve
 participants from outside the project**, which is owner-only and the wall S1 was always going to hit
-· ~~then **region arches in the world**~~ — **built** (ADR-0044): 60 of 61 districts marked across six
-repos, 0 in the wrong district. §9.6's refusal had two clauses and only one had been re-measured; the
-live one — a centroid inside a monolith, **20 of 61** — is what the placement rule answers
+· ~~then **region arches in the world**~~ — **built** (ADR-0044): 142 of 147 districts marked across
+twelve repos, 0 in the wrong district. §9.6's refusal had two clauses and only one had been
+re-measured; the live one — a centroid inside a monolith, **31 of 147** — is what the placement rule
+answers
 · **a naming rule for cross-directory regions**, which is what still blocks NORTH-STAR
 §5 tier 1 now that region *count* no longer does, and which ADR-0041 §7 shows is separable from the
 clustering · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
