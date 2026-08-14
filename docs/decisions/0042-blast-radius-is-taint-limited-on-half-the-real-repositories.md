@@ -17,7 +17,7 @@
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 19**, and none of them the three worst-starved. |
 | 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it ships wrong answer keys on **90–99%** of the subjects it unlocks on three repos. |
 | 5 — candidate C (bounded depth) | **done** | **REFUSED on arithmetic, no code written.** A d=3 bound makes **542,282** of typeorm's real dependents eligible as wrong answers. ADR-0008's supporting claim *"depth-3 truth equals unbounded truth for every node"* is now false **on ark itself**. |
-| 6 — two smaller findings | pending | |
+| 6 — two smaller findings | **done, and these ship** | A subdirectory index went from **1 challenge to 121**. The CLI names a budget it is over; it fires on **1 of 19** repos. |
 | 7 — synthesis + adversarial review | pending | |
 
 ---
@@ -473,4 +473,63 @@ of Blast Radius as **the** v1 verb describe the 42%.
 
 ---
 
-*Phases 7 follows.*
+## 7. Two smaller findings — both fixed, and these are the only `src/` changes in this ADR
+
+### 7.1 Indexing a subdirectory silently kept zero commits
+
+Point the CLI at `packages/rxjs/src` of the rxjs monorepo and it reports `history 0/5976`. All three
+git-graded verbs ship nothing; the atlas carries **1 challenge**.
+
+**The cause.** `git log` runs with `cwd` set to the directory being indexed, but reports paths
+relative to the **repository** root regardless. So every commit's file list reads
+`packages/rxjs/src/every.ts` while every node is keyed `every.ts`, no commit intersects any node,
+and `commits.ts` drops all of them for `touched.size === 0`. The one signal is a truncation line
+saying `commits: kept 0, dropped 5976`, which reads as a budget cap rather than as a defect.
+
+This is ADR-0026's cobra defect a third time — *a path prefix and a node key are not the same
+string* — this time between git and the walk rather than inside either.
+
+**The fix** is `--relative`, which makes diff output relative to `cwd` *and* drops files outside it:
+both halves of what a subtree index needs, in one flag.
+
+| `packages/rxjs/src` of rxjs `54796b38` | before | after |
+|---|---|---|
+| commits retained | **0** / 5,976 | **244** / 5,976 |
+| challenges | **1** | **121** |
+| blast / companion / placement / archaeology | 1 / 0 / 0 / 0 | 1 / **40** / **40** / **40** |
+
+**It is a no-op at a repository root, and that is checked rather than asserted.** Atlases for ark,
+hono, kysely, graphql-js, hugo, prometheus, django and flask hash **byte-identically** across the
+change — the acceptance test a frozen layout demands (ADR-0038). Three tests in
+`tests/atlas/git.test.ts` assert on the **paths** rather than on a count, because a count can be
+right for the wrong reason and the whole defect is about what string a path is; removing the flag
+reddens two of them.
+
+*(Left alone deliberately: a subdirectory index and a whole-repo index of the same repository share
+a `repo.root`, so ADR-0011 keys their saved progress together. That is a real wrinkle, it predates
+this change, and deciding it is not this ADR's business.)*
+
+### 7.2 The CLI printed two budgeted measurements and neither ceiling
+
+`atlas 9399.5 KiB in 56400 ms` was the whole story, because the ceilings lived only in
+`scripts/budget.ts` — which `src/` cannot import, and which a user of the packaged CLI does not
+have. They now live in `src/atlas/budget.ts` and both readers share them, per *never define the
+shape twice*.
+
+**The rule distinguishes a rate breach from an absolute one, and each single-rule version is wrong:**
+
+- **rate only** — the first version, taking ADR-0038's lesson at face value. It fires on **no repo
+  in this corpus**: typeorm 1,060 B/file and 3.99 ms/file, django 1,002 and 4.01, webpack 762 and
+  4.47, against ceilings of 2,621 and 5.00. A check that never fires is the never-fires landmine, and
+  I only found it because I ran the thing before writing tests around it.
+- **absolute only** — calls django's 13.5 s at 3,035 files a breach, which is precisely the error
+  ADR-0038 spent a milestone correcting.
+
+So a rate breach is reported as **OVER BUDGET**, and an atlas past the 5 MB figure while inside the
+per-file rate is reported as a fact with both numbers on the line: *the player loads the whole atlas
+in one request*, which the rate does not carry. **Measured, it fires on 1 of 19 repos** — webpack,
+whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants die.
+
+---
+
+*Phase 8 follows.*
