@@ -1116,6 +1116,9 @@ npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run test:pack          # ~30 s — pack, install outside the repo, run `ark index` and `ark play`
 npm run budget             # print measured budgets, fail over ceiling
+npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
+                           #   a real dependent as a wrong answer. The only check here that can see a
+                           #   *missing* edge; gates itself on a plant and fails if the detector is inert.
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
                            #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.

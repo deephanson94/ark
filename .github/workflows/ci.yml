@@ -48,6 +48,12 @@ jobs:
       # The canary. Indexes this repo twice in two separate processes and
       # requires byte-identical output. See CLAUDE.md — if this fails, fix the
       # nondeterminism, never the test.
+      - name: answer keys read from source
+        # ADR-0042 §13. The only check in this repo that reads the **repository** rather than the
+        # atlas, which is the one way a *missing* edge can be seen (ADR-0026 §4.1). It gates itself:
+        # a plant runs first and the step fails if the detector is inert.
+        run: npm run check:keys
+
       - name: determinism
         run: npm run test:determinism
 

@@ -22,6 +22,7 @@
  *   npx tsx scripts/probe-wrongkey.ts /tmp/ark-corpus <repo>...
  *   npx tsx scripts/probe-wrongkey.ts /tmp/ark-corpus <repo>... --plant
  */
+import process from 'node:process';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -99,7 +100,7 @@ function filesOf(root: string, node: AtlasNode): string[] {
   } catch { return []; }
 }
 
-interface Hit { repo: string; board: string; subject: string; candidate: string; specifier: string; line: string; }
+export interface Hit { repo: string; board: string; subject: string; candidate: string; specifier: string; line: string; }
 
 function goModulePath(root: string): string | null {
   try {
@@ -129,7 +130,15 @@ function workspacePackageDirs(root: string): [string, string][] {
   return out;
 }
 
-function scan(root: string, atlas: Atlas, swap: boolean): { hits: Hit[]; boards: number; slots: number } {
+export interface ScanResult {
+  readonly hits: readonly Hit[];
+  readonly boards: number;
+  readonly slots: number;
+  /** Distinct boards carrying at least one hit — the plant's catch rate reads off this. */
+  readonly byBoard: number;
+}
+
+export function scanBoards(root: string, atlas: Atlas, swap: boolean): ScanResult {
   const goModule = goModulePath(root);
   const workspaceDirs = workspacePackageDirs(root);
   const nodeByPath = new Map(atlas.nodes.map((n) => [n.path, n]));
@@ -235,14 +244,16 @@ function scan(root: string, atlas: Atlas, swap: boolean): { hits: Hit[]; boards:
       }
     }
   }
-  return { hits, boards, slots };
+  return { hits, boards, slots, byBoard: new Set(hits.map((hit) => hit.board)).size };
 }
 
+// Only run as a command, never on import — `scripts/check-keys.ts` reuses `scanBoards`.
+const invokedDirectly = process.argv[1]?.endsWith('probe-wrongkey.ts') ?? false;
 let totalHits = 0;
-for (const repo of repos) {
+for (const repo of invokedDirectly ? repos : []) {
   const root = join(corpus, repo);
   const { atlas } = await buildIndex(indexOptions(root));
-  const { hits, boards, slots } = scan(root, atlas, plant);
+  const { hits, boards, slots } = scanBoards(root, atlas, plant);
   totalHits += hits.length;
   const byBoard = new Set(hits.map((h) => h.board));
   console.log(
@@ -253,6 +264,6 @@ for (const repo of repos) {
     console.log(`    ${h.candidate}  imports  '${h.specifier}'  →  ${h.subject}     (${h.line})`);
   }
 }
-if (plant) {
+if (plant && invokedDirectly) {
   console.log(`\nPLANT GATE: ${totalHits > 0 ? 'PASS — the probe caught the planted wrong keys' : 'FAIL — the probe is measuring nothing'}`);
 }

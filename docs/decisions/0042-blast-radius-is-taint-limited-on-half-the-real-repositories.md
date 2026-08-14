@@ -19,6 +19,7 @@
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 7 — synthesis + adversarial review (PR #54) | **done** |
 | 8 — backlog (b: the other three verbs) | **done** | **Archaeology is supply-limited on 10 of 19**, more than Companion. §10. |
+| 8 — backlog (c: own the invariant) | **done** | `npm run check:keys` ships and **runs in CI**. It gates itself: an inert detector **fails** instead of reporting a clean zero. §13. |
 | 8 — backlog (a: five more repos) | **done** | The distribution moved to **12 cap-limited / 5 taint-limited of 24**, and a *predictive* rule appeared: starvation is `(1 − taint) × subjects < cap`, right on **18 of 20**. §12. | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 boards net, 0 directly-visible wrong answer keys** — on **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120). Three limits in decision 5. |
@@ -931,6 +932,35 @@ starve**. This does, from two numbers already in the atlas.
 - **`svelte` ships 165 boards at `mapped` 43.7%** — the known gap in `README.md`'s Known gaps,
   reproduced. It is *not* taint-limited: it is refused by `duplicateKey`, which is ADR-0012 saying a
   compiler's generated-looking tree has fewer distinct questions than files.
+
+---
+
+## 13. `npm run check:keys` — the invariant is owned now, and it gates itself
+
+*"Does any board mark a real dependent as a wrong answer"* is worth owning, so §3.3's probe is a
+permanent check and **runs in CI on every push**. It is the only check in this repository that reads
+the **repository's source** rather than the atlas, which is the one way a *missing* edge can be seen
+at all (ADR-0026 §4.1).
+
+**Its design point is the self-gate.** The narrow version of this probe reported a clean `0` on rxjs
+and nest while being blind to 63% of their dependency relation — a zero that looked exactly like good
+news. So the check **plants first**: one member of each board's key is moved into the distractor set,
+and the run **fails** if that catches nothing. Two mutants confirm it — a lexer that matches nothing
+and a plant that does not plant both exit 1 with *"the detector is inert, so a clean run would mean
+nothing"*, rather than passing.
+
+It also prints its own reach, because the number is the honest qualifier on the zero:
+
+```
+check:keys: gate ok — the plant was caught on 21 of 40 board(s) (53%; the rest are
+                      transitive-only, which this instrument does not see)
+check:keys: ok — 582 wrong-answer slot(s) across 40 board(s), none of which names its subject
+```
+
+**What it is not.** It matches a specifier naming the subject's own path, so it sees *direct*
+importers, and the share of key members that are direct runs 12% (hugo) to 74% (webpack). It does not
+read tsconfig `paths` aliases or `baseUrl`. It is a **regression detector on the classes it covers**,
+not a proof of ADR-0008's invariant — and the exit code means only the first.
 
 ---
 
