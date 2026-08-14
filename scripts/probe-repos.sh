@@ -33,6 +33,11 @@ date-fns|https://github.com/date-fns/date-fns|HEAD|+TS: thousands of tiny files,
 express|https://github.com/expressjs/express|HEAD|+JS: CommonJS require(), flat — a different module system from every other TS repo here
 webpack|https://github.com/webpack/webpack|HEAD|+JS: large CJS app with genuinely dynamic requires — the pessimistic end
 nest|https://github.com/nestjs/nest|HEAD|+TS: monorepo with @nestjs/* self-references and decorator/DI indirection
+angular|https://github.com/angular/angular|HEAD|phase 8a: the largest TS monorepo in common use — does the workspace fix hold at 10x nest?
+airflow|https://github.com/apache/airflow|HEAD|phase 8a: Python monorepo with providers/ packages — Python and monorepo together, which no other corpus repo has
+etcd|https://github.com/etcd-io/etcd|HEAD|phase 8a: Go multi-module repo (several go.mod) — the shape ADR-0026 6.1's nested-module wrong key came from
+tokio|https://github.com/tokio-rs/tokio|HEAD|phase 8a: Rust — ark reads none of it, so this checks ADR-0025 refuses cleanly and says why
+svelte|https://github.com/sveltejs/svelte|HEAD|phase 8a: CLAUDE.md names it as the repo whose 4,462 .svelte files are unmapped while it still ships
 EOF
 )
 

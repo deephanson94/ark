@@ -18,7 +18,8 @@
 | 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 7 — synthesis + adversarial review (PR #54) | **done** |
-| 8 — backlog (b: the other three verbs) | **done** | **Archaeology is supply-limited on 10 of 19**, more than Companion. §10. | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
+| 8 — backlog (b: the other three verbs) | **done** | **Archaeology is supply-limited on 10 of 19**, more than Companion. §10. |
+| 8 — backlog (a: five more repos) | **done** | The distribution moved to **12 cap-limited / 5 taint-limited of 24**, and a *predictive* rule appeared: starvation is `(1 − taint) × subjects < cap`, right on **18 of 20**. §12. | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 boards net, 0 directly-visible wrong answer keys** — on **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120). Three limits in decision 5. |
 | 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it puts a real dependent in the wrong-answer pool of **30 of nest's 68** and **18 of apollo-client's 47** unlocked subjects (corrected from 99% / 47%). |
@@ -861,6 +862,75 @@ fifteen.
 `probe-supply.ts` read `subjectsConsidered` only, and Placement's report names it
 `commitsConsidered` because its subject is a commit (ADR-0018) — so that column read 0 for that verb
 on all 19 repos.)*
+
+---
+
+## 12. Five more repositories, and the rule that predicts starvation
+
+Added with reasons stated before any number was taken: **`angular/angular`** (the largest TS monorepo
+in common use — does the workspace fix hold at 10× nest?), **`apache/airflow`** (a Python monorepo
+with `providers/` packages — Python *and* monorepo, which nothing else in the corpus had),
+**`etcd-io/etcd`** (a Go **multi-module** repo, the shape ADR-0026 §4.1's nested-`go.mod` wrong key
+came from), **`tokio-rs/tokio`** (Rust — ark reads none of it, so this checks ADR-0025 refuses
+cleanly), and **`sveltejs/svelte`** (named in `CLAUDE.md` as the repo whose 4,462 `.svelte` files are
+unmapped while it ships anyway).
+
+| repo | sha | nodes | res% | subjects | tainted | boards | cap | verdict |
+|---|---|---|---|---|---|---|---|---|
+| angular | `d3d3bc62` | 8,394 | 96.7 | 3,275 | **50.4%** | **1,050** | 1,050 | **cap-limited** |
+| airflow | `2aef6b1c` | 9,499 | 97.0 | 3,301 | 59.6% | 552 | 1,188 | mixed — see below |
+| etcd | `0836b69e` | 278 | **100.0** | 142 | **0.0%** | 40 | 40 | cap-limited |
+| svelte | `20b341f1` | 4,060 | 99.1 | 424 | 7.8% | 165 | 508 | nothing to predict |
+| tokio | `625954f3` | 30 | — | 0 | — | **0** | 40 | **deck refused** (ADR-0025) |
+
+**The distribution moved**, and the shipped fix moved it as much as the new repos: **12 cap-limited,
+5 taint-limited, 2 neither** of 24, against 8 / 7 / 1 of 19 — apollo-client and rxjs crossed from
+taint-limited to cap-limited when their workspace specifiers resolved.
+
+### 12.1 Starvation is `(1 − taint) × subjects < cap`, and that is right on 18 of 20
+
+**angular carries 50.4% subject taint and is not starved at all**, because 3,275 subjects leave
+**1,625** clean ones against a cap of 1,050. The whole document to this point treats taint share as
+the thing to watch; it is not, on its own. What decides is whether the *clean* subjects outnumber
+the cap:
+
+| | clean subjects | cap | at cap? |
+|---|---|---|---|
+| angular | 1,625 | 1,050 | **yes** |
+| webpack | 3,503 | 1,579 | yes |
+| typeorm | **303** | 463 | no — starved |
+| vue-core | **35** | 74 | no — starved |
+| excalidraw | **93** | 98 | no — starved |
+
+Applied to all 20 gradeable repos it predicts at-cap correctly on **18**. This is a better instrument
+than anything earlier in this document: ADR-0024 decision 4's `rate × depth` and §1.3's *"position,
+not rate"* both explain **where** the taint comes from, and neither says **whether a repo will
+starve**. This does, from two numbers already in the atlas.
+
+**Both misses are informative and neither is noise.**
+
+- **nest** has 346 clean subjects against a cap of 252 and ships 120. `taintedRefs` marks a node
+  tainted when its own dependency closure is unsound, while `isChallengeable` refuses a **board**
+  when the subject *or any candidate* is — so a clean subject with a dirty candidate pool is still
+  refused (980 `uncertain` against 822 tainted subjects). The rule is a **lower bound on refusals**,
+  and the residue is `duplicateKey` (52) and `ctrlF` (16).
+- **airflow is the corpus's first genuinely mixed-language repository** — `go, js, json, md, mjs,
+  py, ts, tsx` — and **7,729 of its subjects are refused `ungradedLanguage`** while 552 TS/JS boards
+  ship. `blastSubjects` counts every node with a dependent; the gradeable subject count is a
+  different and smaller number, and no earlier corpus repo forced the distinction. §1.1's
+  classification rule cannot express this row, which is why the table above says *mixed* rather than
+  picking one of its buckets.
+
+### 12.2 Three confirmations, cheaply
+
+- **`tokio` gets a map and no deck** — 30 nodes, 0 edges, **0 challenges**, `mapped` 0.0%. ADR-0025's
+  refusal fires exactly as designed on a language ark cannot read at all, which had never been
+  checked on Rust.
+- **`etcd` resolves at 100.0% with 0 tainted subjects** across a **multi-module** Go repo, which is
+  the shape ADR-0026 §4.1 found two wrong answer keys in on prometheus.
+- **`svelte` ships 165 boards at `mapped` 43.7%** — the known gap in `README.md`'s Known gaps,
+  reproduced. It is *not* taint-limited: it is refused by `duplicateKey`, which is ADR-0012 saying a
+  compiler's generated-looking tree has fewer distinct questions than files.
 
 ---
 
