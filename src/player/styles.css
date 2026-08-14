@@ -866,3 +866,52 @@ body {
   line-height: 1.5;
   color: var(--text-dim);
 }
+
+
+/* The help card (ADR-0046's sibling complaint: the controls scored 6/10 because
+   the mouse gestures were written down nowhere). Same panel language as the
+   legend, opposite corner, and it is built from `controlsFor` so it can never
+   advertise a key the current view does not have. */
+.help {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 340px;
+  max-width: 460px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  z-index: 40;
+}
+
+.help-title {
+  margin-bottom: 12px;
+  font: 600 11px/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.help-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.help-keys {
+  font: 12px/1.5 var(--mono);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.help-what {
+  margin: 0;
+  font: 12.5px/1.5 var(--sans);
+  color: var(--text);
+}

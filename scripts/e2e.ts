@@ -1487,6 +1487,75 @@ async function main(): Promise<number> {
       failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
     }
 
+    // ---- keyboard navigation and the help card ---------------------------
+    //
+    // A cold playtester scored the controls 6 of 10, and the flat map could not
+    // be moved from the keyboard at all — a real gap on a trackpad and an
+    // absolute one for anyone not using a pointer. Both halves are gated on
+    // pixels rather than on "no error", for the reason the orbit block below
+    // spells out: this repo has shipped two instruments that reported confident
+    // numbers about a map that was not moving.
+    {
+      // **Fit first, and that is not tidiness.** An earlier step zooms this page
+      // to street level, and the first draft of this block pressed `+` from
+      // there and reported *"+ changed no pixel"* — `clampScale` caps at
+      // MAX_SCALE and the camera was already against it, so the control was
+      // working and the instrument was testing the clamp. Fitting puts the
+      // camera at a known scale with room in both directions.
+      await page.keyboard.press('f');
+      await page.waitForTimeout(200);
+      const beforeArrow = await hashCanvas();
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(180);
+      const afterArrow = await hashCanvas();
+      if (afterArrow === beforeArrow) {
+        failures.push({ what: 'keys', detail: 'ArrowRight moved no pixel on the map' });
+      }
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(180);
+      const beforeZoom = await hashCanvas();
+      await page.keyboard.press('+');
+      await page.waitForTimeout(180);
+      if ((await hashCanvas()) === beforeZoom) {
+        failures.push({ what: 'keys', detail: '+ changed no pixel on the map' });
+      }
+      const beforeOut = await hashCanvas();
+      await page.keyboard.press('-');
+      await page.waitForTimeout(180);
+      if ((await hashCanvas()) === beforeOut) {
+        failures.push({ what: 'keys', detail: '- changed no pixel on the map' });
+      }
+
+      // The card is built from `controlsFor`, so the assertion is that it says
+      // more than the HUD's one-line hint does — that being the whole reason it
+      // exists. Comparing counts rather than text: the line is a *projection* of
+      // the same list, so any row it drops is a control written down nowhere.
+      await page.keyboard.press('?');
+      await page.waitForSelector('.help', { state: 'visible', timeout: 3000 });
+      const rows = await page.locator('.help-keys').count();
+      const briefs = (await page.locator('.hud-keys').innerText()).split('·').length;
+      if (rows <= briefs) {
+        failures.push({
+          what: 'keys',
+          detail: `the help card lists ${rows} controls and the HUD line already had ${briefs}`,
+        });
+      }
+      const helpText = (await page.locator('.help').innerText()).toLowerCase();
+      // The gestures that were written down nowhere before this existed.
+      for (const gesture of ['scroll', 'drag', 'arrows']) {
+        if (!helpText.includes(gesture)) {
+          failures.push({ what: 'keys', detail: `the help card never mentions ${gesture}` });
+        }
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'help.png') });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      if (await page.locator('.help').isVisible()) {
+        failures.push({ what: 'keys', detail: 'Escape did not close the help card' });
+      }
+      process.stdout.write(`e2e: help card → ${rows} controls, HUD line carries ${briefs}\n`);
+    }
+
     // ---- the orbit view -------------------------------------------------
     //
     // Gated by a canvas hash, because `npm run raster` printed confident,

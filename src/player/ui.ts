@@ -14,6 +14,8 @@
 import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
 import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
 import { guideExhausted, notesEmpty, questsLine } from './empty.js';
+import type { Arm, View } from './experiment.js';
+import { controlsFor } from './experiment.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import { VERBS, wordsFor } from '../verbs/index.js';
@@ -475,6 +477,52 @@ export function createLegend(scene: Scene): HTMLElement {
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
   ]);
+}
+
+/**
+ * The help card: every control this arm and this view actually has.
+ *
+ * **Built from `controlsFor` and never from a list kept here.** A cold
+ * playtester scored the controls 6 out of 10, and the reason was not that they
+ * are bad — it is that the HUD's one-line hint was the *only* enumeration of
+ * them, so the mouse gestures were written down nowhere and the keyboard pan
+ * did not exist. A second hand-kept list would break `experiment.ts`'s rule the
+ * first time an arm changed, which is a failure that file already has a
+ * screenshot of.
+ *
+ * `rebuild` rather than a static render, because the live set changes with the
+ * view: `f` and `n` are dead in the world, and `o` says *map* from the orbit.
+ */
+export interface Help {
+  readonly root: HTMLElement;
+  isOpen(): boolean;
+  toggle(arm: Arm | null, view: View): void;
+  close(): void;
+}
+
+export function createHelp(): Help {
+  const list = el('dl', 'help-list');
+  const root = el('div', 'help', [el('div', 'help-title', ['controls']), list]);
+  root.style.display = 'none';
+  let open = false;
+
+  return {
+    root,
+    isOpen: () => open,
+    toggle(arm, view) {
+      open = !open;
+      root.style.display = open ? 'block' : 'none';
+      if (!open) return;
+      list.replaceChildren();
+      for (const control of controlsFor(arm, view)) {
+        list.append(el('dt', 'help-keys', [control.keys]), el('dd', 'help-what', [control.what]));
+      }
+    },
+    close() {
+      open = false;
+      root.style.display = 'none';
+    },
+  };
 }
 
 export interface Notebook {
