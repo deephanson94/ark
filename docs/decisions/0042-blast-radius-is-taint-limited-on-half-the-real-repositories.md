@@ -15,7 +15,8 @@
 |---|---|---|
 | 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
-| 7 — synthesis + adversarial review (PR #54) | **done** | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
+| 7 — synthesis + adversarial review (PR #54) | **done** |
+| 8 — backlog (b: the other three verbs) | **done** | **Archaeology is supply-limited on 10 of 19**, more than Companion. §10. | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 boards net, 0 directly-visible wrong answer keys** — on **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120). Three limits in decision 5. |
 | 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it puts a real dependent in the wrong-answer pool of **30 of nest's 68** and **18 of apollo-client's 47** unlocked subjects (corrected from 99% / 47%). |
@@ -792,7 +793,37 @@ cobra and flask must produce no line.
 
 ---
 
-## 10. What the adversarial review changed
+## 10. The other three verbs are not uniformly safe either — Archaeology least of all
+
+Nobody had asked the starvation question of the git-graded verbs. Classifying all four the same way
+(*cap-limited* = the deck cap bit; *supply-limited* = it did not):
+
+| verb | cap-limited | **supply-limited** | supply-limited on |
+|---|---|---|---|
+| Companion | 13 | **6** | cobra, django, flask, nest, system-design-primer, webpack |
+| Placement | 11 | **8** | + date-fns, hugo, typeorm |
+| **Archaeology** | 9 | **10** | + prometheus, rxjs |
+| Blast Radius | 8 | 11 | — |
+
+**Archaeology is supply-limited on 10 of 19 repos, more than Companion's 6** — and on four repos
+where Blast Radius is *fully* supplied: hugo ships **23 boards against a cap of 156**, webpack 113
+against 1,579, date-fns 71 against 226, prometheus 55 against 63. Its refusals are dominated by
+`disclosed` (ADR-0019 decision 7 yielding to Placement) rather than by taint, so it is a different
+mechanism from everything else in this document and is not fixed by anything proposed here.
+
+**Companion is the most robust verb in the product**, cap-limited on 13 of 19. §1.5's claim that the
+history verbs ship "a full or capped deck" while Blast Radius does not is true of Companion, and
+only sometimes true of the other two — it is asserted there over eighteen decks and holds for
+fifteen.
+
+*(Measured from the same `_all.json` as §1. A probe defect a reviewer found is fixed in passing:
+`probe-supply.ts` read `subjectsConsidered` only, and Placement's report names it
+`commitsConsidered` because its subject is a commit (ADR-0018) — so that column read 0 for that verb
+on all 19 repos.)*
+
+---
+
+## 11. What the adversarial review changed
 
 Four reviewers were run against the finished draft with the corpus and both atlas sets on disk, each
 told to refute rather than confirm. They raised roughly fifty findings and **most reproduced**. The

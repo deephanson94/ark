@@ -197,6 +197,12 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   with **0 directly-visible wrong answer keys** over 46,099 slots. It is measured, reverted and left
   as the owner's call with three stated limits, patch at `docs/decisions/0042-resolver.patch`.
 
+  **Archaeology is supply-limited on 10 of 19 repos, more than Companion's 6** — and on four where
+  Blast Radius is *fully* supplied (hugo 23 boards against a cap of 156, webpack 113 against 1,579).
+  Its refusals are dominated by `disclosed` — ADR-0019 decision 7 yielding to Placement — so it is a
+  different mechanism and nothing proposed above fixes it. Companion is the most robust verb in the
+  product, cap-limited on 13 of 19.
+
   **Four adversarial reviewers raised ~50 findings against the draft and most reproduced** — one of
   them a **wrong answer key in shipped code**: the first version of the subdirectory fix below made
   git re-run rename detection inside the prefix, inventing six renames on `hono/src` and writing them

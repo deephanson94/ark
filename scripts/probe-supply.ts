@@ -104,7 +104,14 @@ async function measure(repo: string): Promise<SupplyRow> {
       for (const [reason, n] of result.report.skipped) skipped[reason] = n;
       verbs[name] = {
         generated: result.report.generated,
-        considered: 'subjectsConsidered' in result.report ? result.report.subjectsConsidered : 0,
+        // Placement's report names this `commitsConsidered` — its subject is a commit (ADR-0018).
+        // Reading only `subjectsConsidered` silently reported 0 for that verb on all 19 repos.
+        considered:
+          'subjectsConsidered' in result.report
+            ? result.report.subjectsConsidered
+            : 'commitsConsidered' in result.report
+              ? result.report.commitsConsidered
+              : 0,
         skipped,
       };
     }

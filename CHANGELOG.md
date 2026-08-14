@@ -4082,4 +4082,10 @@ one repo two rates from two tools.
 
 884 unit, 115 atlas, determinism byte-identical, e2e clean on the branch and on the CI merge commit.
 
+**And the same question asked of the other three verbs, which nobody had.** **Archaeology is
+supply-limited on 10 of 19 repos** — more than Companion's 6 — and on four where Blast Radius is
+fully supplied (hugo **23 boards against a cap of 156**, webpack 113 against 1,579). Its refusals are
+dominated by `disclosed`, ADR-0019 decision 7 yielding to Placement, so it is a different mechanism
+and nothing in this session touches it. Companion is the most robust verb in the product.
+
 **Next**: the owner's two calls above. Then experiment 0001, which is still the wall.
