@@ -4118,4 +4118,30 @@ invisible.
 889 unit, 116 atlas, determinism byte-identical, e2e clean, `test:pack` ok — on the branch and on the
 reproduced CI merge commit.
 
+**A Fable review of the shipped resolver found two more wrong answer keys, ninety minutes later.**
+`workspacePackages` was a global map over every walked `package.json` — and `webpack` has **no
+`workspaces` field at all**, while its tracked test fixtures declare `pkg`, `my-lib`, `foo` against
+per-fixture `node_modules/` copies the walk excludes. `import "pkg"` from one fixture resolved to an
+unrelated fixture as a `certain` edge, putting a non-dependent into two boards' keys. Both are gone;
+a manifest now qualifies only if the repository root or a **declared** workspace glob covers it, and
+a name two manifests claim resolves to nothing (nest's root manifest is literally `@nestjs/core`).
+Reading the pnpm declaration took two more fixes that had each silently zeroed it — it is YAML, so
+`parseJsonc` skipped it, and it is not a scanned language, so it never reached the manifest list.
+Each was worth 70 of rxjs's boards.
+
+**`check:keys` could not see either, and its own limitations section says why**: it checks
+distractors that import the subject, and these were truth members that do not. A stated limitation
+is not a discharged one.
+
+Five more closed: pattern `exports` subpaths bypassed the decoy guard (typeorm, hono, vue-core and
+excalidraw all declare patterns, so *corpus-clean* was luck of layout); `subtreeOf` compared
+`/`-separated paths, so the rename guard **never fired on Windows** while ubuntu CI stayed green;
+`GitHistory.subtree` had no consumer while two documents claimed the CLI printed it; a two-arm hit
+was stamped `certain` where the schema says `probable`; and **`config.ts` had no test coverage at
+all** — the review mutated its condition order and duplicate-name rule and both survived 889 tests.
+Three mutants that survived the review's own pass now die.
+
+**898 unit, 116 atlas, `check:keys` clean, determinism byte-identical, e2e clean, `test:pack` ok**, on
+the branch and on the reproduced CI merge commit. +250 boards unchanged throughout.
+
 **Next**: experiment 0001, which is still the wall.
