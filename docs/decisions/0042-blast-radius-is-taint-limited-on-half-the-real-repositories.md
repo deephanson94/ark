@@ -15,7 +15,7 @@
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 20**, and none of them the three worst-starved. |
-| 4 — candidate B (taint stops at first unresolved edge) | pending | |
+| 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it ships wrong answer keys on **90–99%** of the subjects it unlocks on three repos. |
 | 5 — candidate C (bounded depth) | pending | |
 | 6 — two smaller findings | pending | |
 | 7 — synthesis + adversarial review | pending | |
@@ -327,4 +327,86 @@ answer to a different and smaller question about monorepo resolution.
 
 ---
 
-*Phases 4–7 follow.*
+## 4. Candidate B — taint that stops at the first unresolved edge. **Refused.**
+
+ADR-0003 refuses a board when any candidate **or anything on its outgoing side** carries an
+unresolved import. Candidate B keeps only the candidate's own imports (depth 0). It is by far the
+largest lever available.
+
+### 4.1 The ceiling is enormous
+
+`scripts/probe-shallowtaint.ts`, recomputing the taint walk at bounded depths on the shipped atlases:
+
+| repo | blast subjects | tainted ∞ (today) | tainted d=3 | tainted d=1 | tainted d=0 | **subjects unlocked at d=0** |
+|---|---|---|---|---|---|---|
+| typeorm | 2,221 | 1,921 | 1,851 | 82 | 19 | **1,902** |
+| django | 981 | 821 | 819 | 279 | 51 | **770** |
+| excalidraw | 479 | 388 | 386 | 191 | 30 | **358** |
+| vue-core | 254 | 220 | 220 | 191 | 14 | **206** |
+| rxjs | 295 | 141 | 141 | 121 | 34 | **107** |
+| nest | 286 | 249 | 249 | 237 | 181 | **68** |
+| prometheus | 288 | 57 | 44 | 25 | 14 | **43** |
+| apollo-client | 348 | 217 | 217 | 211 | 170 | **47** |
+| flask | 32 | 30 | 30 | 17 | 8 | **22** |
+| hono / ark / graphql-js / kysely | | 3 / 0 / 2 / 12 | | | | **2 / 0 / 0 / 1** |
+
+typeorm alone gains more subjects than §3's fix gains boards across the whole corpus. **Note that
+`d=3` buys almost nothing** — 1,921 → 1,851 on typeorm, no change on four repos. The taint is not
+deep, it is *central*, which is §2's finding arriving from the other side: a bound only helps if it
+cuts below the hub, and the hub is one or two hops from everything.
+
+### 4.2 The cost, measured from outside the atlas
+
+The fear ADR-0003 states is *"a candidate we are presenting as a distractor might reach the subject
+through an import we could not resolve."* That cannot be checked against the atlas that has the
+missing edge (ADR-0026 §6.1), so `scripts/probe-shallowcost.ts` compares **two atlases built from
+the same source at the same commit**: A, the shipped resolver; B, the shipped resolver plus §3's
+three fixes, which resolve 98–99% of the previously-unresolved specifiers on three of these repos.
+
+A node in `dependents_B(S) \ dependents_A(S)` is a **real dependent of S that A's graph cannot see**.
+ADR-0008's invariant is computed on A, so A does not put it in `truth` and the distractor generator
+is free to offer it as a wrong answer. B proves it is a dependent without any appeal to A.
+
+**The gate**: `--plant` deletes every 20th edge from A, making dependents invisible by construction.
+It finds 6,257 on apollo-client, 9,802 on nest, 5,058 on excalidraw. The probe fires.
+
+| repo | subjects d=0 unlocks | **with an invisible real dependent** | invisible slots | **mean share of the wrong-answer pool that really depends on the subject** |
+|---|---|---|---|---|
+| **nest** | 68 | **67 (99%)** | 8,439 | 7.8% |
+| **rxjs** | 107 | **99 (93%)** | 3,184 | 2.7% |
+| **excalidraw** | 358 | **321 (90%)** | 1,450 | 1.3% |
+| **express** | 3 | **2 (67%)** | 226 | **80.4%** |
+| **apollo-client** | 47 | **22 (47%)** | 7,159 | **38.1%** |
+| vue-core | 206 | 65 (32%) | 65 | 0.2% |
+| prometheus | 43 | 7 (16%) | 448 | 13.0% |
+| typeorm | 1,902 | 293 (15%) | 349 | 0.1% |
+| kysely / hono | 1 / 2 | 0 / 0 | 0 / 0 | 0.0% |
+
+**Any wrong answer key refuses the option, and this is not a tail — it is the population.** On the
+three repos where the instrument can see clearly, **90% to 99% of the subjects candidate B unlocks
+carry at least one real dependent the graph would mark as a wrong answer.** On apollo-client
+**38.1%** of everything a board would be free to offer as a distractor genuinely depends on the
+subject; on express, **80.4%**.
+
+`src/link/core/empty.ts` would ship a board with **462** real dependents sitting in its distractor
+pool. `packages/common/index.ts` on nest, 466. `packages/excalidraw/drawShapeTrail.ts`, 508.
+
+**Candidate B is refused.** Guardrail 4 is not a preference to be traded against deck size, and here
+the trade is not even close: the largest supply win available in this session is also the one that
+would put a right answer in the wrong-answer column on nearly every board it creates.
+
+### 4.3 Two things this measurement is not
+
+- **It is a lower bound, and typeorm's 15% is the proof.** B still cannot resolve
+  `require(<expression>)`, which is typeorm's entire story (§2.1) — so on the repo with the biggest
+  ceiling the instrument is nearly blind. Read that row as *"B could not see many"*, never as
+  *"there are few"*.
+- **A pool is not a board.** These counts are eligible wrong-answer *slots*, not boards that would
+  ship one; a board draws ~19 candidates. That is what the last column exists to convert, and at
+  38.1% and 80.4% a 19-slot draw is overwhelmingly likely to contain one. At excalidraw's 1.3% it is
+  not — but 321 of its 358 unlocked subjects still have the exposure, so the deck-wide expectation is
+  still many boards.
+
+---
+
+*Phases 5–7 follow.*

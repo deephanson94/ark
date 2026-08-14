@@ -1,0 +1,194 @@
+diff --git a/src/indexer/build.ts b/src/indexer/build.ts
+index 11312e7..fc52749 100644
+--- a/src/indexer/build.ts
++++ b/src/indexer/build.ts
+@@ -199,6 +199,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
+     onDisk: walked.onDisk,
+     configFor: (path: string) => configIndex.for(path),
+     workspaceNames: configIndex.workspaceNames,
++    workspacePackages: configIndex.workspacePackages,
+   };
+ 
+   // ---- scan and resolve -------------------------------------------------
+diff --git a/src/indexer/config.ts b/src/indexer/config.ts
+index b7803ec..b8c0cf3 100644
+--- a/src/indexer/config.ts
++++ b/src/indexer/config.ts
+@@ -81,6 +81,8 @@ interface PackageFacts {
+   readonly name: string | null;
+   /** Dependency names declared with the `workspace:` protocol. */
+   readonly workspaceDeps: readonly string[];
++  /** `exports` flattened to `subpath -> target`, sorted. MEASUREMENT (ADR-0042 §3). */
++  readonly exports: readonly (readonly [string, string])[];
+ }
+ 
+ interface TsFacts {
+@@ -102,6 +104,16 @@ export interface ConfigIndex {
+    * false-negative guardrail 4 exists to prevent.
+    */
+   readonly workspaceNames: ReadonlySet<string>;
++  /** MEASUREMENT (ADR-0042 §3): where each workspace package lives and what it exports. */
++  readonly workspacePackages: ReadonlyMap<string, WorkspacePackage>;
++}
++
++/** MEASUREMENT (ADR-0042 §3). */
++export interface WorkspacePackage {
++  /** Repo-relative directory holding the manifest. `''` at the repo root. */
++  readonly dir: string;
++  /** `exports` subpath -> target, relative to `dir`. */
++  readonly exports: ReadonlyMap<string, string>;
+ }
+ 
+ export async function loadConfigIndex(
+@@ -111,6 +123,7 @@ export async function loadConfigIndex(
+   const packages = new Map<string, PackageFacts>();
+   const tsconfigs = new Map<string, TsFacts>();
+   const workspaceNames = new Set<string>();
++  const workspacePackages = new Map<string, WorkspacePackage>();
+ 
+   // Raw text first, so `extends` can be followed without re-reading.
+   //
+@@ -133,7 +146,13 @@ export async function loadConfigIndex(
+     if (name === 'package.json') {
+       const facts = packageFacts(parsed);
+       packages.set(directory, facts);
+-      if (facts.name !== null) workspaceNames.add(facts.name);
++      if (facts.name !== null) {
++        workspaceNames.add(facts.name);
++        // First manifest wins on a duplicate name, in the walk's sorted order.
++        if (!workspacePackages.has(facts.name)) {
++          workspacePackages.set(facts.name, { dir: directory, exports: new Map(facts.exports) });
++        }
++      }
+     } else {
+       tsconfigs.set(directory, tsFacts(parsed, directory, texts));
+     }
+@@ -188,6 +207,7 @@ export async function loadConfigIndex(
+   return {
+     for: (path) => (texts.size === 0 ? EMPTY_CONFIG : configForDirectory(directoryOf(path))),
+     workspaceNames,
++    workspacePackages,
+   };
+ }
+ 
+@@ -212,9 +232,46 @@ function packageFacts(parsed: unknown): PackageFacts {
+     selfImports: dedupeSorted(Object.keys(stringRecord(record['imports']))),
+     name: typeof record['name'] === 'string' ? record['name'] : null,
+     workspaceDeps: dedupeSorted(workspaceDeps),
++    exports: exportEntries(record['exports']),
+   };
+ }
+ 
++/**
++ * MEASUREMENT (ADR-0042 §3). `exports` flattened to `subpath -> target`.
++ *
++ * Condition objects are followed in a fixed order so the result is deterministic.
++ */
++function exportEntries(value: unknown): readonly (readonly [string, string])[] {
++  const target = (x: unknown, depth: number): string | null => {
++    if (depth > 4) return null;
++    if (typeof x === 'string') return x;
++    if (typeof x !== 'object' || x === null || Array.isArray(x)) return null;
++    const record = x as Record<string, unknown>;
++    for (const key of ['import', 'module', 'default', 'require', 'node', 'types']) {
++      if (!(key in record)) continue;
++      const hit = target(record[key], depth + 1);
++      if (hit !== null) return hit;
++    }
++    return null;
++  };
++  const entries: (readonly [string, string])[] = [];
++  if (typeof value === 'string') return [['.', value]];
++  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
++  const record = value as Record<string, unknown>;
++  const keys = Object.keys(record);
++  if (keys.length > 0 && !keys.some((key) => key.startsWith('.'))) {
++    const hit = target(value, 0);
++    return hit === null ? [] : [['.', hit]];
++  }
++  for (const [key, raw] of Object.entries(record)) {
++    if (!key.startsWith('.')) continue;
++    const hit = target(raw, 0);
++    if (hit !== null) entries.push([key, hit]);
++  }
++  entries.sort((a, b) => byteCompare(a[0], b[0]));
++  return entries;
++}
++
+ /**
+  * `paths` and `baseUrl` from a tsconfig, made repo-relative.
+  *
+diff --git a/src/indexer/resolve.ts b/src/indexer/resolve.ts
+index 7539c3f..6fe5d47 100644
+--- a/src/indexer/resolve.ts
++++ b/src/indexer/resolve.ts
+@@ -74,6 +74,8 @@ export interface ResolveContext {
+    * it.
+    */
+   readonly workspaceNames: ReadonlySet<string>;
++  /** MEASUREMENT (ADR-0042 §3): where each workspace package lives and what it exports. */
++  readonly workspacePackages?: ReadonlyMap<string, { readonly dir: string; readonly exports: ReadonlyMap<string, string> }>;
+ }
+ 
+ const BUILTINS = new Set(builtinModules);
+@@ -85,6 +87,8 @@ const BUILTINS = new Set(builtinModules);
+  */
+ const TRY_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'];
+ const INDEX_FILES = TRY_EXTENSIONS.map((extension) => `/index${extension}`);
++/** Extensions that really are module extensions, as opposed to a dot in a filename. */
++const KNOWN_EXTENSIONS = new Set(TRY_EXTENSIONS);
+ const REWRITES: ReadonlyMap<string, readonly string[]> = new Map([
+   ['.js', ['.ts', '.tsx', '.js']],
+   ['.mjs', ['.mts', '.mjs']],
+@@ -177,10 +181,17 @@ function candidatesFor(base: string): string[] {
+     const stem = base.slice(0, base.length - extension.length);
+     for (const replacement of rewrites) candidates.push(stem + replacement);
+   }
+-  if (extension === '') {
++  // MEASUREMENT (ADR-0042 §3, fix 2 - `dottedSegment`). `extensionOf('./x.interface')` answers
++  // `.interface`, so this append loop used to be skipped and `x.interface.ts` was never a
++  // candidate. nest names 1,942 specifiers that way. A dot is not an extension unless we know it.
++  if (extension === '' || !KNOWN_EXTENSIONS.has(extension)) {
+     for (const suffix of TRY_EXTENSIONS) candidates.push(base + suffix);
+   }
+-  for (const suffix of INDEX_FILES) candidates.push(base + suffix);
++  // MEASUREMENT (ADR-0042 §3, fix 3 - `rootSelfPath`). `base` is `''` for a specifier naming the
++  // repo root, and `'' + '/index.ts'` is `/index.ts` - a leading slash no repo-relative node key
++  // can match. ADR-0026's cobra defect, in this resolver.
++  const prefix = base === '' ? '' : `${base}/`;
++  for (const suffix of INDEX_FILES) candidates.push(prefix + suffix.slice(1));
+ 
+   const seen = new Set<string>();
+   return candidates.filter((candidate) => {
+@@ -280,7 +291,30 @@ export function resolveSpecifier(
+   // not on the map. Pillar 6 forbids requiring a build to index, so the honest
+   // answer is that we do not know — which taints the file and costs a
+   // challenge, rather than shipping an answer key over an invisible edge.
+-  if (context.workspaceNames.has(packageName)) return { kind: 'unresolved' };
++  // MEASUREMENT (ADR-0042 §3, fix 1 - `workspaceSelfReference`). The refusal states a reason that
++  // is repo-dependent: apollo-client's root `exports` is `{".": "./src/core/index.ts"}`, source and
++  // on disk, while rxjs's is `./dist/esm/index.js` where the sentence is right. Try, and keep the
++  // refusal when nothing lands on an indexed file.
++  if (context.workspaceNames.has(packageName)) {
++    const pkg = context.workspacePackages?.get(packageName);
++    if (pkg !== undefined) {
++      const subpath = specifier.length > packageName.length ? `.${specifier.slice(packageName.length)}` : '.';
++      const declared = pkg.exports.get(subpath);
++      if (declared !== undefined) {
++        const base = normalizeJoin(pkg.dir, declared);
++        const hit = base === null ? null : pick(base, context);
++        if (hit !== null && hit.kind === 'internal') return hit;
++      }
++      const rest = subpath === '.' ? '' : subpath.slice(2);
++      for (const root of [pkg.dir, `${pkg.dir}/src`]) {
++        const base = normalizeJoin(root, rest);
++        if (base === null) continue;
++        const hit = pick(base, context);
++        if (hit !== null && hit.kind === 'internal') return hit;
++      }
++    }
++    return { kind: 'unresolved' };
++  }
+ 
+   if (config.dependencies.has(packageName)) return { kind: 'external', name: packageName };
+ 
