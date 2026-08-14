@@ -171,7 +171,7 @@ const GROUND_FAR = '#222c3b';
  * wash *over* the roads drawn on it. Order is a claim about layering and wants
  * to be written down as one.
  */
-const RANK = { wash: 0, road: 1, chronicle: 2, arch: 2, tower: 3, hero: 4 } as const;
+const RANK = { wash: 0, road: 1, chronicle: 2, arch: 3, tower: 4, hero: 5 } as const;
 
 type Prim =
   /**
