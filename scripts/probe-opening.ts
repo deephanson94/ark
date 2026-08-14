@@ -10,16 +10,19 @@
  * This drives the shipped selector exactly as the player does, on a model that
  * passes everything, and reports what the first fifteen boards are *about*.
  *
- * Two counts, and the second is the one that matters:
+ * Two counts, and **which of them is the cross-check reversed once this ran**:
  *
- *  - **fixture-shaped** — the subject has zero transitive dependents that
- *    themselves have dependents. A graph property, no path list, no language
- *    knowledge, and it is what ADR-0040 measured its ρ = 0.96 against.
- *  - **test-pathed** — the subject's path looks like a test, fixture or
- *    manifest. **Only a cross-check**: a path list is the whitelist landmine
- *    (ADR-0025's `UNREAD`) and must never be the rule. It exists here so that a
- *    graph property claiming to capture "not a real module" can be checked
- *    against the thing a human would say.
+ *  - **fixture-shaped** — zero transitive dependents that themselves have
+ *    dependents, the graph property ADR-0040 measured its ρ = 0.96 against. It
+ *    was the proposed rule and it is **refuted**: it flags `src/indexer/build.ts`
+ *    on this repo, whose consumers are all scripts, tests and the CLI, exactly as
+ *    it flags `tests/fixtures/atlas.ts`. An orchestrator near the top of a
+ *    program and a fixture are topologically the same shape. Kept as a
+ *    diagnostic, never as a rule.
+ *  - **test-pathed** — the subject's path looks like a test, fixture, benchmark
+ *    or manifest. A whitelist, with ADR-0025's landmine attached, and it is the
+ *    signal that survived — see ADR-0046 for why demotion-only is what makes a
+ *    list acceptable here.
  *
  *   npx tsx scripts/probe-opening.ts /tmp/ark-corpus <repo>...
  */
@@ -67,7 +70,7 @@ function fixtureShapedSubjects(atlas: Atlas): Set<string> {
   return out;
 }
 
-console.log('| repo | deck | **fixture-shaped in the first 15** | test-pathed | verbs met | first five subjects |');
+console.log('| repo | deck | **fixture-shaped in the first 15** | test-pathed | 2nd verb at | first five subjects |');
 console.log('|---|---|---|---|---|---|');
 
 for (const repo of repos) {
@@ -86,7 +89,7 @@ for (const repo of repos) {
   let state = NO_HISTORY;
   const served: Challenge[] = [];
   for (let step = 0; step < FIRST; step += 1) {
-    const next = suggestNext(atlas.challenges, regionOf, state);
+    const next = suggestNext(atlas.challenges, regionOf, state, (subject) => pathOf.get(subject) ?? null);
     if (next === null) break;
     served.push(next);
     const key = answerKey(next.verb, next.subject);
@@ -99,13 +102,19 @@ for (const repo of repos) {
 
   const shapedCount = served.filter((board) => shaped.has(board.subject)).length;
   const testCount = served.filter((board) => TEST_PATH.test(pathOf.get(board.subject) ?? '')).length;
-  const verbs = new Set(served.map((board) => board.verb));
+
+  // **When the second verb arrives, not whether.** ADR-0040's own acceptance
+  // number — a player met the second verb at board 25 on hono before it — and a
+  // count of distinct verbs hides it completely. Any rank term placed above
+  // `progress` risks pushing it back, so it is measured rather than argued.
+  const first = served[0]?.verb;
+  const secondAt = served.findIndex((board) => board.verb !== first) + 1;
   const firstFive = served
     .slice(0, 5)
     .map((board) => pathOf.get(board.subject) ?? board.subject.slice(0, 10))
     .join(', ');
   console.log(
-    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${verbs.size} | ${firstFive} |`,
+    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${secondAt === 0 ? '—' : secondAt} | ${firstFive} |`,
   );
   if (process.env['ARK_SHOW'] === '1') {
     for (const board of served) {

@@ -1522,6 +1522,33 @@ async function main(): Promise<number> {
     // value rather than by the absence of an error — entering changes the
     // picture, walking changes it again, and the ground carries roads, which is
     // the entire argument of ADR-0033 decision 1.
+    //
+    // **In from a selected node, which is ADR-0032 §3.4's fast travel and not a
+    // convenience here.** Entering from the map with nothing selected spawns the
+    // hero at the shore, outside the north edge — and the buildings near the
+    // shore are the ones a session has already surveyed by this point, so the
+    // walking assertion below had nothing left to find. It read 63 → 65, then
+    // 67 → 69, then 74 → 75, then went red at 82 → 82 when ADR-0046's rank term
+    // surveyed eight more nodes earlier. Sweeping harder is the wrong fix: at
+    // 2.1× run speed the hero simply leaves the map and the next assertion goes
+    // red instead, with `17 towers · 0 roads` on screen. Arriving *in* the city
+    // is both the representative path and the one with something to survey.
+    const entryBox = await page.locator('canvas.map').boundingBox();
+    if (entryBox !== null) {
+      for (let row = 1; row < 20; row++) {
+        let landed = false;
+        for (let column = 1; column < 30; column++) {
+          const x = entryBox.x + (entryBox.width * column) / 30;
+          const y = entryBox.y + (entryBox.height * row) / 20;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-path').count()) === 0) continue;
+          await page.mouse.click(x, y);
+          landed = true;
+          break;
+        }
+        if (landed) break;
+      }
+    }
     const beforeWorld = await hashCanvas();
     await page.keyboard.press('g');
     await page.waitForTimeout(300);
@@ -1592,10 +1619,20 @@ async function main(): Promise<number> {
       Number(
         /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
       );
+    //
+    // **And the sweeps have to cross the city, not the shore.** The hero enters
+    // at the spawn point outside the map's north edge, so short bursts only ever
+    // meet the buildings nearest the shore — and this step's real assumption is
+    // that some of *those* are still unsurveyed when it runs. That assumption
+    // gets weaker every time the deck improves. The entry above is the fix; the
+    // extra sweeps here are the belt, and the deadline is untouched, so a
+    // genuinely dead surveyor still fails.
     let surveyedAfterWalk = await surveyedNow();
-    for (let sweep = 0; sweep < 5 && surveyedAfterWalk <= surveyedBeforeWalk; sweep++) {
+    for (let sweep = 0; sweep < 8 && surveyedAfterWalk <= surveyedBeforeWalk; sweep++) {
       // Turn, then walk. Turning first is what makes the sweeps independent
-      // rather than five copies of the same straight line.
+      // rather than eight copies of the same straight line. **Walk, not run** —
+      // running covers 2.1× the ground and takes the hero out of the city
+      // entirely, which trades this assertion for the one below it.
       await page.keyboard.down('e');
       await page.waitForTimeout(500);
       await page.keyboard.up('e');
@@ -1608,7 +1645,7 @@ async function main(): Promise<number> {
     if (surveyedAfterWalk <= surveyedBeforeWalk) {
       failures.push({
         what: 'world',
-        detail: `walking surveyed nothing in six sweeps: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+        detail: `walking surveyed nothing in nine sweeps: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
       });
     }
     process.stdout.write(

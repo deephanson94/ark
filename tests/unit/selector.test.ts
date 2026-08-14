@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
-import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
+import { NO_HISTORY, isSideshow, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 import { witnessFor } from '../fixtures/atlas.js';
 
@@ -399,5 +399,113 @@ describe('a wrong answer rotates rather than repeats', () => {
     });
     expect(next?.id).toBe('blast-fresh');
     regions.clear();
+  });
+});
+
+describe('the opening', () => {
+  // ADR-0046. A cold player was opened on `benchmarks/jsx/src/preact.ts` and
+  // `keys.test.json` on hono, and on three `__testUtils__` files on graphql-js,
+  // because §8.4 makes a *real* subject a hard question — so Blast Radius's easy
+  // end is by construction its peripheral end. The rank demotes those.
+  const paths = new Map<string, string>();
+  const pathOf = (subject: string): string | null => paths.get(subject) ?? null;
+
+  it('knows a sideshow path from a source one', () => {
+    for (const path of [
+      'tests/unit/thing.test.ts',
+      'src/thing.test.ts',
+      '__tests__/helper.ts',
+      'src/__testUtils__/kitchenSink.ts',
+      'benchmarks/jsx/src/preact.ts',
+      'scripts/probe-thing.ts',
+      'example/src/util/errors.ts',
+      'package.json',
+      'src/middleware/jwk/keys.test.json',
+    ]) {
+      expect(isSideshow(path), path).toBe(true);
+    }
+    for (const path of [
+      'src/indexer/build.ts',
+      'src/player/main.ts',
+      'src/error/GraphQLError.ts',
+      // **The near-misses, and they are the point of a list.** A source file
+      // whose name merely contains a listed word is not a sideshow; only a whole
+      // path segment counts. `contest`/`scripting` are what a substring match
+      // gets wrong, and the first draft of this regex did.
+      'src/contest/rules.ts',
+      'src/scripting/engine.ts',
+      'src/testing.ts',
+      'src/examples.ts',
+    ]) {
+      expect(isSideshow(path), path).toBe(false);
+    }
+    // A commit subject has no path. Not a sideshow — it has nothing to match.
+    expect(isSideshow(null)).toBe(false);
+  });
+
+  it('serves a real module before a fixture of the same difficulty', () => {
+    paths.clear();
+    paths.set(id(1), 'src/__testUtils__/kitchenSink.ts');
+    paths.set(id(2), 'src/error/GraphQLError.ts');
+    const fixture = challenge({ name: 'aaa-fixture', subject: 1, truth: [10], difficulty: 0.1 });
+    const real = challenge({ name: 'zzz-real', subject: 2, truth: [11], difficulty: 0.1 });
+    // Identical difficulty and the fixture wins the id tie-break, so without the
+    // term it is served first — which is the assertion this has to fail without.
+    expect(suggestNext([fixture, real], regionOf, NO_HISTORY)?.id).toBe('blast-aaa-fixture');
+    expect(suggestNext([fixture, real], regionOf, NO_HISTORY, pathOf)?.id).toBe('blast-zzz-real');
+    paths.clear();
+  });
+
+  it('serves a real module before an easier fixture, which is why it sits above progress', () => {
+    // **The placement, pinned.** Below `progress` the term can only reorder
+    // within a difficulty band, and Blast Radius's band 0 is entirely sideshow on
+    // graphql-js — so it moved 8 of 15 junk openings to 8 of 15. Above it, 0 of
+    // 15 on all four measured repos. Here: the fixture is *easier*, so anything
+    // ranked below difficulty or below `progress` serves it first.
+    paths.clear();
+    paths.set(id(1), 'benchmarks/jsx/src/preact.ts');
+    paths.set(id(2), 'src/utils/http-status.ts');
+    const easyFixture = challenge({ name: 'fixture', subject: 1, truth: [10], difficulty: 0.05 });
+    const harderReal = challenge({ name: 'real', subject: 2, truth: [11], difficulty: 0.60 });
+    expect(suggestNext([easyFixture, harderReal], regionOf, NO_HISTORY, pathOf)?.id).toBe('blast-real');
+    paths.clear();
+  });
+
+  it('demotes and never refuses — the whole deck is still served', () => {
+    // What makes a path *list* acceptable in the product at all (ADR-0025's
+    // whitelist landmine): a missing pattern costs one junk board served early,
+    // and an over-firing one costs a good board served late. Nothing is lost, so
+    // the deck a player can finish is unchanged.
+    paths.clear();
+    paths.set(id(1), 'tests/unit/a.test.ts');
+    paths.set(id(2), 'tests/unit/b.test.ts');
+    const deck = [
+      challenge({ name: 'a', subject: 1, truth: [10] }),
+      challenge({ name: 'b', subject: 2, truth: [11] }),
+    ];
+    const answered = new Set<string>();
+    const served: string[] = [];
+    for (let step = 0; step < deck.length; step += 1) {
+      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), previous: null }, pathOf);
+      expect(next).not.toBeNull();
+      if (next === null) break;
+      served.push(next.id);
+      answered.add(answerKey(next.verb, next.subject));
+    }
+    expect(served.sort()).toEqual(['blast-a', 'blast-b']);
+    paths.clear();
+  });
+
+  it('leaves the rank exactly as it was when no path is supplied', () => {
+    // The default argument is what keeps every other test in this file a test of
+    // the rank it was written for, rather than of this term silently.
+    paths.clear();
+    paths.set(id(1), 'tests/unit/a.test.ts');
+    const deck = [
+      challenge({ name: 'aaa', subject: 1, truth: [10], difficulty: 0.1 }),
+      challenge({ name: 'zzz', subject: 2, truth: [11], difficulty: 0.1 }),
+    ];
+    expect(suggestNext(deck, regionOf, NO_HISTORY)?.id).toBe('blast-aaa');
+    paths.clear();
   });
 });

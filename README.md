@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 45 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 46 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city — towers, roads, the chronicle and the district arches (ADR-0044) — one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 45 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 46 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -269,7 +269,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   (uncapped supply against a capped deck; in like units 1.4–1.8×, and **kysely is less**), and the fog
   win survives on one repo of five.
 
-- **No ordering rule can give Blast Radius an easy opening, and that is structural.** On all four
+- ~~**No ordering rule can give Blast Radius an easy opening.**~~ **Closed for the symptom, open for
+  the cause** ([ADR-0046](./docs/decisions/0046-the-opening-is-a-rank-term-and-it-has-to-be-a-list.md)).
+  The structural finding below stands — you cannot fix it *inside* Blast Radius — so the fix is one
+  rank term that **demotes** a board about a fixture, benchmark, example, script or manifest. Measured
+  through `scripts/probe-opening.ts`: test-pathed boards in the served first fifteen go **4 → 0 on
+  hono, 8 → 0 on graphql-js, 2 → 0 on kysely, 1 → 0 on ark**, and the second verb arrives *earlier*
+  (hono 6 → 2, graphql-js 8 → 2), because the demoted boards were the ones crowding the interleave
+  out. ark's opening is character-identical, which is the acceptance criterion for a repo that was not
+  broken. **It is a path list in the product** — ADR-0025's landmine — and demotion-only is the whole
+  argument for allowing one: a missing pattern costs one junk board served early, an over-firing one
+  costs a good board served late, and nothing is ever lost. **Known gap, unpatched**: graphql-js still
+  opens on `resources/strip-private-declarations.ts`, because `resources/` is a plausible real-source
+  directory elsewhere and adding it blind is the failure this decision is meant not to repeat.
+
+- **The structural finding underneath it.** On all four
   reference repos **15 of 15** of the easiest blast boards have a subject with zero non-leaf dependents,
   and there are **zero** boards at difficulty ≤ 0.30 whose subject has even one — §8.4 makes a real
   subject a hard question, which is ADR-0040's ρ = 0.96 read from the other end. So the current openings

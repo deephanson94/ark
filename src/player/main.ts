@@ -467,8 +467,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const ref = scene.graph.refById.get(subject);
     return ref === undefined ? null : (scene.atlas.nodes[ref]?.region ?? null);
   };
+  // ADR-0046: the rank demotes a board about a fixture, a benchmark or a
+  // manifest so a cold player is not opened on one. `null` for a commit subject,
+  // which is not demoted — it has no path rather than a sideshow one.
+  const pathOf = (subject: AtlasId): string | null => {
+    const ref = scene.graph.refById.get(subject);
+    return ref === undefined ? null : (scene.atlas.nodes[ref]?.path ?? null);
+  };
   const nextUp = (): Challenge | null =>
-    suggestNext(scene.atlas.challenges, regionOf, selector);
+    suggestNext(scene.atlas.challenges, regionOf, selector, pathOf);
 
   /**
    * How far a node's radius may be drawn.

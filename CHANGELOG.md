@@ -4353,3 +4353,49 @@ measure and it is smaller than anything in ADR-0045.
 
 **Next**: the `fixtureShaped` rank term, then experiment 0001 — which the review argues is worth more
 than everything else in the queue combined.
+
+---
+
+**2026-08-14 — the opening stops being a fixture, and it costs a path list.**
+Three cold playtests named the first fifteen boards; ADR-0045 §5.6 showed the residue is unreachable
+*inside* Blast Radius, because §8.4 makes a real subject a hard question and there are zero boards at
+difficulty ≤ 0.30 whose subject has even one non-leaf dependent. Shipped as
+[ADR-0046](./docs/decisions/0046-the-opening-is-a-rank-term-and-it-has-to-be-a-list.md): one rank
+term, `sideshow`, that **demotes** a board about a fixture, benchmark, example, script or manifest.
+
+Measured through `scripts/probe-opening.ts`, which drives the real selector under a pass-everything
+player: test-pathed boards in the served first fifteen go **4 → 0 on hono, 8 → 0 on graphql-js,
+2 → 0 on kysely, 1 → 0 on ark**, and **ark's opening is character-identical** — it was never broken.
+hono now opens on `src/jsx/dom/server.ts` and `http-status.ts` rather than `benchmarks/jsx/src/preact.ts`
+and `keys.test.json`.
+
+**The graph property was tried first and cannot work.** *Zero transitive dependents that themselves
+have dependents* flags `src/indexer/build.ts` — cone 12, the file ADR-0041 names a whole map region
+after — exactly as it flags `tests/fixtures/atlas.ts`. An orchestrator near the top of a program and a
+fixture consumed by tests are topologically the same shape, so no import-graph predicate separates
+them. That is the entry-point landmine one level up, and it would have demoted four real modules of
+ark's fifteen against two genuine fixtures.
+
+**Two arguments of mine lost to measurement.** The term sits **above** `progress`, not below: below it
+can only reorder within a band, and Blast Radius's band 0 is entirely sideshow on graphql-js, so it
+moved 8 of 15 to 8 of 15. Above, 0 of 15 on all four — and the interleave it was supposed to protect
+gets *better* (second verb at board 2 rather than 6 on hono), because the demoted boards were the ones
+crowding it out. Eight mutants, all dead, including both misplacements and an unanchored regex.
+
+**It is a whitelist in the product** (ADR-0025's landmine) and demotion-only is the entire argument
+for permitting one: a missing pattern costs one junk board served early, an over-firing one costs a
+good board served late, nothing is lost. The known gap is stated rather than patched — graphql-js
+still opens on `resources/strip-private-declarations.ts`.
+
+**And it reddened the e2e, where the fix was not to loosen the assertion.** The world's walking step
+enters at the shore and asserts a new survey; the shore's buildings are the ones already surveyed by
+then, so it had been thinning for milestones (`63 → 65`, `67 → 69`, **`74 → 75`**) and this tipped it
+to `82 → 82`. Sweeping harder at run speed traded it for a worse failure — the hero leaves the map,
+`17 towers · 0 roads`. It now enters from a selected node, which is ADR-0032 §3.4's fast travel and
+the representative path; the deadline is untouched, so a dead surveyor still fails.
+
+917 unit, 116 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001`. Every review in this lineage has said it outranks the work around
+it, and this change's value is mostly that hono and graphql-js — the repos its participants meet —
+stop opening on `keys.test.json` and `viralSchema.ts`.
