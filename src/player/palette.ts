@@ -85,8 +85,8 @@ export function regionColor(index: number, alpha = 1): string {
 
 /** A darker companion for fills that sit behind the node colour. */
 export function regionWash(index: number, alpha = 1): string {
-  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 48;
-  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 30%, ${alpha})`;
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 52;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 34%, ${alpha})`;
 }
 
 /**
@@ -101,10 +101,16 @@ export function regionWash(index: number, alpha = 1): string {
  * Tinting the silhouette shows you the neighbourhoods and their shape from the
  * first frame, while still withholding the thing you have not earned — which
  * is the name, and what depends on it.
+ *
+ * **Lifted 17% → 22% in the repaint**, with `regionWash` 30% → 34%. Against a
+ * `#0a0d13` ground the old values put the whole map inside the bottom fifth of
+ * the value range, so the one channel that separates *surveyed* from *not* had
+ * almost no room to work in — and lifting an unsurveyed node is the direction
+ * risk #4 wants anyway (*you can always see that there is something there*).
  */
 export function regionSilhouette(index: number, alpha = 1): string {
-  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 26;
-  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 17%, ${alpha})`;
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 28;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 22%, ${alpha})`;
 }
 
 /**

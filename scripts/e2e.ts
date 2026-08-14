@@ -1440,6 +1440,15 @@ async function main(): Promise<number> {
     // number needs a gate proving X happened, and `npm run raster` printed
     // confident nonsense twice before it had one.
     const peaks = Number(/(\d+) peaks/.exec(zoomLevel)?.[1] ?? '0');
+    // The repaint's own liveness gate, and it is here for the reason every
+    // other counted layer is: the landmasses are the figure-ground the map had
+    // none of, and a fill that quietly stopped happening would look exactly
+    // like the map it replaced. Counted on this repo rather than asserted in a
+    // fixture — `CLAUDE.md`'s rule about machinery that never fires.
+    const isles = Number(/(\d+) isles/.exec(zoomLevel)?.[1] ?? '0');
+    if (isles <= 0) {
+      failures.push({ what: 'isles', detail: `no region landmass filled: ${zoomLevel}` });
+    }
     if (peaks <= 0) {
       failures.push({ what: 'peaks', detail: `no summits drawn — elevation reached no pixel: ${zoomLevel}` });
     }

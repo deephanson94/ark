@@ -1101,7 +1101,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // two claims, so it is the one more likely to be quietly false: a gate
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
         openQuestions,
         unanswered.size,
         camera.bearing,

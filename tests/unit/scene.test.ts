@@ -236,6 +236,24 @@ describe('semantic zoom', () => {
     expect(shortLabel('src/indexer/build.ts')).toBe('build.ts');
     expect(shortLabel('package.json')).toBe('package.json');
   });
+
+  it('keeps a long name nameable, head and tail, extension intact', () => {
+    // This repo's own decision records are the case: 62 characters drew a label
+    // wider than the region it sat in and over the top of two neighbours. The
+    // collision pass would otherwise drop it, and a label it drops is a file
+    // that can never be named on the map.
+    const long = 'docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md';
+    const short = shortLabel(long);
+    expect(short.length).toBeLessThanOrEqual(26);
+    expect(short.startsWith('0041-the-legend')).toBe(true);
+    // The extension survives, because it is a fact a reader uses and the middle
+    // of a long name is where the least of it is.
+    expect(short.endsWith('.md')).toBe(true);
+    expect(short).toContain('…');
+    // A name at the limit is untouched — the rule is a ceiling, not a style.
+    expect(shortLabel('a'.repeat(26))).toBe('a'.repeat(26));
+    expect(shortLabel('a'.repeat(27))).toContain('…');
+  });
 });
 
 describe('cost at scale', () => {
