@@ -252,9 +252,19 @@ export function detectRegions(
   // flask's 29-file test cluster, kysely's `example`, prometheus's `discovery`
   // and graphql-js's `benchmark` — and terrain is one collapsed legend row
   // anyway (`legendRows`), so the suffix it inherits is rarely on screen.
+  // **Spread before filtering, and that is a runtime floor rather than a
+  // style.** `ordered.keys()` is an iterator, and `.filter` on an *iterator* is
+  // an ES2025 iterator helper that Node 22 has and Node 20 does not — so this
+  // read `ordered.keys().filter(…)` and threw `ordered.keys.filter is not a
+  // function` on the oldest engine `package.json` claims to support. Nothing
+  // caught it because nothing ran Node 20; the matrix that now does found it on
+  // its first run. These were the only two iterator-helper call sites in the
+  // tree, so the floor is a genuine 20.19 again rather than a claim narrowed to
+  // fit the code.
+  const indices = [...ordered.keys()];
   const labelOrder = [
-    ...ordered.keys().filter((index) => !terrain.has(labelOf[index] ?? -1)),
-    ...ordered.keys().filter((index) => terrain.has(labelOf[index] ?? -1)),
+    ...indices.filter((index) => !terrain.has(labelOf[index] ?? -1)),
+    ...indices.filter((index) => terrain.has(labelOf[index] ?? -1)),
   ];
 
   const used = new Set<string>();
