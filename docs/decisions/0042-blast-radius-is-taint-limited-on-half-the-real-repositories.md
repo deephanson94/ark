@@ -281,10 +281,10 @@ of ark's and 33 of hono's — so a zero from this probe is a measurement rather 
 
 | | wrong-answer slots | **violations** |
 |---|---|---|
-| original resolver, 15 repos | 42,584 | **0** |
-| **with all three fixes, 15 repos** | **46,373** | **0** |
+| original resolver, 15 repos | 42,585 | **0** |
+| **with all three fixes, 15 repos** | **46,099** | **0** |
 
-So the change adds 3,789 wrong-answer slots and **zero** wrong answer keys, on a probe that
+So the change adds 3,514 wrong-answer slots and **zero** wrong answer keys, on a probe that
 demonstrably fires.
 
 **The instrument needed three corrections, and every one made ark look worse than it was** — which
@@ -559,7 +559,7 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
    figure has gone stale and is now false on ark itself (§5.1).
 
 5. **Candidate A — workspace resolution — is a real, safe, small win, and it is the owner's call
-   whether it is worth shipping.** +250 blast boards, 0 lost, **0 wrong answer keys** across 46,373
+   whether it is worth shipping.** +250 blast boards, 0 lost, **0 wrong answer keys** across 46,099
    wrong-answer slots on a probe that demonstrably fires, all suites green and determinism
    byte-identical (§3). It moves **3 repos of 19** and **none of the three worst-starved**. The patch
    is `docs/decisions/0042-resolver.patch`; it was measured and reverted rather than shipped, because

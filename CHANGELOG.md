@@ -4052,7 +4052,7 @@ set — so a cause's ceiling is what it frees with the others left in place, whi
 answer keys on **90–99%** of what it unlocks, measured from outside the atlas against a second graph.
 A depth bound makes **542,282** of typeorm's real dependents eligible as wrong answers — refuted on
 arithmetic in twenty minutes, no code. Workspace resolution is real and safe (**+250 boards, 0 lost,
-0 wrong answer keys** over 46,373 slots, suites green, determinism byte-identical) and moves **3 repos
+0 wrong answer keys** over 46,099 slots, suites green, determinism byte-identical) and moves **3 repos
 of 19**, none of them the three worst-starved; measured, reverted, patch kept.
 
 **Two smaller things shipped.** Indexing a monorepo *subdirectory* silently kept **zero** commits —

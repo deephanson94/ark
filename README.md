@@ -192,7 +192,7 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   1,921** tainted subjects. Two candidate fixes were refused with measurements (relaxing guardrail
   4's transitive walk ships wrong answer keys on **90–99%** of the subjects it unlocks; a depth bound
   makes **542,282** of typeorm's real dependents eligible as wrong answers). A third — monorepo
-  workspace resolution — is real, safe (**0 wrong answer keys** over 46,373 wrong-answer slots) and
+  workspace resolution — is real, safe (**0 wrong answer keys** over 46,099 wrong-answer slots) and
   **small**: +250 boards across **3 repos of 19**, none of them the three worst-starved. It is
   measured, reverted and left as the owner's call, patch at `docs/decisions/0042-resolver.patch`.
 
