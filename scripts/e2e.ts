@@ -490,18 +490,21 @@ async function main(): Promise<number> {
       if (mapBox !== null) {
         const before = (await page.locator('.console-tally').innerText()).trim();
         let toggled = '';
-        // **The bounds have to reach their own denominators.** They did not:
-        // `column < 30` over a `/44` grid and `row < 20` over `/24` swept 66% by
-        // 79% of the canvas, so the step only ever looked at the top-left two
-        // thirds. It passed for milestones because the marks happened to land
-        // there — and went red on a commit that changed *no rendering at all*,
-        // because ark indexes itself and a re-rolled layout put all 19 of them
-        // outside the swept rectangle. A sweep that does not cover the thing it
-        // is searching is the `.first()` landmine with two loop bounds.
-        for (let row = 1; row < 24 && toggled === ''; row++) {
-          for (let column = 1; column < 44 && toggled === ''; column++) {
-            const x = mapBox.x + (mapBox.width * column) / 44;
-            const y = mapBox.y + (mapBox.height * row) / 24;
+        // **A sweep has to be finer than the thing it is looking for, and cover
+        // all of it.** This one was neither, and both halves were luck for
+        // milestones. The bounds never reached their own denominators —
+        // `column < 30` over a `/44` grid, `row < 20` over `/24` — so it searched
+        // 66% by 79% of the canvas; and at `/44 × /24` the step is ~33 × 37 px
+        // against node discs that render at ~15–20 px, so even inside the swept
+        // area it hit a mark by chance. ark indexes itself, so a commit that
+        // changed no rendering at all re-rolled the layout and put all 19 marks
+        // where the grid did not land. `/96 × /54` steps ~15 × 17 px, under the
+        // smallest disc, and runs to the edges. It still exits on the first hit,
+        // so the cost is paid only when the step is about to fail anyway.
+        for (let row = 1; row < 54 && toggled === ''; row++) {
+          for (let column = 1; column < 96 && toggled === ''; column++) {
+            const x = mapBox.x + (mapBox.width * column) / 96;
+            const y = mapBox.y + (mapBox.height * row) / 54;
             if (
               panelBox !== null &&
               x >= panelBox.x - 8 &&
