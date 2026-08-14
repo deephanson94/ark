@@ -342,6 +342,20 @@ function exportEntries(value: unknown): readonly (readonly [string, string])[] {
     if (typeof x === 'string') return x;
     if (typeof x !== 'object' || x === null || Array.isArray(x)) return null;
     const record = x as Record<string, unknown>;
+    // **This list is an *active condition set*, not a preference between equals** — which is what
+    // Node uses too. A review called the fixed order a divergence from Node's insertion order and
+    // named vue-core as the witness; measured across nine corpus repos it is the other way round.
+    // Node walks keys in insertion order and takes the first key that is an **active** condition,
+    // skipping ones that are not (`react-server`, `production`, `browser`, `deno`, `sass`). Naive
+    // insertion order treats every key as active, and on the 6 subpaths in the corpus where the two
+    // orders reach *different indexed files* it picks the wrong one every time: apollo-client's
+    // `./react` becomes `index.react-server.ts` rather than `index.ts` (×5), and kysely's `.`
+    // becomes `outdated-typescript.d.ts`. Everywhere else both land on missing build output and the
+    // outcome is identical. `scripts/probe-conditions.ts` has the table.
+    //
+    // `types` is last on purpose: a declaration file is not the module, and Node never resolves a
+    // runtime specifier to one. It stays as a last resort rather than being dropped, because a map
+    // that offers nothing else is better read than refused.
     for (const key of ['import', 'module', 'default', 'require', 'node', 'types']) {
       if (!(key in record)) continue;
       const hit = target(record[key], depth + 1);

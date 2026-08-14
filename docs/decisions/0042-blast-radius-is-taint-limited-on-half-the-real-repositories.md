@@ -509,12 +509,25 @@ from `walked.onDisk`. Each was worth 70 of rxjs's boards.
 **+250 boards is unchanged** by all of it, and three mutants that survived the review's own pass now
 die. **898 unit, 116 atlas, `check:keys` clean and self-gated, determinism byte-identical.**
 
-**One finding is recorded and not fixed.** `exportEntries` walks conditions in a fixed order
-(`import, module, default, require, node, types`) while Node uses the object's **insertion** order,
-so on 10 of vue-core's 22 manifests it selects `./dist/*.esm-bundler.js` where Node selects a tracked
-`./index.js`. It is benign today — the dist target is missing and arm 2's source mirror lands on the
-true file — and changing it would move real edges on a repo this session cannot re-verify at this
-hour. It is a **known divergence with a named witness**, which is the honest state for it.
+**One finding was left open overnight and is now refuted by measurement.** The review read
+`exportEntries`'s fixed condition order as a divergence from Node's **insertion** order, with
+vue-core as the witness. Measured across nine corpus repos (`scripts/probe-conditions.ts`), it is
+the other way round.
+
+Node does not take the first key; it takes the first key that is an **active condition**, skipping
+ones that are not — `react-server`, `production`, `browser`, `deno`, `sass`. The fixed list *is* an
+active-condition set, and naive insertion order treats every key as active. Of 270 subpaths carrying
+conditions, 38 differ between the two orders, and on the **6 where they reach different indexed
+files insertion order picks the wrong one every time**:
+
+| | fixed picks | insertion picks |
+|---|---|---|
+| apollo-client `./react` and 4 more | `src/react/index.ts` | **`index.react-server.ts`** |
+| kysely `.` | `./dist/index.js` (missing → source mirror) | **`outdated-typescript.d.ts`** |
+
+The other 32 land on missing build output under both orders, so the outcome is identical — including
+every vue-core row the finding named. Three assertions now pin the shapes that decide it, and the
+insertion-order variant fails four.
 
 ---
 

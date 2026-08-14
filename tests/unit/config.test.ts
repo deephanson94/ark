@@ -376,3 +376,67 @@ describe('exports flattening', () => {
     }
   });
 });
+
+/**
+ * The `exports` **active condition set**, pinned against the two corpus shapes that decide it.
+ *
+ * A review read the fixed traversal order as a divergence from Node's insertion order. Measured on
+ * nine repos it is the reverse: Node takes the first key that is an *active* condition, and naive
+ * insertion order — every key active — picks the wrong file on all 6 subpaths where the two reach
+ * different indexed files. `scripts/probe-conditions.ts`.
+ */
+describe('exports conditions that must never be picked', () => {
+  it('skips a platform condition in favour of default (apollo-client ./react)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-cond2-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: {
+          './react': { 'react-server': './src/react/index.react-server.ts', default: './src/react/index.ts' },
+        },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      expect(index.workspacePackages.get('p')?.exports.get('./react')).toBe('./src/react/index.ts');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('descends a nested condition object to its default (vue-core node.default)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-cond3-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: {
+          '.': {
+            types: './dist/p.d.ts',
+            node: { production: './dist/p.prod.js', development: './dist/p.dev.js', default: './index.js' },
+            import: './dist/p.esm.js',
+          },
+        },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      // `import` outranks `node`, and neither `production` nor `development` may ever be chosen.
+      expect(index.workspacePackages.get('p')?.exports.get('.')).toBe('./dist/p.esm.js');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('never prefers a declaration file over a runtime target (kysely .)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-cond4-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: { '.': { types: './outdated-typescript.d.ts', require: './dist/index.js' } },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      expect(index.workspacePackages.get('p')?.exports.get('.')).toBe('./dist/index.js');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
