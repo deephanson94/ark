@@ -4242,3 +4242,39 @@ arches.
 **Next**: a naming rule for cross-directory regions — the arch now makes region *labels* load-bearing
 at eye level, and `around <hub>` is what 26 of 74 measured regions fall back to. Then experiment 0001,
 still the wall.
+
+---
+
+**2026-08-14 — route D to unblocking tier 2 is measured, and it is three changes rather than one.**
+ADR-0043 refused a Direction verb because hovering a candidate answers the board (1.000 on 869 of
+869) and listed three routes out, all through ADR-0008 decision 1. Opening the player found a fourth
+and a channel that document does not mention (ADR-0043 §9, no `src/` change).
+
+**The fourth route is a repair, not an amendment.** Decision 1 rests on *"those edges are already
+drawn on the canvas"* — and `draw.ts` strokes `moveTo`/`lineTo` with **no arrowhead**, so the canvas
+draws the edge *set* undirected while the highlight reveals its *direction*. Make hover undirected
+and the exploit collapses to the line-guess §3 derived an admission rule against: **0 of 1,436 boards
+beat band A** across five repos at either fill level, best 0.769, which is the rule's own ceiling.
+typeorm's 3,385 eligible subjects reproduce `probe-direction.ts` to the digit.
+
+**Then the inspector reopens it.** `ui.ts` prints `imported by: M` ungated, and a candidate with 0
+cannot be imported by the subject — so an adjacent one is a wrong-direction pick and can be dropped,
+never a truth member. That takes the guess to **800 of 1,436** boards over the bar, exact on four of
+five repos. The other count is not a lever and that half is an argument rather than a measurement:
+truth membership constrains only in-degree.
+
+**And the cost to Blast Radius is a deck swap.** Re-scoring `surprise` against the new baseline
+raises difficulty (+0.064 to +0.160 mean) and reorders almost everything (38 of 40 on ark, 73 of 75
+on kysely) — and the shipped generator run twice replaces **22 of ark's 40 subjects, 33 of hono's 54,
+59 of kysely's 75, 31 of graphql-js's 69**, at identical deck size. Two measurement failures on the
+way there, both recorded as landmines. The first version re-ran `retain` over `atlas.challenges`,
+which **is** `retain`'s output, and printed a clean `0` — a tautology wearing a result. The second
+patched `naive` and moved *two* levers, because `nonObvious` reads it too and feeds ADR-0012's
+representative choice; split, they do not add — typeorm's entire change is `nonObvious` and on
+graphql-js they partially cancel (33 apiece, 31 together).
+
+Nothing decided: §6 decision 3 stands and the call is the owner's. 912 unit, 116 atlas, determinism
+byte-identical, `src/` untouched. Three new probes: `probe-undirected.ts`, `probe-surprise.ts`,
+`probe-deck.ts`.
+
+**Next**: unchanged — a naming rule for cross-directory regions, then experiment 0001.

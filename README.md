@@ -244,6 +244,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   ADR-0008 decision 1, which is an owner's call. *(The third — layering violations — is not a
   depth-1 relation and was not measured.)*
 
+  **The most promising route is now measured, and it is three changes rather than one**
+  (ADR-0043 §9). Hover reveals *direction*, which the canvas does not — `draw.ts` strokes lines with
+  no arrowhead — so an **undirected** highlight is a repair rather than an amendment, and it closes
+  the exploit outright: **0 of 1,436 boards** beat band A on five repos, best 0.769 against the
+  admission rule's ceiling. But the inspector's `imported by` count then reopens it on **800 of
+  1,436**, exact on four of five repos; and re-scoring `surprise` against the new baseline **replaces
+  45–79% of the Blast Radius deck** on four repos, through *two* generator paths — `surprise` and
+  ADR-0012's `nonObvious`, which on graphql-js partially cancel. Still nobody's decision but the
+  owner's; it is now made against numbers.
+
 - **The deck has no tier 1 content, and that is what the opening still needs.**
   NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs
   emit tiers 3, 3, 5 and 6, so **Orientation** (*where does execution start? what are the top-level

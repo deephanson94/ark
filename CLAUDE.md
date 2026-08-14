@@ -1070,6 +1070,21 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   membership rule is silent. So when two guards act on one search, **build the fixture where only the
   guard under test can fire** — and note that the surviving mutant was invisible until mutation
   testing, because every assertion was green and the fixture *looked* adversarial.
+- **Re-running a pipeline stage over its own output is a tautology, and it prints as a clean zero.**
+  *"Does re-scoring difficulty change the deck?"* was first measured by running `retain` over
+  `atlas.challenges` with new difficulties — but `atlas.challenges` **is** `retain`'s output, so the
+  list was already at or under the cap and the function returned it unchanged. `0 of 40`, on every
+  repo, in the direction that says *no cost*. The only honest instrument was the generator run twice
+  with the input patched, which says **45–79% of the deck is replaced on four of five repos**. Before
+  believing a no-change result, ask **which stage produced the data you are feeding back in.**
+- **A counterfactual patches a *variable*, and a variable can be read twice.** Widening `naive` to
+  measure the cost of an undirected hover moved `surpriseOf` — the intended lever — and also
+  `nonObvious`, which ADR-0012's `dedupe` uses to pick a colliding group's representative, four
+  hundred lines away. Split, the two are **not additive**: typeorm's entire change is `nonObvious`
+  (its cap does not bind, so difficulty is never consulted) and on graphql-js they **partially
+  cancel**, 33 apiece against 31 together. So *"say what your counterfactual holds fixed"* is not
+  enough when the thing you changed is a value rather than a decision — **grep every read of it, and
+  decompose before quoting the combined number**, which was wrong in both directions here.
 - **One fixture cannot test a pruning rule, because the pruning only bites on a configuration you
   would not think to draw.** The arch search's nearest-neighbour query is a grid that stops when a
   ring's distance floor clears both current bests, and **every invariant test passes against a grid

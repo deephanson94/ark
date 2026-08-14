@@ -162,3 +162,152 @@ This probe bounded the question against the **atlas** (supply) and against the *
 undirected guess), and both came back green. The thing that decided it was a hover handler in a file
 the probe never opened. The verb was one file in when that was found, which is the whole return on
 bounding before building — and the file that found it was `main.ts`, not a measurement.
+
+---
+
+## 9. Route D, measured — 2026-08-14
+
+§6 decision 3 lists three routes to unblocking tier 2 and says every one runs through ADR-0008
+decision 1. **There is a fourth, and there is also a second channel this document does not mention.**
+Both were found by opening the player rather than by re-reading the ADRs, which is §8's lesson
+arriving one level up.
+
+Measured on clean clones of `ark` `9602cc9`, `honojs/hono` `7075369e`, `typeorm/typeorm` `df07bf1e`,
+`kysely-org/kysely` `f24018c7` and `graphql/graphql-js` `9c245018`. Reproduce with
+`scripts/probe-undirected.ts`, `scripts/probe-surprise.ts` and `scripts/probe-deck.ts`.
+
+### 9.1 The fourth route: hover shows *more* than the argument that licensed it
+
+ADR-0008 decision 1 rests on *"those edges are already drawn on the canvas"*. They are — and
+`draw.ts` strokes a plain `moveTo`/`lineTo` with **no arrowhead**. So the canvas draws the edge
+**set** undirected while the highlight reveals its **direction**. Making hover undirected is
+therefore not an amendment to decision 1; it is bringing the code back to the sentence that licensed
+it.
+
+Do that and the hover exploit collapses to the *"tick everything with a line to X"* guess, which §3
+already derived an admission rule against: a board of `t` truth and `w` wrong-direction candidates
+gives the guess recall 1 and precision `t/(t+w)`, so `F1 = 2t/(2t+w)`, which falls under band A
+exactly when **`w ≥ ⌈0.564·t⌉`**.
+
+`w` is a generator's choice, so one number would be a claim about a generator nobody has written.
+Two bounds instead — `lean` fills exactly the admission minimum (the guess's best case) and `rich`
+fills every wrong-direction candidate available (its worst):
+
+| repo | eligible subjects | boards admitted | undirected guess beats band A | mean F1 | best |
+|---|---|---|---|---|---|
+| ark | 149 | 50 | **0** / **0** | 0.692 / 0.463 | 0.750 |
+| hono | 318 | 127 | **0** / **0** | 0.696 / 0.569 | 0.769 |
+| typeorm | 3,385 | 925 | **0** / **0** | 0.686 / 0.592 | 0.769 |
+| kysely | 333 | 209 | **0** / **0** | 0.713 / 0.483 | 0.769 |
+| graphql-js | 407 | 125 | **0** / **0** | 0.719 / 0.548 | 0.769 |
+
+**0 of 1,436 boards, at either fill.** The best any board reaches is 0.769, which is the admission
+rule working exactly as derived rather than a margin anyone chose. So route D closes the hover
+channel completely — and typeorm's 3,385 eligible subjects reproduce `probe-direction.ts`'s figure to
+the digit, which is the cross-check that says the two instruments are measuring the same population.
+
+### 9.2 And then the inspector reopens it
+
+`ui.ts` prints `imports: N` and `imported by: M` for **every** node, ungated, beside the map. §5's
+table says hover answers *"what's a hub, what's a leaf"*; `imported by: 147` answers it as a printed
+number with no hover involved.
+
+Worse for route D, one of those two counts partially recovers the direction an undirected hover would
+hide. A candidate with **`imported by: 0`** is imported by nothing, so the subject cannot import it
+either — an adjacent one is a wrong-direction pick and can be dropped. The refinement can never drop
+a truth member (a file the subject imports has in-degree ≥ 1 by construction), so recall stays 1 and
+precision only rises:
+
+| repo | boards | undirected guess beats A | **+ the `imported by` count** | mean F1 | best |
+|---|---|---|---|---|---|
+| ark | 50 | 0 | **26** | 0.800 | 1.000 |
+| hono | 127 | 0 | **91** | 0.880 | 1.000 |
+| typeorm | 925 | 0 | **589** | 0.854 | 1.000 |
+| kysely | 209 | 0 | **8** | 0.718 | 1.000 |
+| graphql-js | 125 | 0 | **86** | 0.823 | 1.000 |
+
+**800 of 1,436**, exact on four of five repos. kysely is the outlier at 8 of 209 and the reason is
+worth keeping: its importer pools hold few zero-in-degree files, so the elimination rarely has
+anything to eliminate.
+
+**The other count is not a lever, and this is an argument rather than a measurement.** Truth
+membership means *the subject imports this*, which constrains only the candidate's **in**-degree
+(≥ 1). `imports` is the out-degree and can therefore exclude nothing; it can only confirm a candidate
+the guess already picks. That closes over both printed fields, so it is bounded — but it is still
+reasoning, and this repository's record on impossibility arguments is poor.
+
+So **route D needs the inspector changed too**, and *"amend ADR-0008 decision 1"* was never the whole
+of the work.
+
+### 9.3 What it costs Blast Radius: two levers, and they do not add
+
+`surprise` is calibrated against the guess the map hands over — `generate.ts` says so in as many
+words — so route D moves it. Recomputed with the undirected baseline:
+
+| repo | blast boards | deck cap | surprise already 1.000 | mean Δsurprise | mean Δdifficulty | rank changes |
+|---|---|---|---|---|---|---|
+| ark | 40 | 40 (binding) | 4 | +0.275 | +0.137 | **38** of 40 |
+| hono | 54 | 54 (binding) | 3 | +0.321 | +0.160 | **52** of 54 |
+| typeorm | 58 | 463 | 0 | +0.235 | +0.118 | **54** of 58 |
+| kysely | 75 | 75 (binding) | 14 | +0.129 | +0.064 | **73** of 75 |
+| graphql-js | 69 | 69 (binding) | 3 | +0.234 | +0.117 | **57** of 69 |
+
+Difficulty rises, which is correct — an undirected highlight is a *worse* free guess, so the gap
+between naive and truth is genuinely larger — and the ordering moves almost everywhere.
+
+**The question that matters is whether the served deck changes, and `atlas.json` cannot answer it.**
+The first version of that measurement re-ran `retain` over `atlas.challenges`, which is already
+`retain`'s output, and printed a cheerful `0 of 40` — a tautology wearing a result. The honest
+instrument is the generator run twice with `naive` patched:
+
+```
+    for (const edge of graph.out[subject] ?? []) {
+      const id = idOfRef(edge.to);
+      if (candidateSet.has(id)) naive.push(id);
+    }
+```
+
+| repo | subjects replaced | of a deck of |
+|---|---|---|
+| ark | **22** | 40 |
+| hono | **33** | 54 |
+| typeorm | 2 | 58 |
+| kysely | **59** | 75 |
+| graphql-js | **31** | 69 |
+
+Deck *size* is identical everywhere — this is a swap of which subjects are asked, not a loss of
+supply — but on four of five repos **45–79% of the Blast Radius deck is replaced**.
+
+**And that counterfactual moved two levers while naming one.** `naive` feeds `surpriseOf` *and*
+`nonObvious`, which ADR-0012's `dedupe` uses to pick a colliding group's representative. Split:
+
+| repo | both | `surprise` alone | `nonObvious` alone |
+|---|---|---|---|
+| ark | 22 | 22 | 4 |
+| hono | 33 | 33 | 16 |
+| typeorm | 2 | **0** | 2 |
+| kysely | 59 | 51 | 35 |
+| graphql-js | 31 | **33** | 33 |
+
+Two findings in that table. typeorm's entire change is `nonObvious` — its cap does not bind, so
+`retain` never consults difficulty, and the swap is ADR-0012's representative moving, which nobody
+would have predicted. And on graphql-js the two levers **partially cancel**: 33 apiece, 31 together.
+They are not additive, so quoting the combined number as *"the cost of re-scoring difficulty"* would
+have been wrong in both directions.
+
+### 9.4 The verdict, which is still the owner's
+
+Route D is buildable and it is **not a rendering change**. It is three things:
+
+1. hover highlights in- and out-neighbours together — small, and arguably a repair rather than an amendment;
+2. `imported by` leaves the inspector — without it, 800 of 1,436 boards fall to the counts;
+3. most of every cap-limited repo's Blast Radius deck is replaced, through two independent generator
+   paths.
+
+(3) is the price. It is not a supply loss and it is not a correctness problem; it is that a player's
+learned deck changes wholesale on the next index. ADR-0011 keys progress by `(verb, subject)`, so
+passes survive and fog stays lifted — what is lost is the specific questions in flight.
+
+**Nothing here is decided.** §6 decision 3 stands: unblocking tier 2 is an owner's call, and this
+section exists so the call is made against measurements rather than against three routes and an
+unlisted fourth.
