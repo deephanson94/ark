@@ -18,6 +18,7 @@
 | 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 7 — synthesis + adversarial review (PR #54) | **done** |
+| 7b — Fable review of the *shipped* code | **done** | Found **two wrong answer keys on webpack** in the resolver 90 minutes after it shipped, plus five more. All closed. §3.7. |
 | 8 — backlog (b: the other three verbs) | **done** | **Archaeology is supply-limited on 10 of 19**, more than Companion. §10. |
 | 8 — backlog (c: own the invariant) | **done** | `npm run check:keys` ships and **runs in CI**. It gates itself: an inert detector **fails** instead of reporting a clean zero. §13. |
 | 8 — backlog (a: five more repos) | **done** | The distribution moved to **12 cap-limited / 5 taint-limited of 24**, and a *predictive* rule appeared: starvation is `(1 − taint) × subjects < cap`, right on **18 of 20**. §12. | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
@@ -460,6 +461,60 @@ map. The plant gate is much stronger for it: **127 plants caught on 111 of rxjs'
 resolver: **0 violations across 15 repos and 46,067 wrong-answer slots.**
 
 889 unit, 116 atlas, determinism byte-identical, budgets within ceiling.
+
+### 3.7 A Fable review of the shipped code found two more wrong answer keys
+
+Ninety minutes after §3.6 shipped, a fifth reviewer — told to refute the **shipped** resolver rather
+than the draft — found the thing every earlier instrument had missed.
+
+**`workspacePackages` was a global map over every walked `package.json`, first-claimant-wins.**
+`webpack` has **no `workspaces` field at all**, and its tracked test fixtures declare generic names —
+`pkg`, `my-lib`, `foo` — whose real import targets are per-fixture `node_modules/` copies the walk
+correctly excludes. So `import "pkg"` from one fixture resolved to an **unrelated fixture's file**,
+as a `certain` internal edge:
+
+> **`blast-12702e0d8296`** — subject `test/cases/entry-exports-field/imports/pkg.mjs`, `truth`
+> containing `test/cases/scope-hoisting/orphan/index.js`. The orphan fixture imports its *own*
+> `node_modules/pkg`. A player who correctly says it does not depend on this file is marked wrong.
+
+A second on the same repo (`blast-8423ba5757b2`, via `my-lib`). **Both boards are gone**; the
+importer now reads `unresolved: ["pkg"]`, which taints it and costs a challenge.
+
+**§3.3's probe could not see either, and said so in advance.** It checks *distractors that import
+the subject*; these are **truth members that do not** — the "second direction is unchecked entirely"
+gap §3.3 records, holding the bodies. That is the sentence to remember: a stated limitation is not a
+discharged one.
+
+**The rule now has two conditions, and each alone leaves a live defect.** A manifest is a workspace
+package only if it is the repository root **or** a *declared* workspace glob covers it (`workspaces`,
+or `pnpm-workspace.yaml`) — the condition webpack's fixtures fail — **and** no other walked manifest
+claims the same name, because nest's root manifest is literally named `@nestjs/core`, the same as
+`packages/core`, and without it the root answers for `@nestjs/core/x` against the repository root.
+
+Reading the pnpm declaration cost two more fixes, both of which had silently zeroed it: it is
+**YAML**, so `parseJsonc` returned null and the loop skipped it before reaching the branch; and it is
+not a **scanned language**, so it never appeared in `walked.files` at all and manifests are now read
+from `walked.onDisk`. Each was worth 70 of rxjs's boards.
+
+**Five more findings, all closed:**
+
+| finding | why it mattered |
+|---|---|
+| **Pattern `exports` subpaths bypassed arm 2** | `{"./*": "./dist/*.js"}` matched no literal key, so a *declared* subpath fell to the plain-directory arm — the exact decoy path §3.6 bars. typeorm, hono, vue-core and excalidraw all declare patterns; *"corpus-clean"* was luck of layout, which is not what a safety rule may rest on |
+| **`subtreeOf` compared `/`-separated paths** | `realpathSync` answers with `\` on Windows, so the guard **never fired there** and §7.1.1's invented-rename wrong answer key was live — while every CI job (ubuntu) stayed green and the three-platform fingerprint job, which indexes *roots*, structurally could not see it |
+| **`GitHistory.subtree` had no consumer** | while `git.ts`'s comment and §7.1.1 both claimed the CLI printed it. It does now — this repository removed `RevealNote.route` for exactly this shape |
+| **A two-arm hit was stamped `certain`** | `probable` means *more than one viable target*, and `certain` is what `graph.ts` trusts for an answer key. Two arms landing on two different files is a guess |
+| **`config.ts` had no test coverage at all** | the review mutated the `exports` condition order and the duplicate-name rule and **both mutants survived all 889 unit tests** — §3.6's new tests hand-built `workspacePackages`, bypassing the layer where the real defects live |
+
+**+250 boards is unchanged** by all of it, and three mutants that survived the review's own pass now
+die. **898 unit, 116 atlas, `check:keys` clean and self-gated, determinism byte-identical.**
+
+**One finding is recorded and not fixed.** `exportEntries` walks conditions in a fixed order
+(`import, module, default, require, node, types`) while Node uses the object's **insertion** order,
+so on 10 of vue-core's 22 manifests it selects `./dist/*.esm-bundler.js` where Node selects a tracked
+`./index.js`. It is benign today — the dist target is missing and arm 2's source mirror lands on the
+true file — and changing it would move real edges on a repo this session cannot re-verify at this
+hour. It is a **known divergence with a named witness**, which is the honest state for it.
 
 ---
 
