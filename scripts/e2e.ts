@@ -1487,6 +1487,46 @@ async function main(): Promise<number> {
       failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
     }
 
+    // ---- a drawn name is a handle on its node ----------------------------
+    //
+    // A cold playtester answered **all eight** of their boards off the panel's
+    // text list and never used the map once, reporting it as "naming the wrong
+    // objects": pointing at a label selected whatever disc lay under the text.
+    // The labels were right — `placeLabels` anchors each under its own node —
+    // and the *pointer* was not. The unit half pins that the frame returns the
+    // right node per label; this is the half that only a browser can check, that
+    // clicking the pixels of a name selects the file that name belongs to.
+    {
+      await page.keyboard.press('f');
+      await page.waitForTimeout(220);
+      const plates = await page.evaluate('window.__arkNameplates ?? []');
+      const rows = Array.isArray(plates) ? plates : [];
+      if (rows.length === 0) {
+        failures.push({ what: 'labels', detail: 'the frame exposed no nameplates to point at' });
+      }
+      let checked = 0;
+      let wrong = 0;
+      for (const row of rows.slice(0, 6) as { text: string; x: number; y: number }[]) {
+        await page.mouse.move(row.x, row.y);
+        await page.waitForTimeout(90);
+        const shown = (await page.locator('.inspector-path').innerText().catch(() => '')).trim();
+        if (shown === '') continue;
+        checked += 1;
+        // The inspector prints the full path; the label is its basename.
+        if (!shown.endsWith(row.text)) {
+          wrong += 1;
+          failures.push({
+            what: 'labels',
+            detail: `pointing at the name "${row.text}" surveyed ${shown}`,
+          });
+        }
+      }
+      if (checked === 0) {
+        failures.push({ what: 'labels', detail: 'no label hover reached the inspector at all' });
+      }
+      process.stdout.write(`e2e: pointed at ${checked} names → ${wrong} named someone else\n`);
+    }
+
     // ---- keyboard navigation and the help card ---------------------------
     //
     // A cold playtester scored the controls 6 of 10, and the flat map could not

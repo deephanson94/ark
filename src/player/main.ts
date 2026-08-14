@@ -36,7 +36,7 @@ import {
 import { createConsole } from './challenge.js';
 import type { BoardMarks } from './draw.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
-import type { Box } from './labels.js';
+import type { Box, PlacedLabel } from './labels.js';
 import type { Fog } from './fog.js';
 import type { Arm, View } from './experiment.js';
 import { armFromSearch, keyHintFor, worldHintFor } from './experiment.js';
@@ -356,8 +356,37 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * described one file while the cursor sat on another — and the click wrote
    * that wrong file into the saved `surveyed` set.
    */
+  /**
+   * The node labels the last frame drew, so the **text** can be pointed at.
+   *
+   * A label is anchored directly under its own disc and never drifts, but on a
+   * crowded map it lies across other discs — so pointing at a name picked
+   * whatever was beneath it. A cold playtester reported that as the map naming
+   * the wrong objects, answered all eight of their boards off the panel's text
+   * list, and never used the map once. A name you cannot point at is not a
+   * handle, and the map not being a handle is the whole thesis not pulling.
+   */
+  let nameplates: readonly PlacedLabel[] = [];
+
   const pickAt = (local: { x: number; y: number }): SceneNode | null => {
     if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
+    // **Labels first, and only where they name a node.** The text is on top of
+    // the discs visually, so it has to be on top of them for the pointer too or
+    // the two disagree about what is in front. Reversed, so the last label drawn
+    // — the one painted over any it overlaps — is the one that answers.
+    for (let i = nameplates.length - 1; i >= 0; i -= 1) {
+      const label = nameplates[i];
+      if (label === undefined || label.ref === undefined) continue;
+      if (
+        local.x >= label.left &&
+        local.x <= label.left + label.width &&
+        local.y >= label.top &&
+        local.y <= label.top + label.height
+      ) {
+        const node = scene.nodes[label.ref];
+        if (node !== undefined) return node;
+      }
+    }
     const world = screenToWorld(camera, viewport, local);
     return pick(scene, world.x, world.y, camera.scale);
   };
@@ -1133,6 +1162,21 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         orbit === null
           ? drawFrame(context, frameInput)
           : drawOrbitFrame(context, frameInput, orbit);
+      // What the frame just drew is what the pointer may hit. Kept from the
+      // frame rather than recomputed, so the two can never disagree about where
+      // a name is.
+      nameplates = stats.nameplates;
+      // **For the e2e only, and it is a measurement rather than a hook.** The
+      // labels live on the canvas, so a browser test has no way to find where a
+      // name was drawn — and the defect this closes was precisely that pointing
+      // at a name selected someone else. Publishing the boxes is what lets the
+      // suite point at one.
+      (globalThis as unknown as { __arkNameplates?: unknown }).__arkNameplates =
+        stats.nameplates.map((plate) => ({
+          text: plate.text,
+          x: plate.left + plate.width / 2,
+          y: plate.top + plate.height / 2,
+        }));
       hud.update(
         coverage(fog, scene.nodes.length),
         orbit === null ? stats.level : 'orbit',

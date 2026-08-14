@@ -23,6 +23,20 @@ export interface LabelCandidate {
   readonly offset: number;
   /** Higher wins the space. */
   readonly priority: number;
+  /**
+   * The node this label names, when it names one.
+   *
+   * Carried through to `PlacedLabel` so the shell can make the **text** a hit
+   * target for its own node. A label is anchored directly under its disc and is
+   * either placed there or skipped — it never drifts — but on a crowded map the
+   * text still lies across *other* discs, so pointing at a name picked whatever
+   * was underneath it. A cold playtester read that as the map naming the wrong
+   * object, and it is the reason they answered every board off the text list
+   * instead of the map.
+   *
+   * Absent for a region label, which names a cluster rather than a node.
+   */
+  readonly ref?: number;
 }
 
 /** A screen rectangle a label may not overlap. */
@@ -37,6 +51,8 @@ export interface PlacedLabel extends Box {
   readonly text: string;
   readonly x: number;
   readonly y: number;
+  /** @see LabelCandidate.ref */
+  readonly ref?: number;
 }
 
 export type Measure = (text: string) => number;
@@ -104,6 +120,7 @@ export function placeLabels(
     const y = candidate.y + candidate.offset + height;
     const box: PlacedLabel = {
       text: candidate.text,
+      ...(candidate.ref === undefined ? {} : { ref: candidate.ref }),
       x,
       y,
       left: x - width / 2,

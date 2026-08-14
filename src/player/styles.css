@@ -88,12 +88,22 @@ body {
 /* What this map is missing (ADR-0025). Warmer than `--text-dim` and dimmer than
    `--accent`: it is a standing qualification on everything else in the panel,
    not an error and not a thing to click. */
+/* **`pointer-events: auto`, because `.hud` is `none` and this row carries the
+   only explanation of itself.** Its `title` reads "This map holds 201 of this
+   repository's 203 source files. The other 2 are Shell, which ark cannot read."
+   — correct to the digit, and unreachable: a native tooltip needs a mouseover
+   the element could never receive, so `elementFromPoint` at its centre returned
+   the canvas. A cold playtester found it by reading the DOM, which is not a
+   thing a player does. Third instance of this exact contradiction in this file;
+   the other two carry comments a few rules down. */
 .hud-partial {
   margin-top: 3px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--accent);
   opacity: 0.75;
+  pointer-events: auto;
+  cursor: help;
 }
 
 .hud-progress {

@@ -126,6 +126,17 @@ export interface FrameStats {
    * confident numbers about a map that was not moving.
    */
   readonly islandsDrawn: number;
+  /**
+   * The node labels this frame drew, with the node each names.
+   *
+   * Returned so the shell can hit-test the **text**. A label sits directly under
+   * its own disc and never drifts, but on a crowded map it lies across other
+   * discs — so pointing at a name selected whatever happened to be beneath it,
+   * and a cold playtester reported the map as naming the wrong objects. They
+   * answered all eight of their boards off the panel's text list and never used
+   * the map once; a name you cannot point at is not a handle.
+   */
+  readonly nameplates: readonly PlacedLabel[];
 }
 
 /**
@@ -212,6 +223,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // because the claim degrades smoothly rather than inventing a corridor.
   //
   // Drawn first, under the edges, because it is ground.
+  let nameplates: readonly PlacedLabel[] = [];
   let islandsDrawn = 0;
   {
     const byRegion = new Map<number, SceneNode[]>();
@@ -510,6 +522,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       const point = project(node);
       candidates.push({
         text: node.label,
+        ref: node.ref,
         x: point.x,
         y: point.y,
         offset: Math.max(1.4, node.radius * camera.scale * style.nodeScale) + 2,
@@ -534,6 +547,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       context.fillText(label.text, label.x, label.y - 3);
     }
     labelsDrawn += placed.length;
+    nameplates = placed;
   }
 
 
@@ -594,6 +608,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     tiesDrawn,
     boardDrawn,
     islandsDrawn,
+    nameplates,
   };
 }
 
@@ -816,6 +831,11 @@ export function drawOrbitFrame(
     // so a fill in the ground plane would be underfoot and read as a shadow
     // nothing is casting. Zero because it is zero, not because it is unwired.
     islandsDrawn: 0,
+    // The orbit places its labels through the same pass but does not hit-test
+    // them: `pickColumn` works in the tipped projection, where a screen box is
+    // not a node's footprint. Empty because it is empty, not because it is
+    // unwired.
+    nameplates: [],
     tiesDrawn: 0,
     labelsDrawn: placed.length,
     level,

@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { drawFrame } from '../../src/player/draw.js';
 import { INK, regionKnown, regionSilhouette, regionWash } from '../../src/player/palette.js';
 import type { FrameInput } from '../../src/player/draw.js';
-import { NORTH } from '../../src/player/camera.js';
+import { NORTH, worldToScreen } from '../../src/player/camera.js';
 import { NO_TIES } from '../../src/player/ties.js';
 import { TERRAIN_INDEX, prepare } from '../../src/player/scene.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -319,5 +319,84 @@ describe('the renderer uses the ramp it is given', () => {
     expect(fillsFor(new Set())).not.toContain(known);
     // One node understood: it must.
     expect(fillsFor(new Set([hub.id]))).toContain(known);
+  });
+});
+
+/**
+ * A drawn name is a handle on the node it names.
+ *
+ * A cold playtester answered **all eight** of their boards off the panel's text
+ * list and never used the map once, and reported the map as "naming the wrong
+ * objects": pointing at the label `draw.test.ts` selected `src/player/draw.ts`.
+ * `placeLabels` anchors a label directly under its own disc and skips it
+ * otherwise — it never drifts — so the labels were right and the *pointer* was
+ * wrong: text lies across other discs on a crowded map, and hit-testing went
+ * straight to whatever disc was underneath.
+ *
+ * `drawFrame` returns the placed labels with the node each names so the shell
+ * can hit-test the text. This pins the half that lives here: every returned
+ * nameplate names the node whose label it carries.
+ */
+describe('the labels a frame returns', () => {
+  it('carries the node each name belongs to', () => {
+    const atlas = atlasWith(
+      ['src/hub.ts', 'src/a.ts', 'src/b.ts', 'src/c.ts'],
+      [
+        ['src/a.ts', 'src/hub.ts'],
+        ['src/b.ts', 'src/hub.ts'],
+        ['src/c.ts', 'src/a.ts'],
+      ],
+    );
+    const scene = prepare(atlas);
+    const all = new Set(scene.nodes.map((node) => node.id));
+    const stats = drawFrame(stubContext(), {
+      scene,
+      camera: { x: 0, y: 0, scale: 4, bearing: NORTH },
+      viewport: VIEWPORT,
+      fog: { surveyed: all, understood: new Set() },
+      hovered: null,
+      selected: null,
+      radius: null,
+      questions: new Set(),
+      peaks: new Set(),
+      ties: NO_TIES,
+      tieFocus: null,
+      board: null,
+      chrome: [],
+    });
+    // Non-vacuous: a frame that drew no labels would satisfy any claim about
+    // them, and this is the assertion that would have caught the field being
+    // wired to an empty array.
+    expect(stats.nameplates.length).toBeGreaterThan(0);
+    expect(stats.nameplates.length).toBe(stats.labelsDrawn);
+    for (const plate of stats.nameplates) {
+      expect(plate.ref, `"${plate.text}" carries no node`).toBeTypeOf('number');
+      // The name on screen is this node's name — the exact claim the playtester
+      // found false from the pointer's side.
+      expect(scene.nodes[plate.ref ?? -1]?.label).toBe(plate.text);
+    }
+  });
+
+  it('puts each name inside its own node’s column, never beside it', () => {
+    // The other half of "a label identifies its node": it is centred on the
+    // disc it names. `placeLabels` guarantees this by construction — the test
+    // is here because "by construction" is what the drift claim assumed too.
+    const atlas = atlasWith(['src/hub.ts', 'src/a.ts', 'src/b.ts'], [['src/a.ts', 'src/hub.ts']]);
+    const scene = prepare(atlas);
+    const all = new Set(scene.nodes.map((node) => node.id));
+    const camera = { x: 0, y: 0, scale: 4, bearing: NORTH };
+    const stats = drawFrame(stubContext(), {
+      scene, camera, viewport: VIEWPORT,
+      fog: { surveyed: all, understood: new Set() },
+      hovered: null, selected: null, radius: null,
+      questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
+      board: null, chrome: [],
+    });
+    for (const plate of stats.nameplates) {
+      const node = scene.nodes[plate.ref ?? -1];
+      if (node === undefined) throw new Error('nameplate names no node');
+      const screenX = worldToScreen(camera, VIEWPORT, node).x;
+      expect(Math.abs(plate.x - screenX), `"${plate.text}"`).toBeLessThan(1);
+    }
   });
 });
