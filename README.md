@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 44 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 45 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -93,7 +93,7 @@ simultaneously possible.
 | `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city — towers, roads, the chronicle and the district arches (ADR-0044) — one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 44 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 45 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -253,6 +253,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   45–79% of the Blast Radius deck** on four repos, through *two* generator paths — `surprise` and
   ADR-0012's `nonObvious`, which on graphql-js partially cancel. Still nobody's decision but the
   owner's; it is now made against numbers.
+
+  **The route that costs the map nothing was bounded next, and it is two questions**
+  ([ADR-0045](./docs/decisions/0045-tier-2s-third-question-is-two-questions-and-only-one-survives.md),
+  proposed, nothing built). Tier 2's third question — *where is the layering violation* — is **refused
+  as `cycle`**: naming a component decides **111 of hugo's 114 fired Blast Radius boards** (ADR-0034's
+  proof, re-derived by an independent Tarjan pass, 1,326 of 1,326 containments), the only gate ADR-0020
+  allows leaves **0 of ark's 2 and 0 of hugo's 133** boards open at session start, and ark has one
+  2-node component. A second reformulation — **`upstream`**, *which of these does `X` depend on* —
+  **survives**: mirroring the relation mirrors ADR-0003's taint onto the subject's own closure, so it
+  is **3–7× Blast Radius's supply** (ark 149 boards to 40) and roughly **halves the permanently-fogged
+  set** on four of five repos. It needs two static gates, and it does **not** close this gap — it
+  routes around it.
 
 - **The deck has no tier 1 content, and that is what the opening still needs.**
   NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs
