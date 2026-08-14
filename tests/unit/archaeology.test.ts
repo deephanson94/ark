@@ -632,6 +632,65 @@ describe('the reveal', () => {
     for (const note of notes) expect(note.note).not.toContain('“a”');
   });
 
+  it('says something different on each row when every commit lands the same day', () => {
+    // **ADR-0018's `whyYes` defect, in the clause written to avoid it.** The
+    // same-day arm said only *"landing the same day as the change before it"*,
+    // which on a repo that lands several commits a day is every row after the
+    // first: measured over every shipped board (`npx tsx
+    // scripts/probe-sameday.ts`), **27.5% of this repo's 40** carry the
+    // identical clause on all of them, and 49.5% of all rows are same-day —
+    // against 0.0% on hono and kysely. Worst on the bootstrap repo, which is the
+    // one every session looks at.
+    const paths = ['src/io/tap.ts', 'src/io/sink.ts', 'src/io/vent.ts'];
+    const base = atlasWith(paths, [['src/io/sink.ts', 'src/io/tap.ts']]);
+    const ref = base.nodes.findIndex((node) => node.path === 'src/io/tap.ts');
+    // Four commits, one date. Subjects share no token with the path, so every
+    // row falls to the arm under test rather than to the naming one.
+    // Same date throughout, so the validator's order is sha ascending.
+    const shas = ['cc0000000001', 'cc0000000002', 'cc0000000003', 'cc0000000004'];
+    const atlas = validateAtlas({
+      ...base,
+      repo: { ...base.repo, head: 'f'.repeat(40), headDate: '2026-06-15', root: '0'.repeat(40) },
+      history: {
+        ...base.history,
+        present: true,
+        commitsWalked: shas.length,
+        commitsRetained: shas.length,
+        window: { from: '2026-02-02', to: '2026-06-15' },
+        commits: shas.map((sha, at) => ({
+          sha,
+          date: '2026-02-02',
+          subject: `rework the ${['loop', 'guard', 'frame', 'shelf'][at] ?? 'thing'}`,
+          files: [ref],
+          wide: false,
+          issue: null,
+        })),
+      },
+    });
+    const ids = shas.map((sha) => commitIdFor(sha));
+    const board = challengeFor(atlas, {
+      verb: 'archaeology',
+      subject: atlas.nodes[ref]?.id ?? '',
+      candidates: [...ids].sort(byteCompare),
+      truth: [...ids].sort(byteCompare),
+      evidence: { kind: 'history', touchedBy: shas.length },
+    });
+    const notes = archaeology.reveal(
+      atlas,
+      buildGraph(atlas),
+      board,
+      archaeology.grade(board, { picked: [...ids] }),
+    ).notes;
+    expect(notes).toHaveLength(4);
+    // **The claim: four rows, four different sentences.** Asserting they are
+    // distinct rather than asserting a particular wording — the test is that the
+    // player learns something per row, not that the clause reads a certain way.
+    expect(new Set(notes.map((note) => note.note)).size).toBe(4);
+    // And each still says where in the arc it sits, which is the fact that
+    // replaced the dead one.
+    for (const note of notes.slice(1)) expect(note.note).toContain('changes this board asked about');
+  });
+
   it('withholds the `sibling` class, whatever the row', () => {
     // **The most expensive silence in the product, and the measurement is why.**
     // This class used to say *"a commit that touched this file's own corner of

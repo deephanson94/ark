@@ -205,7 +205,15 @@ export function revealOf(
       // not. The rule used to live on a `route: []` beside this field; it moved here
       // when that field went, because prose is where it can actually be broken.
       note: truth.has(id)
-        ? whyYes(namesIt, shared, id === earliest, id === latest, gapAfter.get(id) ?? null)
+        ? whyYes(
+            namesIt,
+            shared,
+            id === earliest,
+            id === latest,
+            gapAfter.get(id) ?? null,
+            keyByDate.indexOf(id) + 1,
+            keyByDate.length,
+          )
         : whyNot(commit.files, namesIt, shared, adjacent, partners, node.path),
     });
   };
@@ -311,22 +319,45 @@ function evidenceWord(shared: readonly string[]): string | null {
   return best;
 }
 
+/** `1` → `first`, up to the key sizes ADR-0007 allows. */
+const ORDINAL = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+
 function whyYes(
   namesIt: boolean,
   shared: readonly string[],
   isEarliest: boolean,
   isLatest: boolean,
   gap: number | null,
+  position: number,
+  total: number,
 ): string {
   // Where in the file's life this landed, and how long the file sat still
   // before it. Both are facts the player can check against the board; the
   // naming clause below is the lesson.
+  //
+  // **The same-day arm used to say only *"landing the same day as the change
+  // before it"*, and on a busy repo that is every row.** Measured over every
+  // shipped Archaeology board (`npx tsx scripts/probe-sameday.ts`): **27.5% of
+  // this repo's 40 boards** carry the identical clause on every row after the
+  // first, and 49.5% of all rows are same-day — against 0.0% of hono's and
+  // kysely's boards and 5.8% of graphql-js's. So it is worst on the bootstrap
+  // repo, which is the one every session and every playtester looks at, and it
+  // is ADR-0018's own `whyYes` defect — *"six words that told the player nothing
+  // they could check"* — in the clause written to avoid it.
+  //
+  // The replacement is the one fact that still differs per row when the dates do
+  // not: **where this commit sits in the board's own date order**. Checkable,
+  // because every row's label leads with its date; derived, because the order is
+  // the key's; and it degrades rather than lies when the key is long, since the
+  // ordinal falls back to a number.
+  const ordinal = ORDINAL[position] ?? `${position}th`;
+  const sameDay = `the ${ordinal} of the ${total} changes this board asked about, landing the same day as the one before it`;
   const place = isEarliest
     ? 'the oldest change this board asked about'
     : gap === null
       ? 'part of this file’s history'
       : gap === 0
-        ? `landing the same day as the change before it${isLatest ? ', and the most recent here' : ''}`
+        ? `${sameDay}${isLatest ? ', and the most recent here' : ''}`
         : `${gap} day${gap === 1 ? '' : 's'} after the change before it${isLatest ? ', and the most recent here' : ''}`;
   if (namesIt) return `changed this file and says so in its message — ${place}.`;
   // The middle case is the common one and used to be told as the strong one.
