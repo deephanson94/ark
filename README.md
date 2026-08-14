@@ -173,6 +173,18 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
+- **A quarter of the deck is unreachable by clicking the map, and on `django` it is three
+  quarters.** A Placement board's subject is a **commit** (ADR-0018), which has no square on the flat
+  map and therefore no marker to click. The guide reaches them — it labels the control *"Open the
+  next question"* and opens them directly — but the guide is one of two ways in, and a player
+  exploring by clicking meets only the other. A cold playtester never found Placement at all.
+  Measured by `npx tsx scripts/probe-placeless.ts`: **25.0%** of ark's, hono's, kysely's and
+  graphql-js's decks, **26.5%** of hugo's and **76.5%** of django's — django's because guardrail 4
+  starves its Blast Radius deck, so the history verbs are nearly all of it. The world has a
+  **chronicle** for exactly this (ADR-0033), standing outside the map because putting a commit's
+  marker among the files it touched would draw Placement's answer key on the ground; the flat map,
+  which is the arrival state, has no equivalent. That is the shape of the fix and it is not built.
+
 - **Blast Radius is starved on half of real repositories, and the reference set could not see it**
   ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md),
   proposed). Measured on **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
