@@ -239,6 +239,11 @@ describe('the progression band — each verb through its own range', () => {
     deck.push(other({ name: 'b-easy', subject: 300, truth: [50], difficulty: 0.5 }));
     deck.push(other({ name: 'b-hard', subject: 301, truth: [51], difficulty: 0.9 }));
 
+    // **`verbRun` is held at 0 deliberately, and saying so is the point.** This
+    // test is about `withinVerbRank` and nothing else; with the run tracked,
+    // `sameVerb` also decides and the assertion below would be measuring two
+    // rules at once — which is how a test comes to pass for a reason nobody
+    // wrote down. The interaction has its own test in "varying the verb".
     const served: string[] = [];
     const answered = new Set<string>();
     let previous: Challenge | null = null;
@@ -326,16 +331,17 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      skipped: new Set<string>(), previous: failed,
+      skipped: new Set<string>(), verbRun: 0, previous: failed,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
 
   it('comes back to it only after the rest of the deck', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
       skipped: Set<string>;
+      verbRun: number;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -352,10 +358,11 @@ describe('a wrong answer rotates rather than repeats', () => {
   });
 
   it('keeps cycling instead of stalling when the whole deck has been failed', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
       skipped: Set<string>;
+      verbRun: number;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -376,7 +383,7 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      skipped: new Set<string>(), previous: null,
+      skipped: new Set<string>(), verbRun: 0, previous: null,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
@@ -398,6 +405,7 @@ describe('a wrong answer rotates rather than repeats', () => {
       answered: new Set([answerKey('blastRadius', id(1))]),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(3))),
       skipped: new Set<string>(),
+      verbRun: 0,
       previous,
     });
     expect(next?.id).toBe('blast-fresh');
@@ -496,7 +504,7 @@ describe('the opening', () => {
     const answered = new Set<string>();
     const served: string[] = [];
     for (let step = 0; step < deck.length; step += 1) {
-      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), skipped: new Set(), previous: null }, pathOf);
+      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), skipped: new Set(), verbRun: 0, previous: null }, pathOf);
       expect(next).not.toBeNull();
       if (next === null) break;
       served.push(next.id);
@@ -566,5 +574,123 @@ describe('skipping a suggestion', () => {
     const open = all.filter((key) => !answered.has(key));
     const skipped = noteSkip(new Set(), keyOf(deck[1] as Challenge), open);
     expect(skipped.size).toBe(0);
+  });
+});
+
+/**
+ * Breaking a run of one verb, without overriding the progression.
+ *
+ * A cold playtester said the first three boards were the same shape. Measured
+ * (`npx tsx scripts/probe-opening.ts`) the longest same-verb run in the first
+ * fifteen was **3** here, 4 on hono and kysely and **5** on graphql-js.
+ */
+describe('varying the verb', () => {
+  const run = (deck: readonly Challenge[], n: number): string[] => {
+    const served: string[] = [];
+    let state = NO_HISTORY;
+    for (let i = 0; i < n; i += 1) {
+      const next = suggestNext(deck, regionOf, state);
+      if (next === null) break;
+      served.push(next.verb);
+      state = {
+        ...state,
+        answered: new Set([...state.answered, answerKey(next.verb, next.subject)]),
+        verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+        previous: next,
+      };
+    }
+    return served;
+  };
+
+  it('never serves three of one verb in a row while another has supply', () => {
+    // **The fixture has to be one that *would* run, or this passes vacuously.**
+    // The first draft gave both verbs matched difficulties, which alternate on
+    // their own through `progress` and the raw-difficulty tie-break — so
+    // deleting `sameVerb` changed nothing and the assertion was decoration.
+    // Two drafts failed before this one, and both failed the same way:
+    // `withinVerbRank` normalises each verb to *its own* range, so two verbs
+    // with the same number of boards land on the same bands and alternate
+    // through `progress` no matter what their raw difficulties are. Making one
+    // verb uniformly cheaper does not help either — the band still comes first.
+    //
+    // What produces a run is **unequal supply**, which is the shape a real repo
+    // has: with twelve boards against three, the many-verb's bands are 0.09
+    // apart and the few-verb's are 0.5 apart, so six of the first fall between
+    // each pair of the second. Measured, ark opened `blastRadius blastRadius
+    // blastRadius` and graphql-js ran **five**.
+    const deck: Challenge[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      deck.push(challenge({ name: `a${String(i).padStart(2, '0')}`, subject: 100 + i, truth: [10 + i], difficulty: 0.1 + i * 0.05 }));
+    }
+    for (let i = 0; i < 3; i += 1) {
+      deck.push(other({ name: `b${i}`, subject: 200 + i, truth: [30 + i], difficulty: 0.2 + i * 0.3 }));
+    }
+    const verbs = run(deck, 12);
+    expect(verbs.length).toBe(12);
+    // **Only while the other verb has supply**, which is what the title says and
+    // what the term promises: once the three companion boards are spent every
+    // remaining board scores 1 and `sameVerb` goes inert by design. Measuring
+    // the whole twelve would be asserting that the term does something it
+    // explicitly does not, and a first draft did exactly that and went red.
+    const lastOther = verbs.lastIndexOf('companion');
+    expect(lastOther).toBeGreaterThan(0);
+    let longest = 1;
+    let current = 1;
+    for (let i = 1; i <= lastOther; i += 1) {
+      current = verbs[i] === verbs[i - 1] ? current + 1 : 1;
+      longest = Math.max(longest, current);
+    }
+    expect(longest, `served ${verbs.join(' ')}`).toBeLessThanOrEqual(2);
+  });
+
+  it('allows a pair, and does not spend a starved verb in the first three', () => {
+    // **The cost of forbidding *any* repeat, measured on a fixture rather than
+    // argued — and the residue, stated rather than hidden.** With only two
+    // boards of the second verb against twenty of the first, strict alternation
+    // serves both immediately and the hardest board in the whole deck arrives
+    // **third**. A cap of two pushes it to sixth. It does still arrive earlier
+    // than banding alone would put it, because `sameVerb` outranks `progress`
+    // by construction: on a starved verb, "vary the tour" and "ascend the
+    // range" genuinely conflict and this rank resolves it towards variety.
+    //
+    // No measured repo looks like this fixture — 20 against 2 — and on the four
+    // that were measured every opening is a real module in ascending bands. The
+    // fixture is here to show the shape of the trade, not to claim there isn't
+    // one.
+    const deck: Challenge[] = [];
+    for (let i = 0; i < 20; i += 1) {
+      deck.push(challenge({ name: `a${String(i).padStart(2, '0')}`, subject: 100 + i, truth: [10 + i], difficulty: 0.1 + i * 0.025 }));
+    }
+    deck.push(other({ name: 'b-easy', subject: 300, truth: [50], difficulty: 0.5 }));
+    deck.push(other({ name: 'b-hard', subject: 301, truth: [51], difficulty: 0.9 }));
+    const served: string[] = [];
+    let state = NO_HISTORY;
+    for (let i = 0; i < 8; i += 1) {
+      const next = suggestNext(deck, regionOf, state);
+      if (next === null) break;
+      served.push(next.id);
+      state = {
+        ...state,
+        answered: new Set([...state.answered, answerKey(next.verb, next.subject)]),
+        verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+        previous: next,
+      };
+    }
+    // The easy one first, always — which is the half of the progression that
+    // survives, and the half a starved deck can still honour.
+    expect(served.indexOf('comp-b-easy')).toBeGreaterThanOrEqual(0);
+    expect(served.indexOf('comp-b-easy')).toBeLessThan(served.indexOf('comp-b-hard'));
+    expect(served.slice(0, 3)).not.toContain('comp-b-hard');
+  });
+
+  it('goes inert when only one verb has anything left', () => {
+    // Self-limiting: every remaining board scores 1, so the term stops
+    // discriminating rather than refusing to serve. It can never shorten a deck.
+    const deck = [
+      challenge({ name: 'a0', subject: 100, truth: [10], difficulty: 0.2 }),
+      challenge({ name: 'a1', subject: 101, truth: [11], difficulty: 0.4 }),
+      challenge({ name: 'a2', subject: 102, truth: [12], difficulty: 0.6 }),
+    ];
+    expect(run(deck, 3)).toHaveLength(3);
   });
 });

@@ -685,6 +685,13 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // answer key is felt the same however the question arrived.
       selector = {
         ...selector,
+        // The run this board continues, or the start of a new one. Maintained
+        // here because this is where "the player was served a board" happens —
+        // both paths into a challenge converge on this handler.
+        verbRun:
+          selector.previous !== null && selector.previous.verb === challenge.verb
+            ? selector.verbRun + 1
+            : 1,
         previous: challenge,
         attempts: progression.unlocked
           ? selector.attempts

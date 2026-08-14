@@ -103,6 +103,14 @@ export interface SelectorState {
    */
   readonly skipped: ReadonlySet<string>;
   /**
+   * How many boards of `previous.verb` have just been served in a row,
+   * including `previous`. 0 when nothing has been served.
+   *
+   * Feeds `sameVerb`, which breaks a **run** rather than forbidding a repeat —
+   * see `rankLess`. The distinction is the whole of why the term is safe.
+   */
+  readonly verbRun: number;
+  /**
    * The last challenge the player was **graded** on, by either path — the
    * suggestion or a map click.
    *
@@ -119,6 +127,7 @@ export const NO_HISTORY: SelectorState = {
   answered: new Set(),
   attempts: new Map(),
   skipped: new Set(),
+  verbRun: 0,
   previous: null,
 };
 
@@ -363,6 +372,7 @@ export function isSideshow(path: string | null): boolean {
 interface Rank {
   readonly attempts: number;
   readonly sameRegion: number;
+  readonly sameVerb: number;
   readonly tier: number;
   readonly progress: number;
   readonly sideshow: number;
@@ -370,6 +380,19 @@ interface Rank {
   readonly overlap: number;
   readonly id: string;
 }
+
+/**
+ * How many of one verb in a row is fine.
+ *
+ * **Two.** At one — forbid any repeat — the term becomes strict alternation, and
+ * a unit fixture with only two boards of the second verb showed what that costs:
+ * both are served immediately, so the hardest board in the deck arrives third.
+ * That is `sameVerb` overriding ADR-0040's progression, which is the objection
+ * this rank was built to answer rather than to create. At two it breaks the runs
+ * a playtester actually complained about (3 here, 4 on hono and kysely, **5** on
+ * graphql-js) and leaves a natural pair alone.
+ */
+const RUN_CAP = 2;
 
 function rankLess(a: Rank, b: Rank): boolean {
   // `attempts` outranks the region constraint, and that is load-bearing: below
@@ -383,6 +406,26 @@ function rankLess(a: Rank, b: Rank): boolean {
   // day the git verbs landed; they landed, and the term below it was the one
   // that needed the amendment.
   if (a.tier !== b.tier) return a.tier < b.tier;
+  // **Break a run of one verb, and only a run.** A cold playtester's first three
+  // boards were the same shape and they said so; measured, this repo opened
+  // `blastRadius blastRadius blastRadius` and graphql-js opened with a run of
+  // **five**. `sameRegion` above has exactly this shape and exactly this reason
+  // — vary the tour — and this is the same term over the other axis.
+  //
+  // **Below `tier`, and the placement was measured at three heights rather than
+  // argued.** Above `tier` and here are **indistinguishable on all four repos**
+  // (`npx tsx scripts/probe-opening.ts`: longest run 3/4/4/5 → 1/1/1/1 either
+  // way, second verb at board 2), so the tie is broken on what happens where
+  // they *would* differ: above `tier`, a verb-variety term outranks §5's
+  // curriculum and could pull a tier-5 board ahead of a tier-3 one purely to
+  // alternate. Below `progress` it is nearly inert where it is most needed —
+  // runs of 4 and 5 survive on hono and graphql-js — which is the same shape
+  // ADR-0046 measured for `sideshow`.
+  //
+  // Self-limiting, which is what makes it safe: once one verb's supply is gone
+  // every remaining board scores 1 and the term stops discriminating. It cannot
+  // refuse a board or shorten the deck.
+  if (a.sameVerb !== b.sameVerb) return a.sameVerb < b.sameVerb;
   // **Ascending through each verb's own range, not through a shared number.**
   // See `withinVerbRank`: raw difficulties are not comparable across verbs, and
   // ranking on them served every one of hono's Blast Radius boards below 0.49
@@ -463,6 +506,10 @@ export function suggestNext(
     const rank: Rank = {
       attempts: state.attempts.get(key) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
+      sameVerb:
+        state.previous !== null && challenge.verb === state.previous.verb && state.verbRun >= RUN_CAP
+          ? 1
+          : 0,
       tier: challenge.tier,
       progress: progressOf.get(challenge.id) ?? 0,
       sideshow: isSideshow(pathOf(challenge.subject)) ? 1 : 0,

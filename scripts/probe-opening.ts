@@ -70,13 +70,13 @@ function fixtureShapedSubjects(atlas: Atlas): Set<string> {
   return out;
 }
 
-console.log('| repo | deck | **fixture-shaped in the first 15** | test-pathed | 2nd verb at | first five subjects |');
-console.log('|---|---|---|---|---|---|');
+console.log('| repo | deck | **fixture-shaped in the first 15** | test-pathed | 2nd verb at | longest same-verb run | opening five verbs |');
+console.log('|---|---|---|---|---|---|---|');
 
 for (const repo of repos) {
   const { atlas } = await buildIndex(indexOptions(join(corpus, repo)));
   if (atlas.challenges.length === 0) {
-    console.log(`| ${repo} | 0 | — | — | — | — |`);
+    console.log(`| ${repo} | 0 | — | — | — | — | — |`);
     continue;
   }
   const shaped = fixtureShapedSubjects(atlas);
@@ -97,9 +97,27 @@ for (const repo of repos) {
       answered: new Set([...state.answered, key]),
       attempts: noteAttempt(state.attempts, key),
       skipped: new Set(),
+      verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
       previous: next,
     };
   }
+
+  // **The verb of each of the first five, in order.** A cold playtester's
+  // complaint was not only *which* subjects opened but that the first three
+  // boards were the same *shape* — three Blast Radius questions reading "2 of
+  // 20, and one of them is the file's own test". ADR-0040 measures when the
+  // second verb *arrives*; that is a different question from what the opening
+  // feels like, and only this row answers it.
+  const opening = served.slice(0, 5).map((board) => board.verb).join(' ');
+  const runLength = (() => {
+    let longest = 1;
+    let run = 1;
+    for (let i = 1; i < served.length; i += 1) {
+      run = served[i]?.verb === served[i - 1]?.verb ? run + 1 : 1;
+      if (run > longest) longest = run;
+    }
+    return served.length === 0 ? 0 : longest;
+  })();
 
   const shapedCount = served.filter((board) => shaped.has(board.subject)).length;
   const testCount = served.filter((board) => TEST_PATH.test(pathOf.get(board.subject) ?? '')).length;
@@ -115,8 +133,9 @@ for (const repo of repos) {
     .map((board) => pathOf.get(board.subject) ?? board.subject.slice(0, 10))
     .join(', ');
   console.log(
-    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${secondAt === 0 ? '—' : secondAt} | ${firstFive} |`,
+    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${secondAt === 0 ? '—' : secondAt} | **${runLength}** | ${opening} |`,
   );
+  if (process.env['ARK_PATHS'] === '1') console.log(`|   first five: ${firstFive}`);
   if (process.env['ARK_SHOW'] === '1') {
     for (const board of served) {
       const flag = shaped.has(board.subject) ? 'SHAPED' : '      ';
