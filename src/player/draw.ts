@@ -113,9 +113,17 @@ export interface FrameStats {
    */
   readonly boardDrawn: number;
   /**
-   * Region landmasses actually filled. Counted for the same reason as every
-   * other layer here: a rendering nobody measures is a rendering that can
-   * silently stop happening.
+   * Regions whose landmass was filled this frame.
+   *
+   * Counted for the same reason as every other layer here — a rendering nobody
+   * measures can silently stop happening — and **weaker than the standard this
+   * repo sets for itself**, which review caught: it counts the fill being
+   * *issued*, not any pixel changing, so a mutant setting the island alphas to
+   * zero keeps the number and draws nothing. It catches the layer being skipped
+   * outright, which is the failure that has actually happened here before, and
+   * it does not catch the layer going invisible. The honest gate would hash the
+   * canvas, which is what `npm run raster` learned to do after printing
+   * confident numbers about a map that was not moving.
    */
   readonly islandsDrawn: number;
 }
@@ -196,7 +204,12 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // distant members that contains other regions' files, which is inventing
   // geography and loses to pillar 4 exactly as an interpolated contour did
   // (see the summit comment below for the same argument made once already).
-  // A union can only ever cover ground a file of that region is standing on.
+  // A union covers only ground **within a fixed distance of a member** — much
+  // weaker than a hull's claim, and not the *"only ground a member is standing
+  // on"* the first draft of this comment said: the pads below are **screen**
+  // pixels, so the world area a coast claims grows as you zoom out. That is the
+  // glyph-radius-is-not-a-ground-area landmine's cousin, and it is harmless here
+  // because the claim degrades smoothly rather than inventing a corridor.
   //
   // Drawn first, under the edges, because it is ground.
   let islandsDrawn = 0;

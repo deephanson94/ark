@@ -2220,6 +2220,10 @@ async function main(): Promise<number> {
         // second step. Read off the HUD, which is the number a player would
         // point at.
         const understoodBefore = await exploitPage.locator('.hud-counts').innerText();
+        // The board's own subject, read off the panel rather than predicted —
+        // this file has four landmines about guessing which board the shell
+        // serves. Used below to find *this* board's note among the others.
+        const subjectPath = (await exploitPage.locator('.console-question').innerText()).trim();
 
         // **Step two: reopen and type back what the panel just said.** This is
         // the click that used to mint a field note claiming proof.
@@ -2260,6 +2264,26 @@ async function main(): Promise<number> {
         }
         await exploitPage.locator('.console-submit').click();
         await exploitPage.waitForTimeout(300);
+        // **The notebook, which this step's own preamble names as its reason for
+        // being a browser test and the first version never opened.** A mutant
+        // forcing `notes.ts`'s register to `'proved'` — the notebook claiming
+        // *"You proved…"* over a farmed pass, which is the §9 violation ADR-0047
+        // exists to close — survived 920 unit tests, 116 atlas tests and this
+        // file, because nothing here looked at the page it is about.
+        await exploitPage.locator('.hud-notes').click();
+        await exploitPage.waitForSelector('.notes-panel', { timeout: 5000 });
+        const claims = await exploitPage.locator('.field-note-claim').allInnerTexts();
+        const farmedNote = claims.find((claim) => claim.includes(subjectPath));
+        if (farmedNote === undefined) {
+          failures.push({ what: 'select-all', detail: `no note for the farmed board ${subjectPath}` });
+        } else if (!farmedNote.includes('You were shown')) {
+          failures.push({
+            what: 'select-all',
+            detail: `the farmed board's note claims proof: "${farmedNote}"`,
+          });
+        }
+        await exploitPage.keyboard.press('Escape');
+        await exploitPage.waitForTimeout(200);
         const understoodAfter = await exploitPage.locator('.hud-counts').innerText();
         if (understoodAfter !== understoodBefore) {
           failures.push({

@@ -45,7 +45,7 @@ import { GOLDEN_TURN, TURN_MS, bearingDuring } from './heading.js';
 import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
-import { VERBS, channelOf } from '../verbs/index.js';
+import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
 import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
@@ -640,7 +640,11 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // ("drawn once both files' questions are answered"). An earlier version
       // drew them on every grade like the cone, and 79% of what it promised was
       // gone by the next click — ADR-0016 decision 3.
-      const progression = applyGrade(progress, challenge, grade);
+      // The real `liveness`, not the default: a `graded` key certifies the board
+      // it was earned on, and a board whose pass has decayed is a new question
+      // with the same name (ADR-0047, `gradedKeys`). Passing `UNCHECKED` here
+      // would make every re-rolled board permanently unprovable.
+      const progression = applyGrade(progress, challenge, grade, PASS_THRESHOLD, liveness);
       remember(progression.progress);
       // Handed back to the console so the panel can say which register this
       // answer landed in while the board that decided it is still on screen.

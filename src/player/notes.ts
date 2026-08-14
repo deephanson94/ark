@@ -169,9 +169,9 @@ export function noteProse(note: FieldNote): NoteProse {
   // **The sentence about the *rule* is shared, and the one about the relation is
   // not.** Which register a note is in is a fact about the pass — the board had
   // already been graded once, so it had already explained itself — and it reads
-  // identically whatever the verb asked. That is the same seam `withhold.ts`
-  // used for its own sentence and the reason ADR-0027 holds: nothing here knows
-  // what the question was.
+  // identically whatever the verb asked. That is the same seam the deleted
+  // `withhold.ts` used for its own sentence, and the reason ADR-0027 holds:
+  // nothing here knows what the question was.
   const rule =
     'Recorded as shown rather than proved: this board had already explained ' +
     'itself when you answered it.';

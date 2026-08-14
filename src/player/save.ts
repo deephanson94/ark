@@ -163,11 +163,34 @@ export function parseProgress(text: string | null): Progress {
   // same thing more quietly. They are kept as proved, and `graded` is seeded
   // with their keys so the rule engages from here on — a board already passed
   // cannot be farmed for a note it has already minted.
+  //
+  // **The cost it does not cover, found by review and stated rather than
+  // patched**: under ADR-0035's gate a *failed* precision-1.0 answer served the
+  // whole annotated key and left **no `Pass`**, so a v1 record cannot show it
+  // and this seeding cannot see it. A player holding such a save can, once,
+  // type back the key they were handed and mint proof — ADR-0047 §2.1's exploit
+  // completed through the version bump. It is unknowable from the stored shape:
+  // v1 recorded passes and never attempts, which is the whole reason `graded`
+  // exists. One board, one player, one time, and the alternative is discarding
+  // every v1 notebook to close it.
   const graded =
     version === SAVE_VERSION
       ? asKeys(record['graded'])
       : passes.map((pass) => answerKey(pass.verb, pass.subject)).sort(byteCompare);
-  return { version: SAVE_VERSION, surveyed: asNodeIds(record['surveyed']), passes, graded };
+  return {
+    version: SAVE_VERSION,
+    surveyed: asNodeIds(record['surveyed']),
+    passes,
+    // **`graded` always covers every pass**, by construction rather than by
+    // trusting the file. A save is untrusted input, and a record whose `graded`
+    // omitted a key its `passes` carries would let that board be proved a
+    // second time — reachable only by hand-editing today, which NORTH-STAR §7.1
+    // opts out of, but the invariant is one line and the alternative is a
+    // comment claiming nobody will.
+    graded: [...new Set([...graded, ...passes.map((pass) => answerKey(pass.verb, pass.subject))])].sort(
+      byteCompare,
+    ),
+  };
 }
 
 export function serializeProgress(progress: Progress): string {

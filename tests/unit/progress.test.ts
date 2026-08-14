@@ -22,6 +22,8 @@ import {
   UNCHECKED,
   answerKey,
   answeredKeys,
+  gradedKeys,
+  livePasses,
   subjectsPassed,
   applyGrade,
   deriveFog,
@@ -130,8 +132,8 @@ describe('the stored record', () => {
   it('keys a pass by (verb, subject) and unions a second attempt into the first', () => {
     // Answer keys are sampled (ADR-0008), so two passes on one hub can prove
     // different members. The second must not replace the first.
-    const once = recordPass(EMPTY_PROGRESS, 'blastRadius', subject, [truth[0] ?? '']);
-    const twice = recordPass(once, 'blastRadius', subject, [truth[1] ?? '']);
+    const once = recordPass(EMPTY_PROGRESS, 'blastRadius', subject, [truth[0] ?? ''], 'proved');
+    const twice = recordPass(once, 'blastRadius', subject, [truth[1] ?? ''], 'proved');
     expect(twice.passes).toHaveLength(1);
     expect(twice.passes[0]?.proved).toEqual([truth[0], truth[1]]);
   });
@@ -165,7 +167,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
   };
 
   it('keeps a claim the graph still supports', () => {
-    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')], 'proved');
     const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/a.ts'))).toBe(true);
     expect(fog.understood.has(idFor('src/b.ts'))).toBe(true);
@@ -175,7 +177,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [
       idFor('src/b.ts'),
       idFor('src/d.ts'),
-    ]);
+    ], 'proved');
     const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/b.ts'))).toBe(true);
     expect(fog.understood.has(idFor('src/d.ts'))).toBe(false);
@@ -185,9 +187,69 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     // The subject is still understood as long as *something* it proved holds.
     // When nothing does, the map re-fogs — showing a stale claim as current
     // knowledge would be a worse lie than showing nothing.
-    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')], 'proved');
     const fog = deriveFog(progress, livenessOf(graph, VERBS));
     expect(fog.understood.has(idFor('src/a.ts'))).toBe(false);
+  });
+
+  it('lets a board whose pass fully decayed be proved again', () => {
+    // **The bar ADR-0047 nearly shipped, found by a post-ship review.** A
+    // `graded` key certifies the board it was earned on. It never decayed, and
+    // passes do — so when a pass came apart entirely, `livePasses` dropped it,
+    // the question came back (that comment is right above `livePasses`) and
+    // came back **permanently unprovable**: the first honest answer to the
+    // returning board read `first = false`, so its subject could never re-enter
+    // `understood` again, under a save ADR-0011 keys to `repo.root` precisely so
+    // it survives a reindex. Ark indexes itself; that is the ordinary case.
+    //
+    // And two panels would then have said something the player can disprove —
+    // *"this board had already explained itself"* about a board whose current
+    // key was never explained, the old one having decayed, which is *why* it
+    // came back.
+    const live = livenessOf(graph, VERBS);
+    const key = answerKey('blastRadius', idFor('src/a.ts'));
+    // A pass whose only member no longer depends on the subject: fully decayed.
+    const dead = {
+      ...recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')], 'proved'),
+      graded: [key],
+    };
+    expect(livePasses(dead, live)).toEqual([]);
+    expect(gradedKeys(dead, live).has(key)).toBe(false);
+
+    // So the board is answerable again, for real.
+    const board: Challenge = {
+      ...challenge,
+      subject: idFor('src/a.ts'),
+      candidates: [idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(),
+      truth: [idFor('src/b.ts')],
+      witness: witnessFor([idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(), [idFor('src/b.ts')]),
+    };
+    const again = applyGrade(
+      dead,
+      board,
+      gradeSet(board, { picked: [idFor('src/b.ts')] }, BLAST_PHRASING),
+      PASS_THRESHOLD,
+      live,
+    );
+    expect(again.register).toBe('proved');
+    expect(deriveFog(again.progress, live).understood.has(idFor('src/a.ts'))).toBe(true);
+  });
+
+  it('still bars a second answer while the first pass is alive', () => {
+    // The control. Without it the assertion above passes against a rule that
+    // decayed every key on sight, which is ADR-0047 deleted.
+    const live = livenessOf(graph, VERBS);
+    const board: Challenge = {
+      ...challenge,
+      subject: idFor('src/a.ts'),
+      candidates: [idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(),
+      truth: [idFor('src/b.ts')],
+      witness: witnessFor([idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(), [idFor('src/b.ts')]),
+    };
+    const good = gradeSet(board, { picked: [idFor('src/b.ts')] }, BLAST_PHRASING);
+    const first = applyGrade(EMPTY_PROGRESS, board, good, PASS_THRESHOLD, live);
+    expect(first.register).toBe('proved');
+    expect(applyGrade(first.progress, board, good, PASS_THRESHOLD, live).register).toBe('shown');
   });
 
   it('counts a subject as answered only when it was the subject', () => {
@@ -195,7 +257,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     // `fog.understood` retired two questions for one pass. Picking `b`
     // correctly proves you know it sits in `a`'s radius — it proves nothing
     // about `b`'s *own* radius, which is a different question.
-    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/b.ts')], 'proved');
     const answered = answeredKeys(progress, livenessOf(graph, VERBS));
     expect(answered.has(answerKey('blastRadius', idFor('src/a.ts')))).toBe(true);
     expect(answered.has(answerKey('blastRadius', idFor('src/b.ts')))).toBe(false);
@@ -204,14 +266,14 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
   });
 
   it('brings a question back when its pass has decayed', () => {
-    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')]);
+    const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')], 'proved');
     expect(answeredKeys(progress, livenessOf(graph, VERBS)).size).toBe(0);
   });
 
   it('ignores ids that name no node, rather than throwing on them', () => {
     const ghost = 'n:ffffffffffff';
     const progress = recordSurvey(
-      recordPass(EMPTY_PROGRESS, 'blastRadius', ghost, [ghost]),
+      recordPass(EMPTY_PROGRESS, 'blastRadius', ghost, [ghost], 'proved'),
       [ghost, idFor('src/b.ts')],
     );
     const fog = deriveFog(progress, livenessOf(graph, VERBS));
@@ -272,7 +334,7 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
     const liveness = livenessOf(graph, VERBS);
     const progress = recordPass(EMPTY_PROGRESS, 'companion', idFor('src/a.ts'), [
       idFor('src/b.ts'),
-    ]);
+    ], 'proved');
 
     // The name is earned — you did prove something about that file.
     expect(deriveFog(progress, liveness).understood.has(idFor('src/a.ts'))).toBe(true);
@@ -297,7 +359,7 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
     const liveness = livenessOf(graph, VERBS);
     const progress = recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [
       idFor('src/c.ts'),
-    ]);
+    ], 'proved');
     const traced = subjectsPassed(progress, liveness, 'blastRadius');
     expect(traced.has(idFor('src/a.ts'))).toBe(true);
     expect(traced.has(idFor('src/c.ts'))).toBe(false);
@@ -310,7 +372,7 @@ describe('one verb\'s pass must not unlock another verb\'s answer', () => {
     const liveness = livenessOf(graph, VERBS);
     const progress = recordPass(EMPTY_PROGRESS, 'companion', idFor('src/a.ts'), [
       idFor('src/b.ts'),
-    ]);
+    ], 'proved');
     const answered = answeredKeys(progress, liveness);
     expect(answered.has(answerKey('companion', idFor('src/a.ts')))).toBe(true);
     // Guardrail: a pass on one verb retiring the other verb's board would
@@ -379,7 +441,7 @@ describe('a commit subject moves through the record without ever reaching the ma
   });
 
   it('keeps the pass while the commit is in the window, and drops it once it is not', () => {
-    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? '']);
+    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? ''], 'proved');
     expect(answeredKeys(passed, livenessOf(graph, VERBS))).toContain(
       answerKey('placement', commit),
     );
@@ -396,7 +458,7 @@ describe('a commit subject moves through the record without ever reaching the ma
     // `subjectsPassed` feeds the map's radius licence, which resolves each id
     // through `refById`. A commit id would resolve to nothing there — the
     // filter is what keeps that from being a silent miss.
-    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? '']);
+    const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? ''], 'proved');
     const live = livenessOf(graph, VERBS);
     expect(subjectsPassed(passed, live, 'placement').size).toBe(0);
   });

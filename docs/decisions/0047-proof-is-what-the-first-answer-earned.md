@@ -3,7 +3,7 @@
 - **Status**: **built, and it reverses an owner decision — awaiting the owner's ratification.**
   ADR-0035 was *"decided by the owner, from three options put with their costs"*. One of those costs
   was measured wrong: the option chosen does not do what it was said to do, and §2 is the
-  measurement. The revert is one commit and §8 says which.
+  measurement. The revert is one commit and §9 says which.
 - **Date**: 2026-08-14
 - **Supersedes**: [ADR-0035](./0035-a-reveal-is-earned-by-an-answer-that-discriminated.md)
 - **Bears on**: NORTH-STAR §9 (field notes claim only what was proved), §8.1 (`Grade` is honest),
@@ -12,7 +12,12 @@
   decision 3, [ADR-0016](./0016-a-history-wire-is-drawn-only-where-no-board-is-open.md) decision 3
   (a payoff that withdraws), [ADR-0027](./0027-a-board-is-asked-in-the-noun-its-members-are.md)
 - **Measured with** `npx tsx scripts/probe-farm.ts /tmp/ark-corpus ark hono kysely graphql-js`, on
-  clean clones, at `9b13cf6`.
+  clean clones — **ark at `9b86d12`**. *The first draft of this line said `9b13cf6`, which is the
+  commit the work landed on rather than the one the corpus clone held; ark's row reads 6.0 / 6 / 20
+  there, because PR #54 moved Blast Radius supply and the deck with it. Every **verdict** below holds
+  at both (160/160 unlockable, 160/160 separable) and the headline mean does not, which is this
+  repository's own rule about a figure on a self-indexing repo arriving in the document that reverses
+  a decision.*
 
 ---
 
@@ -43,7 +48,9 @@ which ones were right."* Two sequences the shipped player permits:
 
 - **`unlock`** — tick one candidate, submit, repeat. The first pick that lands in the key is
   precision 1.0, which clears the bar and hands over the entire reveal. **Every board on all four
-  repos**, in a mean of 5.2 clicks. So "already knowing which ones were right" costs five guesses.
+  repos**, in a mean of 5.2 clicks here and 5.8–7.0 elsewhere. So "already knowing which ones were
+  right" costs a handful of guesses. *(The four means are 5.2 / 7.0 / 6.0 / 5.8; an earlier draft
+  quoted ark's as if it were all four's. The table says it right and the sentence overreached.)*
 - **`sweep`** — never trigger a reveal at all. A single pick scores `2/(K+1) > 0` **exactly when it
   is in the key**, so the displayed percentage is a membership oracle; `score.ts`'s
   *"N of your 1 picks are right"* merely says it in words. Twenty submissions read the whole key off
@@ -113,6 +120,23 @@ A **failed** first attempt leaves no `Pass` to carry the flag — and that is pr
 after which the board has explained itself. `selector.attempts` answers the same question in memory
 and **dies on reload**, so a reload-then-pass would mint a note the player did not earn. `SAVE_VERSION`
 goes 1 → 2.
+
+**Decision 3b — a `graded` key certifies one board, and decays with it.**
+
+Added by the post-ship review in §7, which found the rule outliving its own justification. Passes
+decay (`livePasses`) and the stored key did not, so when a pass came apart entirely — every member
+failing `stillHolds`, i.e. the repo having changed enough that the old explanation is void — the
+question came back **permanently unprovable**: its first honest answer read `first = false`, so the
+subject could never re-enter `understood` again, under a save ADR-0011 keys to `repo.root` precisely
+so it survives a reindex. Ark indexes itself, so that is the ordinary case over time.
+
+Two panels would also have lied about it: *"this board had already explained itself"* over a board
+whose current key was never explained.
+
+`gradedKeys` is the derived view — a key is live while its subject is, and, where a pass exists for
+it, while that pass is. This follows from decision 2's own argument rather than softening it: what
+`gate.ts` certifies is *this* board, and a re-rolled board is a different question wearing the same
+name. The sweep stays closed because a sweep decays nothing.
 
 **Decision 4 — three consumers, three answers, and they are deliberately not the same.**
 
@@ -185,7 +209,38 @@ counts passes and failures per board inside an arm and would answer it; nothing 
 answer is "rarely", decision 2 is charging most of the notebook to the weaker register and the rule
 should be revisited — that is the number to take, and it is not a reason to guess now.
 
-## 7. Verification
+## 7. Post-review
+
+Reviewed after the commit landed. Six findings, all acted on; the reviewer could construct **no**
+laundering sequence within a fixed repo state, and found no register leak through twins, the tally,
+the guide or the deck.
+
+**Decision 3b above is the finding that changed the code**, and it is this repo's *the bug you
+already fixed is one line down* shape with a lifetime instead of a line: decision 3 handled **reload**
+and nothing handled **reindex**.
+
+**Decision 5 had no test at all and its mutant survived everything.** Forcing `notes.ts`'s register
+to `'proved'` makes the notebook claim *"You proved…"* over a farmed pass — the exact §9 violation
+this document exists to close — and 920 unit tests, 116 atlas tests **and the e2e** stayed green,
+because the e2e's select-all step names the notebook in its own preamble as the reason it is a
+browser test and never opened it. The permissive default on `recordPass`'s `register` is what let the
+whole suite compile without noticing; that default is gone, `Register` is now an alias of
+`NoteRegister` rather than a second declaration of the same two strings, and both surfaces are
+asserted.
+
+**The migration launders this document's own §2.1 exploit across the version bump, once.** Under the
+gate a *failed* precision-1.0 answer served the whole key and left no `Pass`, so a v1 record cannot
+show it and `parseProgress` cannot seed `graded` from it. It is unknowable from the stored shape —
+v1 recorded passes and never attempts, which is the whole reason `graded` exists — and the
+alternative is discarding every v1 notebook. Stated in `save.ts` rather than patched. The weaker
+invariant *is* now held by construction: `graded ⊇ keys(passes)` at parse, so a hand-edited save
+cannot reopen a passed board.
+
+**`empty.ts`'s caption became false in this commit.** *"Only what you proved, never what you were
+shown"* was the notebook's promise, and decision 5 makes the notebook show both. Fixed to say what
+the page now does.
+
+## 8. Verification
 
 - **The two farm sequences, driven through the real ledger** (`tests/unit/progress.test.ts`). The
   sweep *reconstructs* the key from the scores rather than reading `challenge.truth`, so it is the
@@ -199,7 +254,7 @@ should be revisited — that is the number to take, and it is not a reason to gu
   The 20-named line is the control that keeps the assertion about a real farm.
 - `test:unit` 919, `test:atlas` 116, `test:determinism` byte-identical, `test:e2e` clean.
 
-## 8. If the owner declines
+## 9. If the owner declines
 
 Revert this commit. `withhold.ts` and its suite come back, `SAVE_VERSION` returns to 1, and existing
 v2 saves are discarded at parse rather than half-read (`parseProgress` already refuses an unknown

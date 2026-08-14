@@ -46,10 +46,14 @@ describe('prepare', () => {
     // A cold playtester caught it from the arithmetic rather than from the code:
     // `src/atlas/index.ts` printed `imported by 165` over a **transitive** cone
     // of 144, and direct dependents are a subset of transitive ones, so the pair
-    // is impossible on its face. 22.7% of this repo's edges are a second kind on
-    // a pair that already had one, and 14 of its 257 nodes printed a number
-    // larger than their own cone — 14 of hono's 425 too
-    // (`npx tsx scripts/probe-indegree.ts`, measured at `9b13cf6`).
+    // is impossible on its face. **22.9%** of this repo's edges are a second kind
+    // on a pair that already had one, and **14 of its 255** nodes printed a
+    // number larger than their own cone — 14 of hono's 425 too. Measured on a
+    // *clean clone* of `9b13cf6` (`npx tsx scripts/probe-indegree.ts`), which is
+    // the only way a figure about a self-indexing repo stays checkable: the
+    // first version of this comment read 22.7% / 14 of 257 / 165 over 144,
+    // taken from the working tree mid-session, and reproduces at no commit at
+    // all.
     let seenBA = 0;
     const twoKinded = atlasWith(
       ['a.ts', 'b.ts', 'c.ts'],

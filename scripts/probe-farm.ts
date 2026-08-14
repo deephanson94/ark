@@ -1,13 +1,14 @@
 /**
  * What the reveal gate actually costs an attacker, in clicks.
  *
- * `withhold.ts` gates the reveal on precision ≥ 0.5 and argues the gate is not
+ * **The gate this measured is gone (ADR-0047), and this is what removed it.**
+ * `withhold.ts` gated the reveal on precision ≥ 0.5 and argued it was not
  * farmable because *"reaching precision 1.0 means already knowing which ones
  * were right"*. That sentence is about **one** answer. Guardrail 6 says
  * re-answering is free and unlimited, so the attacker's unit is not an answer,
  * it is a **sequence** of them — and this measures the sequence.
  *
- * Two sequences, both of which the shipped player permits today:
+ * Two sequences, both of which the player permitted:
  *
  *  - **`unlock`** — tick one candidate, submit, read the grade, repeat. The
  *    first pick that lands in the key scores precision 1.0, which clears the bar
