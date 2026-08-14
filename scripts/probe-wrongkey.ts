@@ -23,6 +23,7 @@
  *   npx tsx scripts/probe-wrongkey.ts /tmp/ark-corpus <repo>... --plant
  */
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { buildIndex, indexOptions } from '../src/indexer/build.js';
@@ -107,8 +108,30 @@ function goModulePath(root: string): string | null {
   } catch { return null; }
 }
 
+/** Every workspace package name → its manifest's directory, read from the repo rather than the atlas. */
+function workspacePackageDirs(root: string): [string, string][] {
+  const out: [string, string][] = [];
+  let listed: string[] = [];
+  try {
+    listed = execFileSync('bash', ['-c',
+      `cd ${JSON.stringify(root)} && git ls-files '*package.json' | grep -v node_modules`],
+      { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  } catch { return out; }
+  for (const manifest of listed) {
+    try {
+      const parsed = JSON.parse(readFileSync(join(root, manifest), 'utf8')) as Record<string, unknown>;
+      if (typeof parsed['name'] !== 'string') continue;
+      out.push([parsed['name'], manifest.includes('/') ? manifest.slice(0, manifest.lastIndexOf('/')) : '']);
+    } catch { /* a malformed manifest is not this probe's problem */ }
+  }
+  // Longest name first, so `@scope/a/b` is not eaten by `@scope/a`.
+  out.sort((a, b) => b[0].length - a[0].length);
+  return out;
+}
+
 function scan(root: string, atlas: Atlas, swap: boolean): { hits: Hit[]; boards: number; slots: number } {
   const goModule = goModulePath(root);
+  const workspaceDirs = workspacePackageDirs(root);
   const nodeByPath = new Map(atlas.nodes.map((n) => [n.path, n]));
   const pathById = new Map(atlas.nodes.map((n) => [n.id, n.path]));
 
@@ -174,21 +197,37 @@ function scan(root: string, atlas: Atlas, swap: boolean): { hits: Hit[]; boards:
 
         for (const m of text.matchAll(SPEC)) {
           const spec = m[1] ?? '';
-          if (!spec.startsWith('.')) continue;
-          const base = joinPosix(dirnameOf(file), spec);
-          if (base === null) continue;
+          // **Non-relative specifiers are checked too, and they were not.** A review measured this
+          // lexer as blind to 62–64% of the dependency relation on apollo-client, rxjs and express
+          // — the three repos ADR-0042 §3's +250 boards are on — because it skipped anything not
+          // starting with `.`, which is *the whole specifier form* the workspace fix resolves. A
+          // probe blind to the class a change creates cannot certify that change.
+          const bases: string[] = [];
+          if (spec.startsWith('.')) {
+            const rel = joinPosix(dirnameOf(file), spec);
+            if (rel !== null) bases.push(rel);
+          } else {
+            for (const [name, dir] of workspaceDirs) {
+              if (spec !== name && !spec.startsWith(`${name}/`)) continue;
+              const sub = spec.slice(name.length).replace(/^\//, '');
+              bases.push(joinPosix(dir, sub) ?? '', joinPosix(dir, `src/${sub}`) ?? '');
+            }
+            if (bases.length === 0) continue;
+          }
+          for (const base of bases) {
           // Does any spelling of this specifier name the subject's file?
-          const names =
-            TRY.some((e) => base + e === subjectPath) ||
-            TRY.some((e) => `${base}/index${e}` === subjectPath) ||
-            // `./x.js` in TypeScript ESM output means `./x.ts`
-            (base.endsWith('.js') && [`${base.slice(0, -3)}.ts`, `${base.slice(0, -3)}.tsx`].includes(subjectPath));
-          if (!names) continue;
-          const at = text.slice(0, m.index).split('\n').length;
-          hits.push({
-            repo: '', board: challenge.id, subject: subjectPath, candidate: candPath,
-            specifier: spec, line: `${file}:${at}`,
-          });
+            const names =
+              TRY.some((e) => base + e === subjectPath) ||
+              TRY.some((e) => `${base}/index${e}` === subjectPath) ||
+              // `./x.js` in TypeScript ESM output means `./x.ts`
+              (base.endsWith('.js') && [`${base.slice(0, -3)}.ts`, `${base.slice(0, -3)}.tsx`].includes(subjectPath));
+            if (!names) continue;
+            const at = text.slice(0, m.index).split('\n').length;
+            hits.push({
+              repo: '', board: challenge.id, subject: subjectPath, candidate: candPath,
+              specifier: spec, line: `${file}:${at}`,
+            });
+          }
         }
       }
       if (planted !== null && pathById.get(planted) === candPath && hits.at(-1)?.candidate !== candPath) {

@@ -1234,6 +1234,14 @@ first, but it reads *this* line for what is already done. **A decision is not a 
 edit of this paragraph must not turn an ADR into a shipped verb. **M5 is next by the roadmap**
 (tree-sitter, 3–4 more languages), and the negative witness — the last rung, which improved every
 existing board rather than adding a fifth verb — is done.
+**The reference set has a taint-limited member now, and it did not for five milestones.**
+`typeorm/typeorm` `df07bf1e` — 3,704 files, **58 Blast Radius boards of 2,248 subjects**, 2,120
+refused by guardrail 4, the cap 8× from biting (ADR-0042 decision 2). Every other repo this project
+measures itself against — ark, hono, kysely, graphql-js, and both of `docs/experiments/0001`'s
+matched pair — is **cap-limited**, so every "the cap is the binding constraint" measurement in this
+repository was taken where the cap binds. **A supply measurement that has not been run on a
+taint-limited repo has not been run.**
+
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node at
 `7075369e` — and the only outside repo where the generator had more supply than the deck cap

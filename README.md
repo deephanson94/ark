@@ -587,7 +587,17 @@ are Blast Radius** — that verb is refused by language, not by taint (ADR-0028)
 `c9eb16a87e` is the scale case at 3,035 nodes and 10,162 edges, and the one repo that breaches the
 index budget (see gaps). **`graphql/graphql-js` `9c245018`** (549 nodes, 3.70 edges/node, 276
 challenges) and **`kysely-org/kysely` `f24018c7`** (600, 4.13, 300) are the densest third-party maps
-measured, and are experiment 0001's matched pair. Ark indexes **itself** as its first level, which is deliberate: every
+measured, and are experiment 0001's matched pair.
+
+**`typeorm/typeorm` at `df07bf1e` is the reference set's taint-limited member**, added because every
+other repo named here is one where the **deck cap** is the binding constraint, and that made a whole
+class of behaviour invisible for five milestones
+([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md)
+decision 2). It is 3,704 files, 11,988 edges (3.24 each), 54 regions, 962 challenges — and **58 Blast
+Radius boards of 2,248 candidate subjects**, with 2,120 refused by guardrail 4 and the cap 8× away
+from ever biting. One `require(<expression>)` in `src/platform/PlatformTools.ts` accounts for 1,912
+of its 1,921 tainted subjects. Point a supply measurement at this one before believing it
+generalises. Ark indexes **itself** as its first level, which is deliberate: every
 feature added becomes a new level, and if the tool cannot make its own architecture legible it does
 not work.
 

@@ -81,6 +81,8 @@ interface PackageFacts {
   readonly name: string | null;
   /** Dependency names declared with the `workspace:` protocol. */
   readonly workspaceDeps: readonly string[];
+  /** `exports` flattened to `subpath -> target`, sorted. MEASUREMENT (ADR-0042 §3). */
+  readonly exports: readonly (readonly [string, string])[];
 }
 
 interface TsFacts {
@@ -102,6 +104,16 @@ export interface ConfigIndex {
    * false-negative guardrail 4 exists to prevent.
    */
   readonly workspaceNames: ReadonlySet<string>;
+  /** MEASUREMENT (ADR-0042 §3): where each workspace package lives and what it exports. */
+  readonly workspacePackages: ReadonlyMap<string, WorkspacePackage>;
+}
+
+/** MEASUREMENT (ADR-0042 §3). */
+export interface WorkspacePackage {
+  /** Repo-relative directory holding the manifest. `''` at the repo root. */
+  readonly dir: string;
+  /** `exports` subpath -> target, relative to `dir`. */
+  readonly exports: ReadonlyMap<string, string>;
 }
 
 export async function loadConfigIndex(
@@ -111,6 +123,7 @@ export async function loadConfigIndex(
   const packages = new Map<string, PackageFacts>();
   const tsconfigs = new Map<string, TsFacts>();
   const workspaceNames = new Set<string>();
+  const workspacePackages = new Map<string, WorkspacePackage>();
 
   // Raw text first, so `extends` can be followed without re-reading.
   //
@@ -133,7 +146,13 @@ export async function loadConfigIndex(
     if (name === 'package.json') {
       const facts = packageFacts(parsed);
       packages.set(directory, facts);
-      if (facts.name !== null) workspaceNames.add(facts.name);
+      if (facts.name !== null) {
+        workspaceNames.add(facts.name);
+        // First manifest wins on a duplicate name, in the walk's sorted order.
+        if (!workspacePackages.has(facts.name)) {
+          workspacePackages.set(facts.name, { dir: directory, exports: new Map(facts.exports) });
+        }
+      }
     } else {
       tsconfigs.set(directory, tsFacts(parsed, directory, texts));
     }
@@ -188,6 +207,7 @@ export async function loadConfigIndex(
   return {
     for: (path) => (texts.size === 0 ? EMPTY_CONFIG : configForDirectory(directoryOf(path))),
     workspaceNames,
+    workspacePackages,
   };
 }
 
@@ -212,7 +232,44 @@ function packageFacts(parsed: unknown): PackageFacts {
     selfImports: dedupeSorted(Object.keys(stringRecord(record['imports']))),
     name: typeof record['name'] === 'string' ? record['name'] : null,
     workspaceDeps: dedupeSorted(workspaceDeps),
+    exports: exportEntries(record['exports']),
   };
+}
+
+/**
+ * MEASUREMENT (ADR-0042 §3). `exports` flattened to `subpath -> target`.
+ *
+ * Condition objects are followed in a fixed order so the result is deterministic.
+ */
+function exportEntries(value: unknown): readonly (readonly [string, string])[] {
+  const target = (x: unknown, depth: number): string | null => {
+    if (depth > 4) return null;
+    if (typeof x === 'string') return x;
+    if (typeof x !== 'object' || x === null || Array.isArray(x)) return null;
+    const record = x as Record<string, unknown>;
+    for (const key of ['import', 'module', 'default', 'require', 'node', 'types']) {
+      if (!(key in record)) continue;
+      const hit = target(record[key], depth + 1);
+      if (hit !== null) return hit;
+    }
+    return null;
+  };
+  const entries: (readonly [string, string])[] = [];
+  if (typeof value === 'string') return [['.', value]];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length > 0 && !keys.some((key) => key.startsWith('.'))) {
+    const hit = target(value, 0);
+    return hit === null ? [] : [['.', hit]];
+  }
+  for (const [key, raw] of Object.entries(record)) {
+    if (!key.startsWith('.')) continue;
+    const hit = target(raw, 0);
+    if (hit !== null) entries.push([key, hit]);
+  }
+  entries.sort((a, b) => byteCompare(a[0], b[0]));
+  return entries;
 }
 
 /**

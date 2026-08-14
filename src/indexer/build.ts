@@ -199,6 +199,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
     onDisk: walked.onDisk,
     configFor: (path: string) => configIndex.for(path),
     workspaceNames: configIndex.workspaceNames,
+    workspacePackages: configIndex.workspacePackages,
   };
 
   // ---- scan and resolve -------------------------------------------------

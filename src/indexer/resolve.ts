@@ -74,6 +74,8 @@ export interface ResolveContext {
    * it.
    */
   readonly workspaceNames: ReadonlySet<string>;
+  /** MEASUREMENT (ADR-0042 §3): where each workspace package lives and what it exports. */
+  readonly workspacePackages?: ReadonlyMap<string, { readonly dir: string; readonly exports: ReadonlyMap<string, string> }>;
 }
 
 const BUILTINS = new Set(builtinModules);
@@ -85,6 +87,8 @@ const BUILTINS = new Set(builtinModules);
  */
 const TRY_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'];
 const INDEX_FILES = TRY_EXTENSIONS.map((extension) => `/index${extension}`);
+/** Extensions that really are module extensions, as opposed to a dot in a filename. */
+const KNOWN_EXTENSIONS = new Set(TRY_EXTENSIONS);
 const REWRITES: ReadonlyMap<string, readonly string[]> = new Map([
   ['.js', ['.ts', '.tsx', '.js']],
   ['.mjs', ['.mts', '.mjs']],
@@ -153,6 +157,20 @@ function dirnameOf(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
+/**
+ * Join a repo-relative directory to a sub-path, where the directory may be `''` — the repository
+ * root, which is what a manifest at the top of the tree has.
+ *
+ * `${dir}/${sub}` is wrong there: it produces `/src`, and `normalizeJoin` keeps the leading empty
+ * segment, so every candidate built from it starts with a slash and can never match a node key.
+ * ADR-0026's cobra defect; see the workspace block in `resolveSpecifier`.
+ */
+function joinDir(dir: string, sub: string): string {
+  if (dir === '') return sub;
+  if (sub === '') return dir;
+  return `${dir}/${sub}`;
+}
+
 /** POSIX path join + `.`/`..` normalisation. Returns null if it escapes the repo. */
 export function normalizeJoin(base: string, specifier: string): string | null {
   const parts = base === '' ? [] : base.split('/');
@@ -177,10 +195,17 @@ function candidatesFor(base: string): string[] {
     const stem = base.slice(0, base.length - extension.length);
     for (const replacement of rewrites) candidates.push(stem + replacement);
   }
-  if (extension === '') {
+  // MEASUREMENT (ADR-0042 §3, fix 2 - `dottedSegment`). `extensionOf('./x.interface')` answers
+  // `.interface`, so this append loop used to be skipped and `x.interface.ts` was never a
+  // candidate. nest names 1,942 specifiers that way. A dot is not an extension unless we know it.
+  if (extension === '' || !KNOWN_EXTENSIONS.has(extension)) {
     for (const suffix of TRY_EXTENSIONS) candidates.push(base + suffix);
   }
-  for (const suffix of INDEX_FILES) candidates.push(base + suffix);
+  // MEASUREMENT (ADR-0042 §3, fix 3 - `rootSelfPath`). `base` is `''` for a specifier naming the
+  // repo root, and `'' + '/index.ts'` is `/index.ts` - a leading slash no repo-relative node key
+  // can match. ADR-0026's cobra defect, in this resolver.
+  const prefix = base === '' ? '' : `${base}/`;
+  for (const suffix of INDEX_FILES) candidates.push(prefix + suffix.slice(1));
 
   const seen = new Set<string>();
   return candidates.filter((candidate) => {
@@ -275,12 +300,60 @@ export function resolveSpecifier(
   // the repo. That is a file that looks fully resolved and is hiding a
   // dependency, which is the exact false negative guardrail 4 exists to catch.
   //
-  // We do not resolve it either: a package's entry point is its `exports` or
-  // `main`, and in a monorepo those name *built* output that is gitignored and
-  // not on the map. Pillar 6 forbids requiring a build to index, so the honest
-  // answer is that we do not know — which taints the file and costs a
-  // challenge, rather than shipping an answer key over an invisible edge.
-  if (context.workspaceNames.has(packageName)) return { kind: 'unresolved' };
+  // **We do resolve it when the repository says where it lives** (ADR-0042 decision 5). The
+  // sentence this comment used to carry — *"a package's entry point is its `exports` or `main`, and
+  // in a monorepo those name built output that is gitignored"* — is **repo-dependent**, which
+  // nothing had checked: apollo-client's root `exports` is `{".": "./src/core/index.ts"}`, source
+  // and on disk, while rxjs's is `./dist/esm/index.js` where the sentence is exactly right.
+  //
+  // Three arms, and the **order and the gaps between them are the whole safety argument**:
+  //
+  //   1. `exports` declares this subpath and its target is on the map. Authoritative — the package
+  //      itself said what the specifier means.
+  //   2. `exports` declares it and the target is **missing** (a build artifact). Fall back to the
+  //      source-layout mirror `<dir>/src/<rest>` and **nowhere else**. This is the monorepo shape
+  //      rxjs and vue-core have, and stopping here is what makes arm 3 safe.
+  //   3. `exports` says nothing about this subpath at all. Then plain directory resolution,
+  //      `<dir>/<rest>` then `<dir>/src/<rest>`, which is what Node does without an `exports` map.
+  //      nest is this case: 493 specifiers, no manifest declaring `exports` anywhere.
+  //
+  // **Arm 2 must not fall through to `<dir>/<rest>`, and that is not fastidiousness.** With a root
+  // manifest `dir` is `''`, so `<dir>/<rest>` is the repository root: a package whose `exports` maps
+  // `./utils` to `./dist/utils.js` — compiled from `src/utils.ts` — would resolve to a **root-level
+  // `utils.ts` decoy** instead, `certain`, and the real file would never get the edge. Under
+  // ADR-0008's `candidates ∩ dependents(subject, ∞) = truth` that is a wrong answer key. It is
+  // fixture-proven and corpus-clean, and it is barred by construction rather than by luck.
+  //
+  // Anything else stays `unresolved`, exactly as before — a workspace sibling imports straight back
+  // into the repo, so calling it `external` would assert "nothing outside can import back in" about
+  // an import that does, which is the false negative guardrail 4 exists to catch.
+  if (context.workspaceNames.has(packageName)) {
+    const pkg = context.workspacePackages?.get(packageName);
+    if (pkg !== undefined) {
+      const subpath =
+        specifier.length > packageName.length ? `.${specifier.slice(packageName.length)}` : '.';
+      const rest = subpath === '.' ? '' : subpath.slice(2);
+      const declared = pkg.exports.get(subpath);
+
+      if (declared !== undefined) {
+        const base = normalizeJoin(pkg.dir, declared);
+        const hit = base === null ? null : pick(base, context);
+        if (hit !== null && hit.kind === 'internal') return hit;
+      }
+
+      // Arm 2 when `exports` declared the subpath, arm 3 when it did not. See above for why the
+      // declared case may not reach `pkg.dir` itself.
+      const roots =
+        declared === undefined ? [pkg.dir, joinDir(pkg.dir, 'src')] : [joinDir(pkg.dir, 'src')];
+      for (const root of roots) {
+        const base = normalizeJoin(joinDir(root, rest), '');
+        if (base === null) continue;
+        const hit = pick(base, context);
+        if (hit !== null && hit.kind === 'internal') return hit;
+      }
+    }
+    return { kind: 'unresolved' };
+  }
 
   if (config.dependencies.has(packageName)) return { kind: 'external', name: packageName };
 

@@ -1,13 +1,15 @@
 # ADR-0042 — Blast Radius is taint-limited on 7 of 16 gradeable repositories, and the reference set could not see it
 
-- **Status**: proposed
+- **Status**: **accepted** — decisions 2 and 5 taken by the owner on 2026-08-14; the rest stand as
+  measurements and refusals
 - **Date**: 2026-08-14
 - **Bears on**: ADR-0003 (an unresolved import produces no edge), ADR-0008 (truth is unbounded),
   ADR-0024 (a language ships on its deck, not its map), ADR-0026 (a check about a missing edge must
   come from outside the atlas), ADR-0028 (Python is mapped and never graded), ADR-0038 (a budget is
   a rate);
   NORTH-STAR §6.1 (the v1 verb), §13 M2 (the kill point), guardrail 4
-- **Code shipped by this ADR**: phase 6 only. The survey and the candidate measurements are probes.
+- **Code shipped by this ADR**: §7's two fixes, and §3's workspace resolution — **with the two
+  defects a review found inside it closed first** (§3.6). Candidates B and C ship nothing.
 
 ## Progress
 
@@ -421,6 +423,44 @@ badly-starved monorepo completely and leaves three others untouched.
 
 ---
 
+## 3.6 What shipped, and the two defects closed first
+
+The owner accepted candidate A on 2026-08-14. The patch was **not** shipped as measured — a reviewer
+found two defects inside it, both of them ADR-0026's *a path prefix and a node key are not the same
+string*, and both are closed:
+
+- **The fallback arms were dead for a manifest at the repository root.** `` `${pkg.dir}/src` `` is
+  `/src` when `pkg.dir` is `''`, and `normalizeJoin` keeps the leading empty segment, so every
+  candidate began with a slash no node key can match. **8 of the 12 corpus repos with a root
+  manifest self-import their own name**, which is exactly that shape. There is a `joinDir` helper
+  now, and §3.1's *"via `D/src/S`"* column could not have been reproduced by the patch as written.
+- **A declared-but-unresolvable `exports` subpath fell through to the package directory** — which at
+  a root manifest is the repository root. A package mapping `./utils` to a build artifact compiled
+  from `src/utils.ts`, with a root-level `utils.ts` decoy present, resolved to **the decoy**,
+  `certain`. Under ADR-0008's invariant that is a wrong answer key. Fixture-proven, corpus-clean, and
+  now barred by construction: a subpath the package *declared* falls back only to the source mirror
+  `<dir>/src/<rest>`, never to `<dir>/<rest>`.
+
+The three arms and the gaps between them are in `resolve.ts`'s comment; **the gaps are the safety
+argument**, so four mutants exercise them — including one that restores the original patch's
+two-arm loop, which fails two assertions.
+
+**Closing the dead arm made the change better, not merely safer**: typeorm's resolution goes
+97.6% → **99.6%** (it read 97.9% with the arm dead), graphql-js 96.1% → **99.8%**, and kysely's
+subject-taint share now **falls** 3.6% → 2.0% where the first measurement had it rising to 7.2%.
+Board counts are unchanged at **+250** — apollo-client 46 → 108, nest 7 → 120, rxjs 75 → 150.
+
+**And §3.3's probe was widened before being believed a second time.** It skipped every non-relative
+specifier, which is *the whole form* this change resolves — blind to 62–64% of the dependency
+relation on the three repos that move. It now resolves workspace specifiers through the same package
+map. The plant gate is much stronger for it: **127 plants caught on 111 of rxjs's boards and 85 on
+84 of nest's**, where the narrow probe caught **none** on either. Re-run against the shipped
+resolver: **0 violations across 15 repos and 46,067 wrong-answer slots.**
+
+889 unit, 116 atlas, determinism byte-identical, budgets within ceiling.
+
+---
+
 ## 4. Candidate B — taint that stops at the first unresolved edge. **Refused.**
 
 ADR-0003 refuses a board when any candidate **or anything on its outgoing side** carries an
@@ -728,8 +768,10 @@ cobra and flask must produce no line.
    ADR-0008's decision stands and is better supported than when it was taken; its **supporting**
    figure has gone stale and is now false on ark itself (§5.1).
 
-5. **Candidate A — workspace resolution — is a real win on three repos, and its safety is
-   established more weakly than the first draft claimed.** +250 boards net, **0 directly-visible
+5. **Candidate A — workspace resolution — ships** (owner's call, 2026-08-14), with the two defects
+   a review found inside the patch closed first and the certifying probe widened to see the class it
+   creates. See §3.6. **It is a real win on three repos, and its safety was established more weakly
+   than the first draft claimed.** +250 boards net, **0 directly-visible
    wrong answer keys** across 46,099 wrong-answer slots, all suites green and determinism
    byte-identical (§3). It moves **3 repos of 19**, one of which is the corpus's worst-starved repo
    (nest, 7 → 120).
@@ -741,8 +783,7 @@ cobra and flask must produce no line.
    for a manifest at the repo root** (`normalizeJoin('/src', …)` builds a leading slash no node key
    can match), which is the `rootSelfPath` defect reappearing inside the patch that fixes it —
    affecting 8 of the 12 corpus repos with a root manifest. The patch is
-   `docs/decisions/0042-resolver.patch`; it was measured and reverted rather than shipped, and
-   **shipping it should start from fixing that arm and widening the probe**, not from these numbers.
+   `docs/decisions/0042-resolver.patch` as first measured; **§3.6 is what actually shipped**.
 
    Two of its three parts are plain defects rather than features, and would be the cheaper half to
    take: **`dottedSegment`** (a specifier whose last segment carries an unknown dot-extension never
