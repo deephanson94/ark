@@ -90,6 +90,37 @@ export function regionWash(index: number, alpha = 1): string {
 }
 
 /**
+ * A node whose **own** question you have passed — the brightest a file gets.
+ *
+ * **The third rung of a ramp that had only two.** `fog.ts` names three states and
+ * the map drew two: silhouette got its own drained fill, and *surveyed* and
+ * *understood* shared one, separated by a stroke width of 1.4px against 2.5px.
+ * So the reward for the entire core loop — answer a question, prove you
+ * understand a file, watch the fog lift — was a line getting one pixel thicker.
+ * A cold playtester rated the loop 5 out of 10 and could not tell what passing
+ * had changed; NORTH-STAR §4 says the revealed fraction of the map is *"a real
+ * measure of how much of it you can reason about"*, and a measure nobody can
+ * read is not one.
+ *
+ * Lightness, because that is the channel with room in it: hue already carries
+ * region and saturation already carries terrain, so a third meaning had to go
+ * somewhere unoccupied.
+ *
+ * **The ramp is 22 → 34 → 50 in HSL and that is not the claim**, because HSL
+ * lightness is not perceptual and these fills sit on a near-black ground where
+ * the bottom of the range is compressed. Measured as WCAG contrast by
+ * `npx tsx scripts/probe-ramp.ts`: **1.49 : 2.16 : 3.75** against the `#0a0d13`
+ * ground, so the steps are **1.45×** and **1.73×**. The larger step is the one
+ * the loop rewards, which is the right way round — and the first draft of this
+ * paragraph asserted "1.9 : 3.4 : 6.6, roughly 1.8× each" from no measurement at
+ * all, which the probe was written to catch and did.
+ */
+export function regionKnown(index: number, alpha = 1): string {
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 56;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 50%, ${alpha})`;
+}
+
+/**
  * An unsurveyed node: its region's hue, drained almost to the background.
  *
  * Risk #4 says fog must never read as the tool hiding things — you should

@@ -96,6 +96,7 @@ for (const repo of repos) {
     state = {
       answered: new Set([...state.answered, key]),
       attempts: noteAttempt(state.attempts, key),
+      skipped: new Set(),
       previous: next,
     };
   }

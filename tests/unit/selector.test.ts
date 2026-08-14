@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
-import { NO_HISTORY, isSideshow, noteAttempt, suggestNext } from '../../src/player/selector.js';
+import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 import { witnessFor } from '../fixtures/atlas.js';
 
@@ -326,15 +326,16 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      previous: failed,
+      skipped: new Set<string>(), previous: failed,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
 
   it('comes back to it only after the rest of the deck', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
+      skipped: Set<string>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -351,9 +352,10 @@ describe('a wrong answer rotates rather than repeats', () => {
   });
 
   it('keeps cycling instead of stalling when the whole deck has been failed', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
+      skipped: Set<string>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -374,7 +376,7 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      previous: null,
+      skipped: new Set<string>(), previous: null,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
@@ -395,6 +397,7 @@ describe('a wrong answer rotates rather than repeats', () => {
     const next = suggestNext([previous, fresh, failedElsewhere], regionOf, {
       answered: new Set([answerKey('blastRadius', id(1))]),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(3))),
+      skipped: new Set<string>(),
       previous,
     });
     expect(next?.id).toBe('blast-fresh');
@@ -493,7 +496,7 @@ describe('the opening', () => {
     const answered = new Set<string>();
     const served: string[] = [];
     for (let step = 0; step < deck.length; step += 1) {
-      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), previous: null }, pathOf);
+      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), skipped: new Set(), previous: null }, pathOf);
       expect(next).not.toBeNull();
       if (next === null) break;
       served.push(next.id);
@@ -514,5 +517,54 @@ describe('the opening', () => {
     ];
     expect(suggestNext(deck, regionOf, NO_HISTORY)?.id).toBe('blast-aaa');
     paths.clear();
+  });
+});
+
+/**
+ * Skipping a suggestion, and the one rule that keeps it from being a lockout.
+ *
+ * A cold playtester's first three suggestions were the same shape and there was
+ * no way past them but to answer one — *"Where next?"* offered exactly one next.
+ * The board is never removed: it keeps its rank and returns when the list
+ * clears, which is what makes this a preference rather than a refusal.
+ */
+describe('skipping a suggestion', () => {
+  const deck = [
+    challenge({ name: 'a', subject: 1, truth: [11], difficulty: 0.2 }),
+    challenge({ name: 'b', subject: 2, truth: [12], difficulty: 0.5 }),
+  ];
+  const keyOf = (board: Challenge): string => answerKey(board.verb, board.subject);
+  const all = deck.map(keyOf);
+
+  it('offers a different board once one is waved away', () => {
+    const first = suggestNext(deck, regionOf, NO_HISTORY);
+    if (first === null) throw new Error('the fixture served nothing');
+    const state = { ...NO_HISTORY, skipped: noteSkip(new Set(), keyOf(first), all) };
+    const second = suggestNext(deck, regionOf, state);
+    expect(second).not.toBeNull();
+    expect(second?.id).not.toBe(first.id);
+  });
+
+  it('clears the list rather than run the deck to empty', () => {
+    // **The rule that matters.** Without it, skipping the last unanswered board
+    // leaves `suggestNext` returning null over a deck that is not finished — the
+    // guide then says "every question answered" and the HUD says "158 left",
+    // which is the count-of-zero landmine with a third cause for the same
+    // number. Guardrail 6's spirit: nothing the player does to a board takes it
+    // away from them.
+    let skipped = new Set<string>();
+    for (const board of deck) skipped = noteSkip(skipped, keyOf(board), all);
+    expect(skipped.size).toBe(0);
+    expect(suggestNext(deck, regionOf, { ...NO_HISTORY, skipped })).not.toBeNull();
+  });
+
+  it('only counts what is left unanswered towards clearing', () => {
+    // The remaining set is the *unanswered* boards, so skipping the one open
+    // board clears the list even though the deck holds an answered one too —
+    // otherwise the player is stuck exactly when there is least to do.
+    const answered = new Set([keyOf(deck[0] as Challenge)]);
+    const open = all.filter((key) => !answered.has(key));
+    const skipped = noteSkip(new Set(), keyOf(deck[1] as Challenge), open);
+    expect(skipped.size).toBe(0);
   });
 });

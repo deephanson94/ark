@@ -18,7 +18,7 @@ import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
 import type { Box, LabelCandidate, PlaceOptions, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
-import { INK, regionColor, regionSilhouette, regionWash } from './palette.js';
+import { INK, regionColor, regionKnown, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
 import { projectAll } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
@@ -356,7 +356,13 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       context.globalAlpha = dimmed ? 0.45 : 1;
       context.fill();
     } else {
-      context.fillStyle = regionWash(node.regionIndex, 1);
+      // **Three states, three fills.** `understood` used to share `surveyed`'s
+      // fill and differ by a stroke width of 2.5px against 1.4px, which is the
+      // entire core loop's reward rendered as one pixel — see `regionKnown`.
+      context.fillStyle =
+        state === 'understood'
+          ? regionKnown(node.regionIndex, 1)
+          : regionWash(node.regionIndex, 1);
       context.globalAlpha = dimmed ? 0.4 : 1;
       context.fill();
       context.strokeStyle = regionColor(node.regionIndex, 1);
@@ -722,7 +728,13 @@ export function drawOrbitFrame(
       context.fillStyle = regionSilhouette(node.regionIndex, 1);
       context.fill();
     } else {
-      context.fillStyle = regionWash(node.regionIndex, 1);
+      // The ramp is the map's, and the orbit is the same atlas from a different
+      // angle — a file reading as *known* flat and as merely surveyed standing
+      // up would be two answers to one question.
+      context.fillStyle =
+        state === 'understood'
+          ? regionKnown(node.regionIndex, 1)
+          : regionWash(node.regionIndex, 1);
       context.fill();
       context.strokeStyle = regionColor(node.regionIndex, 1);
       context.lineWidth = state === 'understood' ? 2.5 : 1.4;

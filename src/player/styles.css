@@ -915,3 +915,23 @@ body {
   font: 12.5px/1.5 var(--sans);
   color: var(--text);
 }
+
+
+/* "Not this one" — the guide's skip. Deliberately quieter than the primary
+   action: it is an escape hatch, not the path through the game. */
+.guide-skip {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  font: 11px/1.4 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.guide-skip:hover {
+  color: var(--text);
+}

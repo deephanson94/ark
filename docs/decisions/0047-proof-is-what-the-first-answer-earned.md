@@ -1,9 +1,10 @@
 # ADR-0047 — Proof is what the first answer earned, and the ledger is the defence
 
-- **Status**: **built, and it reverses an owner decision — awaiting the owner's ratification.**
-  ADR-0035 was *"decided by the owner, from three options put with their costs"*. One of those costs
-  was measured wrong: the option chosen does not do what it was said to do, and §2 is the
-  measurement. The revert is one commit and §9 says which.
+- **Status**: **accepted and built. Ratified by the owner 2026-08-14.**
+  It reverses ADR-0035, which was *"decided by the owner, from three options put with their costs"* —
+  one of those costs was measured wrong, the option chosen does not do what it was said to do, and §2
+  is the measurement. Put back to the owner with that measurement and the §7 review, and ratified.
+  §9 is kept as the record of what a revert would take.
 - **Date**: 2026-08-14
 - **Supersedes**: [ADR-0035](./0035-a-reveal-is-earned-by-an-answer-that-discriminated.md)
 - **Bears on**: NORTH-STAR §9 (field notes claim only what was proved), §8.1 (`Grade` is honest),

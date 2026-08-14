@@ -119,15 +119,31 @@ export interface Guide {
  * decay (ADR-0011 decision 3) and a reindex can resurrect its question, so a
  * stored "done" would go on lying.
  */
-export function createGuide(onSuggest: () => void): Guide {
+export function createGuide(onSuggest: () => void, onSkip: () => void): Guide {
   const button = el('button', 'guide-action');
   button.type = 'button';
   button.addEventListener('click', onSuggest);
+  /**
+   * **"Not this one."** A cold playtester's first three suggestions were the
+   * same shape and there was no way past them but to answer one, because *"Where
+   * next?"* offered exactly one next. The board is not refused or hidden — it
+   * keeps its rank and comes back when the skip list empties (`noteSkip`) — so
+   * this is a *preference about the next ten minutes*, which is why it is
+   * session-only and never reaches the save.
+   */
+  const skip = el('button', 'guide-skip', ['not this one']);
+  skip.type = 'button';
+  skip.title = 'Suggest a different question. Nothing is removed from the deck.';
+  skip.addEventListener('click', onSkip);
   const caption = el('div', 'guide-caption');
-  const root = el('div', 'guide', [button, caption]);
+  const root = el('div', 'guide', [button, skip, caption]);
   return {
     root,
     update({ next, refusal, path, placed, arrived, questionsLeft }) {
+      // Nothing to skip *to* when there is nothing left, and a live control that
+      // does nothing reads as broken rather than as a refusal (`main.ts`'s own
+      // rule about advertising a dead key).
+      skip.style.display = next === null ? 'none' : '';
       if (next === null) {
         button.disabled = true;
         // The fork itself lives in `empty.ts` and is unit-tested there. Written

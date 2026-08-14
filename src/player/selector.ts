@@ -87,6 +87,22 @@ export interface SelectorState {
    */
   readonly attempts: ReadonlyMap<string, number>;
   /**
+   * `(verb, subject)` keys the player has waved away **this session**.
+   *
+   * A cold playtester's first three suggestions were the same shape and there
+   * was no way past them but to answer one — *"Where next?"* offered exactly one
+   * next, so a player who did not want that board had no move. Skipping is the
+   * cheapest possible answer to that and it costs nothing: the board stays in
+   * the deck, keeps its rank, and comes back the moment the skip list empties.
+   *
+   * **Session-only, never stored.** ADR-0011 decision 2 is that `Progress` is
+   * the record of what the player *knows*, and a skip is a preference about the
+   * next ten minutes; persisting it would be a second kind of state in a file
+   * whose whole shape is "claims, re-checked against the atlas". It also means
+   * a reload is the other way out, which is the honest fallback.
+   */
+  readonly skipped: ReadonlySet<string>;
+  /**
    * The last challenge the player was **graded** on, by either path — the
    * suggestion or a map click.
    *
@@ -102,8 +118,29 @@ export interface SelectorState {
 export const NO_HISTORY: SelectorState = {
   answered: new Set(),
   attempts: new Map(),
+  skipped: new Set(),
   previous: null,
 };
+
+/**
+ * The skip list, with the one rule that keeps it from being a lockout.
+ *
+ * **When every remaining board has been skipped, the list clears.** Otherwise a
+ * player who waved away the last unanswered question would be told the deck was
+ * finished — the count-of-zero landmine, with a third cause for the same number
+ * — and guardrail 6's spirit is that nothing the player does to a board takes it
+ * away from them. `remaining` is what is left unanswered; the caller has it.
+ */
+export function noteSkip(
+  skipped: ReadonlySet<string>,
+  key: string,
+  remaining: readonly string[],
+): Set<string> {
+  const next = new Set(skipped);
+  next.add(key);
+  if (remaining.every((candidate) => next.has(candidate))) return new Set();
+  return next;
+}
 
 /**
  * How much of the previous answer key this one repeats, 0..1.
@@ -420,9 +457,11 @@ export function suggestNext(
   let best: Challenge | null = null;
   let bestRank: Rank | null = null;
   for (const challenge of deck) {
-    if (state.answered.has(answerKey(challenge.verb, challenge.subject))) continue;
+    const key = answerKey(challenge.verb, challenge.subject);
+    if (state.answered.has(key)) continue;
+    if (state.skipped.has(key)) continue;
     const rank: Rank = {
-      attempts: state.attempts.get(answerKey(challenge.verb, challenge.subject)) ?? 0,
+      attempts: state.attempts.get(key) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
       progress: progressOf.get(challenge.id) ?? 0,

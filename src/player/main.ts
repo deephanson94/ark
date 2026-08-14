@@ -59,7 +59,7 @@ import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
-import { NO_HISTORY, noteAttempt, suggestNext } from './selector.js';
+import { NO_HISTORY, noteAttempt, noteSkip, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
 import {
   createError,
@@ -773,6 +773,21 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     radius = blastRadius(scene, node.ref, depthFor(node));
     tieFocus = focusFor(node);
     describe(node);
+    invalidate();
+  }, () => {
+    // Skip: wave this board away for the session and re-suggest. The deck is
+    // untouched — `noteSkip` clears the list rather than let the player run it
+    // to empty, so "158 left" can never sit over a guide with nothing to offer.
+    const challenge = nextUp();
+    if (challenge === null) return;
+    const remaining = scene.atlas.challenges
+      .map((board) => answerKey(board.verb, board.subject))
+      .filter((key) => !selector.answered.has(key));
+    selector = {
+      ...selector,
+      skipped: noteSkip(selector.skipped, answerKey(challenge.verb, challenge.subject), remaining),
+    };
+    retally();
     invalidate();
   });
 
