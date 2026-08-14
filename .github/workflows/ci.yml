@@ -18,9 +18,20 @@ env:
 
 jobs:
   check:
-    name: build and test
+    name: build and test (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      # **`package.json` claims `engines: >=20.19` and nothing tested it.** Every
+      # dependency in the tree supports 20 — `vite` is the floor at `^20.19.0`,
+      # which is where that figure comes from and why the claim used to be wrong
+      # by saying `>=20` — but a supported range nobody runs is the same shape as
+      # a checklist item nobody can satisfy: it gets believed from memory. The
+      # oldest supported major runs the fast half of the suite; 22 stays the
+      # version everything else is measured on.
+      matrix:
+        node: ['20', '22']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,7 +42,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
