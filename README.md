@@ -197,6 +197,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   with **0 directly-visible wrong answer keys** over 46,099 slots. It is measured, reverted and left
   as the owner's call with three stated limits, patch at `docs/decisions/0042-resolver.patch`.
 
+  **Starvation is `(1 − taint) × subjects < cap`, and that predicts it on 18 of 20 gradeable
+  repos** — the sharpest instrument this project has for the question, and it was found only after
+  the corpus reached 24. `angular/angular` carries **50.4% subject taint and is not starved at all**,
+  because 3,275 subjects leave 1,625 clean ones against a cap of 1,050. Taint share alone does not
+  decide; taint × size against the cap does. The two misses name the second constraint: a clean
+  *subject* still needs a clean *candidate pool* (nest), and a mixed-language repo's subject count is
+  not its gradeable subject count (`apache/airflow`, the corpus's first — 7,729 subjects refused by
+  language while 552 TS/JS boards ship). With 24 repos and the resolver fix shipped the split is
+  **12 cap-limited / 5 taint-limited / 2 neither**.
+
   **Archaeology is supply-limited on 10 of 19 repos, more than Companion's 6** — and on four where
   Blast Radius is *fully* supplied (hugo 23 boards against a cap of 156, webpack 113 against 1,579).
   Its refusals are dominated by `disclosed` — ADR-0019 decision 7 yielding to Placement — so it is a
