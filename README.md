@@ -564,6 +564,7 @@ npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism    # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
 npm run check:keys         # does any board mark a real dependent wrong? reads SOURCE, not the atlas
+                           #   — gates itself on a plant and fails if the detector is inert
 npm run test:e2e           # slow — headless playthrough; screenshots land in artifacts/
 ```
 
