@@ -4454,3 +4454,50 @@ projection of it, so the two cannot diverge. Gated on canvas hashes, not on "no 
 ratification first, since a between-subjects run should not start on a rule that might be reverted.
 The open gaps a session could take meanwhile: the invisible fog, the guide's missing skip, mute
 landmarks, `UNREAD` being a whitelist, and Placement being reachable only through the chronicle.
+
+---
+
+## 2026-08-14 (later) — the loop's reward becomes visible, and the opening varies
+
+ADR-0047 ratified by the owner. Three more gaps from the cold playtest, each
+measured before it was fixed.
+
+**The core loop's reward was one pixel.** `fog.ts` names three states and
+`drawFrame` drew two: `understood` shared `surveyed`'s fill and differed only by
+a stroke width of 2.5px against 1.4px. So passing a board — the thing NORTH-STAR
+§4 says lifts the fog — changed a line's thickness. `regionKnown` is the third
+rung, and the claim is stated as measured contrast rather than as three HSL
+numbers that look evenly spaced, because HSL lightness is not perceptual and
+these fills sit on a near-black ground: **1.49 : 2.16 : 3.75** against the
+ground, steps of **1.45×** and **1.73×** (`npx tsx scripts/probe-ramp.ts`). That
+probe paid for itself immediately — the first draft of the comment asserted
+"1.9 : 3.4 : 6.6" from no measurement at all. The unit test measures the same
+ratios; against the shipped version before this, the top step read **1.00**.
+
+**The guide offered exactly one next.** A player who did not want that board had
+no move, and the tester's first three were the same shape. "Not this one" skips
+for the session; the board keeps its rank and returns when the list clears,
+which `noteSkip` forces as soon as every *unanswered* board is on it — otherwise
+skipping the last one leaves the guide saying "every question answered" over a
+HUD saying "158 left", which is the count-of-zero landmine with a third cause.
+
+**And the shapes repeated.** The longest same-verb run in the first fifteen was
+3 here, 4 on hono and kysely and **5** on graphql-js; now **2** on all four.
+Two things were measured rather than argued: the rank position (above `tier` and
+below it are indistinguishable on all four repos, so the tie broke on which is
+safer where they *would* differ) and the run cap (forbidding any repeat spends a
+starved verb's hardest board third, which is the term overriding the very
+progression it sits under).
+
+Three fixtures were written before one could run. Two verbs with equal supply
+alternate on their own, because `withinVerbRank` normalises each to its own
+range — so the first two drafts passed with the term deleted. **Unequal supply**
+is what produces a run, and is what a real deck has.
+
+934 unit, 116 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001` — now unblocked, since ADR-0047 is ratified.
+The gaps left are smaller: Placement is reachable only through the guide (a
+player clicking the map never meets 25% of the deck), the same-day commit gloss
+says nothing when a repo lands several commits a day, `UNREAD` is still a
+whitelist, and there is no deck browser.
