@@ -4278,3 +4278,43 @@ byte-identical, `src/` untouched. Three new probes: `probe-undirected.ts`, `prob
 `probe-deck.ts`.
 
 **Next**: unchanged — a naming rule for cross-directory regions, then experiment 0001.
+
+---
+
+**2026-08-14 — tier 2's third question is two questions, and only one survives.**
+ADR-0043 §7 left *"where is the layering violation"* open in as many words — *"does not clear it and
+does not condemn it; it was not measured"*. Measured now
+([ADR-0045](./docs/decisions/0045-tier-2s-third-question-is-two-questions-and-only-one-survives.md),
+proposed, no `src/` change). NORTH-STAR §6.2's objections — not set-shaped, ground truth not unique —
+are both about assigning layer *numbers*; reachability is unique, and two reformulations inherit that.
+
+**`cycle` is refused on three grounds.** ADR-0034 §4's proof re-derived with an independent Tarjan
+pass — **1,326 of 1,326** subjects have their whole component inside their own cone — so a verb whose
+content is naming the component teaches the guess that beats band A on **111 of hugo's 114 fired
+boards and 21 of kysely's 22**. The only gate ADR-0020 allows (serve it when no component member has
+an open blast board) leaves **0 of ark's 2 and 0 of hugo's 133** open at session start, so the gate
+inverts the curriculum it exists to serve. And ark, the bootstrap, has one 2-node component.
+
+**`upstream` — *which of these does `X` depend on* — survives**, and its supply argument is
+structural: ADR-0003's taint walks the *candidate's* outgoing side, so mirroring the relation moves
+the cost onto the **subject's own closure** — one per board instead of twenty. **149 boards on ark
+against 40 Blast Radius ones**, 309/54 on hono, 404/69 on graphql-js, and 171/58 even on
+taint-limited typeorm. It roughly **halves the permanently-fogged set** on four of five repos
+(ark 60 → 28), which is the Companion argument rather than a fifth question about the same files.
+
+Two gates, both static, both scored. The depth-1 hover guess beats band A on 6–22% of boards — except
+**typeorm's 150 of 171**, and the reason generalises: **guardrail 4 selects for shallow closures, and
+a shallow closure is exactly the one whose key is all direct dependencies**, so the safety rule and
+the leak are correlated by construction. And an `understood` candidate renders its **full** radius,
+which names a key member at any depth — an exposure that **grows as the player progresses**, the
+opposite of every other gate here, and one Blast Radius does not have because its key is the reverse
+relation.
+
+One claim refuted, and it was this session's own: `probe-layering.ts` first asserted the blast reveal
+states the cycle key entirely. The cone is not the key — ADR-0008 caps truth at 6 — and the shipped
+figure is **3% on hugo, 7% on kysely, 12% on graphql-js, 33% on hono**. Corrected in the file.
+
+912 unit, 116 atlas, determinism byte-identical, `src/` untouched. Two new probes.
+
+**Next**: `upstream` is proposed and unbuilt; the residual deck after both gates is unmeasured and is
+the first thing to check if it is built. Then experiment 0001.
