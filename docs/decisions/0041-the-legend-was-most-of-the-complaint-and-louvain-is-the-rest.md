@@ -437,10 +437,85 @@ than any other.
 
 ---
 
-## 12. What would change this
+## 12. The naming rule, done in the same epoch
 
-- **A naming rule that can name a cross-directory community.** The single highest-value follow-up:
-  it is what still blocks tier 1, and §7 shows it is separable from the clustering.
+§7 left this as the highest-value follow-up. It is here rather than in a later change for a measured
+reason: **renaming a region moves no node but recolours every map.** `computeLayout` accumulates each
+group's centroid in node-index order with the group number used only as a `Map` key, so permuting the
+numbering is byte-identical — verified over three permutations (`scripts/probe-renumber.ts`) and then
+on the real thing: **0 nodes moved on ark, hono and django** while 2,685 of django's changed region
+id. But hue is `index × golden angle` over the id-sorted region list, so new labels mean new colours.
+Deferring would have spent a second, standalone recolour of every map on a change with no other
+user-visible effect.
+
+### 12.1 The defect
+
+`nameFor` took the deepest directory **every** member shares and, failing that, the directory of the
+busiest file. Under label propagation regions were mostly subtrees so the fallback rarely fired;
+Louvain's cross directories by design. Measured across the eight repos, **39 of 74 topology regions
+carried a label naming a directory holding under half their members**:
+
+```
+ark        40 members  "src/atlas/index"        →  3% under it
+kysely     94 members  "src/util/object-utils"  →  1%
+django    330 members  "django/urls"            →  2%
+hugo       41 members  "root/hugolib"           →  0%   ← a directory that does not exist
+prometheus 42 members  "root/config"            →  0%
+```
+
+The `root/…` names are the fallback meeting the collision refiner: `nameFor` returns `root`, two
+regions want it, and each gets `root/<hub stem>`. Nothing is under `root/`.
+
+### 12.2 The rule, and why its bar is not read off the data
+
+A region is named after the directory maximising **F1** against it — the metric §8.2 already grades
+players with. Recall alone answers with the repo root; precision alone with whichever directory holds
+one member. Deepest wins ties, because a region that *is* `src/atlas` scores 1.000 against `src/atlas`
+and against `src`, and a shallow-first scan throws the specific name away.
+
+**Note this is the same instrument §7 found cannot compare clusterings.** Its optimum over partitions
+is the folder tree, which pillar 4 forbids a region to be. Naming one **fixed** region is a different
+question — *how well does this directory describe this set?* — and there it is exactly right. The two
+uses are not in tension; conflating them would be.
+
+The bar below which no directory is claimed is **a half**, and it is *not* placed in the largest gap
+in the measured distribution, because ADR-0025's rule was applied and **there is no gap**: best
+achievable F1 across the 74 regions runs 0.21 → 1.00 in a near-continuum whose largest gap is
+**0.043**. A bar read off that would be noise dressed as evidence. So it is not read off the data at
+all — the label `src/atlas` asserts *this region is src/atlas*, and that sentence is more false than
+true the moment most of the region is elsewhere. A half is the truth condition, not a tuning.
+
+Below it the region is named **`around <hub path>`** — its most-connected member, a different fact and
+equally checkable, and visibly not a directory claim because it ends in a file extension.
+
+Two regions cannot both be a directory: the one more of which is in it keeps the name, and a
+**topology** region outranks a terrain lump, because a derived cluster is a claim about structure and
+terrain is the absence of one. That last ordering moves the `(2)` suffix off 4 regions.
+
+### 12.3 What it gives
+
+**Labels claiming a directory holding under half the region: 39 of 74 → 0 of 74.** 26 regions use the
+hub form. The minimum share behind a directory label, per repo, rises from 0.00–0.08 to 0.50–0.87.
+
+ark's five regions are now `tests`, `src/verbs`, `src/player`, `src/atlas` and
+`around src/indexer/build.ts` — its own architecture, with one honest fallback: that region is 15
+`src/indexer` files, 11 `tests/unit` and 5 `scripts`, so `src/indexer` covers **45%** and would be
+false for the majority. §7 said the region best described by `tests` was labelled `src/atlas/index`;
+it is labelled `tests`.
+
+**Six mutants die**, and three of them survived the first draft: no share bar (masked because the bar
+was checked in two places — one rule, two homes, which is this repo's most-repeated leak shape),
+recall instead of F1 (every fixture had its broadest directory also its tightest), and awarding a
+contested directory to whichever region is met first (the fixture happened to meet the stronger one
+first). Two earlier fixtures for the contest tested nothing at all.
+
+---
+
+## 13. What would change this
+
+- ~~**A naming rule that can name a cross-directory community.**~~ **Done in this epoch** — §12.
+  What remains is whether `around <hub>` is the *right* fallback: it is true and it is not a
+  description. 26 of 74 regions use it, and the honest test is a playtest, not another metric.
 - **Adjacent-commit instability getting worse on a bigger repo.** django was not measured this way;
   hono's worst step is 9.0% and that is the number to beat.
 - **A repo where the Leiden repair fires**, or two more sessions at zero, which is grounds to delete

@@ -55,6 +55,24 @@ export interface DetectedRegion {
 
 /** Regions smaller than this are folded into their strongest neighbour. */
 const MIN_REGION = 3;
+/**
+ * A region may be named after a directory only when at least this share of its
+ * members are in it.
+ *
+ * **A half is the truth condition of the sentence, not a tuned parameter**, and
+ * the distinction matters because ADR-0025 has a landmine about exactly this:
+ * a bar picked for its English ("a majority") refused the Svelte repo, and the
+ * rule there is to put a threshold in the largest gap in the measured
+ * distribution. That rule was applied here and **there is no gap** — the best
+ * achievable F1 across 74 topology regions on eight repos runs 0.21 to 1.00 in
+ * a near-continuum whose largest gap is 0.043, which is noise.
+ *
+ * So the bar is not read off the data at all. The label "src/atlas" asserts
+ * *this region is src/atlas*, and that sentence is more false than true the
+ * moment most of the region is somewhere else. Below the half the region is
+ * named after its hub instead, which asserts something else that is true.
+ */
+const NAMEABLE_SHARE = 0.5;
 
 export function detectRegions(
   paths: readonly string[],
@@ -146,7 +164,7 @@ export function detectRegions(
     if (label === undefined) {
       label = nextSynthetic++;
       terrainLabels.set(top, label);
-      // Named here rather than by `nameFor`, whose "directory of the busiest
+      // Named here rather than by `describe`, whose F1 scan is meaningless
       // file" fallback is meaningless when every member has degree zero — it
       // labelled vite's 841-file `playground` terrain
       // `playground/dynamic-import-inline/src/foo`, which is a true path and a
@@ -196,34 +214,75 @@ export function detectRegions(
   // but four distinct communities inside `src/indexer` all called "src/indexer"
   // tell you nothing — so any name claimed by more than one region is refined
   // with that region's busiest file. "src/indexer/scan" says where you are.
-  const preliminary = ordered.map((members, index) => {
+  const filesUnder = new Map<string, number>();
+  for (const path of paths) {
+    for (const prefix of directoryPrefixes(path)) {
+      filesUnder.set(prefix, (filesUnder.get(prefix) ?? 0) + 1);
+    }
+  }
+
+  const described = ordered.map((members, index) => {
     const own = labelOf[index] ?? -1;
-    return terrainName.get(own) ?? nameFor(members, paths, degrees);
+    const terrainLabel = terrainName.get(own);
+    if (terrainLabel !== undefined) return { directory: terrainLabel, share: 1 };
+    return describe(members, paths, filesUnder);
   });
-  const taken = new Map<string, number>();
-  for (const name of preliminary) taken.set(name, (taken.get(name) ?? 0) + 1);
+
+  // Who has the strongest claim on each directory. Two regions describing
+  // themselves as `src/execution` cannot both be it, and refining the loser to
+  // `src/execution/execute` — what this used to do — states a *second*
+  // directory it is mostly not in. The weaker claimant names its hub instead.
+  const strongest = new Map<string, number>();
+  for (const [index, claim] of described.entries()) {
+    if (terrain.has(labelOf[index] ?? -1) || claim.share < NAMEABLE_SHARE) continue;
+    const held = strongest.get(claim.directory);
+    if (held === undefined || claim.share > (described[held]?.share ?? 0)) {
+      strongest.set(claim.directory, index);
+    }
+  }
+
+  // **Topology is labelled first, and that decides a real contest.** A terrain
+  // lump and a cluster can both want `tests` — one meaning "the files under
+  // tests/ that import nothing", the other "a cluster mostly under tests/".
+  // Both are true, so the `(2)` backstop below fires and one of them reads as
+  // an afterthought. Which one used to be decided by member path order, which
+  // is no reason at all; a derived cluster is a claim about structure and
+  // terrain is the absence of one, so the cluster takes the plain name.
+  // Measured, this moves the suffix off 4 regions across the eight repos —
+  // flask's 29-file test cluster, kysely's `example`, prometheus's `discovery`
+  // and graphql-js's `benchmark` — and terrain is one collapsed legend row
+  // anyway (`legendRows`), so the suffix it inherits is rarely on screen.
+  const labelOrder = [
+    ...ordered.keys().filter((index) => !terrain.has(labelOf[index] ?? -1)),
+    ...ordered.keys().filter((index) => terrain.has(labelOf[index] ?? -1)),
+  ];
 
   const used = new Set<string>();
   const usedLabels = new Set<string>();
-  const regions: DetectedRegion[] = [];
-  for (const [index, members] of ordered.entries()) {
-    const preferred = preliminary[index] ?? 'root';
+  const named = new Array<DetectedRegion>(ordered.length);
+  for (const index of labelOrder) {
+    const members = ordered[index] ?? [];
     const isTerrain = terrain.has(labelOf[index] ?? -1);
-    // Terrain never refines. Refinement names a region after its busiest file,
-    // which is meaningless when every member has degree zero — and when a
-    // terrain lump and a real cluster both wanted `packages`, refining *both*
-    // gave the terrain one a 364-file region called
-    // `packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic`.
-    // The terrain keeps the plain top-level name; the cluster refines around it.
+    const claim = described[index] ?? { directory: 'root', share: 0 };
+    // A directory name is a claim the player can check in one click, so it is
+    // only used when it is true of most of the region. Otherwise the region is
+    // named after its hub — the most-connected file in it — which is a
+    // different and equally checkable fact, and reads as one because a path
+    // ending in a file extension is visibly not a directory.
+    // **`strongest` is the only place the bar lives.** It was tested here too,
+    // and the duplicate made the bar unremovable-by-mutation: deleting this
+    // copy changed no test, because the other one still refused to register a
+    // sub-half claim. One rule, one home — every leak this file's ADRs record
+    // was a rule that lived twice.
     let label =
-      !isTerrain && (taken.get(preferred) ?? 0) > 1
-        ? `${preferred}/${hubSuffix(paths[hubOf(members, paths, degrees)] ?? '', preferred)}`
-        : preferred;
+      isTerrain || strongest.get(claim.directory) === index
+        ? claim.directory
+        : `around ${paths[hubOf(members, paths, degrees)] ?? 'root'}`;
     // The legend prints labels, not ids, so two regions sharing a label makes
     // the legend say two different colours are the same place — a false claim
     // about the map, which pillar 4 does not allow it to make for tidiness or
-    // any other reason. Refinement already disambiguates by hub file; this is
-    // the backstop for when even that collides.
+    // any other reason. Two regions cannot share a hub, so this is a backstop
+    // rather than a mechanism.
     if (usedLabels.has(label)) {
       const base = label;
       for (let suffix = 2; usedLabels.has(label); suffix++) label = `${base} (${suffix})`;
@@ -233,8 +292,9 @@ export function detectRegions(
     let id = base;
     for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
     used.add(id);
-    regions.push({ id, label, kind: isTerrain ? 'terrain' : 'topology', members });
+    named[index] = { id, label, kind: isTerrain ? 'terrain' : 'topology', members };
   }
+  const regions = [...named];
   regions.sort((a, b) => byteCompare(a.id, b.id));
   return regions;
 }
@@ -256,27 +316,6 @@ function hubOf(
   return hub;
 }
 
-/**
- * How to say which community inside `preferred` this is, given its busiest
- * file. The hub's path *below* the shared name, not just its stem — two regions
- * under `src/verbs` whose hubs are both called `index.ts` would otherwise both
- * refine to `src/verbs/index`, which is how a legend ends up naming two
- * different colours the same thing.
- */
-function hubSuffix(hubPath: string, preferred: string): string {
-  const prefix = `${preferred}/`;
-  const relative = hubPath.startsWith(prefix) ? hubPath.slice(prefix.length) : hubPath;
-  const slash = relative.lastIndexOf('/');
-  const directory = slash === -1 ? '' : `${relative.slice(0, slash)}/`;
-  return `${directory}${stemOf(relative)}`;
-}
-
-/** `src/indexer/scan.ts` → `scan`. */
-function stemOf(path: string): string {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  const dot = name.indexOf('.');
-  return dot <= 0 ? name : name.slice(0, dot);
-}
 
 /**
  * Fold undersized regions into their strongest neighbour.
@@ -379,24 +418,78 @@ function absorbSmallRegions(
 }
 
 /**
- * What to call a region.
+ * The directory that best describes a region, and how much of the region is
+ * actually in it.
  *
- * The deepest directory every member shares, when there is one — that is the
- * most informative name available and it is free. When members span
- * directories the shared prefix collapses to the repo root, which named three
- * different regions "root" on this repo and told you nothing. In that case fall
- * back to the directory of the region's busiest file: a cluster is best
- * described by the thing at the middle of it.
+ * **The rule this replaced named regions after directories they were not in.**
+ * It took the deepest directory *every* member shares and, when there was none,
+ * the directory of the busiest file. Under label propagation regions were
+ * mostly subtrees so the fallback rarely fired; Louvain's cross directories by
+ * design, so it fired constantly. Measured across eight repos, **39 of 74
+ * topology regions carried a label naming a directory holding under half their
+ * members**, several at literally 0% — the `root` fallback plus collision
+ * refinement produced `root/hugolib`, a directory that does not exist.
+ *
+ * The score is **F1** against the region, which is the metric §8.2 already
+ * grades players with: recall alone would always answer with the repo root, and
+ * precision alone with whichever directory holds one member. Note this is the
+ * same instrument ADR-0041 §7 found *cannot* compare clusterings — its optimum
+ * over partitions is the folder tree, which pillar 4 forbids a region to be.
+ * Naming one **fixed** region is a different question, and there it is exactly
+ * right: how well does this directory describe this set?
  */
-function nameFor(
+function describe(
   members: readonly number[],
   paths: readonly string[],
-  degrees: readonly number[],
-): string {
-  const shared = commonDirectory(members.map((index) => paths[index] ?? ''));
-  if (shared !== '') return shared;
-  const directory = dirnameOf(paths[hubOf(members, paths, degrees)] ?? '');
-  return directory === '' ? 'root' : directory;
+  filesUnder: ReadonlyMap<string, number>,
+): { directory: string; share: number } {
+  const hits = new Map<string, number>();
+  for (const member of members) {
+    for (const prefix of directoryPrefixes(paths[member] ?? '')) {
+      hits.set(prefix, (hits.get(prefix) ?? 0) + 1);
+    }
+  }
+  let best = { directory: 'root', share: 0 };
+  let bestScore = 0;
+  // **Deepest first**, then ascending, and the depth half is not tidiness: a
+  // region that is exactly `src/atlas` scores 1.000 against `src/atlas` *and*
+  // against `src` when nothing else is under `src`, so a shallow-first scan
+  // answers `src` and throws away the specific name. Ascending path breaks what
+  // depth does not, so the scan order is total and the result reproducible.
+  //
+  // Depth is counted **once per key**, not inside the comparator. Splitting a
+  // path in a comparator is the landmine this file's neighbours already carry:
+  // a sort calls it O(n log n) times, and on django's 5k-key hit maps it took
+  // the whole index from 12.6 s to 41 s.
+  const candidates = [...hits.keys()];
+  const depth = new Map<string, number>();
+  for (const key of candidates) {
+    let segments = 1;
+    for (let i = 0; i < key.length; i++) if (key.charCodeAt(i) === 47) segments++;
+    depth.set(key, segments);
+  }
+  candidates.sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0) || byteCompare(a, b));
+  for (const directory of candidates) {
+    const overlap = hits.get(directory) ?? 0;
+    const under = filesUnder.get(directory) ?? 0;
+    if (under === 0) continue;
+    const precision = overlap / under;
+    const recall = overlap / members.length;
+    const score = (2 * precision * recall) / (precision + recall);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { directory, share: recall };
+    }
+  }
+  return best;
+}
+
+/** Every directory prefix of a path, shallowest first. `src/a/b.ts` → `src`, `src/a`. */
+function directoryPrefixes(path: string): string[] {
+  const parts = path.split('/');
+  const out: string[] = [];
+  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join('/'));
+  return out;
 }
 
 function dirnameOf(path: string): string {

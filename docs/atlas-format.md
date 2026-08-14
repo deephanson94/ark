@@ -273,11 +273,33 @@ truth set is sound and only the distractors are at risk) is set out in
 
 | field | type | notes |
 |---|---|---|
-| `id` | `string` | Slug of the members' shared directory, `-2` suffixed on collision. |
-| `label` | `string` | The shared directory itself, or `"root"`. |
+| `id` | `string` | Slug of `label`, `-2` suffixed on collision. |
+| `label` | `string` | Either a **directory** holding at least half the region, or `"around <path>"` naming its hub. See below. |
 | `nodeCount` | `number` | Must equal the number of nodes claiming this region. |
 | `centroid` | `[number, number]` | Mean member position, 2dp. |
 | `kind` | `"topology" \| "terrain"` | Whether the graph produced this cluster, or the graph had nothing to say. |
+
+#### What a label may claim
+
+A label is a sentence the player can check in one click, so it is only a
+directory name when that is **true of at least half the region**. Otherwise the
+region is named `around <path>` after its hub — the most-connected member —
+which is a different fact and equally checkable, and reads as one because a path
+ending in a file extension is visibly not a directory.
+
+The rule this replaced took the deepest directory *every* member shared and fell
+back to the busiest file's *directory*. Regions used to be mostly subtrees so it
+rarely mattered; Louvain's cross directories by design, and measured across eight
+repos **39 of 74 topology regions carried a label naming a directory holding
+under half their members** — several at 0%, because the `root` fallback plus
+collision refinement produced names like `root/hugolib`, a directory that does
+not exist. It is now **0 of 74**, with 26 using the hub form
+([ADR-0041](decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md) §12).
+
+Two regions cannot both be a directory: the one more of which is in it keeps the
+name and the other takes its hub. A **topology** region outranks a terrain lump
+for a contested name, because a derived cluster is a claim about structure and
+terrain is the absence of one.
 
 Regions are derived from the import graph by **deterministic Louvain at γ = 1**
 (`src/indexer/louvain.ts`), **not** from the directory tree (pillar 4). It was label propagation

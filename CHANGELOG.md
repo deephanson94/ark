@@ -3960,3 +3960,74 @@ renaming a region moves **no node** (verified over three permutations of the gro
 `computeLayout` accumulates centroids in node-index order with the group number only a `Map` key) but
 **recolours every map**, because hue is index × golden angle over the id-sorted region list. So it
 belongs inside this epoch rather than after it, and deferring it buys a second standalone recolour.
+
+## A region is named after a directory only when it is mostly in it
+
+The last piece of ADR-0041, done **inside the same epoch** for a measured reason: renaming a region
+**moves no node** — `computeLayout` accumulates each group's centroid in node-index order with the
+group number used only as a `Map` key, verified over three permutations and then on the real thing
+(**0 nodes moved on ark, hono and django**, while 2,685 of django's changed region id) — but it
+**recolours every map**, because hue is `index × golden angle` over the id-sorted region list.
+Deferring would have spent a second, standalone recolour of every map on a change with no other
+user-visible effect.
+
+**The defect.** `nameFor` took the deepest directory *every* member shares and, failing that, the
+directory of the busiest file. Regions used to be mostly subtrees so the fallback rarely fired;
+Louvain's cross directories by design. Measured across eight repos, **39 of 74 topology regions
+carried a label naming a directory holding under half their members** — ark's 40-file cluster was
+`src/atlas/index` with **1 member** under `src/atlas/`, kysely's 94-file one was
+`src/util/object-utils` at 1%, and hugo's was `root/hugolib`, which names a directory that **does not
+exist** (the `root` fallback meeting the collision refiner).
+
+**The rule.** A region is named after the directory maximising **F1** against it — recall alone
+answers with the repo root, precision alone with whichever directory holds one member — and the
+deepest wins ties, because a region that *is* `src/atlas` scores 1.000 against `src/atlas` and
+against `src`, and a shallow-first scan throws the specific name away. This is the same instrument
+ADR-0041 §7 found **cannot** compare clusterings, and the distinction is the point: its optimum over
+*partitions* is the folder tree, which pillar 4 forbids; naming one **fixed** region is a different
+question and there it is exactly right.
+
+**The bar is not read off the data, and that is deliberate.** ADR-0025's rule — put a threshold in
+the largest gap in the measured distribution — was applied and **there is no gap**: best achievable
+F1 across the 74 regions runs 0.21 → 1.00 in a near-continuum whose largest gap is **0.043**. A bar
+read off that is noise dressed as evidence. So it is not read off it at all: `src/atlas` asserts
+*this region is src/atlas*, and that sentence is more false than true the moment most of the region
+is elsewhere. **A half is the truth condition, not a tuning.** Below it the region is `around <hub
+path>` — its most-connected member, a different fact, equally checkable, and visibly not a directory
+because it ends in a file extension.
+
+Two regions cannot both be a directory: the one more of which is in it keeps the name. A **topology**
+region outranks a terrain lump for a contested name, since a derived cluster is a claim about
+structure and terrain is the absence of one — that ordering alone moves the `(2)` suffix off 4
+regions, and it used to be decided by member path order, which is no reason at all.
+
+**Result: 39 of 74 → 0 of 74.** 26 regions use the hub form; the minimum share behind a directory
+label rises from 0.00 to 0.50–0.87 per repo. ark's own map now reads `tests`, `src/verbs`,
+`src/player`, `src/atlas` and `around src/indexer/build.ts` — the last an honest fallback, because
+that region is 15 `src/indexer` files, 11 `tests/unit` and 5 `scripts`, so `src/indexer` covers
+**45%** and would be false for the majority.
+
+**Six mutants die, and three survived the first draft** — each for a reason worth keeping. *No share
+bar* was masked because the bar was checked in **two places**, so deleting one changed nothing; it
+has one home now, which is this repo's most-repeated leak shape arriving in my own code. *Recall
+instead of F1* survived because every fixture had its broadest directory also its tightest, so a
+region of five spread through a sixteen-file `src/` was needed. *Awarding a contested directory to
+whichever region is met first* survived because the fixture happened to meet the stronger claimant
+first — and before that, **two earlier versions of the contest fixture tested nothing at all**: the
+first gave the loser a different majority directory, so no contest ever happened.
+
+Three casualties: `hubSuffix`, `stemOf` and `commonDirectory` are gone. The first two existed only to
+refine a colliding directory name into a second, equally unchecked directory claim. `commonDirectory`
+was left with no consumer but its own test, which is the shape `RevealNote.route` was removed for.
+
+**One self-inflicted effect worth naming**: ark indexes itself, so this session's 20 measurement
+probes are now a 19-node `scripts` region on ark's own map, and 5 of them joined the indexer cluster
+— which is part of why that region misses the half. They are kept because every figure in ADR-0041 is
+supposed to be re-derivable and this repo's rule is *re-measure rather than quote*, but the cost is
+real and is on the record rather than absorbed.
+
+878 unit, 112 atlas, determinism byte-identical, e2e clean, all hard budgets within ceiling.
+
+**Next**: whether `around <hub>` is the *right* fallback. It is true and it is not a description, and
+26 of 74 regions wear it. The honest test is a playtest, not another metric — which is
+`docs/experiments/0001`, still unrun.

@@ -109,6 +109,105 @@ describe('detectRegions', () => {
     }
   });
 
+  it('names a region after the directory holding most of it, not one it barely touches', () => {
+    // **The defect this rule replaced.** The old `nameFor` took the deepest
+    // directory *every* member shares and, when there was none, the directory
+    // of the busiest file — so a region of eight `tests/` files whose hub
+    // happens to sit in `src/` was called `src`. Measured across eight repos,
+    // 39 of 74 topology regions carried a label naming a directory holding
+    // under half their members, several at literally 0% (ADR-0041 §12).
+    //
+    // Here the hub is `src/core.ts` — highest degree by construction — while
+    // six of the seven members are under `tests/`.
+    const paths = [
+      'src/core.ts',
+      'tests/a.ts', 'tests/b.ts', 'tests/c.ts', 'tests/d.ts', 'tests/e.ts', 'tests/f.ts',
+    ];
+    const links: [string, string][] = [
+      ['tests/a.ts', 'src/core.ts'],
+      ['tests/b.ts', 'src/core.ts'],
+      ['tests/c.ts', 'src/core.ts'],
+      ['tests/d.ts', 'src/core.ts'],
+      ['tests/e.ts', 'src/core.ts'],
+      ['tests/f.ts', 'src/core.ts'],
+    ];
+    const { regions } = assignment(paths, links);
+    const home = regions.find((region) => region.members.length === paths.length);
+    expect(home?.label).toBe('tests');
+  });
+
+  it('names a region after its hub when no directory holds half of it', () => {
+    // Three directories, two members each, plus the hub. Nothing reaches the
+    // half, so claiming any directory would be false — and a label ending in a
+    // file extension reads as a file, which is the point of the fallback.
+    const paths = [
+      'src/hub.ts',
+      'a/one.ts', 'a/two.ts',
+      'b/one.ts', 'b/two.ts',
+      'c/one.ts', 'c/two.ts',
+    ];
+    const links: [string, string][] = [
+      ['a/one.ts', 'src/hub.ts'], ['a/two.ts', 'src/hub.ts'],
+      ['b/one.ts', 'src/hub.ts'], ['b/two.ts', 'src/hub.ts'],
+      ['c/one.ts', 'src/hub.ts'], ['c/two.ts', 'src/hub.ts'],
+    ];
+    const { regions } = assignment(paths, links);
+    const home = regions.find((region) => region.members.length === paths.length);
+    expect(home?.label).toBe('around src/hub.ts');
+  });
+
+  it('gives a contested directory to the region most of it is in', () => {
+    // Two clusters that both genuinely describe themselves as `shared` — 3 of 5
+    // and 4 of 5. Only one can be it, and refining the loser to
+    // `shared/<hub stem>` — what this used to do — states a *second* directory
+    // it is mostly not in, so it names its hub instead.
+    //
+    // **Two earlier fixtures here tested nothing.** The first gave the second
+    // cluster 3-of-5 under `far/`, so the rule named it `far` and no contest
+    // happened. The second put the *stronger* claimant first in path order, so
+    // a mutant awarding the directory to whichever region is met first survived
+    // — hence the weaker cluster's paths sort first here. Its other directories
+    // hold one member each, so nothing else reaches the half.
+    const weak = ['shared/a1.ts', 'shared/a2.ts', 'shared/a3.ts', 'x/a4.ts', 'y/a5.ts'];
+    const strong = ['shared/b1.ts', 'shared/b2.ts', 'shared/b3.ts', 'shared/b4.ts', 'other/b5.ts'];
+    const ring = (group: readonly string[]): [string, string][] =>
+      group.map((path, i) => [path, group[(i + 1) % group.length] ?? ''] as [string, string]);
+    const { regions, byPath } = assignment([...weak, ...strong], [...ring(weak), ...ring(strong)]);
+    const winner = regions.find((region) => region.id === byPath.get('shared/b1.ts'));
+    const loser = regions.find((region) => region.id === byPath.get('shared/a1.ts'));
+    expect(winner?.label).toBe('shared');
+    expect(loser?.label).not.toBe('shared');
+    expect(loser?.label.startsWith('around ')).toBe(true);
+  });
+
+  it('will not name a region after a directory it is only a sliver of', () => {
+    // Precision, not just coverage. The region's five members are all under
+    // `src/`, so recall against `src` is 1.000 — but `src` holds sixteen files,
+    // so the label would be describing a sixth of a directory. `src/core` holds
+    // three of the five and nothing else, which is the truer name.
+    //
+    // A mutant scoring by recall alone survives every other fixture in this
+    // file, because in each of them the broadest directory is also the tightest.
+    const region = ['src/core/a.ts', 'src/core/b.ts', 'src/core/c.ts', 'src/edge/d.ts', 'src/rim/e.ts'];
+    const strangers = Array.from({ length: 11 }, (_, i) => `src/other/f${i}.ts`);
+    const ring = region.map((path, i) => [path, region[(i + 1) % region.length] ?? ''] as [string, string]);
+    const { regions } = assignment([...region, ...strangers], ring);
+    const home = regions.find((r) => r.members.length === region.length);
+    expect(home?.label).toBe('src/core');
+  });
+
+  it('prefers the deepest directory when several describe the region equally', () => {
+    // A region that is exactly `src/atlas` scores 1.000 against `src/atlas` and
+    // against `src`, when nothing else is under `src`. A shallow-first scan
+    // answers `src` and throws the specific name away.
+    const paths = ['src/atlas/a.ts', 'src/atlas/b.ts', 'src/atlas/c.ts'];
+    const { regions } = assignment(paths, [
+      ['src/atlas/a.ts', 'src/atlas/b.ts'],
+      ['src/atlas/b.ts', 'src/atlas/c.ts'],
+    ]);
+    expect(regions.map((region) => region.label)).toContain('src/atlas');
+  });
+
   it('groups unlinked files by directory, since topology says nothing', () => {
     const paths = ['docs/one.md', 'docs/two.md', 'other/three.md'];
     const { byPath } = assignment(paths, []);

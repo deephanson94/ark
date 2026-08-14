@@ -311,17 +311,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   propagation's 4** — which an earlier 25-commit-jump measurement had called a dead heat before the
   granularity was corrected.
 
-- **A region's *name* is still the weak half, and the change made it more visible.** ADR-0041 tested
-  nameability three ways and none of them arbitrates: scored by best-matching directory, a control
-  arm of `region = top-level directory` wins that column on **8 of 8** repos and the modularity
-  column on **0 of 8**, at **Q = −0.095 on django** — worse than a random partition. So the metric
-  measures folder-tree resemblance, which `docs/atlas-format.md` §3.4 forbids a region to be, and a
-  segment-based naming rule moved no repo's mean F1 by more than 0.068. The consequence is live on
-  this repo's own map: the 40-file region whose best directory is `tests` is **labelled
-  `src/atlas/index`**, because `nameFor` falls back to the busiest file's directory when members
-  share no prefix. Fewer, larger regions make that failure bigger rather than rarer. NORTH-STAR §5
-  tier 1 is now unblocked on *count* and still blocked on *naming*, and a rule that can name a
-  cross-directory community is the highest-value follow-up in that document.
+- ~~**A region's *name* is still the weak half.**~~ **Fixed in the same epoch**
+  ([ADR-0041](./docs/decisions/0041-the-legend-was-most-of-the-complaint-and-louvain-is-the-rest.md)
+  §12), because renaming **moves no node** (0 on ark, hono and django, while 2,685 of django's nodes
+  changed region id) but **recolours every map** — so doing it later would have spent a second
+  standalone recolour. The old rule took the deepest directory *every* member shares and fell back to
+  the busiest file's directory; measured, **39 of 74 topology regions carried a label naming a
+  directory holding under half their members**, several at 0% (`root/hugolib` names a directory that
+  does not exist). A region is now named after the directory maximising **F1** against it, deepest
+  wins ties, and **below a half no directory is claimed at all** — the region takes `around <hub>`
+  instead, which is a different fact and equally checkable. That bar is *not* placed in the largest
+  measured gap, because ADR-0025's rule was applied and there is none: the F1 distribution runs
+  0.21–1.00 with a largest gap of 0.043. It is the truth condition of the sentence. **Result: 0 of
+  74**, 26 using the hub form, and ark's own map now reads `tests`, `src/verbs`, `src/player`,
+  `src/atlas` and `around src/indexer/build.ts` — the last being an honest fallback, since
+  `src/indexer` covers only 45% of it. Six mutants die, three of which survived the first draft.
 
 - **Districts are unmarked at street level — and the reason they were deferred has just closed.**
   Region arches are designed (ADR-0032 §3.2) and not built, because *"118 of django's 175 region
