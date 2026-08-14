@@ -4186,3 +4186,45 @@ way. Three assertions pin it; the insertion-order variant fails four.
 
 **Next**: tier 1 is blocked on a different thing (no entry point in the atlas — every TypeScript
 manifest points into an excluded `dist/`), and experiment 0001 is still the wall.
+
+---
+
+**2026-08-14 — districts are named at street level, and the blocker had two clauses.**
+`README.md` said ADR-0032 §9.6's refusal of a region arch *"is gone"* on the strength of
+`probe-centroids.ts` reading 0 of 100. §9.6 refused it on **two** measurements and that probe had
+re-run one of them. The other — a centroid landing **inside a monolith** — is live on **20 of the 61
+topology centroids** across six repos. Re-checking one clause of a two-clause refusal reads exactly
+like re-checking the refusal.
+
+Shipped ([ADR-0044](./docs/decisions/0044-a-district-is-marked-where-it-can-be-stood-in-not-at-its-mean.md)):
+an arch stands on the nearest ground to the centroid that clears every building **and** sits a whole
+arch-width inside its own district, four pillars in the region's own hue, as tall as the district's
+tallest roof plus a clearance, carrying the region's name through the map's own label collision pass.
+**60 of 61 districts marked, 0 in the wrong district**, thinnest margin 6.28 units (django), closest
+pair 59.3. The one unmarked — django's `around django/core/__init__.py`, 67 files — has no such
+ground inside its own extent and is reported rather than rescued by a second pass that would fire
+once in 61. The world has drawn region colour since it shipped and never said what a colour meant;
+this is the flat map's legend, standing in the place it describes.
+
+Three things the measurement changed, none of which a suite could see. The **margin** was found by a
+fixture: without it the arch lands on the Voronoi boundary — 0.14 units inside its own district in the
+fixture, 0.53 on hugo — because the search returns the *nearest* standable point, which is where the
+inequality flips. The **search bound** is the district's own extent rather than a constant, so
+*unmarked* means "no standable ground in this district" and not "the search gave up" (a fixed 40
+units loses 4 arches; the extent loses 1). And a written **arch-vs-arch spacing check was deleted**
+after being measured: the margin already implies any two arches are `ARCH_HALF` apart by the triangle
+inequality, and the closest real pair is 59.3 against an 11.2 collision width.
+
+Eight mutants, all dead — two only after the test that should have caught them was rewritten. The
+clearance assertion was **vacuous** over a fixture built to reproduce §9.6 faithfully, because the
+membership margin already pushes an arch off foreign buildings; it takes a district blocked by *its
+own* monolith to exercise it. And the ring-density refinement has no invariant behind it, so it is
+pinned by **isotropy** instead: rotate the fixture and the nudge must barely move (spread 4 at
+constant sample spacing, 7 at eight samples a ring, bar in the gap).
+
+910 unit, 116 atlas, determinism byte-identical, build clean. `scripts/probe-arches.ts` and
+`scripts/shot-world.ts` are new; `_arch.ts` and `_dump2.ts` are gone.
+
+**Next**: a naming rule for cross-directory regions — the arch now makes region *labels* load-bearing
+at eye level, and `around <hub>` is what 26 of 74 measured regions fall back to. Then experiment 0001,
+still the wall.

@@ -854,7 +854,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // `tiesDrawn` are here for. `roads` is the one to watch: ADR-0033's whole
       // argument is that the ground carries the import graph, so a frame that
       // draws zero roads is that argument silently not shipping.
-      `${stats.towersDrawn} towers · ${stats.skylineDrawn} skyline · ${stats.roadsDrawn} roads · ${stats.labelsDrawn} labels · ${stats.beaconsDrawn} beacons`,
+      `${stats.towersDrawn} towers · ${stats.skylineDrawn} skyline · ${stats.roadsDrawn} roads · ${stats.archesDrawn} arches · ${stats.labelsDrawn} labels · ${stats.beaconsDrawn} beacons`,
       openQuestions,
       unanswered.size,
       // North is north: the minimap is north-up and the world does not turn

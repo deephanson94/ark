@@ -43,7 +43,7 @@
 
 import type { NodeRef } from '../../atlas/index.js';
 import type { Bounds } from '../camera.js';
-import type { Scene, SceneEdge, SceneNode } from '../scene.js';
+import type { Scene, SceneEdge, SceneNode, SceneRegion } from '../scene.js';
 
 /**
  * World units of height per elevation layer (ADR-0013).
@@ -126,10 +126,74 @@ export interface Chronicle {
   readonly radius: number;
 }
 
+/**
+ * A named district marker, standing on ground that belongs to the district.
+ *
+ * ## Why this is not simply `Region.centroid`
+ *
+ * ADR-0032 §3.2 wanted *"a named arch marking a district"* and §9.6 refused it,
+ * with **two** measurements, not one:
+ *
+ *  1. for **118 of django's 175 regions** the node nearest the centroid belonged
+ *     to a *different* region — the arch would stand in someone else's street;
+ *  2. **24 django centroids sat within 3 units of a node**, i.e. inside a
+ *     monolith.
+ *
+ * *"Marking a district needs a derivation that is a place, not an average."*
+ *
+ * The first concern died with the partition it was measured on: under ADR-0041's
+ * clustering the nearest node belongs to the region on **100 of 100** centroids
+ * across six repos (`scripts/probe-centroids.ts`). The second is **live** — **20
+ * of the 61 topology centroids** on those repos land inside a tower's drawn
+ * footprint — and it is what this type answers. A mean of member positions is not
+ * a place; the **nearest clear ground to that mean that stands in a member's
+ * street** is one, and it is still a pure function of the layout.
+ *
+ * Both of §9.6's conditions are one predicate here (`standable`), deliberately:
+ * a rule that satisfied one and not the other is exactly how the first of them
+ * came to be checked and the second forgotten for a milestone. The cost is
+ * stated rather than absorbed: **60 of 61 districts are marked**, and the one
+ * that is not (django's `around django/core/__init__.py`, 67 files) has no ground
+ * inside its own extent that clears every building *and* stands a whole
+ * arch-width inside its own territory.
+ *
+ * ## Four pillars, not two
+ *
+ * §3.2's word is *arch*, and a two-pillar arch has a **facing**. Nothing in the
+ * atlas supplies one — a region is a set of nodes, not a direction — so orienting
+ * it would be invented geography, which is the objection §9.1 already sustained
+ * against the featureless plane. Four pillars on the world axes read the same
+ * from every approach and claim no direction, and they are axis-aligned for the
+ * same reason every tower is.
+ */
+export interface Arch {
+  readonly region: SceneRegion;
+  readonly x: number;
+  readonly y: number;
+  /** World units from `region.centroid`. 0 when the mean was already standable. */
+  readonly nudge: number;
+  /**
+   * Pillar height — **the district's own tallest roof plus a clearance**, not a
+   * constant.
+   *
+   * A fixed 26 units put the first version below the skyline it was meant to
+   * name: the screenshots showed a gateway swallowed by the buildings around it,
+   * visible only from the two streets that happened to point at it. Risk #4 asks
+   * the world to show *"the silhouette of unexplored regions"*, and a name you
+   * can only read from underneath answers nothing about where to go.
+   *
+   * Deriving it from the members keeps ADR-0013 intact — the arch is not a
+   * height claim, it is the height of the claims it stands among, so it moves
+   * with them and never reorders them.
+   */
+  readonly height: number;
+}
+
 export interface World {
   readonly towers: readonly Tower[];
   readonly byRef: ReadonlyMap<NodeRef, Tower>;
   readonly roads: readonly Road[];
+  readonly arches: readonly Arch[];
   readonly chronicle: Chronicle;
   readonly spawn: { readonly x: number; readonly y: number; readonly facing: number };
   readonly bounds: Bounds;
@@ -139,6 +203,30 @@ const CHRONICLE_HEIGHT = 58;
 const CHRONICLE_RADIUS = 7;
 /** How far outside the map's edge the chronicle and the spawn point stand. */
 const OUTSKIRTS = 90;
+
+/** Half the distance between opposite pillars. */
+export const ARCH_SPAN = 4.5;
+/** Half-width of one pillar. */
+export const ARCH_PILLAR = 1.1;
+/** How far the lintel clears the district's tallest roof. See `Arch.height`. */
+export const ARCH_CLEARANCE = 14;
+/** What a district with no towers taller than the ground would get. */
+export const ARCH_MIN_HEIGHT = 26;
+export const ARCH_LINTEL = 2.2;
+/** Half-width of the square the whole structure occupies. */
+export const ARCH_HALF = ARCH_SPAN + ARCH_PILLAR;
+
+/**
+ * How finely the outward search samples, in world units.
+ *
+ * Both radially and **along each ring** — the first version used a fixed 16
+ * samples per ring, which is 0.4 units apart at radius 1 and 28 units apart at
+ * radius 46, so the search grew blind exactly where it was working hardest and
+ * overshot every gap narrower than a building. django's worst arch moved 72
+ * units under that rule and 46 under this one; graphql-js's went 50 → 17.
+ */
+const SEARCH_STEP = 1;
+const MIN_RINGS = 8;
 
 export function buildWorld(scene: Scene): World {
   const towers: Tower[] = [];
@@ -167,6 +255,8 @@ export function buildWorld(scene: Scene): World {
     roads.push({ from, to, edge, length });
   }
 
+  const arches = placeArches(scene.regions, towers);
+
   const bounds = scene.bounds;
   const midX = (bounds.minX + bounds.maxX) / 2;
   const chronicle: Chronicle = {
@@ -183,7 +273,157 @@ export function buildWorld(scene: Scene): World {
   // that is always interactable, whatever the deck holds.
   const spawn = { x: midX + OUTSKIRTS * 0.55, y: bounds.minY - OUTSKIRTS * 0.8, facing: Math.PI };
 
-  return { towers, byRef, roads, chronicle, spawn, bounds };
+  return { towers, byRef, roads, arches, chronicle, spawn, bounds };
+}
+
+/**
+ * One arch per **topology** region, on the nearest standable ground to its mean.
+ *
+ * Terrain regions get none, and that is ADR-0010's rule rather than a shortcut:
+ * a terrain lump is *"files the graph has nothing to say about"*, drawn in one
+ * shared grey precisely so the map does not claim they are a neighbourhood. An
+ * arch reading `docs` would make exactly that claim, in the world, at eye level.
+ * On this repo that is 4 of 9 regions holding 60 of 246 files — a real absence,
+ * and the honest one.
+ */
+export function placeArches(
+  regions: readonly SceneRegion[],
+  towers: readonly Tower[],
+): Arch[] {
+  const arches: Arch[] = [];
+  for (const region of regions) {
+    if (region.kind !== 'topology') continue;
+    const limit = spreadOf(region, towers);
+    // `standable` is O(towers) per sample and the search takes O(limit²)
+    // samples, so django — 3,035 towers — would pay 3,035 × tens of thousands
+    // fifteen times over on every entry to the world. Only towers near the
+    // search disc can change either of `standable`'s answers, and **near** has
+    // to cover the membership half as well as the overlap half: overlap needs
+    // `limit + footprint + ARCH_HALF`, but the *nearest* tower to a candidate
+    // can be further out, and pruning on the overlap bound alone would let a
+    // non-member disappear and a member be declared nearest — §9.6's first
+    // concern, reintroduced by an optimisation.
+    //
+    // A candidate sits within `limit` of the centroid and some member sits
+    // within `limit` of it too, so no candidate's nearest tower is more than
+    // `2·limit` away, hence never more than `3·limit` from the centroid.
+    const reach = limit * 3 + ARCH_HALF;
+    const local = towers.filter(
+      (tower) => Math.hypot(tower.node.x - region.x, tower.node.y - region.y) <= reach + tower.footprint,
+    );
+    const at = standingPlace(region, local, limit);
+    if (at === null) continue;
+    let tallest = 0;
+    for (const tower of towers) {
+      if (tower.node.regionIndex === region.index) tallest = Math.max(tallest, tower.height);
+    }
+    arches.push({
+      region,
+      x: at.x,
+      y: at.y,
+      nudge: at.nudge,
+      height: Math.max(ARCH_MIN_HEIGHT, tallest + ARCH_CLEARANCE),
+    });
+  }
+  return arches;
+}
+
+/**
+ * How far the district reaches from its own mean — the search's bound.
+ *
+ * A fixed radius would be a constant with nothing behind it, and this repo's
+ * landmine about thresholds named for their English applies to distances too:
+ * an arch 40 units out is nothing on django and off the edge of a small
+ * district. The district's own extent is the honest limit, because ground
+ * further out than its furthest member is not in it. So *"no standable ground
+ * inside this district"* is what an unmarked region means, rather than *"the
+ * search gave up"*.
+ */
+function spreadOf(region: SceneRegion, towers: readonly Tower[]): number {
+  let furthest = 0;
+  for (const tower of towers) {
+    if (tower.node.regionIndex !== region.index) continue;
+    furthest = Math.max(furthest, Math.hypot(tower.node.x - region.x, tower.node.y - region.y));
+  }
+  return furthest;
+}
+
+/**
+ * The first standable point on an outward lattice from the centroid.
+ *
+ * Deterministic by construction — a fixed radius sequence, a fixed angle
+ * sequence, first hit wins — because two sessions of the same repo must put the
+ * same arch in the same place for the same reason `layout` is computed in the
+ * indexer.
+ */
+function standingPlace(
+  region: SceneRegion,
+  towers: readonly Tower[],
+  limit: number,
+): { x: number; y: number; nudge: number } | null {
+  if (standable(region, region.x, region.y, towers)) {
+    return { x: region.x, y: region.y, nudge: 0 };
+  }
+  for (let radius = SEARCH_STEP; radius <= limit; radius += SEARCH_STEP) {
+    const rings = Math.max(MIN_RINGS, Math.ceil((2 * Math.PI * radius) / SEARCH_STEP));
+    for (let ring = 0; ring < rings; ring += 1) {
+      const theta = (ring / rings) * Math.PI * 2;
+      const x = region.x + radius * Math.cos(theta);
+      const y = region.y + radius * Math.sin(theta);
+      if (standable(region, x, y, towers)) return { x, y, nudge: radius };
+    }
+  }
+  return null;
+}
+
+/**
+ * §9.6's two refusals, as one predicate.
+ *
+ * The point must be **clear of every building** (concern 2) and the nearest
+ * building must be a member of this region **by a margin** (concern 1).
+ *
+ * There is no third clause keeping two districts out of one doorway, and the
+ * absence is deliberate. It was written, and then measured: the margin makes it
+ * unreachable in the band that matters. If arches for A and B stand `s` apart,
+ * each is `ARCH_HALF` deeper into its own territory than the other's, and the
+ * triangle inequality over this same metric gives `ARCH_HALF ≤ s` outright — so
+ * they can never interpenetrate. On six repos the closest pair is **59.3 units**
+ * (django) against an 11.2-unit collision width. A branch that cannot fire is
+ * code, comment and test surface asserting a behaviour the product does not
+ * have.
+ *
+ * The margin is the part that is not obvious, and it was found by a fixture
+ * rather than reasoned out. `standingPlace` returns the *nearest* standable
+ * point, so without one the arch lands exactly on the Voronoi boundary where
+ * *nearest is a member* first becomes true — a claim holding by a hair. The
+ * fixture put one 0.14 units inside its own district, true under the square
+ * metric the rule uses and false under a Euclidean one; on hugo the thinnest
+ * real margin was **0.53 units** out of a 34-unit nudge. So the rule asks for a
+ * margin of the arch's own half-width: the whole structure stands in member
+ * territory rather than straddling the border, which is what *"in its own
+ * district's street"* has to mean if it means anything.
+ */
+function standable(
+  region: SceneRegion,
+  x: number,
+  y: number,
+  towers: readonly Tower[],
+): boolean {
+  let member = Infinity;
+  let foreign = Infinity;
+  for (const tower of towers) {
+    // Square-to-square, because a tower is drawn as a box of half-width
+    // `footprint` — `hero.ts` collides with the inscribed *circle*, which is the
+    // smaller shape and would let an arch clip a corner it never touches.
+    const gap = Math.max(
+      Math.abs(tower.node.x - x) - tower.footprint,
+      Math.abs(tower.node.y - y) - tower.footprint,
+    );
+    if (gap < ARCH_HALF) return false;
+    if (tower.node.regionIndex === region.index) member = Math.min(member, gap);
+    else foreign = Math.min(foreign, gap);
+  }
+  return member + ARCH_HALF <= foreign;
 }
 
 /** Towers within `reach` of a point. What collision and interaction look at. */

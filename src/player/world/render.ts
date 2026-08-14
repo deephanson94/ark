@@ -29,8 +29,8 @@ import { visibilityOf } from '../fog.js';
 import { INK, regionColor, regionSilhouette, regionWash } from '../palette.js';
 import type { Eye, ViewPoint } from './camera.js';
 import { clipToNear, focalOf, projectView, toView } from './camera.js';
-import type { Chronicle, Road, Tower, World } from './build.js';
-import { ROAD_WIDTH } from './build.js';
+import type { Arch, Chronicle, Road, Tower, World } from './build.js';
+import { ARCH_LINTEL, ARCH_PILLAR, ARCH_SPAN, ROAD_WIDTH } from './build.js';
 import type { Hero } from './hero.js';
 import { HERO_HEIGHT, HERO_RADIUS } from './hero.js';
 
@@ -81,6 +81,11 @@ export interface WorldFrameStats {
    * than no path — the e2e reads it.
    */
   readonly skylineDrawn: number;
+  /**
+   * District arches in the frame. Counted for the same reason `skylineDrawn` is:
+   * an arch that never draws looks exactly like a repo with no districts.
+   */
+  readonly archesDrawn: number;
 }
 
 /**
@@ -126,6 +131,23 @@ export const SILHOUETTE_DISTANCE = 2400;
 const ROAD_CHOP = 34;
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+const DISTRICT_FONT = '600 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+
+/**
+ * One collision pass, two kinds of name.
+ *
+ * A district name and a file name compete for the same pixels, so they have to
+ * be placed by the same rule — two passes would let a district's name land on
+ * top of the file name of the tower it is standing beside.
+ */
+interface LabelCandidate {
+  readonly text: string;
+  readonly at: Point;
+  readonly ppu: number;
+  readonly tint: string;
+  /** District names are placed first and drawn larger. */
+  readonly district: boolean;
+}
 /**
  * Sky, horizon and ground.
  *
@@ -149,7 +171,7 @@ const GROUND_FAR = '#222c3b';
  * wash *over* the roads drawn on it. Order is a claim about layering and wants
  * to be written down as one.
  */
-const RANK = { wash: 0, road: 1, chronicle: 2, tower: 3, hero: 4 } as const;
+const RANK = { wash: 0, road: 1, chronicle: 2, arch: 2, tower: 3, hero: 4 } as const;
 
 type Prim =
   /**
@@ -169,6 +191,15 @@ type Prim =
   | { kind: 'road'; depth: number; a: ViewPoint; b: ViewPoint; fade: number; dashed: boolean }
   | { kind: 'tower'; depth: number; tower: Tower; fade: number }
   | { kind: 'chronicle'; depth: number; fade: number }
+  /**
+   * A district's name, standing in the district (ADR-0044).
+   *
+   * Sorted like an object rather than drawn over everything, because it *is*
+   * one — a marker painted on top of the buildings in front of it would read as
+   * chrome, and the claim it makes is that the district is **here**, which only
+   * survives if the thing is somewhere.
+   */
+  | { kind: 'arch'; depth: number; arch: Arch; fade: number }
   /**
    * The hero, in the same list as everything else.
    *
@@ -224,6 +255,25 @@ export function drawWorldFrame(
     towersDrawn++;
   }
 
+  // Arches carry further than buildings on purpose: a district's name is what
+  // risk #4 asks for — *"always show the silhouette of unexplored regions"* — and
+  // a name you can only read once you are standing under it answers nothing about
+  // where to go next.
+  let archesDrawn = 0;
+  for (const arch of world.arches) {
+    const distance = Math.hypot(arch.x - eye.x, arch.y - eye.y);
+    if (distance > VIEW_DISTANCE * 2) continue;
+    const centre = toView(eye, arch.x, arch.y, arch.height / 2);
+    if (centre.forward <= -ARCH_SPAN * 2) continue;
+    prims.push({
+      kind: 'arch',
+      depth: centre.forward - ARCH_SPAN,
+      arch,
+      fade: Math.max(0.3, fadeAt(distance)),
+    });
+    archesDrawn += 1;
+  }
+
   const chronicleDistance = Math.hypot(world.chronicle.x - eye.x, world.chronicle.y - eye.y);
   if (chronicleDistance <= VIEW_DISTANCE * 1.6) {
     const centre = toView(eye, world.chronicle.x, world.chronicle.y, world.chronicle.height / 2);
@@ -247,7 +297,19 @@ export function drawWorldFrame(
   prims.sort((a, b) => b.depth - a.depth || RANK[a.kind] - RANK[b.kind]);
 
   let beaconsDrawn = 0;
-  const labelled: { tower: Tower; at: Point; ppu: number; lit: boolean }[] = [];
+  const labelled: LabelCandidate[] = [];
+  for (const arch of world.arches) {
+    const head = projectPoint(eye, viewport, arch.x, arch.y, arch.height + ARCH_LINTEL + 6);
+    if (head === null) continue;
+    if (Math.hypot(arch.x - eye.x, arch.y - eye.y) > VIEW_DISTANCE * 2) continue;
+    labelled.push({
+      text: arch.region.label,
+      at: head.point,
+      ppu: head.ppu,
+      tint: regionColor(arch.region.index, 0.95),
+      district: true,
+    });
+  }
 
   for (const prim of prims) {
     if (prim.kind === 'wash') {
@@ -261,6 +323,10 @@ export function drawWorldFrame(
     if (prim.kind === 'chronicle') {
       drawChronicle(context, world.chronicle, eye, viewport, prim.fade, chronicleLit);
       if (chronicleLit) beaconsDrawn++;
+      continue;
+    }
+    if (prim.kind === 'arch') {
+      drawArch(context, prim.arch, eye, viewport, prim.fade);
       continue;
     }
     if (prim.kind === 'hero') {
@@ -283,14 +349,20 @@ export function drawWorldFrame(
       input.waypoint.x === tower.node.x &&
       input.waypoint.y === tower.node.y;
     if (head !== null && state !== 'silhouette' && prim.fade > 0.25 && !isWaypoint) {
-      labelled.push({ tower, at: head.point, ppu: head.ppu, lit });
+      labelled.push({
+        text: tower.node.label,
+        at: head.point,
+        ppu: head.ppu,
+        tint: lit ? INK.question : INK.text,
+        district: false,
+      });
     }
   }
 
   const labelsDrawn = drawLabels(context, labelled, viewport, input.chrome);
   if (input.waypoint !== null) drawWaypoint(context, input.waypoint, eye, viewport, hero);
 
-  return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn, skylineDrawn };
+  return { towersDrawn, roadsDrawn, labelsDrawn, beaconsDrawn, skylineDrawn, archesDrawn };
 }
 
 /**
@@ -707,6 +779,83 @@ function drawBeacon(
   return true;
 }
 
+/**
+ * A district's gateway: four pillars and the four beams that join them.
+ *
+ * In the **region's own hue**, which is the piece of work this does that no
+ * other surface can. The world has carried region colour since it shipped — the
+ * ground wash and every tower body — and has never said what any of those
+ * colours *mean*. The flat map answers that with a legend the world does not
+ * have; naming the district in its own colour is the legend, standing in the
+ * place it describes.
+ *
+ * The middle is left open on purpose. A slab across the top is a roof, and a
+ * roof at 26 units hides the skyline behind it from anyone standing near — the
+ * one thing risk #4 asks the world to keep showing.
+ */
+function drawArch(
+  context: CanvasRenderingContext2D,
+  arch: Arch,
+  eye: Eye,
+  viewport: Viewport,
+  fade: number,
+): void {
+  const boxes: { cx: number; cy: number; hx: number; hy: number; z0: number; z1: number }[] = [];
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      boxes.push({
+        cx: arch.x + sx * ARCH_SPAN,
+        cy: arch.y + sy * ARCH_SPAN,
+        hx: ARCH_PILLAR,
+        hy: ARCH_PILLAR,
+        z0: 0,
+        z1: arch.height,
+      });
+    }
+  }
+  const reach = ARCH_SPAN + ARCH_PILLAR;
+  for (const side of [-1, 1]) {
+    boxes.push({ cx: arch.x, cy: arch.y + side * ARCH_SPAN, hx: reach, hy: ARCH_PILLAR, z0: arch.height, z1: arch.height + ARCH_LINTEL });
+    boxes.push({ cx: arch.x + side * ARCH_SPAN, cy: arch.y, hx: ARCH_PILLAR, hy: reach, z0: arch.height, z1: arch.height + ARCH_LINTEL });
+  }
+
+  const colour = regionColor(arch.region.index, 1);
+  context.globalAlpha = fade;
+  const ordered = boxes
+    .map((box) => ({ box, depth: toView(eye, box.cx, box.cy, (box.z0 + box.z1) / 2).forward }))
+    .sort((a, b) => b.depth - a.depth);
+  for (const { box } of ordered) {
+    const corners: [number, number][] = [
+      [box.cx - box.hx, box.cy - box.hy],
+      [box.cx + box.hx, box.cy - box.hy],
+      [box.cx + box.hx, box.cy + box.hy],
+      [box.cx - box.hx, box.cy + box.hy],
+    ];
+    const base = corners.map(([cx, cy]) => toView(eye, cx, cy, box.z0));
+    const top = corners.map(([cx, cy]) => toView(eye, cx, cy, box.z1));
+    const sides = [0, 1, 2, 3]
+      .map((i) => ({ i, j: (i + 1) % 4 }))
+      .map(({ i, j }) => ({ i, j, depth: ((base[i] as ViewPoint).forward + (base[j] as ViewPoint).forward) / 2 }))
+      .sort((p, q) => q.depth - p.depth);
+    for (const side of sides) {
+      const b0 = base[side.i] as ViewPoint;
+      const b1 = base[side.j] as ViewPoint;
+      const quad = clipQuad(b0, b1, top[side.j] as ViewPoint, top[side.i] as ViewPoint, viewport, eye);
+      if (quad === null) continue;
+      tracePolygon(context, quad);
+      context.fillStyle = shade(colour, faceShade(b0, b1));
+      context.fill();
+    }
+    const cap = clipQuad(top[0] as ViewPoint, top[1] as ViewPoint, top[2] as ViewPoint, top[3] as ViewPoint, viewport, eye);
+    if (cap !== null) {
+      tracePolygon(context, cap);
+      context.fillStyle = colour;
+      context.fill();
+    }
+  }
+  context.globalAlpha = 1;
+}
+
 function drawChronicle(
   context: CanvasRenderingContext2D,
   chronicle: Chronicle,
@@ -848,23 +997,39 @@ function drawHero(
  */
 function drawLabels(
   context: CanvasRenderingContext2D,
-  candidates: { tower: Tower; at: Point; ppu: number; lit: boolean }[],
+  candidates: LabelCandidate[],
   viewport: Viewport,
   chrome: readonly Box[],
 ): number {
-  context.font = LABEL_FONT;
   context.textAlign = 'center';
   context.textBaseline = 'bottom';
   const placed: { x: number; y: number; half: number }[] = [];
   let drawn = 0;
-  const ordered = [...candidates].sort((a, b) => b.ppu - a.ppu);
+  // **District names first, whatever their distance.** Sorting the whole list by
+  // apparent size would drop a district's name behind the file names of the very
+  // buildings it stands among — and a name that only survives when nothing is in
+  // front of it is not a landmark. File names then take the remaining room by
+  // nearest-first, exactly as before.
+  const ordered = [...candidates].sort(
+    (a, b) => Number(b.district) - Number(a.district) || b.ppu - a.ppu,
+  );
   for (const candidate of ordered) {
     if (drawn >= 22) break;
     const { at } = candidate;
-    if (at.x < 0 || at.x > viewport.width || at.y < 0 || at.y > viewport.height) continue;
-    const text = candidate.tower.node.label;
+    if (at.x < 0 || at.x > viewport.width) continue;
+    if (!candidate.district && (at.y < 0 || at.y > viewport.height)) continue;
+    const text = candidate.text;
+    context.font = candidate.district ? DISTRICT_FONT : LABEL_FONT;
     const half = context.measureText(text).width / 2 + 4;
-    const y = at.y - 8;
+    // **A district name is pinned into view rather than dropped.** An arch
+    // clears its district's tallest roof, so standing under one puts its head
+    // far above the screen — exactly when knowing which district you are in is
+    // most useful. Dropping it there would make the label appear only at middle
+    // distance, which is the same defect the first fixed-height arch had, moved
+    // from the geometry into the text.
+    const y = candidate.district
+      ? Math.min(viewport.height - 24, Math.max(24, at.y - 8))
+      : at.y - 8;
     if (
       chrome.some(
         (box) =>
@@ -883,10 +1048,25 @@ function drawLabels(
     placed.push({ x: at.x, y, half });
     context.fillStyle = 'rgba(6, 9, 14, 0.72)';
     context.fillRect(at.x - half, y - 13, half * 2, 15);
-    context.fillStyle = candidate.lit ? INK.question : INK.text;
+    context.fillStyle = candidate.tint;
     context.fillText(text, at.x, y);
+    // A pinned name says *that way*, not *here*, and without the chevron a row
+    // of them along the top edge reads as chrome — a tab bar the player has no
+    // reason to connect to anything in the world.
+    if (candidate.district && y !== at.y - 8) {
+      const up = at.y - 8 < y;
+      const tip = up ? y - 19 : y + 10;
+      const base = up ? y - 15 : y + 6;
+      context.beginPath();
+      context.moveTo(at.x, tip);
+      context.lineTo(at.x - 4, base);
+      context.lineTo(at.x + 4, base);
+      context.closePath();
+      context.fill();
+    }
     drawn++;
   }
+  context.font = LABEL_FONT;
   context.textAlign = 'left';
   context.textBaseline = 'alphabetic';
   return drawn;

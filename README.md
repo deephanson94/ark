@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 40 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 44 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -90,10 +90,10 @@ simultaneously possible.
 | `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES modules), `goscan`/`gomod` (Go) and `pyscan`/`pyroot` (Python) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates, groups files into nodes, and generates. |
 | `src/verbs/` | One directory per verb (`generate`, `grade`, `reveal`, distractors), plus what they share: `gate.ts` (the Ctrl+F gate), `difficulty.ts`, `score.ts` (F1), `disclosure.ts` (cross-verb facts), `sample.ts`, `paths.ts`. |
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
-| `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
+| `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city — towers, roads, the chronicle and the district arches (ADR-0044) — one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 40 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 44 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -126,8 +126,9 @@ map, the field notes, the deck or the selector names a verb.
 | **M6** | The expensive tier | Trace verb (real call graph) | ⬜ |
 
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
-**orbit view** (press `o`), a **walkable world** (press `g` — a hero, and the roads are the import
-edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change layer** on the map
+**orbit view** (press `o`), a **walkable world** (press `g` — a hero, the roads are the import
+edges, and every district carries its name on an arch in its own colour, ADR-0033 and ADR-0044),
+**map rotation between challenges** (ADR-0017), a **co-change layer** on the map
 (ADR-0016), and the **negative witness** — every wrong answer carries the reason it was offered
 (ADR-0020).
 
@@ -166,7 +167,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
 | M2's instrumentation (`arkTally()`) | ✅ | `docs/experiments/0001` §3's engagement measure, in its own `localStorage` record and **only inside `?arm=`**, so the ordinary player stores nothing and ADR-0011 decision 2 is untouched rather than argued with ([ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)). The datum did not exist before, and not only unpersisted: `selector.attempts` increments **only on a non-pass**, so it counts failures and would have answered *"challenges attempted"* with a number that falls as participants do better. The first draft put it in `Progress` and **three independent reviewers refuted it**; the shipped shape is theirs. `test:e2e` plays a board in an arm, reloads and asserts the reading survived — deleting the write reddens both assertions. |
 | Hold-out split (`npm run holdout`) | ✅ | Cuts a built atlas into the atlas both arms play and the fixed quiz they are scored on (`docs/experiments/0001` §4.4). `Verb.keyFacts` is the third disclosure direction — *what would state my own key* — and it returns **`null` rather than `[]`** where the vocabulary cannot express one, so the two verbs of the discriminating tier print `unchecked` instead of a clean zero. Refuses **0 on ark `75b6117`, graphql-js `9c245018`, kysely `f24018c7` and hono `7075369e`**; the swap loop is proved by a hand-built collision in `tests/unit/holdout.test.ts`, because on a generated atlas ADR-0019 decision 7 makes one impossible. |
-| Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
+| Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, **a district is a four-pillar arch in its own hue carrying its own name** (ADR-0044 — the world had drawn region colour since it shipped and never said what a colour meant), and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
 ### Known gaps — things this project does *not* do
 
@@ -390,13 +391,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `src/atlas` and `around src/indexer/build.ts` — the last being an honest fallback, since
   `src/indexer` covers only 45% of it. Six mutants die, three of which survived the first draft.
 
-- **Districts are unmarked at street level — and the reason they were deferred has just closed.**
-  Region arches are designed (ADR-0032 §3.2) and not built, because *"118 of django's 175 region
-  centroids have their nearest node in a **different** region"*, so an arch at a centroid would stand
-  in someone else's street (ADR-0032 §9.6). **That figure was measured against a partition that no
-  longer exists.** Re-measured at `decc8a2` under ADR-0041's clustering: **0 of django's 22, 0 of
-  hono's 20 and 0 of ark's 9** — fragmented regions had centroids landing in other regions' territory
-  and cohesive ones do not. The blocker is gone; the work is not done. `scripts/probe-centroids.ts`.
+- ~~**Districts are unmarked at street level.**~~ **Closed** —
+  [ADR-0044](./docs/decisions/0044-a-district-is-marked-where-it-can-be-stood-in-not-at-its-mean.md).
+  **And the entry that stood here was half wrong, which is the part worth keeping.** It said ADR-0032
+  §9.6's blocker *"is gone"* on the strength of `scripts/probe-centroids.ts` reading 0 of 100. §9.6
+  refused the arch on **two** measurements and that probe re-ran one of them: the *other* — a centroid
+  landing **inside a monolith** — was live on **20 of the 61 topology centroids** across six repos.
+  Re-checking one clause of a two-clause refusal reads exactly like re-checking the refusal.
+  An arch now stands on the nearest ground to the centroid that clears every building *and* sits a
+  whole arch-width inside its own district: **60 of 61 districts marked** at `da8a276`, 0 in the wrong
+  district, thinnest margin 6.28 units. The one unmarked (django's `around django/core/__init__.py`,
+  67 files) has no such ground inside its own extent, and is reported rather than rescued.
+  `scripts/probe-arches.ts`.
 - ~~**`src/player/ties.ts`'s header records a leak at a figure that predates the fix.**~~ **Closed.**
   It said mutual Companion carrying reaches *"up to 6 of 6 on this repo, measured"* and prescribed
   generator-side work; that work shipped as `companion/generate.ts`'s `claimed` set — one matrix cell,
@@ -538,10 +544,10 @@ removed key against the served deck's `discloses` output, which refuses **0 acro
 two different reasons the script keeps apart (see Known gaps). **M2's instrumentation ships too**
 (ADR-0037), so **both** pieces of that document's §9 are done and what is left is **twelve
 participants from outside the project**, which is owner-only and the wall S1 was always going to hit
-· then **region arches in the world**, whose blocker just closed: ADR-0032 §9.6 refused
-`Region.centroid` because 118 of django's 175 centroids had their nearest node in a *different*
-region, and under ADR-0041's clustering that is **0 of 22** (0 of hono's 20, 0 of ark's 9, measured
-at `decc8a2`) · **a naming rule for cross-directory regions**, which is what still blocks NORTH-STAR
+· ~~then **region arches in the world**~~ — **built** (ADR-0044): 60 of 61 districts marked across six
+repos, 0 in the wrong district. §9.6's refusal had two clauses and only one had been re-measured; the
+live one — a centroid inside a monolith, **20 of 61** — is what the placement rule answers
+· **a naming rule for cross-directory regions**, which is what still blocks NORTH-STAR
 §5 tier 1 now that region *count* no longer does, and which ADR-0041 §7 shows is separable from the
 clustering · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
 were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60

@@ -12,7 +12,18 @@ import { prepare } from '../../src/player/scene.js';
 import type { Viewport } from '../../src/player/camera.js';
 import type { Eye } from '../../src/player/world/camera.js';
 import { NEAR, clipToNear, follow, project, toView } from '../../src/player/world/camera.js';
-import { FOOTPRINT_SCALE, buildWorld, near } from '../../src/player/world/build.js';
+import type { Tower } from '../../src/player/world/build.js';
+import {
+  ARCH_CLEARANCE,
+  ARCH_HALF,
+  BASE_HEIGHT,
+  FOOTPRINT_SCALE,
+  buildWorld,
+  near,
+  placeArches,
+} from '../../src/player/world/build.js';
+import type { SceneRegion } from '../../src/player/scene.js';
+import type { RegionKind } from '../../src/atlas/index.js';
 import { HERO_RADIUS, WALK_SPEED, step, wrapAngle } from '../../src/player/world/hero.js';
 import { DEFAULT_ORBIT, project as projectOrbit } from '../../src/player/orbit.js';
 import { horizonY } from '../../src/player/world/render.js';
@@ -275,6 +286,205 @@ describe('the world model', () => {
       );
       expect(found.includes(tower)).toBe(gap <= 1 + tower.footprint);
     }
+  });
+});
+
+describe('district arches', () => {
+  // ADR-0032 §9.6 refused an arch at `Region.centroid` on two measurements, and
+  // this fixture reproduces **both at once** on purpose, because a fixture where
+  // the mean is already standable asserts nothing: every check below would pass
+  // over a rule that had been deleted.
+  //
+  // Region 0 ("core") holds three files in a wide triangle, so its centroid is
+  // `(0, -20)`. Region 1 ("edge") parks one building on exactly that spot. So
+  // the mean is inside a foreign monolith *and* its nearest neighbour belongs to
+  // someone else — §9.6's second and first concerns, in one point.
+  const CORE = 0;
+  const EDGE = 1;
+  function tower(ref: number, x: number, y: number, regionIndex: number, radius = 3.2): Tower {
+    return {
+      ref,
+      node: {
+        ref,
+        id: `n:f${ref}`,
+        path: `f${ref}.ts`,
+        label: `f${ref}.ts`,
+        x,
+        y,
+        radius,
+        regionIndex,
+        dependentCount: 0,
+        elevation: 0,
+      },
+      footprint: radius * FOOTPRINT_SCALE,
+      height: BASE_HEIGHT,
+    };
+  }
+  function region(index: number, label: string, x: number, y: number, kind: RegionKind = 'topology'): SceneRegion {
+    return { id: `r${index}`, label, index, x, y, nodeCount: 3, kind };
+  }
+
+  const towers: Tower[] = [
+    tower(0, -60, 0, CORE),
+    tower(1, 60, 0, CORE),
+    tower(2, 0, -60, CORE),
+    tower(3, 0, -20, EDGE, 20),
+    tower(4, 200, -20, EDGE),
+    tower(5, 240, -20, EDGE),
+  ];
+  const core = region(CORE, 'core', 0, -20);
+  const edge = region(EDGE, 'edge', 146.67, -20);
+
+  it('refuses to stand the mean where the mean actually is', () => {
+    // The gate on everything below: if this fixture's centroid were already
+    // standable the rest of this block would be measuring nothing.
+    const blocker = towers[3] as Tower;
+    expect(Math.abs(blocker.node.x - core.x)).toBeLessThan(blocker.footprint);
+    expect(Math.abs(blocker.node.y - core.y)).toBeLessThan(blocker.footprint);
+
+    const arches = placeArches([core, edge], towers);
+    const placed = arches.find((arch) => arch.region.index === CORE);
+    expect(placed).toBeDefined();
+    expect(placed?.nudge).toBeGreaterThan(0);
+  });
+
+  it('stands every arch clear of every building', () => {
+    // **The blocker here is a member, and that is the whole test.** Written over
+    // the mixed fixture above this assertion was vacuous: the membership margin
+    // already pushes the arch away from *foreign* buildings, so deleting the
+    // clearance check changed nothing and the mutant lived. Only a district
+    // whose own centroid sits inside its own monolith exercises it.
+    const dense = region(CORE, 'dense', 0, 0);
+    const inhabited = [tower(0, 0, 0, CORE, 30), tower(1, 0, -70, CORE), tower(2, 0, 70, CORE)];
+    const arches = placeArches([dense], inhabited);
+    expect(arches).toHaveLength(1);
+    for (const arch of arches) {
+      for (const built of inhabited) {
+        const gap = Math.max(
+          Math.abs(built.node.x - arch.x) - built.footprint - ARCH_HALF,
+          Math.abs(built.node.y - arch.y) - built.footprint - ARCH_HALF,
+        );
+        expect(gap).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("stands every arch in its own district's street, by a whole arch's width", () => {
+    // §9.6's first concern, asserted on the *placed* position rather than on the
+    // centroid — which is the question a nudge raises and the re-measurement of
+    // the refusal could not answer.
+    //
+    // **The margin is the assertion**, not the inequality. Written as "the
+    // nearest building is a member" this passed with the arch 0.14 units inside
+    // its own district — on the Voronoi boundary, because the search returns the
+    // nearest standable point and that is precisely where the inequality flips.
+    // The same shape was live on hugo at 0.53 units. A claim that holds by a
+    // rounding error is the kind this repo's landmines are about.
+    for (const arch of placeArches([core, edge], towers)) {
+      let member = Infinity;
+      let foreign = Infinity;
+      for (const built of towers) {
+        const gap = Math.max(
+          Math.abs(built.node.x - arch.x) - built.footprint,
+          Math.abs(built.node.y - arch.y) - built.footprint,
+        );
+        if (built.node.regionIndex === arch.region.index) member = Math.min(member, gap);
+        else foreign = Math.min(foreign, gap);
+      }
+      expect(foreign - member).toBeGreaterThanOrEqual(ARCH_HALF);
+    }
+  });
+
+  it('leaves a standable mean exactly where it is', () => {
+    // The other half of the rule: an arch that moved when it did not have to
+    // would be an invented position, and the `nudge` field would stop meaning
+    // anything.
+    const lone = region(CORE, 'core', 0, 200);
+    const arches = placeArches([lone], [tower(0, 0, 260, CORE), tower(1, 40, 260, CORE)]);
+    expect(arches).toHaveLength(1);
+    expect(arches[0]?.nudge).toBe(0);
+    expect(arches[0]?.x).toBe(0);
+    expect(arches[0]?.y).toBe(200);
+  });
+
+  it('marks no terrain region, however big it is', () => {
+    // ADR-0010: a terrain lump is files the graph has nothing to say about,
+    // drawn in one shared grey precisely so the map does not claim it is a
+    // neighbourhood. An arch reading `docs` would make that claim at eye level.
+    const ground = region(EDGE, 'docs', 146.67, -20, 'terrain');
+    const arches = placeArches([core, ground], towers);
+    expect(arches.map((arch) => arch.region.label)).toEqual(['core']);
+  });
+
+  it('gives up rather than leaving the district it is naming', () => {
+    // The search is bounded by the district's own extent, so "no arch" means
+    // *there is no standable ground inside this district* rather than *the
+    // search gave up at an arbitrary radius*. Here one wide building covers the
+    // whole of its region's reach.
+    const packed = region(0, 'packed', 0, 0);
+    const arches = placeArches([packed], [tower(0, 0, 0, 0, 60), tower(1, 4, 0, 0, 60)]);
+    expect(arches).toHaveLength(0);
+  });
+
+  it('clears the tallest roof in its own district and no other', () => {
+    // `Arch.height` is derived from the members so the name is readable over the
+    // skyline it names — a fixed height put the first version *below* the
+    // buildings it stood among. It is not a height claim of its own: ADR-0013
+    // owns what elevation means, and this only ever quotes it.
+    const tall: Tower[] = [
+      { ...tower(0, -60, 0, CORE), height: 41 },
+      { ...tower(1, 60, 0, CORE), height: 11 },
+      { ...tower(2, 0, -60, CORE), height: 11 },
+      { ...tower(3, 0, -20, EDGE, 20), height: 95 },
+      tower(4, 200, -20, EDGE),
+      tower(5, 240, -20, EDGE),
+    ];
+    const placed = placeArches([core], tall)[0];
+    expect(placed?.height).toBe(41 + ARCH_CLEARANCE);
+  });
+
+  it('finds the nearest standable ground in any direction, not just along an axis', () => {
+    // The search samples rings, and a **fixed** number of samples per ring is
+    // 0.4 units apart at radius 1 and 28 units apart at radius 72 — blind
+    // exactly where it is working hardest. The symptom is not a wrong arch, it
+    // is an arch further from its district's mean than it needed to be, which
+    // no invariant above can see: every one of them still passes.
+    //
+    // So the property is **isotropy**. Rotate the whole fixture about the
+    // centroid and the distance the arch has to walk should barely move.
+    // Measured over these fifteen rotations: **spread 4** with sample spacing
+    // held at `SEARCH_STEP`, **spread 7** with a fixed eight samples a ring. The
+    // bar sits in that gap, with both neighbours named — and on real repos the
+    // same change took django's worst nudge from 72 units to 46 and
+    // graphql-js's from 50 to 17.
+    const spun: number[] = [];
+    for (const degrees of [0, 5, 10, 15, 20, 22.5, 25, 30, 33, 35, 40, 45, 60, 90, 137]) {
+      const theta = (degrees * Math.PI) / 180;
+      const spin = (built: Tower): Tower => {
+        const dx = built.node.x - core.x;
+        const dy = built.node.y - core.y;
+        return {
+          ...built,
+          node: {
+            ...built.node,
+            x: core.x + dx * Math.cos(theta) - dy * Math.sin(theta),
+            y: core.y + dx * Math.sin(theta) + dy * Math.cos(theta),
+          },
+        };
+      };
+      const placed = placeArches([core], towers.map(spin))[0];
+      expect(placed, `no arch at ${degrees}°`).toBeDefined();
+      spun.push(placed?.nudge ?? 0);
+    }
+    expect(Math.max(...spun) - Math.min(...spun)).toBeLessThanOrEqual(5);
+  });
+
+  it('puts the same arch in the same place every time', () => {
+    // Spatial memory is the whole mechanic, and an arch that wandered between
+    // sessions would be the re-layout NORTH-STAR §7 forbids, wearing a landmark.
+    const once = placeArches([core, edge], towers);
+    const again = placeArches([core, edge], [...towers].reverse());
+    expect(again).toEqual(once);
   });
 });
 

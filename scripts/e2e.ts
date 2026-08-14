@@ -1543,6 +1543,15 @@ async function main(): Promise<number> {
     if (towersDrawn <= 0) {
       failures.push({ what: 'world', detail: `nothing was standing on the plane: ${worldDetail}` });
     }
+    // ADR-0044: the districts are named at street level. The world has carried
+    // region colour since it shipped and had no legend, so a hue meant nothing
+    // to a walker. A count of zero here is that gap silently returning — and it
+    // is a count rather than a screenshot for the reason `skylineDrawn` is:
+    // a picture cannot tell an absent layer from a layer with nothing to draw.
+    const archesDrawn = Number(/(\d+) arches/.exec(worldDetail)?.[1] ?? '0');
+    if (archesDrawn <= 0) {
+      failures.push({ what: 'world', detail: `no district was named: ${worldDetail}` });
+    }
     // **The skyline is checked at the edge of the world, not here.** NORTH-STAR
     // risk #4 wants the silhouette of what you have not explored, and the world
     // drew *nothing* past `VIEW_DISTANCE` — seconds of unlit void when crossing

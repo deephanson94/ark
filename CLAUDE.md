@@ -1052,6 +1052,31 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   with nothing to type-check it. Design documents are where this class of defect is **cheapest** to
   find and where nothing will find it for you: before writing a layer, walk this list and ask which
   entries are about a shape the new layer also has.
+- **A refusal with two clauses is re-opened by re-measuring both, and re-measuring one reads exactly
+  the same.** ADR-0032 §9.6 refused a district arch at `Region.centroid` because the nearest node
+  belonged to *another region* (118 of django's 175) **and** because 24 centroids sat *inside a
+  monolith*. A later session re-ran the first under new clustering, got 0 of 100, and wrote *"the
+  blocker is gone"* into `README.md` and into the Next line. The second was live on **20 of 61**
+  topology centroids across six repos, and stayed live for two milestones behind a status entry that
+  read as a clearance. This is the *bug-you-already-fixed-is-one-line-down* landmine with a
+  measurement instead of a line of code, and the same fix applies: **count the clauses in the thing
+  you are re-opening before you quote a number at it.** The tell is grammatical — §9.6's sentence
+  contains an "and", exactly like the class labels one row up.
+- **Two rules that constrain the same search hide each other's tests.** The clearance rule (*stand
+  clear of every building*) and the membership rule (*the nearest building is a member*) both push an
+  arch away from things, so over a mixed fixture the second alone satisfies the first: deleting the
+  clearance check changed **nothing** and its mutant lived, in a fixture written specifically to
+  reproduce the defect. Exercising it needs a district blocked by **its own** monolith, where the
+  membership rule is silent. So when two guards act on one search, **build the fixture where only the
+  guard under test can fire** — and note that the surviving mutant was invisible until mutation
+  testing, because every assertion was green and the fixture *looked* adversarial.
+- **The nearest point satisfying an inequality is the point where the inequality is tightest.** A
+  search that returns the *closest* place meeting a strict condition lands on that condition's
+  boundary by construction — the arch stood **0.14 units** inside its own district in the fixture and
+  **0.53** on hugo, true under the metric the code uses and false under a Euclidean one. A predicate
+  used as a search's stopping rule needs a **margin**, in the units of the thing being placed, or the
+  claim it certifies holds by a rounding error. Note which instrument found it: not the six-repo probe
+  (which reported a clean `0 wrong district`) but a unit fixture and a second metric.
 
 ---
 
@@ -1122,6 +1147,9 @@ npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks 
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
                            #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
+npx tsx scripts/shot-world.ts [repo]   # walk into the city and photograph it. `test:e2e`'s world
+                           #   shot is taken at the shore, so a change *inside* the city is invisible
+                           #   to it — this walks five legs, turning between them, into artifacts/.
 ```
 
 **If `test:e2e` reports `Executable doesn’t exist at .../chromium_headless_shell-NNNN/...`**, the
