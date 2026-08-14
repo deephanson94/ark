@@ -135,7 +135,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 
 | Verb | Question | Ground truth | Tier | Status |
 |---|---|---|---|---|
-| **Blast Radius** | *"Which of these files depend on this one?"* | Transitive dependents, unbounded | 3 | ✅ |
+| **Blast Radius** | *"Which of these files depend on this one?"* | Transitive dependents, unbounded | 3 | ✅ — but **fully supplied on 8 of 19 measured repos**, token on 7, absent on 4 ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md)) |
 | **Companion** | *"Which files change with this one?"* | Co-change matrix | 3 | ✅ |
 | **Placement** | *"This commit landed — which files did it change?"* | The commit's own file list | 6 | ✅ |
 | **Archaeology** | *"Which of these commits changed this file?"* | Commits whose file list names it | 5 | ✅ |
@@ -171,6 +171,30 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 ### Known gaps — things this project does *not* do
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
+
+- **Blast Radius is starved on half of real repositories, and the reference set could not see it**
+  ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md),
+  proposed). Measured on **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
+  (the deck cap is what bounds it), ships a token deck on **7** (0.6%–25% of subjects), and does not
+  exist on **4**. `typeorm` `df07bf1e` ships **58 boards of 2,221 subjects at 97.6% resolution**;
+  `vue-core` 7 of 254; `nest` 7 of 286. The three git-graded verbs are unaffected on almost all of
+  them, so **on a majority of real repositories the product is already a history product** — which no
+  document said before this row.
+
+  **All four reference repos — ark, hono, kysely, graphql-js — are cap-limited**, as are both of
+  `docs/experiments/0001`'s matched pair, so every "the cap is the binding constraint" measurement in
+  this repository (ADR-0039's `retain` work, ADR-0040's progression, ADR-0012's dedupe costs) was
+  taken where the cap binds. ADR-0042 decision 2 proposes adding a taint-limited member.
+
+  **Resolution rate is anti-predictive and `rate × mean closure depth` is not the metric either** —
+  ADR-0024 decision 4's successor is *position*: typeorm's single `src/platform/PlatformTools.ts`
+  carries **one** `require(<expression>)` of the repo's 13,805 import sites and poisons **1,912 of
+  1,921** tainted subjects. Two candidate fixes were refused with measurements (relaxing guardrail
+  4's transitive walk ships wrong answer keys on **90–99%** of the subjects it unlocks; a depth bound
+  makes **542,282** of typeorm's real dependents eligible as wrong answers). A third — monorepo
+  workspace resolution — is real, safe (**0 wrong answer keys** over 46,373 wrong-answer slots) and
+  **small**: +250 boards across **3 repos of 19**, none of them the three worst-starved. It is
+  measured, reverted and left as the owner's call, patch at `docs/decisions/0042-resolver.patch`.
 
 - **A cycle is an answer key, and nothing may name one without a gate**
   ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md) §4).
@@ -458,7 +482,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
+**Decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
+with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
+repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
+Neither is a session's call · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
 though **[ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md) is a
 reason to look at the opening first**: on both of that experiment's matched repos a participant's
 first fifteen boards were one verb at the difficulty floor, and seven of graphql-js's first ten were

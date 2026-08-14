@@ -4031,3 +4031,37 @@ real and is on the record rather than absorbed.
 **Next**: whether `around <hub>` is the *right* fallback. It is true and it is not a description, and
 26 of 74 regions wear it. The honest test is a playtest, not another metric — which is
 `docs/experiments/0001`, still unrun.
+
+## Blast Radius is taint-limited on half of real repositories, and the reference set could not see it
+
+**The survey is the deliverable, and it is a null result on the fixes.** Nineteen repositories cloned
+at full depth and pinned, indexed through ark's own `buildIndex`: Blast Radius — NORTH-STAR §6.1's v1
+verb, the one M2's kill point is about — is fully supplied on **8**, ships a token deck on **7**, and
+does not exist on **4**. typeorm ships **58 boards of 2,221 subjects at 97.6% resolution**. **All four
+reference repos are cap-limited**, as are both of experiment 0001's matched pair, so every "the cap is
+the binding constraint" measurement in this repo was taken where the cap binds.
+
+**Position, not rate, and not rate × depth.** ADR-0024 decision 4's successor: typeorm's single
+`src/platform/PlatformTools.ts` carries **one** `require(<expression>)` of 13,805 sites and poisons
+**1,912 of 1,921** tainted subjects. Taint is *overdetermined* — several causes poison nearly the same
+set — so a cause's ceiling is what it frees with the others left in place, which is **5 of typeorm's
+1,921**, 6 of excalidraw's 388, 1 of vue-core's 220.
+
+**Two candidates refused with measurements, one accepted and left to the owner.** Relaxing guardrail
+4's transitive walk has the largest ceiling of the night (+1,902 typeorm subjects) and ships wrong
+answer keys on **90–99%** of what it unlocks, measured from outside the atlas against a second graph.
+A depth bound makes **542,282** of typeorm's real dependents eligible as wrong answers — refuted on
+arithmetic in twenty minutes, no code. Workspace resolution is real and safe (**+250 boards, 0 lost,
+0 wrong answer keys** over 46,373 slots, suites green, determinism byte-identical) and moves **3 repos
+of 19**, none of them the three worst-starved; measured, reverted, patch kept.
+
+**Two smaller things shipped.** Indexing a monorepo *subdirectory* silently kept **zero** commits —
+`git log` reports repository-relative paths whatever `cwd` is, so no commit intersected any node and
+all three history verbs died. rxjs's `packages/rxjs/src` goes from **1 challenge to 121**; `--relative`
+is byte-identical at repository roots on eight repos. And the CLI now names a budget it is over,
+distinguishing a *rate* breach from an *absolute* one — a rate-only check fired on no repo in the
+corpus, and the shipped rule fires on **1 of 19** (webpack's 9.18 MiB atlas).
+
+884 unit, 115 atlas, determinism byte-identical, e2e clean on the branch and on the CI merge commit.
+
+**Next**: the owner's two calls above. Then experiment 0001, which is still the wall.
