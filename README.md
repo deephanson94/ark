@@ -226,7 +226,24 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
   cycles today; this is a standing constraint on anything that would.
 
-- **The deck has no tier 1 and no tier 2 content, and that is what the opening still needs.**
+- **Tier 2 is not a backlog item, it is blocked — and the map is what blocks it**
+  ([ADR-0043](./docs/decisions/0043-tier-2-is-unaskable-while-the-map-gives-away-depth-1.md)). A
+  **Direction** verb (*"which of these does `X` import?"* — tier 2's own headline question) was
+  designed and refused. Not on supply, which is enormous: typeorm has **3,385 subjects whose imports
+  are fully understood** against the 58 Blast Radius boards it ships, because a *direct* claim needs
+  only the subject to be clean where a transitive one must walk its whole closure. It was refused
+  because **hovering a candidate answers the board exactly** — `depthFor` gives an un-understood node
+  `DIRECT_ONLY` and `blastRadius()` returns *dependents*, so `X ∈ dependents(Y, 1) ⟺ X imports Y`.
+  Measured on real generated boards: **1.000 exact on 869 of 869** across eight repos.
+
+  That is not a leak: **ADR-0008 decision 1 gives the depth-1 graph away on purpose**, so that §8.4's
+  `surprise` is measured against a baseline the player already has. But two of tier 2's three
+  questions (*which way do dependencies point*, *what is a hub*) **are** the depth-1 graph, so the
+  curriculum and the map's most settled decision are in direct conflict. Unblocking it means amending
+  ADR-0008 decision 1, which is an owner's call. *(The third — layering violations — is not a
+  depth-1 relation and was not measured.)*
+
+- **The deck has no tier 1 content, and that is what the opening still needs.**
   NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs
   emit tiers 3, 3, 5 and 6, so **Orientation** (*where does execution start? what are the top-level
   regions?*) and **Topology** (*which way do dependencies point? what is a hub?*) have no questions

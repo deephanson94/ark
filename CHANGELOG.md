@@ -4145,3 +4145,44 @@ Three mutants that survived the review's own pass now die.
 the branch and on the reproduced CI merge commit. +250 boards unchanged throughout.
 
 **Next**: experiment 0001, which is still the wall.
+
+## Tier 2 is unaskable while the map gives away depth 1
+
+**A Direction verb was designed, bounded, and refused — and the refusal explains a gap the README had
+carried for two milestones with no cause.** *"Which of these does `X` import?"* is NORTH-STAR §5 tier
+2's own headline question, and the deck's missing easy opening is exactly the tier-2 hole.
+
+**Supply was never the problem, and the reason is worth keeping.** A *direct* claim needs only the
+subject's own imports to be understood, where a transitive one must walk the whole closure — so
+typeorm has **3,385 askable subjects** against the 58 Blast Radius boards it ships. That is also the
+distinction ADR-0042 §4's refusal turned on: checking a *transitive* claim shallowly is unsound;
+checking a *shallow* claim shallowly is exactly sound.
+
+**The screen-readable guess the map's lines invite was beatable**, by a rule derived from the pass
+threshold rather than chosen: edges are drawn undirected, so ticking everything with a line to `X`
+scores `2t/(2t+w)`, which falls under band A when `w ≥ ⌈0.564·t⌉` wrong-direction candidates are on
+the board. That still leaves **919 boards on typeorm, 512 on nest, 191 on excalidraw**.
+
+**What killed it was a hover handler in a file the probe never opened.** `depthFor` gives an
+un-understood node `DIRECT_ONLY` and `blastRadius()` returns *dependents*, so hovering candidate `Y`
+highlights `Y`'s importers: tick `Y` when the subject lights up and you have the key exactly.
+Measured on real generated boards, **1.000 exact on 869 of 869** across eight repos. No threshold to
+tune, no distractor mix that helps.
+
+**And the result is bigger than one verb.** ADR-0008 decision 1 gives the depth-1 graph away *on
+purpose*, so §8.4's `surprise` is measured against a baseline the player already has — a good
+decision this does not reopen. But two of tier 2's three questions **are** the depth-1 graph, so the
+curriculum and the map's most settled decision are in direct conflict, and the README's gap is the
+shadow it casts. Unblocking it is an owner's call on ADR-0008.
+
+Also this session: the one Fable finding left open overnight — that `exports` conditions are walked
+in a fixed order rather than Node's insertion order — is **refuted by measurement**. Node takes the
+first *active* condition, not the first key; the fixed list is an active-condition set, and naive
+insertion order picks `index.react-server.ts` over `index.ts` on apollo-client (×5) and a `.d.ts` on
+kysely. Of 270 conditioned subpaths, 38 differ and the other 32 land on missing build output either
+way. Three assertions pin it; the insertion-order variant fails four.
+
+901 unit, 116 atlas, determinism byte-identical. No `src/` change ships from the refusal.
+
+**Next**: tier 1 is blocked on a different thing (no entry point in the atlas — every TypeScript
+manifest points into an excluded `dist/`), and experiment 0001 is still the wall.
