@@ -226,7 +226,7 @@ Measured across the corpus's monorepos, that sentence is true of some repos and 
 | nest | *(none, and no `main`)* | **unaddressed** — `packages/common/utils/x.util.ts` is right there |
 | rxjs | `./dist/esm/index.js` | true — but `packages/*/src/` resolves anyway |
 | vue-core | `./dist/*.esm-bundler.js` | **true** |
-| typeorm | *(names `dist`)* | **true** |
+| typeorm | `./index.js` — a build artifact at the repo root, untracked and absent from a clean clone | **true** |
 
 So the honest rule is *try, and keep the refusal when nothing lands on an indexed file*. Scored
 before implementing (`scripts/probe-workspace.ts`), in priority order — the `exports` entry, then
