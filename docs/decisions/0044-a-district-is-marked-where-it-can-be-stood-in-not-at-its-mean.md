@@ -242,6 +242,12 @@ ADR-0033's S1 gate stands; the flat map is still the arrival state. It does not 
 the atlas, or any verb — `placeArches` is player-side, derived from coordinates the indexer froze,
 and `test:determinism` is byte-identical across it.
 
+It does not answer *"which district am I in"* from every standing position. An arch is a place, not a
+HUD line: standing deep inside a district with its arch behind you shows nothing until you turn. That
+is the physical reading and it is deliberate — a permanent "you are in X" caption would be chrome, and
+the wash under your feet already carries the hue the arch names. Recorded rather than fixed, because
+the fix is a different decision about how much of the world is text.
+
 It also does not disclose anything. An arch states `Region.label` at a position derived from
 `Region.centroid`, and the flat map has drawn region labels at their centroids, ungated by fog, since
 M1. No verb's answer key mentions a region.
