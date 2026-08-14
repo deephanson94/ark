@@ -532,4 +532,75 @@ whose atlas is **9,399.5 KiB** — and is silent on the other 18. Four mutants d
 
 ---
 
-*Phase 8 follows.*
+## 8. Decision
+
+**Proposed. Every item below is a recommendation to the owner; §7 is the only `src/` change made.**
+
+1. **The hypothesis holds and the finding is the survey, not a fix.** Blast Radius is fully supplied
+   on **8 of 19** repositories, token on **7**, absent on **4**. NORTH-STAR §6.1 calls it *the* v1
+   verb and `README.md` marks it ✅ beside three others; on a majority of real repositories the
+   product is already a history product. **The documents should say so.** This is the null result and
+   it is the main deliverable.
+
+2. **Add a taint-limited repository to the reference set.** All four repos this project measures
+   itself against — ark, hono, kysely, graphql-js — are cap-limited, as are both of
+   `docs/experiments/0001`'s matched pair. Every "the cap is the binding constraint" measurement in
+   the repository (ADR-0039's `retain` work, ADR-0040's progression, ADR-0012's dedupe costs) was
+   taken where the cap binds. **`typeorm` `df07bf1e` is the recommended addition**: 2,221 blast
+   subjects, 58 boards, and the cap 8× away from biting.
+
+3. **Candidate B — taint that stops at the first unresolved edge — is refused.** It has the largest
+   ceiling measured tonight (typeorm +1,902 subjects) and ships wrong answer keys on **90–99%** of
+   the subjects it unlocks on three repos (§4.2). Guardrail 4 is not tradeable against deck size.
+
+4. **Candidate C — bounded-depth truth — is refused on arithmetic**, at a cost of twenty minutes and
+   no code (§5). A d=3 bound makes 542,282 of typeorm's real dependents eligible as wrong answers.
+   ADR-0008's decision stands and is better supported than when it was taken; its **supporting**
+   figure has gone stale and is now false on ark itself (§5.1).
+
+5. **Candidate A — workspace resolution — is a real, safe, small win, and it is the owner's call
+   whether it is worth shipping.** +250 blast boards, 0 lost, **0 wrong answer keys** across 46,373
+   wrong-answer slots on a probe that demonstrably fires, all suites green and determinism
+   byte-identical (§3). It moves **3 repos of 19** and **none of the three worst-starved**. The patch
+   is `docs/decisions/0042-resolver.patch`; it was measured and reverted rather than shipped, because
+   the brief this session ran under scoped `src/` changes to §7.
+
+   Two of its three parts are plain defects rather than features, and would be the cheaper half to
+   take: **`dottedSegment`** (a specifier whose last segment carries an unknown dot-extension never
+   has `.ts` appended — 1,942 sites on nest) and **`rootSelfPath`** (a specifier naming the repo root
+   builds `/index.ts`, a leading slash no node key can match — 96 sites on express).
+
+6. **Do not use resolution rate, and do not use `rate × mean closure depth` either.** ADR-0024
+   decision 4 retired the first; this retires the second. The three worst-starved repos resolve
+   above 96%, and vue-core and nest carry ~87% subject taint at median closures of **15 and 1**. What
+   predicts starvation is **where the unresolved sites sit** — typeorm's single
+   `src/platform/PlatformTools.ts` poisons 1,912 of 1,921 tainted subjects with **one** import site
+   of 13,805.
+
+7. **Before pricing any future resolver work, compute the *marginal* ceiling, and treat it as an
+   upper bound.** Taint is overdetermined: a cause can poison 99% of a repo's tainted subjects and be
+   worth **zero** because another cause poisons the same set (§2.3). And the marginal figure itself
+   over-predicts, because resolving a specifier turns it into an **edge** that carries taint out of
+   its target's closure — express was predicted +17 subjects and gained **0 boards** (§3.4).
+
+---
+
+## 9. What would change this
+
+- **Candidate B** would need an instrument showing the invisible-dependent rate is near zero on
+  repos that matter. §4.2 measures the opposite, and §4.3 says why its figures are a floor rather
+  than a ceiling.
+- **Candidate A's value** is bounded by the deck cap, not by resolution: apollo-client and rxjs land
+  exactly **on** their caps afterwards. If the cap were raised (an open question `README.md` already
+  records as unmeasured), candidate A would be worth more than 250 boards.
+- **The three worst-starved repos** would need `require(<expression>)` resolved — which needs
+  running the code, barred by pillar 6 — or `./dist/*` build output on the map, which needs a build,
+  barred by the same pillar. ADR-0024's *"what would change this"* said the same of Python's
+  computed sites, and this is that finding arriving in TypeScript.
+- **A per-file escape hatch** — *"this one import is dynamic, treat the rest of the file as known"* —
+  is the one lever this session did not price. ADR-0024 already named it and said it *"would need
+  its own ADR, because it weakens ADR-0003 at exactly the point ADR-0003 exists."* §2.1 sharpens the
+  case for looking: on typeorm it is **one site in one file**. It is also the case §4 just refused in
+  a more general form, so the bar is the same — measure the wrong answer keys from outside the atlas
+  first, and expect them.
+
