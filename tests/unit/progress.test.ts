@@ -32,6 +32,7 @@ import {
 import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
 import { VERBS } from '../../src/verbs/index.js';
+import { parseProgress, serializeProgress } from '../../src/player/save.js';
 import { atlasWith, witnessFor } from '../fixtures/atlas.js';
 
 function ids(count: number): string[] {
@@ -137,7 +138,7 @@ describe('the stored record', () => {
 
   it('stores no understood set — it is derived, and two copies would disagree', () => {
     const { progress } = applyGrade(EMPTY_PROGRESS, challenge, gradeSet(challenge, { picked: truth }, BLAST_PHRASING));
-    expect(Object.keys(progress).sort()).toEqual(['passes', 'surveyed', 'version']);
+    expect(Object.keys(progress).sort()).toEqual(['graded', 'passes', 'surveyed', 'version']);
   });
 
   it('adds the landmarks to the fog without storing them', () => {
@@ -398,5 +399,125 @@ describe('a commit subject moves through the record without ever reaching the ma
     const passed = recordPass(EMPTY_PROGRESS, 'placement', commit, [nodeIds[0] ?? '']);
     const live = livenessOf(graph, VERBS);
     expect(subjectsPassed(passed, live, 'placement').size).toBe(0);
+  });
+});
+
+/**
+ * The two farming sequences, driven through the real ledger.
+ *
+ * `scripts/probe-farm.ts` measures these against every shipped board on four
+ * repos and finds both open on all of them. They are the reason ADR-0047 moved
+ * the defence off the reveal: neither needs a reveal at all, because the
+ * **score** is the oracle. A single pick scores `2/(K+1) > 0` exactly when it is
+ * in the key, guardrail 6 makes retries free and unlimited, and §8.1 requires
+ * the grade to be honest — so no policy over what the panel *says* can close
+ * either one. What can be closed is the claim the save makes afterwards.
+ *
+ * Both assertions fail against the code before ADR-0047, where every passing
+ * answer minted `proved` whatever had come before it.
+ */
+describe('a farmed board proves nothing', () => {
+  /** Answer, grade, fold in. The player's loop, once. */
+  function answer(
+    progress: Parameters<typeof applyGrade>[0],
+    picked: readonly NodeId[],
+  ): ReturnType<typeof applyGrade> {
+    return applyGrade(progress, challenge, gradeSet(challenge, { picked }, BLAST_PHRASING));
+  }
+
+  it('learns the whole key one pick at a time and still proves nothing', () => {
+    // The `sweep`: never open a reveal, just read the grade. Twenty submissions
+    // and the key is known with certainty — this loop *reconstructs* it from
+    // the scores rather than reading `challenge.truth`, so it is the attack and
+    // not a restatement of the fixture.
+    let progress = EMPTY_PROGRESS;
+    const learned: NodeId[] = [];
+    for (const id of challenge.candidates) {
+      const result = answer(progress, [id]);
+      progress = result.progress;
+      if (gradeSet(challenge, { picked: [id] }, BLAST_PHRASING).score > 0) learned.push(id);
+    }
+    expect([...learned].sort()).toEqual([...challenge.truth].sort());
+
+    // Now type it back. It passes — guardrail 6 forbids anything else — and it
+    // is recorded as *shown*.
+    const final = answer(progress, learned);
+    expect(final.unlocked).toBe(true);
+    expect(final.register).toBe('shown');
+    const pass = final.progress.passes[0];
+    expect(pass?.proved).toEqual([]);
+    expect([...(pass?.shown ?? [])].sort()).toEqual([...challenge.truth].sort());
+
+    // And the map does not light up for it. NORTH-STAR §4 calls the revealed
+    // fraction "a real measure of how much of it you can reason about", which is
+    // false if a brute-force sweep moves it.
+    const fog = fogOf(final.progress);
+    expect(fog.understood.size).toBe(0);
+    expect(fog.surveyed.has(subject)).toBe(true);
+    // The board is still retired and the cone is still unlocked: the reveal
+    // already drew it, and taking it back afterwards is ADR-0016's vanishing
+    // payoff. Nothing here is a punishment.
+    expect(answeredKeys(final.progress, UNCHECKED)).toContain(
+      answerKey('blastRadius', subject),
+    );
+    expect(subjectsPassed(final.progress, UNCHECKED, 'blastRadius')).toContain(subject);
+  });
+
+  it('cannot launder a pass through the reveal the gate used to allow', () => {
+    // ADR-0035's *showcase* case, which was the exploit. Pick one file, be
+    // right: precision 1.0 cleared the old bar, so the board handed over every
+    // member with its evidence and drew the whole cone — without passing. Then
+    // reopen and type back what it just said.
+    const first = truth[0] ?? '';
+    const opener = answer(EMPTY_PROGRESS, [first]);
+    expect(opener.unlocked).toBe(false);
+    expect(opener.register).toBeNull();
+
+    const laundered = answer(opener.progress, truth);
+    expect(laundered.unlocked).toBe(true);
+    expect(laundered.register).toBe('shown');
+    expect(laundered.progress.passes[0]?.proved).toEqual([]);
+    expect(fogOf(laundered.progress).understood.size).toBe(0);
+  });
+
+  it('proves everything when the first answer earned it', () => {
+    // The control, and the thing that stops the two above passing against a
+    // product that never proves anything at all.
+    const honest = answer(EMPTY_PROGRESS, truth);
+    expect(honest.unlocked).toBe(true);
+    expect(honest.register).toBe('proved');
+    expect([...(honest.progress.passes[0]?.proved ?? [])].sort()).toEqual([...truth].sort());
+    expect(honest.progress.passes[0]?.shown).toEqual([]);
+    expect(fogOf(honest.progress).understood.has(subject)).toBe(true);
+  });
+
+  it('never takes back what a first answer proved', () => {
+    // Guardrail 6 at the seam where the two registers meet: a first submission
+    // proves two members, a later one re-picks them plus two more. The first
+    // two stay proved — a second attempt may add, never demote.
+    const partial = truth.slice(0, 2);
+    const started = answer(EMPTY_PROGRESS, partial);
+    expect(started.register).toBe('proved');
+    const later = answer(started.progress, truth);
+    expect(later.register).toBe('shown');
+    const pass = later.progress.passes[0];
+    expect([...(pass?.proved ?? [])].sort()).toEqual([...partial].sort());
+    expect([...(pass?.shown ?? [])].sort()).toEqual([...truth.slice(2)].sort());
+    // Disjoint, always: a member cannot be in both registers.
+    for (const id of pass?.shown ?? []) expect(pass?.proved).not.toContain(id);
+  });
+
+  it('remembers across a reload that the board was already answered', () => {
+    // The reason `graded` is on `Progress` and not in the selector's in-memory
+    // attempt counter: a failed first attempt leaves no `Pass` to carry the
+    // flag, and a counter that dies on reload would let reload-then-pass mint a
+    // note the player did not earn.
+    const missed = answer(EMPTY_PROGRESS, [candidates[10] ?? '']);
+    expect(missed.unlocked).toBe(false);
+    expect(missed.progress.passes).toEqual([]);
+    expect(missed.progress.graded).toEqual([answerKey('blastRadius', subject)]);
+
+    const reloaded = parseProgress(serializeProgress(missed.progress));
+    expect(answer(reloaded, truth).register).toBe('shown');
   });
 });

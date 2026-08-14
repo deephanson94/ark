@@ -21,7 +21,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { dependents, idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet, keyRule } from '../score.js';
-import { counted } from '../members.js';
+import { counted, credited } from '../members.js';
 import { decidedByNothing, disclosesNothing, keyNotExpressible } from '../disclosure.js';
 import type {
   GenerateOptions,
@@ -117,7 +117,7 @@ export const blastRadius: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${counted(count, facts.noun)} that ` +
+      `${credited(facts.register, count, facts.noun)} that ` +
       `${plural(count, 'depends', 'depend')} on ${facts.subjectLabel} — ${names} — ` +
       `${facts.farthest === 1 ? 'all of them direct importers' : `the farthest ${facts.farthest} hops away`}.`;
     // The gap between what was proved and what the map shows is exactly the

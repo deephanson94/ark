@@ -788,6 +788,7 @@ describe('a stored pass decays with the atlas, not with the repo', () => {
       population: 4,
       noun: { one: 'file', many: 'files' },
       populationNoun: { one: 'file', many: 'files' },
+      register: 'proved',
     });
     expect(prose.claim).toContain('changed in abc — "x"');
     // Never "the farthest 1 hops away" — the sentence Blast Radius's template

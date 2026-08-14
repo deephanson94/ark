@@ -22,6 +22,7 @@ export type {
   NoteFacts,
   NoteKind,
   NoteProse,
+  NoteRegister,
   NoteWeights,
   ProvedMember,
   Prompt,
@@ -42,7 +43,6 @@ export {
 } from './types.js';
 export type { SetScore } from './score.js';
 export { gradeSet, isGameable, keyRule, scoreSet, selectAllScore } from './score.js';
-export { REVEAL_PRECISION_BAR, asEarned, precisionOf } from './withhold.js';
 export type { DifficultyInput } from './difficulty.js';
 export { WEIGHTS, difficultyOf, hopReach, surpriseOf } from './difficulty.js';
 export type {
@@ -68,7 +68,7 @@ export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from './paths
 export { retain, spread, truthCap } from './sample.js';
 export type { CommitSkip, CommitSupply, EligibleCommit } from './commits.js';
 export { commitSupply } from './commits.js';
-export { commitLabel, counted, memberLabel, memberNoun, pathLabel, wordsFor } from './members.js';
+export { commitLabel, counted, credited, memberLabel, memberNoun, pathLabel, wordsFor } from './members.js';
 export type { Noun } from './members.js';
 export type { DisclosedFact, RelationId } from './disclosure.js';
 export {

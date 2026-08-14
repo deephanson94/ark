@@ -48,7 +48,7 @@
 import type { AtlasId, Challenge, Graph, NodeId } from '../../atlas/index.js';
 import { commitAt, commitIdFor, isCommitId, isNodeId, nodeAt } from '../../atlas/index.js';
 import { gradeSet, keyRule } from '../score.js';
-import { counted } from '../members.js';
+import { credited } from '../members.js';
 import type {
   GenerateOptions,
   NoteFacts,
@@ -177,7 +177,7 @@ export const archaeology: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join('; ');
     const claim =
-      `You proved ${counted(count, facts.noun)} that ` +
+      `${credited(facts.register, count, facts.noun)} that ` +
       `${plural(count, 'changed', 'changed')} ${facts.subjectLabel} — ${names}.`;
     // The gap between what was proved and what the history holds is exactly what
     // sampling left out, and naming it as *revealed* is what keeps the sentence

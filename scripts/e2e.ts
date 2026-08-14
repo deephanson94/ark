@@ -1222,12 +1222,12 @@ async function main(): Promise<number> {
           });
         } else {
           // **Every answer, plus the one wrong row whose witness is being
-          // checked.** Picking the wrong row alone was precision 0, and since
-          // ADR-0035 a board explains itself only to an answer that
-          // discriminated — so the old version of this step now measures the
-          // withholding rule rather than the witness. `k` answers and one
-          // mistake is precision `k/(k+1) ≥ 0.5`, which is above the bar for
-          // every board, and it leaves exactly one spurious row to explain.
+          // checked.** This was a workaround for ADR-0035's precision bar —
+          // picking the wrong row alone scored precision 0 and the board went
+          // silent, so the step measured the withholding rule rather than the
+          // witness. The bar is gone (ADR-0047) and the shape is kept anyway,
+          // because it is the honest near-miss this step is about and it leaves
+          // exactly one spurious row to explain.
           const wanted = new Set(
             [...witnessBoard.truth].map((id) => labelById.get(id) ?? '').filter((l) => l !== ''),
           );
@@ -2078,14 +2078,23 @@ async function main(): Promise<number> {
       }
     }
 
-    // ---- select-all buys nothing (ADR-0035) ------------------------------
+    // ---- select-all buys no *proof* (ADR-0047) ---------------------------
     //
     // A playtester farmed a pass in two clicks: tick everything, read the
     // annotated key off the reveal, reopen, tick what it named — `S · 100%`, a
-    // pass, and a field note. This plays that first step for real. It is a
-    // browser check rather than a unit one because the leak was as much the
-    // **map unlock** as the words, and because the panel is what a player reads:
-    // the assertion is that no candidate's label appears anywhere in it.
+    // pass, and a field note. This plays the **whole** exploit, both steps, and
+    // asserts where it now ends.
+    //
+    // **It used to assert that the reveal named nothing**, which was ADR-0035's
+    // gate. That gate is gone: it could not hold — a single-pick answer scores
+    // above zero exactly when the pick is in the key, so the score is a
+    // membership oracle and guardrail 6 makes retries free — and its own
+    // showcase case *was* the exploit. So the reveal now names every member, on
+    // purpose, and what must not move is the **ledger**: the second answer
+    // passes, retires the board and draws the cone, and proves nothing. That is
+    // a browser check rather than a unit one because the unit version
+    // (`progress.test.ts`) cannot see the notebook or the HUD, which are what a
+    // player reads the claim off.
     {
       const exploitContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const exploitPage = await exploitContext.newPage();
@@ -2116,27 +2125,73 @@ async function main(): Promise<number> {
         const shown = (await exploitPage.locator('.console-panel').innerText()).trim();
         // Every row's own rendered label, compared against rendered text — the
         // `innerText` landmine, and the reason the labels come from the board
-        // rather than from the atlas.
+        // rather than from the atlas. The reveal is *expected* to name members
+        // now; this is the control that proves the exploit's first step
+        // succeeded, so the assertions below are about a real farm.
         const named = rows.map((row) => row.trim()).filter((row) => row !== '' && shown.includes(row));
-        if (named.length > 0) {
+        if (named.length === 0) {
           failures.push({
             what: 'select-all',
-            detail: `the reveal named ${named.length} of ${rows.length} candidates after select-all`,
+            detail: `the reveal named none of ${rows.length} candidates — nothing to farm`,
           });
         }
-        if (!shown.includes('wrong than right')) {
-          failures.push({
-            what: 'select-all',
-            detail: 'the board went silent without saying why',
-          });
-        }
-        // The control: this run must have been a genuine select-all on a real
-        // board, or the two assertions above pass against an empty panel.
         if (rows.length < 4) {
           failures.push({ what: 'select-all', detail: `only ${rows.length} rows to sweep` });
         }
+        // How much the map claims the player understands, before the farm's
+        // second step. Read off the HUD, which is the number a player would
+        // point at.
+        const understoodBefore = await exploitPage.locator('.hud-counts').innerText();
+
+        // **Step two: reopen and type back what the panel just said.** This is
+        // the click that used to mint a field note claiming proof.
+        //
+        // Reopened with Enter on the **selected** node rather than through the
+        // guide, and that is not a shortcut: `main.ts` selects the subject when
+        // it grades, so Enter reopens *this* board, while the guide would move
+        // on — a failed attempt bumps `selector.attempts`, which demotes the
+        // board it was spent on. The first version of this step used the guide,
+        // got a different board, and failed with `nothing selected` because none
+        // of the remembered labels was on it. Never predict what the shell will
+        // serve; here, ask for the one thing we already have.
+        const key = new Set(
+          (await exploitPage.locator('.note-missed .note-path, .note-correct .note-path')
+            .allInnerTexts()).map((text) => text.trim()),
+        );
+        if (key.size === 0) {
+          failures.push({ what: 'select-all', detail: 'the reveal listed no answer rows to copy' });
+        }
+        await exploitPage.locator('.console-submit').click();
+        await exploitPage.waitForTimeout(400);
+        await exploitPage.keyboard.press('Enter');
+        await exploitPage.waitForSelector('.choice-button', { timeout: 5000 });
+        // Tick exactly the rows the reveal named as answers — `.note-missed`
+        // and `.note-correct` are the truth set, `.note-spurious` is not.
+        for (const button of await exploitPage.locator('.choice-button').all()) {
+          if (key.has((await button.innerText()).trim())) await button.click();
+        }
+        await submitBoard(exploitPage, 'select-all farm');
+        await exploitPage.waitForSelector('.console-score', { timeout: 5000 });
+        const farmed = (await exploitPage.locator('.console-panel').innerText()).trim();
+        // It passes — guardrail 6 forbids anything else — and it says so.
+        if (!farmed.includes('Recorded as shown rather than proved')) {
+          failures.push({
+            what: 'select-all',
+            detail: 'a farmed pass did not say it was recorded as shown',
+          });
+        }
+        await exploitPage.locator('.console-submit').click();
+        await exploitPage.waitForTimeout(300);
+        const understoodAfter = await exploitPage.locator('.hud-counts').innerText();
+        if (understoodAfter !== understoodBefore) {
+          failures.push({
+            what: 'select-all',
+            detail: `the farm moved the understood count: ${understoodBefore} → ${understoodAfter}`,
+          });
+        }
         process.stdout.write(
-          `e2e: select-all over ${rows.length} rows → ${named.length} candidates named\n`,
+          `e2e: select-all over ${rows.length} rows → ${named.length} named, ` +
+            `farmed pass recorded as shown, counts held at ${understoodAfter}\n`,
         );
         await exploitPage.screenshot({ path: join(SHOT_DIR, 'select-all.png') });
       } finally {

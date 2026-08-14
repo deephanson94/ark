@@ -28,10 +28,12 @@ import { join } from 'node:path';
 import type { Atlas, Challenge } from '../src/atlas/index.js';
 import { buildIndex, indexOptions } from '../src/indexer/build.js';
 import { scoreSet } from '../src/verbs/score.js';
-import { REVEAL_PRECISION_BAR } from '../src/verbs/withhold.js';
 
 const corpus = process.argv[2] ?? '/tmp/ark-corpus';
 const repos = process.argv.slice(3);
+
+/** The bar ADR-0035's gate used, kept here because this probe is its obituary. */
+const REVEAL_PRECISION_BAR = 0.5;
 
 /**
  * Clicks until a single-pick answer clears the reveal bar.

@@ -631,6 +631,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // gone by the next click — ADR-0016 decision 3.
       const progression = applyGrade(progress, challenge, grade);
       remember(progression.progress);
+      // Handed back to the console so the panel can say which register this
+      // answer landed in while the board that decided it is still on screen.
+      const register = progression.register;
       // Every graded submission, pass or fail — which is the difference between
       // this and the `attempts` map below, and the reason M2's datum did not
       // exist before. That one counts only the boards that did *not* pass, so a
@@ -705,6 +708,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       turnPending = true;
       describe(selected);
       invalidate();
+      return register;
     },
     onClose() {
       if (turnPending) {

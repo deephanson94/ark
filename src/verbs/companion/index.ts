@@ -32,7 +32,7 @@
 import type { Challenge, Graph, NodeId, AtlasId } from '../../atlas/index.js';
 import { idOf, nodeAt } from '../../atlas/index.js';
 import { gradeSet, keyRule } from '../score.js';
-import { counted } from '../members.js';
+import { counted, credited } from '../members.js';
 import { decidedByNothing, disclosesNothing, keyNotExpressible } from '../disclosure.js';
 import type {
   GenerateOptions,
@@ -137,7 +137,7 @@ export const companion: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${counted(count, facts.noun)} that ` +
+      `${credited(facts.register, count, facts.noun)} that ` +
       `${plural(count, 'changes', 'change')} with ${facts.subjectLabel} — ${names} — ` +
       `the strongest sharing ${facts.farthest} ${plural(facts.farthest, 'commit', 'commits')}.`;
     const revealed =

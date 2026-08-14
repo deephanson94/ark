@@ -41,7 +41,7 @@ import { PASS_THRESHOLD } from '../verbs/index.js';
 import type { Fog } from './fog.js';
 
 /** Bumped when the stored shape changes. Independent of `ATLAS_VERSION`. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /**
  * One challenge the player passed.
@@ -69,6 +69,21 @@ export interface Pass {
    * orders and compares these and never needs to know which kind they are.
    */
   readonly proved: readonly AtlasId[];
+  /**
+   * Truth members picked in a passing answer that came **after** this board had
+   * already been graded once — and therefore after it had explained itself.
+   *
+   * Sorted, unique, and disjoint from `proved`. It is the other half of
+   * NORTH-STAR §9's *"facts you have proven you know, not facts you were
+   * shown"*, and before ADR-0047 the save had only the first half: **every**
+   * passing answer minted `proved`, whatever the player had been told one click
+   * earlier.
+   *
+   * A pass in this register still retires the board, still unlocks the subject's
+   * cone and still writes a field note. What it does not do is claim the note as
+   * knowledge, which is the one thing §9 says the register is for.
+   */
+  readonly shown: readonly AtlasId[];
 }
 
 export interface Progress {
@@ -80,9 +95,34 @@ export interface Progress {
   readonly surveyed: readonly NodeId[];
   /** Sorted by `(verb, subject)`. */
   readonly passes: readonly Pass[];
+  /**
+   * Every `(verb, subject)` this player has submitted an answer to, passing or
+   * not. Sorted, unique. `answerKey` strings, the same shape `answeredKeys`
+   * returns.
+   *
+   * **This is what makes "the first submission" a thing the save can know**, and
+   * it has to live on `Progress` rather than on `Pass` because a *failed* first
+   * attempt leaves no `Pass` behind — which is precisely the attempt after which
+   * the board has explained itself. In memory the selector's attempt counter
+   * would answer the same question and it dies on reload, so a reload-then-pass
+   * would mint a note the player did not earn.
+   *
+   * ADR-0047: proof is what the **first** answer earned. `gate.ts` certifies
+   * every board against guesses assembled from a known information state — key
+   * size, the drawn direct ring, hover — and that certification models the first
+   * submission and nothing after it. So *proved* means "claimed under the
+   * conditions this board was certified fair for", which is a sentence the save
+   * can check.
+   */
+  readonly graded: readonly string[];
 }
 
-export const EMPTY_PROGRESS: Progress = { version: SAVE_VERSION, surveyed: [], passes: [] };
+export const EMPTY_PROGRESS: Progress = {
+  version: SAVE_VERSION,
+  surveyed: [],
+  passes: [],
+  graded: [],
+};
 
 function union<T extends string>(existing: readonly T[], added: Iterable<T>): T[] {
   return [...new Set([...existing, ...added])].sort(byteCompare);
@@ -111,20 +151,34 @@ export function recordPass(
   progress: Progress,
   verb: VerbId,
   subject: AtlasId,
-  proved: Iterable<AtlasId>,
+  members: Iterable<AtlasId>,
+  register: Register = 'proved',
 ): Progress {
   const passes = [...progress.passes];
   const at = passes.findIndex((pass) => pass.verb === verb && pass.subject === subject);
   const existing = at === -1 ? undefined : passes[at];
-  const merged: Pass = {
-    verb,
-    subject,
-    proved: union(existing?.proved ?? [], proved),
-  };
+  const proved = union(existing?.proved ?? [], register === 'proved' ? members : []);
+  // **Disjoint, and `proved` wins.** A member proved on the first submission and
+  // shown again on a later one is still proved — guardrail 6 forbids the second
+  // attempt taking away what the first earned, and this is the one place the two
+  // registers could have collided.
+  const knownProved = new Set(proved);
+  const shown = union(existing?.shown ?? [], register === 'shown' ? members : []).filter(
+    (id) => !knownProved.has(id),
+  );
+  const merged: Pass = { verb, subject, proved, shown };
   if (at === -1) passes.push(merged);
   else passes[at] = merged;
   passes.sort(passOrder);
   return { ...progress, passes };
+}
+
+/** Which half of NORTH-STAR §9's distinction a passing answer lands in. */
+export type Register = 'proved' | 'shown';
+
+/** Everything a live pass claims, in either register. */
+export function claimedBy(pass: Pass): AtlasId[] {
+  return [...pass.proved, ...pass.shown];
 }
 
 export interface Progression {
@@ -138,8 +192,41 @@ export interface Progression {
    * next leak. What a pass unlocks is the verb's business (`subjectsPassed`).
    */
   readonly unlocked: boolean;
+  /**
+   * Which register this answer landed in, or `null` when it did not pass.
+   *
+   * Returned rather than recomputed by the caller, because the fact is *"was
+   * this board already graded before this call"* and this function is the only
+   * one that knows — by the time it returns, `graded` says yes either way.
+   */
+  readonly register: Register | null;
 }
 
+/**
+ * Fold one grade into the record.
+ *
+ * **The first submission is the one that can prove something** (ADR-0047). Every
+ * later passing answer is recorded in the `shown` register instead, because by
+ * then the board has explained itself and no policy over the *reveal* can change
+ * that: a single-pick answer scores `2/(K+1) > 0` exactly when the pick is in
+ * the key, so the **score** is a membership oracle, and guardrail 6 makes
+ * retries free and unlimited. Measured on four repos, one candidate at a time
+ * reads the whole answer key in 20 submissions and reaches a full reveal in a
+ * mean of 5.2 — on **every board of all four**
+ * (`npx tsx scripts/probe-farm.ts`, at `9b13cf6`).
+ *
+ * So extraction-resistance is not a property this product can have, and
+ * NORTH-STAR §7.1 already made that peace for the atlas file: *"anyone who opens
+ * devtools to cheat has opted out of the product"*. What §9 says to defend is
+ * the **distinction** between shown and proved, and that lives here.
+ *
+ * Guardrail 6 is untouched and the check is worth writing out: the score is
+ * unchanged, nothing is locked, the board can be answered again immediately, a
+ * retry still improves the band and still retires the deck, still unlocks the
+ * cone and still writes a field note. The only thing a retry cannot do is
+ * convert *shown* into *proved* — which is not a punishment for a wrong answer,
+ * it is a refusal to relabel a fact the player was handed.
+ */
 export function applyGrade(
   progress: Progress,
   challenge: Challenge,
@@ -152,9 +239,18 @@ export function applyGrade(
   // place a non-node subject can enter the record.
   const seen = [challenge.subject, ...challenge.candidates].filter(isNodeId);
   let next = recordSurvey(progress, seen);
+  const key = answerKey(challenge.verb, challenge.subject);
+  const first = !progress.graded.includes(key);
   const passed = grade.score >= threshold;
-  if (passed) next = recordPass(next, challenge.verb, challenge.subject, grade.correct);
-  return { progress: next, unlocked: passed };
+  const register: Register | null = passed ? (first ? 'proved' : 'shown') : null;
+  if (register !== null) {
+    next = recordPass(next, challenge.verb, challenge.subject, grade.correct, register);
+  }
+  // Recorded for **every** graded answer, passing or not: the attempt that
+  // explains a board is usually the one that failed, and it is the reason the
+  // next one cannot prove anything.
+  if (first) next = { ...next, graded: union(next.graded, [key]) };
+  return { progress: next, unlocked: passed, register };
 }
 
 // ---------------------------------------------------------------------------
@@ -272,14 +368,19 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
   const live: Pass[] = [];
   for (const pass of progress.passes) {
     if (!liveness.exists(pass.subject)) continue;
-    const proved = pass.proved.filter(
-      (member) => liveness.exists(member) && liveness.holds(pass.verb, pass.subject, member),
-    );
+    const alive = (member: AtlasId): boolean =>
+      liveness.exists(member) && liveness.holds(pass.verb, pass.subject, member);
+    const proved = pass.proved.filter(alive);
+    // **Both registers decay, and a pass survives while *either* does.** Reading
+    // only `proved` here would drop every shown-register pass at the first
+    // restore — which re-fogs the subject, un-retires the board and deletes the
+    // note, silently, for a player who did nothing but answer twice.
+    const shown = pass.shown.filter(alive);
     // A fully decayed pass drops out entirely, which demotes its subject: the
     // map re-fogs, honestly, because the thing the player proved is no longer
     // true — and the question comes back, because it is unanswered again.
-    if (proved.length === 0) continue;
-    live.push({ verb: pass.verb, subject: pass.subject, proved });
+    if (proved.length === 0 && shown.length === 0) continue;
+    live.push({ verb: pass.verb, subject: pass.subject, proved, shown });
   }
   return live;
 }
@@ -345,6 +446,13 @@ export function answeredKeys(progress: Progress, liveness: Liveness): Set<string
  * `understood` stays verb-blind on purpose: proving *anything* about a file is
  * a real reason to know its name. It is the radius, not the label, that has to
  * be earned in the verb that asks about it.
+ *
+ * **Either register unlocks the cone, and that is deliberate** (ADR-0047). The
+ * reveal that made the pass a *shown* one had already drawn this cone and named
+ * every member of it in words, so withholding the picture afterwards would be
+ * ADR-0016's vanishing-payoff defect — a rendering that appears and then
+ * withdraws, which this repository has shipped once and has a landmine about.
+ * The board is retired either way, so nothing is asked back.
  */
 export function subjectsPassed(
   progress: Progress,
@@ -379,12 +487,26 @@ export function deriveFog(
 
   const understood = new Set<NodeId>();
   for (const pass of livePasses(progress, liveness)) {
+    // **`understood` is the proved register and nothing else** (ADR-0047). This
+    // set's contract, stated at the top of this file, is *"you proved you knew
+    // something about it, by being graded against ground truth"*, and NORTH-STAR
+    // §4 calls the revealed fraction of the map *"a real measure of how much of
+    // it you can reason about"*. A playthrough that read every answer off the
+    // reveal and typed it back must not light the map, or that sentence is
+    // false and the fog is decoration.
+    //
+    // A shown member still promotes to `surveyed`, which is exactly what it is:
+    // you were shown it.
+    //
     // A commit subject un-fogs nothing of its own — it is not on the map. Its
-    // proved members still promote, below, which is the whole of what a
-    // Placement pass reveals.
+    // members still promote, below, which is the whole of what a Placement pass
+    // reveals.
     if (isNodeId(pass.subject)) {
-      understood.add(pass.subject);
+      if (pass.proved.length > 0) understood.add(pass.subject);
       surveyed.add(pass.subject);
+    }
+    for (const member of pass.shown) {
+      if (isNodeId(member)) surveyed.add(member);
     }
     // **Node members only, and that filter is new.** `understood` and
     // `surveyed` are sets of *squares*; an Archaeology pass proves commits,

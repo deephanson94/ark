@@ -180,7 +180,27 @@ export interface NoteFacts {
    * note can honestly prove four packages out of a population of places.
    */
   readonly populationNoun: Noun;
+  /**
+   * Which half of NORTH-STAR §9's *"proven you know, not shown"* this note is.
+   *
+   * `proved` — the pass was this board's **first** graded answer, taken under
+   * the information state `gate.ts` certified it fair against. `shown` — the
+   * board had already been answered once and had therefore already explained
+   * itself, so the members are true and the player did not have to find them.
+   *
+   * **On the facts rather than in the console** (ADR-0027): each verb opens its
+   * own sentence, because *"you were shown 4 files that depend on X"* and *"…4
+   * commits that landed on X"* are the same distinction in two vocabularies, and
+   * templating one opening over a verb's own clause is how *"Map its companion"*
+   * happened. The sentence about the **rule** — why this note is in this
+   * register — is shared, in `notes.ts`, for the same reason the reveal's
+   * withheld-sentence was.
+   */
+  readonly register: NoteRegister;
 }
+
+/** @see NoteFacts.register */
+export type NoteRegister = 'proved' | 'shown';
 
 /**
  * What to call the things a prompt is about.

@@ -53,7 +53,7 @@ import type {
 } from '../types.js';
 import { DEFAULT_GENERATE_OPTIONS } from '../types.js';
 import { decidedFact, touchedFact, widthFact } from '../disclosure.js';
-import { commitLabel, counted } from '../members.js';
+import { commitLabel, counted, credited } from '../members.js';
 import { generatePlacement } from './generate.js';
 import { revealOf } from './reveal.js';
 
@@ -154,7 +154,7 @@ export const placement: Verb = {
     const count = facts.proved.length;
     const names = facts.proved.map((member) => member.label).join(', ');
     const claim =
-      `You proved ${counted(count, facts.noun)} that ` +
+      `${credited(facts.register, count, facts.noun)} that ` +
       `${plural(count, 'changed', 'changed')} in ${facts.subjectLabel} — ${names}.`;
     // The gap between what was proved and what the commit touched is exactly
     // what sampling left out (ADR-0018), and naming it as *revealed* is what

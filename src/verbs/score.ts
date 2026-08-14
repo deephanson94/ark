@@ -35,6 +35,16 @@ export interface SetScore {
  * fail state, no lockout) and instead denied the metric the whole anti-gaming
  * argument rests on.
  *
+ * **The second half of the sentence was false too, and for two milestones it sat
+ * one screen away from the thing that falsified it.** *"Nothing is locked by a
+ * wrong answer"* was true of the score and of the deck, and ADR-0035's reveal
+ * gate locked the **explanation** — so a player below the precision bar read
+ * this promise and, in the same panel, *"this board is not explained here"*. A
+ * cold playtester named the pair as the single worst thing in the product.
+ * ADR-0047 removed the gate; what replaces the promise is the rule that is
+ * actually true now, and saying it up front is what stops the first answer being
+ * spent carelessly.
+ *
  * **Stating the key size is free against the Ctrl-F gate**, which is the reason
  * it is safe rather than a judgement that it feels fair: `gate.ts` already
  * hands every heuristic `truth.length`, so every board that ships has been
@@ -48,7 +58,8 @@ export function keyRule(challenge: Challenge): string {
   const count = challenge.candidates.length;
   return (
     `Exactly ${key === 1 ? 'one' : key} of these ${count} ${key === 1 ? 'counts' : 'count'}, ` +
-    'so extra picks lower the score. Nothing is locked by a wrong answer.'
+    'so extra picks lower the score. Answer as often as you like — every answer ' +
+    'is explained, and only the first one can prove anything.'
   );
 }
 

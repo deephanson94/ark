@@ -40,7 +40,7 @@
 
 import type { Graph, AtlasId, VerbId } from '../atlas/index.js';
 import { byteCompare } from '../atlas/index.js';
-import type { NoteFacts, NoteProse, ProvedMember } from '../verbs/index.js';
+import type { NoteFacts, NoteProse, NoteRegister, ProvedMember } from '../verbs/index.js';
 import { VERBS, memberLabel, memberNoun } from '../verbs/index.js';
 import type { Liveness, Progress } from './progress.js';
 import { livePasses } from './progress.js';
@@ -89,9 +89,19 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
     if (subjectLabel === null) continue;
     const weights = verb.noteWeights(graph, pass.subject);
 
+    // **A note claims one register, never a mixture** (ADR-0047). A pass can
+    // hold both — proved on the first answer, shown on a later one — and a
+    // sentence over the union would either overclaim the shown half or
+    // underclaim the proved half. So the proved members are the note whenever
+    // there are any, which is exactly the behaviour before this change; a pass
+    // that proved nothing writes its note from what it was shown, in the
+    // register §9 keeps for it. Shown members reach `surveyed` and the map
+    // either way (`deriveFog`); what they do not do is get counted as knowledge.
+    const register: NoteRegister = pass.proved.length > 0 ? 'proved' : 'shown';
+    const claimed = register === 'proved' ? pass.proved : pass.shown;
     const proved: ProvedMember[] = [];
     const provedIds: AtlasId[] = [];
-    for (const member of pass.proved) {
+    for (const member of claimed) {
       const weight = weights.get(member);
       // **The name is resolved by prefix, not through `refById`.** This read
       // `graph.refById.get(member)` and `continue`d on a miss, which for an
@@ -130,6 +140,7 @@ export function fieldNotes(graph: Graph, progress: Progress, liveness: Liveness)
       // wrong about one of the two sentences on every such note.
       noun: memberNoun(graph, provedIds),
       populationNoun: memberNoun(graph, weights.keys()),
+      register,
     });
   }
   notes.sort(
@@ -153,5 +164,19 @@ export function noteProse(note: FieldNote): NoteProse {
   // Unreachable from `fieldNotes`, which has already dropped an unknown verb.
   // Kept because this is exported and the types demand a total function.
   if (verb === undefined) return { claim: '', revealed: null };
-  return verb.noteProse(note);
+  const prose = verb.noteProse(note);
+  if (note.register === 'proved') return prose;
+  // **The sentence about the *rule* is shared, and the one about the relation is
+  // not.** Which register a note is in is a fact about the pass — the board had
+  // already been graded once, so it had already explained itself — and it reads
+  // identically whatever the verb asked. That is the same seam `withhold.ts`
+  // used for its own sentence and the reason ADR-0027 holds: nothing here knows
+  // what the question was.
+  const rule =
+    'Recorded as shown rather than proved: this board had already explained ' +
+    'itself when you answered it.';
+  return {
+    claim: prose.claim,
+    revealed: prose.revealed === null ? rule : `${prose.revealed} ${rule}`,
+  };
 }

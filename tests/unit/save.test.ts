@@ -119,7 +119,7 @@ describe('parseProgress', () => {
     });
     const parsed = parseProgress(text);
     expect(parsed.passes).toHaveLength(1);
-    expect(parsed.passes[0]).toEqual({ verb: 'blastRadius', subject: id(3), proved: [id(1)] });
+    expect(parsed.passes[0]).toEqual({ shown: [], verb: 'blastRadius', subject: id(3), proved: [id(1)] });
   });
 
   it('survives a record whose fields are the wrong container type', () => {
@@ -206,7 +206,7 @@ describe('a commit subject survives a round trip', () => {
   it('keeps a pass whose subject is a commit', () => {
     const restored = parseProgress(JSON.stringify(commitPass));
     expect(restored.passes).toEqual([
-      { verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] },
+      { shown: [], verb: 'placement', subject: 'c:0123456789ab', proved: ['n:000000000001'] },
     ]);
   });
 

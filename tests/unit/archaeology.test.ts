@@ -796,6 +796,7 @@ describe('what a pass is worth', () => {
       population: 9,
       noun: { one: 'commit', many: 'commits' },
       populationNoun: { one: 'commit', many: 'commits' },
+      register: 'proved',
     });
     expect(prose.claim).toContain('1 commit that changed src/core/engine.ts');
     expect(prose.claim).not.toContain('hops');

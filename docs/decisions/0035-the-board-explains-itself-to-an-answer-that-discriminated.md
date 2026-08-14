@@ -1,6 +1,12 @@
 # ADR-0035 — The board explains itself to an answer that discriminated
 
-- **Status**: **accepted and built.**
+- **Status**: **superseded by [ADR-0047](./0047-proof-is-what-the-first-answer-earned.md), 2026-08-14.**
+  The mechanism decided here does not do what this document says it does: the gate is farmable in a
+  mean of **5.2 clicks on every board of four repos**, and the case §3 below calls *"untouched"* and
+  *"not farmable"* — pick few, be right — **is** the exploit, because precision 1.0 hands over the
+  whole reveal without passing. The goal stated here stands and is what ADR-0047 defends. Only the
+  layer moved: from the panel to the save.
+- **Status was**: **accepted and built.**
 - **Date**: 2026-08-11
 - **Decided by**: the owner, from three options put with their costs.
 - **Bears on**: NORTH-STAR §9 (field notes claim only what was proved), guardrail 6

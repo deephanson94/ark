@@ -16,9 +16,9 @@
  */
 
 import type { AtlasId, NodeId, RepoMeta, VerbId } from '../atlas/index.js';
-import { VERB_IDS, isCommitId, isNodeId } from '../atlas/index.js';
+import { VERB_IDS, byteCompare, isCommitId, isNodeId } from '../atlas/index.js';
 import type { Pass, Progress } from './progress.js';
-import { EMPTY_PROGRESS, SAVE_VERSION } from './progress.js';
+import { EMPTY_PROGRESS, SAVE_VERSION, answerKey } from './progress.js';
 
 /** The subset of `Storage` this needs. Lets a test pass a plain object. */
 export interface SaveStore {
@@ -109,7 +109,26 @@ function asPass(value: unknown): Pass | null {
   // **And so is a member** (ADR-0019) — see `asMemberIds`, where the same
   // sentence was written down as a rule and was false one verb later.
   if (typeof subject !== 'string' || !(isNodeId(subject) || isCommitId(subject))) return null;
-  return { verb: verb as VerbId, subject, proved: asMemberIds(record['proved']) };
+  const proved = asMemberIds(record['proved']);
+  const known = new Set(proved);
+  return {
+    verb: verb as VerbId,
+    subject,
+    proved,
+    // **Absent means empty, never means "same as proved".** A v1 record has no
+    // `shown` and every member in it was minted under the old rule, so it is
+    // read as proved — see `parseProgress` for why that is the charitable
+    // migration and what it costs.
+    shown: asMemberIds(record['shown']).filter((id) => !known.has(id)),
+  };
+}
+
+/** Sorted, unique, and free of anything that is not a string. */
+function asKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string'))].sort(
+    byteCompare,
+  );
 }
 
 /**
@@ -131,11 +150,24 @@ export function parseProgress(text: string | null): Progress {
   }
   if (typeof parsed !== 'object' || parsed === null) return EMPTY_PROGRESS;
   const record = parsed as Record<string, unknown>;
-  if (record['version'] !== SAVE_VERSION) return EMPTY_PROGRESS;
+  const version = record['version'];
+  if (version !== SAVE_VERSION && version !== 1) return EMPTY_PROGRESS;
   const passes = (Array.isArray(record['passes']) ? record['passes'] : [])
     .map(asPass)
     .filter((pass): pass is Pass => pass !== null);
-  return { version: SAVE_VERSION, surveyed: asNodeIds(record['surveyed']), passes };
+  // **The v1 → v2 migration, and it is charitable on purpose.** A v1 record
+  // predates ADR-0047's first-submission rule, so nothing in it can say which of
+  // its passes were earned on a first answer. Discarding them would delete a
+  // real notebook to enforce a rule retroactively, which punishes the player for
+  // a change they had no part in; re-labelling them all as *shown* would do the
+  // same thing more quietly. They are kept as proved, and `graded` is seeded
+  // with their keys so the rule engages from here on — a board already passed
+  // cannot be farmed for a note it has already minted.
+  const graded =
+    version === SAVE_VERSION
+      ? asKeys(record['graded'])
+      : passes.map((pass) => answerKey(pass.verb, pass.subject)).sort(byteCompare);
+  return { version: SAVE_VERSION, surveyed: asNodeIds(record['surveyed']), passes, graded };
 }
 
 export function serializeProgress(progress: Progress): string {
