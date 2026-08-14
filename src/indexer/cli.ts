@@ -149,6 +149,7 @@ function summarise(
   generation: IndexResult['generation'],
   bytes: number,
   milliseconds: number,
+  subtree: string | null,
 ): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
@@ -170,6 +171,15 @@ function summarise(
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
   ];
+  // Rename detection is **off** in a subtree, because `--relative` makes git re-pair adds with
+  // deletes inside the prefix and invent renames the repository does not contain (ADR-0042 §7.1.1).
+  // Lineage is lost rather than wrong, and losing it silently is the half this line exists to stop.
+  if (subtree !== null) {
+    lines.push(
+      `subtree     indexing ${subtree}/ of a larger repository — renames are not detected here, ` +
+        'so churn is split across a moved file\'s two paths',
+    );
+  }
   // A measurement, printed whenever it is non-zero, in a file whose whole
   // discipline is that it prints measurements rather than estimates. It is not
   // the alarm — that is the refusal below, and it fires on a threshold. This
@@ -361,7 +371,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const started = Date.now();
-  const { atlas, generation } = await buildIndex(indexOptions(args.root));
+  const { atlas, generation, subtree } = await buildIndex(indexOptions(args.root));
   const text = serializeAtlas(atlas);
 
   // **A `play` with no `--out` gets a private copy of the player**, so two runs
@@ -380,7 +390,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   if (!args.quiet) {
     process.stdout.write(
-      `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started)}\n`,
+      `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started, subtree)}\n`,
     );
     process.stdout.write(`written     ${outPath}\n`);
   }

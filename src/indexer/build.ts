@@ -98,6 +98,15 @@ export const DEFAULT_INDEX_OPTIONS: Omit<IndexOptions, 'root'> = {
 export interface IndexResult {
   readonly atlas: Atlas;
   /**
+   * The repo-relative directory indexed, when it is not the repository root — `null` when it is.
+   *
+   * Not on the atlas: it is a fact about **this run** rather than about the repository, and the
+   * player has no use for it. It is here because rename detection is off in a subtree (ADR-0042
+   * §7.1.1) and the CLI has to be able to say so; a field with no consumer is what this repository
+   * removed `RevealNote.route` for.
+   */
+  readonly subtree: string | null;
+  /**
    * What each verb shipped and what it refused to. Printed by the CLI.
    *
    * **`null` when the whole deck was refused** (ADR-0025) — not four empty
@@ -152,9 +161,14 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   // Resolution reads the manifests nearest each importing file, not just the
   // repo root's — see `config.ts`. The walk has already applied .gitignore and
   // the default excludes, so this cannot wander into `node_modules`.
+  // **`onDisk`, not `files`.** `walked.files` holds what became a node, and `pnpm-workspace.yaml`
+  // is not a language ark scans — so reading manifests from that list makes every pnpm monorepo's
+  // workspace declaration invisible, and `config.ts` then refuses to resolve any of its packages.
+  // Measured on rxjs: 150 Blast Radius boards become 80. Sorted, because `onDisk` is a Set and the
+  // order manifests arrive in decides a first-claimant tie.
   const configIndex = await loadConfigIndex(
     options.root,
-    walked.files.map((file) => file.path).filter(isManifest),
+    [...walked.onDisk].filter(isManifest).sort(byteCompare),
   );
   const paths = walked.files.map((file) => file.path);
 
@@ -534,7 +548,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
   // saying why. The rule is `sourceCoverage`'s and lives in `src/atlas/` because
   // the player states the same fact to the same person.
   const coverage = sourceCoverage(validated);
-  if (coverage.deckRefused) return { atlas: validated, generation: null };
+  if (coverage.deckRefused) return { atlas: validated, generation: null, subtree: git.subtree };
 
   // **The cap is per verb, deliberately.** `maxChallengesFor` scales the deck
   // with the repo so a 2,000-file codebase is not exhausted in one sitting; a
@@ -586,6 +600,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexResult> {
 
   return {
     atlas: validateAtlas({ ...validated, challenges }),
+    subtree: git.subtree,
     generation: {
       blastRadius: blast,
       companion: companionResult,

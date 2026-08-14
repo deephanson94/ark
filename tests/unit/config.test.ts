@@ -237,3 +237,142 @@ describe('the workspace-sibling rule in resolveSpecifier', () => {
     });
   });
 });
+
+/**
+ * **Which manifests are workspace packages** — and the answer is not "all of them".
+ *
+ * `webpack` has no `workspaces` field at all, and its tracked test fixtures declare generic names
+ * (`pkg`, `my-lib`) whose real targets are per-fixture `node_modules/` copies the walk excludes.
+ * Treating every walked `package.json` as a linked package sent `import "pkg"` from one fixture to
+ * an unrelated fixture's file as a **`certain` internal edge** — a non-dependent in a `truth` set,
+ * on two shipped boards. ADR-0042 §3.7.
+ *
+ * Two conditions, and each is asserted alone because each alone leaves a live defect.
+ */
+async function write(dir: string, rel: string, text: string): Promise<void> {
+  await mkdir(dirname(join(dir, rel)), { recursive: true });
+  await writeFile(join(dir, rel), text, 'utf8');
+}
+
+describe('which manifests are workspace packages', () => {
+  it('refuses a nested manifest no workspace glob covers', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-ws-none-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({ name: 'webpack' }));
+      await mkdir(join(dir, 'test', 'fixture'), { recursive: true });
+      await write(dir, 'test/fixture/package.json', JSON.stringify({ name: 'pkg' }));
+      const index = await loadConfigIndex(dir, ['package.json', 'test/fixture/package.json']);
+      // The root is a package; the fixture is a directory boundary.
+      expect(index.workspacePackages.get('webpack')?.dir).toBe('');
+      expect(index.workspacePackages.get('pkg')).toBeUndefined();
+      // `workspaceNames` still holds it — it may never be called `external` (guardrail 4).
+      expect(index.workspaceNames.has('pkg')).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts a nested manifest a workspaces glob covers', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-ws-glob-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({ name: 'root', workspaces: ['packages/*'] }));
+      await mkdir(join(dir, 'packages', 'a'), { recursive: true });
+      await write(dir, 'packages/a/package.json', JSON.stringify({ name: '@scope/a' }));
+      const index = await loadConfigIndex(dir, ['package.json', 'packages/a/package.json']);
+      expect(index.workspacePackages.get('@scope/a')?.dir).toBe('packages/a');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads pnpm-workspace.yaml, which is not JSON and not a scanned language', async () => {
+    // The first version parsed every manifest with `parseJsonc` before dispatching on its name, so
+    // the YAML returned null and was skipped — and every pnpm monorepo lost its declaration.
+    // Measured on rxjs: 150 Blast Radius boards became 80.
+    const dir = await mkdtemp(join(tmpdir(), 'ark-ws-pnpm-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({ name: 'root' }));
+      await write(dir, 'pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - apps/site\n");
+      await mkdir(join(dir, 'packages', 'b'), { recursive: true });
+      await write(dir, 'packages/b/package.json', JSON.stringify({ name: '@scope/b' }));
+      const index = await loadConfigIndex(dir, [
+        'package.json',
+        'packages/b/package.json',
+        'pnpm-workspace.yaml',
+      ]);
+      expect(index.workspacePackages.get('@scope/b')?.dir).toBe('packages/b');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a name two manifests claim', async () => {
+    // nest's root manifest is literally named `@nestjs/core`, the same as `packages/core`. Without
+    // this the root answers for it and resolves `@nestjs/core/x` against the repository root.
+    const dir = await mkdtemp(join(tmpdir(), 'ark-ws-dup-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({ name: '@nestjs/core', workspaces: ['packages/*'] }));
+      await mkdir(join(dir, 'packages', 'core'), { recursive: true });
+      await write(dir, 'packages/core/package.json', JSON.stringify({ name: '@nestjs/core' }));
+      const index = await loadConfigIndex(dir, ['package.json', 'packages/core/package.json']);
+      expect(index.workspacePackages.get('@nestjs/core')).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * `exports` flattening, through `loadConfigIndex` rather than a hand-built map.
+ *
+ * A review mutated the condition priority and the duplicate-name rule and found **both mutants
+ * survived all 889 unit tests**: `tests/unit/resolve.test.ts`'s workspace helper builds
+ * `workspacePackages` by hand with plain string targets, so the layer where the real defects lived
+ * was exercised by nothing.
+ */
+describe('exports flattening', () => {
+  it('prefers the import condition over types, in a fixed order', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-cond-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: { '.': { types: './x.d.ts', require: './x.cjs', import: './x.js' } },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      expect(index.workspacePackages.get('p')?.exports.get('.')).toBe('./x.js');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a wildcard subpath key literally, for the pattern matcher to expand', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-star-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: { './*': './dist/*.js' },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      expect(index.workspacePackages.get('p')?.exports.get('./*')).toBe('./dist/*.js');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads a conditions-only exports object as the package root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ark-exp-only-'));
+    try {
+      await write(dir, 'package.json', JSON.stringify({
+        name: 'p',
+        workspaces: ['.'],
+        exports: { import: './m.js', require: './c.cjs' },
+      }));
+      const index = await loadConfigIndex(dir, ['package.json']);
+      expect(index.workspacePackages.get('p')?.exports.get('.')).toBe('./m.js');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

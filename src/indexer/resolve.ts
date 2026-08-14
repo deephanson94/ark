@@ -236,6 +236,30 @@ function pick(base: string, context: ResolveContext): Resolution | null {
   return null;
 }
 
+/**
+ * The `exports` value for a subpath a `*` pattern covers, with the wildcard substituted.
+ *
+ * Longest literal prefix wins, which is the rule Node uses to disambiguate overlapping patterns.
+ */
+function matchExportPattern(
+  exports: ReadonlyMap<string, string>,
+  subpath: string,
+): string | undefined {
+  let best: { prefix: number; target: string } | null = null;
+  for (const [key, target] of exports) {
+    const star = key.indexOf('*');
+    if (star === -1) continue;
+    const head = key.slice(0, star);
+    const tail = key.slice(star + 1);
+    if (!subpath.startsWith(head) || !subpath.endsWith(tail)) continue;
+    if (subpath.length < head.length + tail.length) continue;
+    const filled = subpath.slice(head.length, subpath.length - tail.length);
+    if (best !== null && head.length <= best.prefix) continue;
+    best = { prefix: head.length, target: target.replace('*', filled) };
+  }
+  return best?.target;
+}
+
 function packageNameOf(specifier: string): string {
   const parts = specifier.split('/');
   if (specifier.startsWith('@')) return parts.slice(0, 2).join('/');
@@ -333,7 +357,13 @@ export function resolveSpecifier(
       const subpath =
         specifier.length > packageName.length ? `.${specifier.slice(packageName.length)}` : '.';
       const rest = subpath === '.' ? '' : subpath.slice(2);
-      const declared = pkg.exports.get(subpath);
+      // **Pattern subpaths count as declared.** `exportEntries` stores keys literally, so a map of
+      // `{"./*": "./dist/*.js"}` matched no real subpath and fell to arm 3 — which tries
+      // `<dir>/<rest>` first and is exactly the decoy path arm 2 exists to bar. typeorm (`./*`,
+      // root manifest, so `<dir>` is the repository root), hono, vue-core and excalidraw all
+      // declare patterns. "Corpus-clean" was luck of layout, which is not what a safety rule may
+      // rest on.
+      const declared = pkg.exports.get(subpath) ?? matchExportPattern(pkg.exports, subpath);
 
       if (declared !== undefined) {
         const base = normalizeJoin(pkg.dir, declared);
@@ -345,11 +375,22 @@ export function resolveSpecifier(
       // declared case may not reach `pkg.dir` itself.
       const roots =
         declared === undefined ? [pkg.dir, joinDir(pkg.dir, 'src')] : [joinDir(pkg.dir, 'src')];
+      // **Two arms landing on two different files is a guess, and the schema has a word for it.**
+      // `probable` means "more than one viable target"; `certain` is what `graph.ts` trusts for an
+      // answer key. When both `<dir>/<rest>` and `<dir>/src/<rest>` are indexed we have no way to
+      // say which the specifier meant, so the edge is drawn and excluded from generation rather
+      // than asserted.
+      const found: Resolution[] = [];
       for (const root of roots) {
         const base = normalizeJoin(joinDir(root, rest), '');
         if (base === null) continue;
         const hit = pick(base, context);
-        if (hit !== null && hit.kind === 'internal') return hit;
+        if (hit !== null && hit.kind === 'internal') found.push(hit);
+      }
+      const first = found[0];
+      if (first !== undefined && first.kind === 'internal') {
+        const distinct = new Set(found.map((hit) => (hit.kind === 'internal' ? hit.path : '')));
+        return distinct.size > 1 ? { ...first, confidence: 'probable' } : first;
       }
     }
     return { kind: 'unresolved' };

@@ -294,3 +294,32 @@ describe('resolveSpecifier — a package this repo defines', () => {
     expect(resolveSpecifier('src/consumer.ts', 'myrepo', ctx)).toEqual({ kind: 'unresolved' });
   });
 });
+
+describe('resolveSpecifier — workspace edge cases a review found', () => {
+  it('treats a pattern subpath as declared, so it cannot reach the package directory', () => {
+    // `{"./*": "./dist/*.js"}` covers `./utils`. Reading it as *undeclared* sent the specifier to
+    // the plain-directory arm — the decoy path the exact-key test above exists to bar. typeorm,
+    // hono, vue-core and excalidraw all declare patterns.
+    const ctx = workspace(['src/utils.ts', 'utils.ts', 'src/consumer.ts'], {
+      myrepo: { dir: '', exports: { './*': './dist/*.js' } },
+    });
+    expect(resolveSpecifier('src/consumer.ts', 'myrepo/utils', ctx)).toEqual({
+      kind: 'internal',
+      path: 'src/utils.ts',
+      confidence: 'certain',
+    });
+  });
+
+  it('marks a two-arm ambiguity probable rather than certain', () => {
+    // Both `<dir>/lib` and `<dir>/src/lib` are indexed and nothing says which the specifier meant.
+    // `probable` edges are excluded from challenge generation, which is the point.
+    const ctx = workspace(['packages/p/lib.ts', 'packages/p/src/lib.ts', 'a.ts'], {
+      '@s/p': { dir: 'packages/p' },
+    });
+    expect(resolveSpecifier('a.ts', '@s/p/lib', ctx)).toEqual({
+      kind: 'internal',
+      path: 'packages/p/lib.ts',
+      confidence: 'probable',
+    });
+  });
+});

@@ -184,8 +184,14 @@ function subtreeOf(toplevel: string | null, root: string): string | null {
   } catch {
     // An unreadable path is not a reason to guess; fall back to the raw strings.
   }
-  const top = a.replace(/[/\\]+$/, '');
-  const here = b.replace(/[/\\]+$/, '');
+  // **Separators normalised before comparing.** `realpathSync` answers with `\` on Windows while
+  // this test was written with `/` only, so `startsWith(`${top}/`)` was false for every subtree
+  // there — the guard returned `null`, rename detection stayed on, and §7.1.1's invented-rename
+  // wrong answer key was live on Windows while every CI job (ubuntu) stayed green. The
+  // three-platform fingerprint job cannot see it either: it indexes repository *roots*, which
+  // compare equal under both spellings.
+  const top = a.replace(/\\/g, '/').replace(/\/+$/, '');
+  const here = b.replace(/\\/g, '/').replace(/\/+$/, '');
   if (here === top) return null;
   const prefix = here.startsWith(`${top}/`) ? here.slice(top.length + 1) : null;
   return prefix === null || prefix === '' ? null : prefix;
@@ -218,7 +224,7 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
     // reports as delete + add: churn is split across the two paths and lineage is lost, which is
     // the documented cost of dropping `-M` (CLAUDE.md) and is the safe direction — a missing
     // lineage costs a challenge, an invented one is a wrong answer key. It is reported rather than
-    // absorbed: `subtree` is non-null exactly when this happened, and the CLI says so.
+    // absorbed: `subtree` is non-null exactly when this happened, and `cli.ts` prints it.
     const toplevel = (await tryGit(root, ['rev-parse', '--show-toplevel'], env))?.trim() ?? null;
     const subtree = subtreeOf(toplevel, root);
 
