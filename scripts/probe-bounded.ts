@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { buildGraph, reach, nodeAt } from '../src/atlas/graph.js';
-import type { Atlas, NodeRef } from '../src/atlas/schema.js';
+import type { Atlas } from '../src/atlas/schema.js';
 
 const dir = process.argv[2] ?? '/tmp/atlas-A';
 const repos = process.argv.slice(3);

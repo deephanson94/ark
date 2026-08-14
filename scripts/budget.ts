@@ -22,15 +22,25 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import {
+  MAX_ATLAS_BYTES,
+  MAX_INDEX_MS,
+  REFERENCE_FILES,
+} from '../src/atlas/budget.js';
+
 import { serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The scale the CLAUDE.md ceilings are quoted at. */
-const REFERENCE_FILES = 2000;
-const MAX_ATLAS_BYTES = 5 * 1024 * 1024;
-const MAX_INDEX_MS = 10_000;
+/**
+ * The ceilings come from `src/atlas/budget.ts` rather than being restated here.
+ *
+ * They used to live only in this file, which `src/` cannot import — so the CLI printed the two
+ * measurements they are about with no verdict attached, and a user indexing a large repo had a
+ * figure and no way to read it. Defining them twice would put the fix and the check on separate
+ * numbers, which is the one thing the working agreement's *never define the shape twice* is for.
+ */
 const MAX_PLAYER_DEPS = 3;
 /**
  * A second repo to measure against, if the machine has one.

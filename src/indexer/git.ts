@@ -195,6 +195,23 @@ export async function readGitHistory(root: string, maxCommits: number): Promise<
         // content diff, is **308 ms** for the same information and a slightly
         // smaller payload. It was 42% of the whole index.
         '--name-status',
+        // **`--relative`, because the index root and the repository root are not the same string.**
+        //
+        // `git log` runs with `cwd` set to the directory being indexed, but it reports paths
+        // relative to the **repository** root regardless. Point the CLI at `packages/rxjs/src` of a
+        // monorepo and every commit's file list reads `packages/rxjs/src/every.ts` while every node
+        // is keyed `every.ts`, so **no commit intersects any node**: `commits.ts` drops all of them
+        // for `touched.size === 0` and all three history verbs ship zero boards. Measured on rxjs
+        // `54796b38`: 5,976 commits walked, **0 retained**, 231 nodes, **1 challenge**.
+        //
+        // `--relative` makes the diff output relative to `cwd` *and* drops files outside it, which
+        // is both halves of what a subtree index needs. It is a no-op when `cwd` is the repository
+        // root, which is why every existing atlas is byte-identical across this change (asserted by
+        // `test:determinism` and the golden atlas).
+        //
+        // This is ADR-0026's cobra defect a third time — *a path prefix and a node key are not the
+        // same string* — now between git and the walk rather than inside either. ADR-0042 §7.
+        '--relative',
         // `short` renders each commit in *its own* recorded timezone, so a repo
         // with contributors in two zones produces dates that do not decrease
         // along the log, and two commits made at the same instant get different

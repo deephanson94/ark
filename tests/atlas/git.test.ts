@@ -14,7 +14,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -165,4 +165,60 @@ describe('repo.root', () => {
       await rm(empty, { recursive: true, force: true });
     }
   });
+});
+
+/**
+ * Indexing a **subdirectory** of a repository.
+ *
+ * `git log` runs with `cwd` set to the directory being indexed and reports paths relative to the
+ * **repository** root regardless, so without `--relative` every commit's file list is prefixed and
+ * intersects no node. `commits.ts` then drops every commit for `touched.size === 0` and all three
+ * history verbs ship nothing — measured on rxjs `54796b38`'s `packages/rxjs/src`: 5,976 commits
+ * walked, **0 retained**, 1 challenge. ADR-0042 §7.
+ *
+ * The assertion is on the **paths**, not on a count: a count can be right for the wrong reason,
+ * and the defect is entirely about what string a path is.
+ */
+describe('history in a subdirectory', () => {
+  let repo = '';
+
+  beforeAll(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ark-subdir-'));
+    await git(repo, ['init', '-q', '-b', 'main']);
+    await mkdir(join(repo, 'packages', 'inner'), { recursive: true });
+    await writeFile(join(repo, 'outside.ts'), 'export const outside = 1;\n', 'utf8');
+    await writeFile(join(repo, 'packages', 'inner', 'deep.ts'), 'export const deep = 1;\n', 'utf8');
+    await git(repo, ['add', '-A']);
+    await git(repo, ['commit', '-q', '-m', 'both']);
+    await writeFile(join(repo, 'packages', 'inner', 'deep.ts'), 'export const deep = 2;\n', 'utf8');
+    await git(repo, ['add', '-A']);
+    await git(repo, ['commit', '-q', '-m', 'inner only']);
+  }, 30_000);
+
+  afterAll(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  it('reports paths relative to the indexed directory, not the repository root', async () => {
+    const history = await readGitHistory(join(repo, 'packages', 'inner'), 100);
+    expect(history.present).toBe(true);
+    const touched = history.commits.flatMap((commit) => [...commit.files]);
+    // The whole defect in one assertion: `deep.ts`, never `packages/inner/deep.ts`.
+    expect(touched).toContain('deep.ts');
+    expect(touched.some((path) => path.startsWith('packages/'))).toBe(false);
+  }, 30_000);
+
+  it('drops files outside the indexed directory', async () => {
+    const history = await readGitHistory(join(repo, 'packages', 'inner'), 100);
+    const touched = history.commits.flatMap((commit) => [...commit.files]);
+    expect(touched).not.toContain('outside.ts');
+    expect(touched).not.toContain('../../outside.ts');
+  }, 30_000);
+
+  it('still reports repository-relative paths when the root IS the repository', async () => {
+    const history = await readGitHistory(repo, 100);
+    const touched = history.commits.flatMap((commit) => [...commit.files]);
+    expect(touched).toContain('packages/inner/deep.ts');
+    expect(touched).toContain('outside.ts');
+  }, 30_000);
 });
