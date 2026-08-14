@@ -180,3 +180,146 @@ describe('resolveSpecifier — bare', () => {
     });
   });
 });
+
+/**
+ * Resolving a specifier that names a package **this repository defines** (ADR-0042 decision 5).
+ *
+ * Three arms, and every assertion below is about a gap between them rather than about an arm:
+ *
+ *   1. `exports` declares the subpath and its target is on the map — authoritative.
+ *   2. `exports` declares it and the target is missing (a build artifact) — fall back to the
+ *      source-layout mirror `<dir>/src/<rest>` and **nowhere else**.
+ *   3. `exports` says nothing — plain directory resolution, which is what Node does without one.
+ *
+ * The two `''`-directory cases are the ones an adversarial review found in the first version of
+ * this code, both of them ADR-0026's *a path prefix and a node key are not the same string*.
+ */
+function workspace(
+  files: readonly string[],
+  packages: Record<string, { dir: string; exports?: Record<string, string> }>,
+): ResolveContext {
+  const base = context(files, {}, Object.keys(packages));
+  return {
+    ...base,
+    workspacePackages: new Map(
+      Object.entries(packages).map(([name, entry]) => [
+        name,
+        { dir: entry.dir, exports: new Map(Object.entries(entry.exports ?? {})) },
+      ]),
+    ),
+  };
+}
+
+describe('resolveSpecifier — a package this repo defines', () => {
+  it('follows an exports map that names source', () => {
+    // apollo-client's shape: `{".": "./src/core/index.ts"}`, at the repository root.
+    const ctx = workspace(['src/core/index.ts', 'src/consumer.ts'], {
+      '@apollo/client': { dir: '', exports: { '.': './src/core/index.ts' } },
+    });
+    expect(resolveSpecifier('src/consumer.ts', '@apollo/client', ctx)).toEqual({
+      kind: 'internal',
+      path: 'src/core/index.ts',
+      confidence: 'certain',
+    });
+  });
+
+  it('falls back to the source mirror when exports names a build artifact', () => {
+    // rxjs's shape: exports points at `dist/`, which is not on the map; `packages/*/src/` is.
+    const ctx = workspace(['packages/test/src/index.ts', 'packages/rxjs/src/a.ts'], {
+      '@rxjs/test': { dir: 'packages/test', exports: { '.': './dist/esm/index.js' } },
+    });
+    expect(resolveSpecifier('packages/rxjs/src/a.ts', '@rxjs/test', ctx)).toEqual({
+      kind: 'internal',
+      path: 'packages/test/src/index.ts',
+      confidence: 'certain',
+    });
+  });
+
+  it('resolves through the package directory when there is no exports map', () => {
+    // nest's shape: no `exports` and no `main` anywhere; 493 specifiers resolve this way.
+    const ctx = workspace(['packages/common/utils/shared.utils.ts', 'packages/core/x.ts'], {
+      '@nestjs/common': { dir: 'packages/common' },
+    });
+    expect(resolveSpecifier('packages/core/x.ts', '@nestjs/common/utils/shared.utils', ctx)).toEqual({
+      kind: 'internal',
+      path: 'packages/common/utils/shared.utils.ts',
+      confidence: 'certain',
+    });
+  });
+
+  /**
+   * **The wrong answer key this ordering exists to prevent.** `exports` maps `./utils` to a build
+   * artifact compiled from `src/utils.ts`. A root-level `utils.ts` decoy exists. Falling through
+   * from a *declared* subpath to `<dir>/<rest>` — which at a root manifest is the repository root —
+   * resolves the specifier to the decoy, `certain`, and the real file never gets the edge.
+   */
+  it('never falls from a declared exports subpath to the package directory', () => {
+    const ctx = workspace(['src/utils.ts', 'utils.ts', 'src/consumer.ts'], {
+      myrepo: { dir: '', exports: { './utils': './dist/utils.js' } },
+    });
+    const hit = resolveSpecifier('src/consumer.ts', 'myrepo/utils', ctx);
+    expect(hit).toEqual({ kind: 'internal', path: 'src/utils.ts', confidence: 'certain' });
+    // …and specifically not the decoy.
+    expect(hit).not.toEqual(expect.objectContaining({ path: 'utils.ts' }));
+  });
+
+  /**
+   * **The dead arm.** With a manifest at the repository root `dir` is `''`, and `` `${dir}/src` ``
+   * is `/src` — a leading slash `normalizeJoin` preserves and no node key can match. The first
+   * version of this block built exactly that, so both fallback arms were inert for every
+   * root-level package: 8 of the 12 corpus repos with a root manifest self-import their own name.
+   */
+  it('resolves under a manifest at the repository root', () => {
+    const ctx = workspace(['src/index.ts', 'src/utils.ts', 'src/consumer.ts'], {
+      myrepo: { dir: '' },
+    });
+    expect(resolveSpecifier('src/consumer.ts', 'myrepo', ctx)).toEqual({
+      kind: 'internal',
+      path: 'src/index.ts',
+      confidence: 'certain',
+    });
+    expect(resolveSpecifier('src/consumer.ts', 'myrepo/utils', ctx)).toEqual({
+      kind: 'internal',
+      path: 'src/utils.ts',
+      confidence: 'certain',
+    });
+  });
+
+  it('stays unresolved when nothing lands on an indexed file', () => {
+    // The refusal is kept, not replaced: a workspace sibling reaches back into the repo, so
+    // calling it `external` would be the false negative guardrail 4 exists to catch.
+    const ctx = workspace(['src/consumer.ts'], {
+      myrepo: { dir: 'packages/thing', exports: { '.': './dist/index.js' } },
+    });
+    expect(resolveSpecifier('src/consumer.ts', 'myrepo', ctx)).toEqual({ kind: 'unresolved' });
+  });
+});
+
+describe('resolveSpecifier — workspace edge cases a review found', () => {
+  it('treats a pattern subpath as declared, so it cannot reach the package directory', () => {
+    // `{"./*": "./dist/*.js"}` covers `./utils`. Reading it as *undeclared* sent the specifier to
+    // the plain-directory arm — the decoy path the exact-key test above exists to bar. typeorm,
+    // hono, vue-core and excalidraw all declare patterns.
+    const ctx = workspace(['src/utils.ts', 'utils.ts', 'src/consumer.ts'], {
+      myrepo: { dir: '', exports: { './*': './dist/*.js' } },
+    });
+    expect(resolveSpecifier('src/consumer.ts', 'myrepo/utils', ctx)).toEqual({
+      kind: 'internal',
+      path: 'src/utils.ts',
+      confidence: 'certain',
+    });
+  });
+
+  it('marks a two-arm ambiguity probable rather than certain', () => {
+    // Both `<dir>/lib` and `<dir>/src/lib` are indexed and nothing says which the specifier meant.
+    // `probable` edges are excluded from challenge generation, which is the point.
+    const ctx = workspace(['packages/p/lib.ts', 'packages/p/src/lib.ts', 'a.ts'], {
+      '@s/p': { dir: 'packages/p' },
+    });
+    expect(resolveSpecifier('a.ts', '@s/p/lib', ctx)).toEqual({
+      kind: 'internal',
+      path: 'packages/p/lib.ts',
+      confidence: 'probable',
+    });
+  });
+});

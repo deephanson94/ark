@@ -311,6 +311,7 @@ export function createWorldMode(): WorldMode {
           labelsDrawn: 0,
           beaconsDrawn: 0,
           skylineDrawn: 0,
+          archesDrawn: 0,
           litOnMinimap: 0,
         };
       }

@@ -453,6 +453,7 @@ describe('the two constants that cross the indexer/player wall', () => {
       headDate: '2026-01-01',
       root: 'b'.repeat(40),
       totalCommits: 2,
+      subtree: null,
       commits: [
         { sha: 'c'.repeat(40), date: '2026-01-01', author: 'a', subject: 'one', files: ['x.ts', 'y.ts', 'z.ts'], renames: [] },
         { sha: 'd'.repeat(40), date: '2026-01-02', author: 'a', subject: 'two', files: ['x.ts', 'y.ts', 'z.ts'], renames: [] },

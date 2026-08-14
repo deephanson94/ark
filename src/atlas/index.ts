@@ -55,6 +55,8 @@ export {
 export type { SourceCoverage } from './coverage.js';
 
 export { commitIdFor, isCommitId, isNodeId, nodeIdFor } from './identity.js';
+export { MAX_ATLAS_BYTES, REFERENCE_FILES, budgetVerdicts } from './budget.js';
+export type { BudgetVerdict } from './budget.js';
 export { NO_STRATEGY, encodeWitness, isStrategyToken, readWitness, splitWitness } from './witness.js';
 export { byKey, byteCompare, challengeOrder, isStrictlySorted, round2, sortedUnique } from './order.js';
 export {

@@ -51,7 +51,7 @@ import { EMPTY_CONFIG, normalizeJoin } from './resolve.js';
  * an `extends` pointing at one finds nothing and the inherited `paths` vanish.
  * vite has 55 tsconfigs and only some are called `tsconfig.json`.
  */
-const MANIFEST_PATTERN = /^(package\.json|[tj]sconfig(\.[\w-]+)*\.json)$/;
+const MANIFEST_PATTERN = /^(package\.json|pnpm-workspace\.yaml|[tj]sconfig(\.[\w-]+)*\.json)$/;
 
 /**
  * A `tsconfig.json` may `extends` a chain of others. Bounded so a cycle or a
@@ -81,6 +81,10 @@ interface PackageFacts {
   readonly name: string | null;
   /** Dependency names declared with the `workspace:` protocol. */
   readonly workspaceDeps: readonly string[];
+  /** Globs from a `workspaces` field — the array form, or the object's `packages`. */
+  readonly workspaceGlobs: readonly string[];
+  /** `exports` flattened to `subpath -> target`, sorted. MEASUREMENT (ADR-0042 §3). */
+  readonly exports: readonly (readonly [string, string])[];
 }
 
 interface TsFacts {
@@ -102,6 +106,16 @@ export interface ConfigIndex {
    * false-negative guardrail 4 exists to prevent.
    */
   readonly workspaceNames: ReadonlySet<string>;
+  /** MEASUREMENT (ADR-0042 §3): where each workspace package lives and what it exports. */
+  readonly workspacePackages: ReadonlyMap<string, WorkspacePackage>;
+}
+
+/** MEASUREMENT (ADR-0042 §3). */
+export interface WorkspacePackage {
+  /** Repo-relative directory holding the manifest. `''` at the repo root. */
+  readonly dir: string;
+  /** `exports` subpath -> target, relative to `dir`. */
+  readonly exports: ReadonlyMap<string, string>;
 }
 
 export async function loadConfigIndex(
@@ -111,6 +125,13 @@ export async function loadConfigIndex(
   const packages = new Map<string, PackageFacts>();
   const tsconfigs = new Map<string, TsFacts>();
   const workspaceNames = new Set<string>();
+  const workspacePackages = new Map<string, WorkspacePackage>();
+  /** Directory → facts, for every manifest that declares a name. */
+  const declared = new Map<string, PackageFacts>();
+  /** Name → every directory claiming it. More than one is ambiguous and resolves to nothing. */
+  const claimedBy = new Map<string, string[]>();
+  /** Repo-relative globs from a root `workspaces` field or `pnpm-workspace.yaml`. */
+  const workspaceGlobs = new Set<string>();
 
   // Raw text first, so `extends` can be followed without re-reading.
   //
@@ -126,17 +147,62 @@ export async function loadConfigIndex(
   for (const [path, text] of loaded) if (text !== null) texts.set(path, text);
 
   for (const [path, text] of texts) {
-    const parsed = parseJsonc(text);
-    if (parsed === null) continue;
     const directory = directoryOf(path);
     const name = path.slice(path.lastIndexOf('/') + 1);
+    // Before the JSON parse, because this one is YAML and `parseJsonc` returns null for it — which
+    // is how the first version of this dropped every pnpm workspace declaration on the floor.
+    if (name === 'pnpm-workspace.yaml') {
+      for (const glob of pnpmPackages(text)) workspaceGlobs.add(normalizeJoin(directory, glob) ?? glob);
+      continue;
+    }
+    const parsed = parseJsonc(text);
+    if (parsed === null) continue;
     if (name === 'package.json') {
       const facts = packageFacts(parsed);
       packages.set(directory, facts);
-      if (facts.name !== null) workspaceNames.add(facts.name);
+      if (facts.name !== null) {
+        workspaceNames.add(facts.name);
+        const claimants = claimedBy.get(facts.name);
+        if (claimants === undefined) claimedBy.set(facts.name, [directory]);
+        else claimants.push(directory);
+        declared.set(directory, facts);
+      }
     } else {
       tsconfigs.set(directory, tsFacts(parsed, directory, texts));
     }
+  }
+
+  // **Which manifests are actually workspace packages** — and the answer is not "all of them",
+  // which is what an earlier version of this assumed and what shipped two wrong answer keys.
+  //
+  // `webpack` has **no `workspaces` field at all**, and its tracked test fixtures declare generic
+  // names — `pkg`, `my-lib`, `foo` — whose real targets are per-fixture `node_modules/` copies the
+  // walk correctly excludes. Treating every walked `package.json` as a linked package sent
+  // `import "pkg"` from one fixture to an unrelated fixture's file as a **`certain` internal
+  // edge**, which put a non-dependent into a `truth` set: board `blast-12702e0d8296` marked
+  // `test/cases/scope-hoisting/orphan/index.js` a dependent of `.../entry-exports-field/imports/
+  // pkg.mjs`, which it is not. A player who answers correctly is told they are wrong.
+  //
+  // Two conditions, and each one alone leaves a live defect:
+  //
+  //   qualifying   the repo root, or a directory a **declared** workspace glob covers
+  //                (`workspaces` in the root manifest, or `pnpm-workspace.yaml`). This is what
+  //                makes a nested `package.json` a *linked* package rather than a directory
+  //                boundary, and it is the condition webpack's fixtures fail.
+  //   unambiguous  no other walked manifest claims the same name. nest's **root** manifest is
+  //                literally named `@nestjs/core`, the same as `packages/core`, so without this
+  //                the root would answer for it and resolve `@nestjs/core/x` against the repo root.
+  //
+  // Anything else stays out of the map, which means `resolveSpecifier` keeps the `unresolved`
+  // verdict it had before — a missing challenge rather than a wrong answer key.
+  const rootFacts = declared.get('');
+  const rootGlobs = rootFacts?.workspaceGlobs ?? [];
+  for (const glob of rootGlobs) workspaceGlobs.add(glob);
+  for (const [directory, facts] of declared) {
+    if (facts.name === null) continue;
+    if ((claimedBy.get(facts.name) ?? []).length !== 1) continue;
+    if (directory !== '' && !coveredByGlob(directory, workspaceGlobs)) continue;
+    workspacePackages.set(facts.name, { dir: directory, exports: new Map(facts.exports) });
   }
 
   const cache = new Map<string, ProjectConfig>();
@@ -188,6 +254,7 @@ export async function loadConfigIndex(
   return {
     for: (path) => (texts.size === 0 ? EMPTY_CONFIG : configForDirectory(directoryOf(path))),
     workspaceNames,
+    workspacePackages,
   };
 }
 
@@ -212,7 +279,106 @@ function packageFacts(parsed: unknown): PackageFacts {
     selfImports: dedupeSorted(Object.keys(stringRecord(record['imports']))),
     name: typeof record['name'] === 'string' ? record['name'] : null,
     workspaceDeps: dedupeSorted(workspaceDeps),
+    exports: exportEntries(record['exports']),
+    workspaceGlobs: workspaceGlobsOf(record['workspaces']),
   };
+}
+
+/** `workspaces` as an array, or as `{ packages: [...] }` (the yarn form). */
+function workspaceGlobsOf(value: unknown): readonly string[] {
+  const list = Array.isArray(value)
+    ? value
+    : Array.isArray(stringRecord(value)['packages'])
+      ? (stringRecord(value)['packages'] as unknown[])
+      : [];
+  return dedupeSorted(list.filter((entry): entry is string => typeof entry === 'string'));
+}
+
+/** The `packages:` list of a `pnpm-workspace.yaml`, read as a list of globs and nothing else. */
+function pnpmPackages(text: string): string[] {
+  const globs: string[] = [];
+  let inPackages = false;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '');
+    if (/^\s*packages\s*:/.test(line)) { inPackages = true; continue; }
+    if (inPackages && /^\S/.test(line)) break;
+    const item = /^\s*-\s*['"]?([^'"\s]+)['"]?\s*$/.exec(line);
+    if (inPackages && item?.[1] !== undefined) globs.push(item[1]);
+  }
+  return globs;
+}
+
+/**
+ * Does a workspace glob cover this directory? Only the shapes a `workspaces` field actually uses —
+ * an exact path, a trailing `*` or `**`, and `.` for the root itself. Anything more exotic is not
+ * matched, which costs a resolution rather than inventing one.
+ */
+function coveredByGlob(directory: string, globs: ReadonlySet<string>): boolean {
+  for (const glob of globs) {
+    const clean = glob.replace(/^\.\//, '').replace(/\/+$/, '');
+    if (clean === '.' || clean === '') { if (directory === '') return true; continue; }
+    if (clean === directory) return true;
+    if (clean.endsWith('/**')) {
+      const head = clean.slice(0, -3);
+      if (directory === head || directory.startsWith(`${head}/`)) return true;
+      continue;
+    }
+    if (clean.endsWith('/*')) {
+      const head = clean.slice(0, -2);
+      if (directory.startsWith(`${head}/`) && !directory.slice(head.length + 1).includes('/')) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * MEASUREMENT (ADR-0042 §3). `exports` flattened to `subpath -> target`.
+ *
+ * Condition objects are followed in a fixed order so the result is deterministic.
+ */
+function exportEntries(value: unknown): readonly (readonly [string, string])[] {
+  const target = (x: unknown, depth: number): string | null => {
+    if (depth > 4) return null;
+    if (typeof x === 'string') return x;
+    if (typeof x !== 'object' || x === null || Array.isArray(x)) return null;
+    const record = x as Record<string, unknown>;
+    // **This list is an *active condition set*, not a preference between equals** — which is what
+    // Node uses too. A review called the fixed order a divergence from Node's insertion order and
+    // named vue-core as the witness; measured across nine corpus repos it is the other way round.
+    // Node walks keys in insertion order and takes the first key that is an **active** condition,
+    // skipping ones that are not (`react-server`, `production`, `browser`, `deno`, `sass`). Naive
+    // insertion order treats every key as active, and on the 6 subpaths in the corpus where the two
+    // orders reach *different indexed files* it picks the wrong one every time: apollo-client's
+    // `./react` becomes `index.react-server.ts` rather than `index.ts` (×5), and kysely's `.`
+    // becomes `outdated-typescript.d.ts`. Everywhere else both land on missing build output and the
+    // outcome is identical. `scripts/probe-conditions.ts` has the table.
+    //
+    // `types` is last on purpose: a declaration file is not the module, and Node never resolves a
+    // runtime specifier to one. It stays as a last resort rather than being dropped, because a map
+    // that offers nothing else is better read than refused.
+    for (const key of ['import', 'module', 'default', 'require', 'node', 'types']) {
+      if (!(key in record)) continue;
+      const hit = target(record[key], depth + 1);
+      if (hit !== null) return hit;
+    }
+    return null;
+  };
+  const entries: (readonly [string, string])[] = [];
+  if (typeof value === 'string') return [['.', value]];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length > 0 && !keys.some((key) => key.startsWith('.'))) {
+    const hit = target(value, 0);
+    return hit === null ? [] : [['.', hit]];
+  }
+  for (const [key, raw] of Object.entries(record)) {
+    if (!key.startsWith('.')) continue;
+    const hit = target(raw, 0);
+    if (hit !== null) entries.push([key, hit]);
+  }
+  entries.sort((a, b) => byteCompare(a[0], b[0]));
+  return entries;
 }
 
 /**

@@ -490,10 +490,21 @@ async function main(): Promise<number> {
       if (mapBox !== null) {
         const before = (await page.locator('.console-tally').innerText()).trim();
         let toggled = '';
-        for (let row = 1; row < 20 && toggled === ''; row++) {
-          for (let column = 1; column < 30 && toggled === ''; column++) {
-            const x = mapBox.x + (mapBox.width * column) / 44;
-            const y = mapBox.y + (mapBox.height * row) / 24;
+        // **A sweep has to be finer than the thing it is looking for, and cover
+        // all of it.** This one was neither, and both halves were luck for
+        // milestones. The bounds never reached their own denominators —
+        // `column < 30` over a `/44` grid, `row < 20` over `/24` — so it searched
+        // 66% by 79% of the canvas; and at `/44 × /24` the step is ~33 × 37 px
+        // against node discs that render at ~15–20 px, so even inside the swept
+        // area it hit a mark by chance. ark indexes itself, so a commit that
+        // changed no rendering at all re-rolled the layout and put all 19 marks
+        // where the grid did not land. `/96 × /54` steps ~15 × 17 px, under the
+        // smallest disc, and runs to the edges. It still exits on the first hit,
+        // so the cost is paid only when the step is about to fail anyway.
+        for (let row = 1; row < 54 && toggled === ''; row++) {
+          for (let column = 1; column < 96 && toggled === ''; column++) {
+            const x = mapBox.x + (mapBox.width * column) / 96;
+            const y = mapBox.y + (mapBox.height * row) / 54;
             if (
               panelBox !== null &&
               x >= panelBox.x - 8 &&
@@ -1522,6 +1533,38 @@ async function main(): Promise<number> {
     // value rather than by the absence of an error — entering changes the
     // picture, walking changes it again, and the ground carries roads, which is
     // the entire argument of ADR-0033 decision 1.
+    //
+    // **In from a selected node, which is ADR-0032 §3.4's fast travel and not a
+    // convenience here.** Entering from the map with nothing selected spawns the
+    // hero at the shore, outside the north edge — and the buildings near the
+    // shore are the ones a session has already surveyed by this point, so the
+    // walking assertion below had nothing left to find. It read 63 → 65, then
+    // 67 → 69, then 74 → 75, then went red at 82 → 82 when ADR-0046's rank term
+    // surveyed eight more nodes earlier. Sweeping harder is the wrong fix: at
+    // 2.1× run speed the hero simply leaves the map and the next assertion goes
+    // red instead, with `17 towers · 0 roads` on screen. Arriving *in* the city
+    // is both the representative path and the one with something to survey.
+    const entryBox = await page.locator('canvas.map').boundingBox();
+    let entered = false;
+    if (entryBox !== null) {
+      for (let row = 1; row < 20 && !entered; row++) {
+        for (let column = 1; column < 30 && !entered; column++) {
+          const x = entryBox.x + (entryBox.width * column) / 30;
+          const y = entryBox.y + (entryBox.height * row) / 20;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-path').count()) === 0) continue;
+          await page.mouse.click(x, y);
+          entered = true;
+        }
+      }
+    }
+    // **Loudly, not silently.** With no node found the hero falls back to the
+    // shore spawn and the walking assertion below inherits exactly the fragility
+    // this entry exists to remove — passing, or failing for a reason that has
+    // nothing to do with walking. A fallback nobody can see is worse than none.
+    if (!entered) {
+      failures.push({ what: 'world', detail: 'found no node to fast-travel from; entering at the shore' });
+    }
     const beforeWorld = await hashCanvas();
     await page.keyboard.press('g');
     await page.waitForTimeout(300);
@@ -1542,6 +1585,15 @@ async function main(): Promise<number> {
     const towersDrawn = Number(/(\d+) towers/.exec(worldDetail)?.[1] ?? '0');
     if (towersDrawn <= 0) {
       failures.push({ what: 'world', detail: `nothing was standing on the plane: ${worldDetail}` });
+    }
+    // ADR-0044: the districts are named at street level. The world has carried
+    // region colour since it shipped and had no legend, so a hue meant nothing
+    // to a walker. A count of zero here is that gap silently returning — and it
+    // is a count rather than a screenshot for the reason `skylineDrawn` is:
+    // a picture cannot tell an absent layer from a layer with nothing to draw.
+    const archesDrawn = Number(/(\d+) arches/.exec(worldDetail)?.[1] ?? '0');
+    if (archesDrawn <= 0) {
+      failures.push({ what: 'world', detail: `no district was named: ${worldDetail}` });
     }
     // **The skyline is checked at the edge of the world, not here.** NORTH-STAR
     // risk #4 wants the silhouette of what you have not explored, and the world
@@ -1583,10 +1635,21 @@ async function main(): Promise<number> {
       Number(
         /(\d+) surveyed/.exec((await page.locator('.hud-counts').innerText()).trim())?.[1] ?? '0',
       );
+    //
+    // **And the sweeps have to cross the city, not the shore.** Entered from the
+    // map with nothing selected the hero *would* spawn outside the north edge,
+    // so short bursts only ever met the buildings nearest the shore — and this
+    // step's real assumption is that some of *those* are still unsurveyed when
+    // it runs. The fast-travel entry above is what removes that assumption. That assumption
+    // gets weaker every time the deck improves. The entry above is the fix; the
+    // extra sweeps here are the belt, and the deadline is untouched, so a
+    // genuinely dead surveyor still fails.
     let surveyedAfterWalk = await surveyedNow();
-    for (let sweep = 0; sweep < 5 && surveyedAfterWalk <= surveyedBeforeWalk; sweep++) {
+    for (let sweep = 0; sweep < 8 && surveyedAfterWalk <= surveyedBeforeWalk; sweep++) {
       // Turn, then walk. Turning first is what makes the sweeps independent
-      // rather than five copies of the same straight line.
+      // rather than eight copies of the same straight line. **Walk, not run** —
+      // running covers 2.1× the ground and takes the hero out of the city
+      // entirely, which trades this assertion for the one below it.
       await page.keyboard.down('e');
       await page.waitForTimeout(500);
       await page.keyboard.up('e');
@@ -1599,7 +1662,7 @@ async function main(): Promise<number> {
     if (surveyedAfterWalk <= surveyedBeforeWalk) {
       failures.push({
         what: 'world',
-        detail: `walking surveyed nothing in six sweeps: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
+        detail: `walking surveyed nothing in nine sweeps: ${surveyedBeforeWalk} → ${surveyedAfterWalk}`,
       });
     }
     process.stdout.write(

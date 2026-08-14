@@ -256,11 +256,79 @@ function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
   return out;
 }
 
+/**
+ * Paths a first-time player should not be *opened* on.
+ *
+ * ## This is a list, and a list is the thing this repository distrusts most
+ *
+ * ADR-0025's landmine: *"a decision not to include something and a failure to
+ * think of it look identical in a table"*. That one cost 64 challenges about a
+ * Terraform repo's documentation because `.tf` was not on a list. So the bar for
+ * putting one in the product is high, and it is cleared here by **what happens
+ * when the list is wrong**, not by the list being right.
+ *
+ * This is consulted **only by the rank**, and only to push a board later. It
+ * cannot refuse a board, cannot reach `retain`, cannot change an answer key and
+ * cannot change what is drawn. A pattern that is missing costs *one junk board
+ * served early* — the defect it exists to reduce, not a new one. A pattern that
+ * over-fires costs *one good board served later*, and everything is still served.
+ * Both failures are soft, which is the whole argument.
+ *
+ * ## Why a graph property was tried first, and why it cannot work
+ *
+ * The proposal this replaces was *"demote a subject with zero non-leaf transitive
+ * dependents"* — a pure graph property, no list. It flags **`src/indexer/build.ts`
+ * on this repo**: cone of 12, every one of them a script, a test or the CLI, so
+ * zero of them has an importer. `tests/fixtures/atlas.ts` has the identical
+ * signature (cone 31, zero non-leaf), and so do hono's `src/adapter/vercel/handler.ts`
+ * and `keys.test.json`. **An orchestrator consumed by entry points and a fixture
+ * consumed by tests are topologically the same thing**, because being near the top
+ * of a program is what that shape means. There is no predicate over the import
+ * graph that separates them; the distinction lives in a layer the graph does not
+ * record. That is `CLAUDE.md`'s entry-point landmine one level up.
+ *
+ * ## What is a rule and what is a list
+ *
+ * The extension clause is a **rule** — a manifest or a Markdown file is not a
+ * source file, so neither can be a module worth opening on, and neither has a
+ * false-positive mode. `testdata` is rule-grade too: the Go toolchain reserves
+ * and ignores that directory name. The rest is the list, and it carries the two
+ * repos that matter: the rule alone catches 1 of hono's 4 junk openings and 0 of
+ * graphql-js's 8.
+ *
+ * **Two known gaps, stated rather than patched.** graphql-js still opens on
+ * `resources/strip-private-declarations.ts`; `resources/`, `docs/`, `site/` and
+ * `tools/` are not here because each is a plausible real-source directory
+ * elsewhere, and adding them blind is the failure this rule is meant not to
+ * repeat. And the list **over-fires on a product module legitimately named
+ * `test`** — `django/test/client.py` is `django.test.Client`, and rxjs publishes
+ * `@rxjs/test` from `packages/test/src/` — measured across eight repos this is
+ * the only false-positive shape it has. Demotion-only is what makes both soft.
+ */
+const SIDESHOW =
+  // The `(__)?` wrappers are the `__tests__` / `__testUtils__` / `__testdata__`
+  // convention, and they are a wrapper rather than three more entries because
+  // enumerating them is how `__testdata__` got missed while `testdata` was
+  // present — a list inside a list, with the same failure mode one level down.
+  /(^|\/)(__)?(tests?|testutils?|testdata|fixtures?|benchmarks?|scripts?|examples?)(__)?(\/|$)|\.(test|spec)\.|\.(json|md)$/i;
+
+/**
+ * Whether a board is a poor thing to *open* a session on.
+ *
+ * Verb-blind, and it has to be: `pathOf` answers `null` for a commit subject
+ * (ADR-0018), which is not demoted — a commit is not a sideshow, it simply has
+ * no path. Nothing here names a verb, which is the seam M4 bought.
+ */
+export function isSideshow(path: string | null): boolean {
+  return path !== null && SIDESHOW.test(path);
+}
+
 interface Rank {
   readonly attempts: number;
   readonly sameRegion: number;
   readonly tier: number;
   readonly progress: number;
+  readonly sideshow: number;
   readonly difficulty: number;
   readonly overlap: number;
   readonly id: string;
@@ -285,6 +353,20 @@ function rankLess(a: Rank, b: Rank): boolean {
   // so among challenges at the same relative position the genuinely easier one
   // wins — which is what makes the two tier-3 verbs alternate rather than
   // arriving in blocks.
+  // **Above `progress`, and the argument for putting it below was refuted by
+  // measuring it.** That argument was that a term this high flattens the
+  // progression — every real subject before any sideshow one, whatever the
+  // difficulty — and so undoes ADR-0040's interleave. Measured through
+  // `scripts/probe-opening.ts` on four repos, at three placements, it is
+  // backwards in both halves. Below `progress` the term is nearly inert where it
+  // is most needed, because it can only reorder *within* a band and Blast
+  // Radius's band 0 is **entirely** sideshow on graphql-js: test-pathed boards in
+  // the first fifteen go 8 → 8 there and 4 → 4 on hono. Above it they go to
+  // **0 on all four repos**. And the interleave it was supposed to protect gets
+  // *better*, not worse — the second verb arrives at board 2 rather than 6 on
+  // hono, 3 rather than 7 on kysely, 2 rather than 8 on graphql-js — because the
+  // boards being demoted were the ones crowding it out.
+  if (a.sideshow !== b.sideshow) return a.sideshow < b.sideshow;
   if (a.progress !== b.progress) return a.progress < b.progress;
   if (a.difficulty !== b.difficulty) return a.difficulty < b.difficulty;
   // **Below difficulty, and that placement was measured rather than argued.**
@@ -314,6 +396,14 @@ export function suggestNext(
   deck: readonly Challenge[],
   regionOf: (subject: AtlasId) => string | null,
   state: SelectorState,
+  /**
+   * The subject's path, or `null` where it has none — a commit, or a node the
+   * atlas no longer holds. Optional so a caller that does not care about the
+   * opening (tests, and anything scoring a rank in isolation) is unchanged; the
+   * shell passes it. Absent, `sideshow` is 0 for everything and the rank is
+   * exactly what it was.
+   */
+  pathOf: (subject: AtlasId) => string | null = () => null,
 ): Challenge | null {
   // Null means "this subject is not anywhere on the map" — a commit (ADR-0018),
   // or a node the atlas no longer holds. The region constraint then simply does
@@ -336,6 +426,7 @@ export function suggestNext(
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
       tier: challenge.tier,
       progress: progressOf.get(challenge.id) ?? 0,
+      sideshow: isSideshow(pathOf(challenge.subject)) ? 1 : 0,
       difficulty: challenge.difficulty,
       overlap: overlapWith(state.previous, challenge),
       id: challenge.id,

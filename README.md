@@ -24,7 +24,7 @@ publishing is a decision about the name rather than about the packaging.
 
 **MIT licensed.** It is a research-shaped project rather than a supported one: there is no roadmap
 promise, the name is a placeholder with known collisions, and the interesting reading is
-[`docs/decisions/`](./docs/decisions/) — 40 ADRs, each carrying the measurement that decided it, plus
+[`docs/decisions/`](./docs/decisions/) — 46 ADRs, each carrying the measurement that decided it, plus
 the ones recording what the measurement got wrong afterwards.
 
 ## The problem
@@ -90,10 +90,10 @@ simultaneously possible.
 | `src/indexer/` | Repo on disk → validated atlas: `walk` → `scan`/`resolve` (ES modules), `goscan`/`gomod` (Go) and `pyscan`/`pyroot` (Python) → `git`/`history` → `regions`/`layout`/`elevation` → `build` orchestrates, groups files into nodes, and generates. |
 | `src/verbs/` | One directory per verb (`generate`, `grade`, `reveal`, distractors), plus what they share: `gate.ts` (the Ctrl+F gate), `difficulty.ts`, `score.ts` (F1), `disclosure.ts` (cross-verb facts), `sample.ts`, `paths.ts`. |
 | `src/player/` | Map rendering, camera/orbit/heading, challenge console, grading UI, fog, field notes, save, selector. |
-| `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city, one painter's list, the minimap. |
+| `src/player/world/` | The walkable world (ADR-0033): a perspective camera, a body and its collisions, the fold from atlas to city — towers, roads, the chronicle and the district arches (ADR-0044) — one painter's list, the minimap. |
 | `tests/unit/` | Pure functions: grading, graph queries, distractors, gate, save/restore. **< 5 s.** |
 | `tests/atlas/` | Indexes *this* repo and asserts the result is sound — the bootstrap fixture and the integration test. |
-| `docs/decisions/` | 40 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
+| `docs/decisions/` | 46 ADRs. Anything that contradicts or extends the north star lands here **with its measurement**. |
 
 ### The grading contract
 
@@ -126,8 +126,9 @@ map, the field notes, the deck or the selector names a verb.
 | **M6** | The expensive tier | Trace verb (real call graph) | ⬜ |
 
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
-**orbit view** (press `o`), a **walkable world** (press `g` — a hero, and the roads are the import
-edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change layer** on the map
+**orbit view** (press `o`), a **walkable world** (press `g` — a hero, the roads are the import
+edges, and every district carries its name on an arch in its own colour, ADR-0033 and ADR-0044),
+**map rotation between challenges** (ADR-0017), a **co-change layer** on the map
 (ADR-0016), and the **negative witness** — every wrong answer carries the reason it was offered
 (ADR-0020).
 
@@ -135,7 +136,7 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 
 | Verb | Question | Ground truth | Tier | Status |
 |---|---|---|---|---|
-| **Blast Radius** | *"Which of these files depend on this one?"* | Transitive dependents, unbounded | 3 | ✅ |
+| **Blast Radius** | *"Which of these files depend on this one?"* | Transitive dependents, unbounded | 3 | ✅ — but **fully supplied on 8 of 19 measured repos**, token on 7, absent on 4 ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md)) |
 | **Companion** | *"Which files change with this one?"* | Co-change matrix | 3 | ✅ |
 | **Placement** | *"This commit landed — which files did it change?"* | The commit's own file list | 6 | ✅ |
 | **Archaeology** | *"Which of these commits changed this file?"* | Commits whose file list names it | 5 | ✅ |
@@ -166,11 +167,57 @@ edges, ADR-0033), **map rotation between challenges** (ADR-0017), a **co-change 
 | Experiment harness (`?arm=`) | ✅ | `?arm=map\|orbit\|world` fixes the mode a session starts in and refuses the keys that would leave it — `docs/experiments/0001` is between-subjects and every view was one keystroke from every other, so an arm could not be held. The world arm's minimap drops its **road layer** and keeps everything else (ADR-0033 §4.1). **No query string is the ordinary player, unchanged**, which the deployed page has none of. |
 | M2's instrumentation (`arkTally()`) | ✅ | `docs/experiments/0001` §3's engagement measure, in its own `localStorage` record and **only inside `?arm=`**, so the ordinary player stores nothing and ADR-0011 decision 2 is untouched rather than argued with ([ADR-0037](./docs/decisions/0037-m2-is-instrumented-inside-an-arm-and-nowhere-else.md)). The datum did not exist before, and not only unpersisted: `selector.attempts` increments **only on a non-pass**, so it counts failures and would have answered *"challenges attempted"* with a number that falls as participants do better. The first draft put it in `Progress` and **three independent reviewers refuted it**; the shipped shape is theirs. `test:e2e` plays a board in an arm, reloads and asserts the reading survived — deleting the write reddens both assertions. |
 | Hold-out split (`npm run holdout`) | ✅ | Cuts a built atlas into the atlas both arms play and the fixed quiz they are scored on (`docs/experiments/0001` §4.4). `Verb.keyFacts` is the third disclosure direction — *what would state my own key* — and it returns **`null` rather than `[]`** where the vocabulary cannot express one, so the two verbs of the discriminating tier print `unchecked` instead of a clean zero. Refuses **0 on ark `75b6117`, graphql-js `9c245018`, kysely `f24018c7` and hono `7075369e`**; the swap loop is proved by a hand-built collision in `tests/unit/holdout.test.ts`, because on a generated atlas ADR-0019 decision 7 makes one impossible. |
-| Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
+| Third-person walkable world | ✅ | **Press `g`.** A hero you walk through the repo: a file is a building at its map position, its height is `elevation`, **the roads on the ground are the import edges**, an unanswered board is a teal beacon, **a district is a four-pillar arch in its own hue carrying its own name** (ADR-0044 — the world had drawn region colour since it shipped and never said what a colour meant), and a north-up minimap keeps the survey view co-present with the walk. Walking past a building surveys it. Shipped as a **mode** — the flat map is still the arrival state, because **S1 is unrun** and nothing may claim the world teaches better until it runs (ADR-0033; P4 released by the owner, recorded in ADR-0009). |
 
 ### Known gaps — things this project does *not* do
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
+
+- **Blast Radius is starved on half of real repositories, and the reference set could not see it**
+  ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md),
+  proposed). Measured on **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
+  (the deck cap is what bounds it), ships a token deck on **7** (2.4%–25.4% of subjects), and does not
+  exist on **4**. `typeorm` `df07bf1e` ships **58 boards of 2,221 subjects at 97.6% resolution**;
+  `vue-core` 7 of 254; `nest` 7 of 286. The three git-graded verbs are unaffected on almost all of
+  them, so **on a majority of real repositories the product is already a history product** — which no
+  document said before this row.
+
+  **All four reference repos — ark, hono, kysely, graphql-js — are cap-limited**, as are both of
+  `docs/experiments/0001`'s matched pair, so every "the cap is the binding constraint" measurement in
+  this repository (ADR-0039's `retain` work, ADR-0040's progression, ADR-0012's dedupe costs) was
+  taken where the cap binds. ADR-0042 decision 2 proposes adding a taint-limited member.
+
+  **Resolution rate is anti-predictive and `rate × mean closure depth` is not the metric either** —
+  ADR-0024 decision 4's successor is *position*: typeorm's single `src/platform/PlatformTools.ts`
+  carries **one** `require(<expression>)` of the repo's 13,805 import sites and poisons **1,912 of
+  1,921** tainted subjects. Two candidate fixes were refused with measurements: relaxing guardrail
+  4's transitive walk puts a real dependent in the wrong-answer pool of **30 of nest's 68** and 18 of
+  apollo-client's 47 unlocked subjects, and a depth bound creates **29,840 eligible wrong-answer
+  slots across typeorm's board-carrying subjects**. A third — monorepo workspace resolution —
+  is +250 boards across **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120),
+  with **0 directly-visible wrong answer keys** over 46,099 slots. It is measured, reverted and left
+  as the owner's call with three stated limits, patch at `docs/decisions/0042-resolver.patch`.
+
+  **Starvation is `(1 − taint) × subjects < cap`, and that predicts it on 18 of 20 gradeable
+  repos** — the sharpest instrument this project has for the question, and it was found only after
+  the corpus reached 24. `angular/angular` carries **50.4% subject taint and is not starved at all**,
+  because 3,275 subjects leave 1,625 clean ones against a cap of 1,050. Taint share alone does not
+  decide; taint × size against the cap does. The two misses name the second constraint: a clean
+  *subject* still needs a clean *candidate pool* (nest), and a mixed-language repo's subject count is
+  not its gradeable subject count (`apache/airflow`, the corpus's first — 7,729 subjects refused by
+  language while 552 TS/JS boards ship). With 24 repos and the resolver fix shipped the split is
+  **12 cap-limited / 5 taint-limited / 2 neither**.
+
+  **Archaeology is supply-limited on 10 of 19 repos, more than Companion's 6** — and on four where
+  Blast Radius is *fully* supplied (hugo 23 boards against a cap of 156, webpack 113 against 1,579).
+  Its refusals are dominated by `disclosed` — ADR-0019 decision 7 yielding to Placement — so it is a
+  different mechanism and nothing proposed above fixes it. Companion is the most robust verb in the
+  product, cap-limited on 13 of 19.
+
+  **Four adversarial reviewers raised ~50 findings against the draft and most reproduced** — one of
+  them a **wrong answer key in shipped code**: the first version of the subdirectory fix below made
+  git re-run rename detection inside the prefix, inventing six renames on `hono/src` and writing them
+  `lineage: 'certain'`. ADR-0042 §10 records what the review changed.
 
 - **A cycle is an answer key, and nothing may name one without a gate**
   ([ADR-0034](./docs/decisions/0034-the-phenomenon-catalogue-is-deferred-and-a-cycle-is-an-answer-key.md) §4).
@@ -180,7 +227,73 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   hugo's 156** Blast Radius boards, 11 of prometheus's 63 and 7 of hono's 54. Nothing draws or names
   cycles today; this is a standing constraint on anything that would.
 
-- **The deck has no tier 1 and no tier 2 content, and that is what the opening still needs.**
+- **Tier 2 is not a backlog item, it is blocked — and the map is what blocks it**
+  ([ADR-0043](./docs/decisions/0043-tier-2-is-unaskable-while-the-map-gives-away-depth-1.md)). A
+  **Direction** verb (*"which of these does `X` import?"* — tier 2's own headline question) was
+  designed and refused. Not on supply, which is enormous: typeorm has **3,385 subjects whose imports
+  are fully understood** against the 58 Blast Radius boards it ships, because a *direct* claim needs
+  only the subject to be clean where a transitive one must walk its whole closure. It was refused
+  because **hovering a candidate answers the board exactly** — `depthFor` gives an un-understood node
+  `DIRECT_ONLY` and `blastRadius()` returns *dependents*, so `X ∈ dependents(Y, 1) ⟺ X imports Y`.
+  Measured on real generated boards: **1.000 exact on 869 of 869** across eight repos.
+
+  That is not a leak: **ADR-0008 decision 1 gives the depth-1 graph away on purpose**, so that §8.4's
+  `surprise` is measured against a baseline the player already has. But two of tier 2's three
+  questions (*which way do dependencies point*, *what is a hub*) **are** the depth-1 graph, so the
+  curriculum and the map's most settled decision are in direct conflict. Unblocking it means amending
+  ADR-0008 decision 1, which is an owner's call. *(The third — layering violations — is not a
+  depth-1 relation and was not measured.)*
+
+  **The most promising route is now measured, and it is three changes rather than one**
+  (ADR-0043 §9). Hover reveals *direction*, which the canvas does not — `draw.ts` strokes lines with
+  no arrowhead — so an **undirected** highlight is a repair rather than an amendment, and it closes
+  the exploit outright: **0 of 1,436 boards** beat band A on five repos, best 0.769 against the
+  admission rule's ceiling. But the inspector's `imported by` count then reopens it on **800 of
+  1,436**, exact on four of five repos; and re-scoring `surprise` against the new baseline **replaces
+  45–79% of the Blast Radius deck** on four repos, through *two* generator paths — `surprise` and
+  ADR-0012's `nonObvious`, which on graphql-js partially cancel. Still nobody's decision but the
+  owner's; it is now made against numbers.
+
+  **The route that costs the map nothing was bounded next, and it is two questions**
+  ([ADR-0045](./docs/decisions/0045-tier-2s-third-question-is-two-questions-and-only-one-survives.md),
+  proposed, nothing built). Tier 2's third question — *where is the layering violation* — is **refused
+  as `cycle`**: naming a component decides **111 of hugo's 114 fired Blast Radius boards** (ADR-0034's
+  proof, re-derived by an independent Tarjan pass, 1,326 of 1,326 containments), the only gate ADR-0020
+  allows leaves **0 of ark's 2 and 0 of hugo's 133** boards open at session start, and ark has one
+  2-node component. A second reformulation — **`upstream`**, *which of these does `X` depend on* —
+  looked like it survived and **is refused too**, by a review on the same day (§5). Every table in that
+  document reproduces; the conclusion did not, because **the benefits were measured on the ungated deck
+  and the costs per board**. Through its own two gates and the product's own cap the shipped deck is
+  **the same size as Blast Radius's on four repos, 22 against 40 on ark, and 9 against 58 on typeorm** —
+  the one repo the structural supply argument was for. The *"3–7× supply"* headline crossed its units
+  (uncapped supply against a capped deck; in like units 1.4–1.8×, and **kysely is less**), and the fog
+  win survives on one repo of five.
+
+- ~~**No ordering rule can give Blast Radius an easy opening.**~~ **Closed for the symptom, open for
+  the cause** ([ADR-0046](./docs/decisions/0046-the-opening-is-a-rank-term-and-it-has-to-be-a-list.md)).
+  The structural finding below stands — you cannot fix it *inside* Blast Radius — so the fix is one
+  rank term that **demotes** a board about a fixture, benchmark, example, script or manifest. Measured
+  through `scripts/probe-opening.ts`: test-pathed boards in the served first fifteen go **4 → 0 on
+  hono, 8 → 0 on graphql-js, 2 → 0 on kysely, 1 → 0 on ark**, and the second verb arrives *earlier*
+  (hono 6 → 2, graphql-js 8 → 2), because the demoted boards were the ones crowding the interleave
+  out. ark's opening is character-identical, which is the acceptance criterion for a repo that was not
+  broken. **It is a path list in the product** — ADR-0025's landmine — and demotion-only is the whole
+  argument for allowing one: a missing pattern costs one junk board served early, an over-firing one
+  costs a good board served late, and nothing is ever lost. **Known gap, unpatched**: graphql-js still
+  opens on `resources/strip-private-declarations.ts`, because `resources/` is a plausible real-source
+  directory elsewhere and adding it blind is the failure this decision is meant not to repeat.
+
+- **The structural finding underneath it.** On all four
+  reference repos **15 of 15** of the easiest blast boards have a subject with zero non-leaf dependents,
+  and there are **zero** boards at difficulty ≤ 0.30 whose subject has even one — §8.4 makes a real
+  subject a hard question, which is ADR-0040's ρ = 0.96 read from the other end. So the current openings
+  are `jsr.json`, `package.json`, `keys.test.json` and eight `__testUtils__` files. The easy-and-real
+  boards already exist in the *other* verbs: Companion's easiest fifteen are **0 of 15** test-shaped on
+  all four repos. The measured proposal is one selector rank term — a blast board whose subject has zero
+  non-leaf dependents sorts last — ordering only, no board lost, no atlas change
+  ([ADR-0045](./docs/decisions/0045-tier-2s-third-question-is-two-questions-and-only-one-survives.md) §5.6).
+
+- **The deck has no tier 1 content, and that is what the opening still needs.**
   NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs
   emit tiers 3, 3, 5 and 6, so **Orientation** (*where does execution start? what are the top-level
   regions?*) and **Topology** (*which way do dependencies point? what is a hub?*) have no questions
@@ -327,13 +440,18 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   `src/atlas` and `around src/indexer/build.ts` — the last being an honest fallback, since
   `src/indexer` covers only 45% of it. Six mutants die, three of which survived the first draft.
 
-- **Districts are unmarked at street level — and the reason they were deferred has just closed.**
-  Region arches are designed (ADR-0032 §3.2) and not built, because *"118 of django's 175 region
-  centroids have their nearest node in a **different** region"*, so an arch at a centroid would stand
-  in someone else's street (ADR-0032 §9.6). **That figure was measured against a partition that no
-  longer exists.** Re-measured at `decc8a2` under ADR-0041's clustering: **0 of django's 22, 0 of
-  hono's 20 and 0 of ark's 9** — fragmented regions had centroids landing in other regions' territory
-  and cohesive ones do not. The blocker is gone; the work is not done. `scripts/probe-centroids.ts`.
+- ~~**Districts are unmarked at street level.**~~ **Closed** —
+  [ADR-0044](./docs/decisions/0044-a-district-is-marked-where-it-can-be-stood-in-not-at-its-mean.md).
+  **And the entry that stood here was half wrong, which is the part worth keeping.** It said ADR-0032
+  §9.6's blocker *"is gone"* on the strength of `scripts/probe-centroids.ts` reading 0 of 100. §9.6
+  refused the arch on **two** measurements and that probe re-ran one of them: the *other* — a centroid
+  landing **inside a monolith** — was live on **20 of the 61 topology centroids** across six repos.
+  Re-checking one clause of a two-clause refusal reads exactly like re-checking the refusal.
+  An arch now stands on the nearest ground to the centroid that clears every building *and* sits a
+  whole arch-width inside its own district: **142 of 147 districts marked across twelve repos** at
+  `da8a276`, **0 in the wrong district**, thinnest margin 5.62 units. The five unmarked (django's
+  `around django/core/__init__.py` at 67 files, three typeorm test directories, one rxjs region) have
+  no such ground inside their own extent, and are reported rather than rescued. `scripts/probe-arches.ts`.
 - ~~**`src/player/ties.ts`'s header records a leak at a figure that predates the fix.**~~ **Closed.**
   It said mutual Companion carrying reaches *"up to 6 of 6 on this repo, measured"* and prescribed
   generator-side work; that work shipped as `companion/generate.ts`'s `claimed` set — one matrix cell,
@@ -458,7 +576,10 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
+**Decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
+with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
+repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
+Neither is a session's call · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
 though **[ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md) is a
 reason to look at the opening first**: on both of that experiment's matched repos a participant's
 first fifteen boards were one verb at the difficulty floor, and seven of graphql-js's first ten were
@@ -472,10 +593,11 @@ removed key against the served deck's `discloses` output, which refuses **0 acro
 two different reasons the script keeps apart (see Known gaps). **M2's instrumentation ships too**
 (ADR-0037), so **both** pieces of that document's §9 are done and what is left is **twelve
 participants from outside the project**, which is owner-only and the wall S1 was always going to hit
-· then **region arches in the world**, whose blocker just closed: ADR-0032 §9.6 refused
-`Region.centroid` because 118 of django's 175 centroids had their nearest node in a *different*
-region, and under ADR-0041's clustering that is **0 of 22** (0 of hono's 20, 0 of ark's 9, measured
-at `decc8a2`) · **a naming rule for cross-directory regions**, which is what still blocks NORTH-STAR
+· ~~then **region arches in the world**~~ — **built** (ADR-0044): 142 of 147 districts marked across
+twelve repos, 0 in the wrong district. §9.6's refusal had two clauses and only one had been
+re-measured; the live one — a centroid inside a monolith, **31 of 147** — is what the placement rule
+answers
+· **a naming rule for cross-directory regions**, which is what still blocks NORTH-STAR
 §5 tier 1 now that region *count* no longer does, and which ADR-0041 §7 shows is separable from the
 clustering · the **phenomenon catalogue** is **deferred** (ADR-0034), not queued: fifteen candidate detectors
 were measured before anything was designed, and the honest size is ~5 entries rather than the 30–60
@@ -514,6 +636,8 @@ npm run test:unit          # fast — every change
 npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism    # index twice, assert byte-identical
 npm run budget             # print measured budgets, fail over ceiling
+npm run check:keys         # does any board mark a real dependent wrong? reads SOURCE, not the atlas
+                           #   — gates itself on a plant and fails if the detector is inert
 npm run test:e2e           # slow — headless playthrough; screenshots land in artifacts/
 ```
 
@@ -548,7 +672,17 @@ are Blast Radius** — that verb is refused by language, not by taint (ADR-0028)
 `c9eb16a87e` is the scale case at 3,035 nodes and 10,162 edges, and the one repo that breaches the
 index budget (see gaps). **`graphql/graphql-js` `9c245018`** (549 nodes, 3.70 edges/node, 276
 challenges) and **`kysely-org/kysely` `f24018c7`** (600, 4.13, 300) are the densest third-party maps
-measured, and are experiment 0001's matched pair. Ark indexes **itself** as its first level, which is deliberate: every
+measured, and are experiment 0001's matched pair.
+
+**`typeorm/typeorm` at `df07bf1e` is the reference set's taint-limited member**, added because every
+other repo named here is one where the **deck cap** is the binding constraint, and that made a whole
+class of behaviour invisible for five milestones
+([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md)
+decision 2). It is 3,704 files, 11,988 edges (3.24 each), 54 regions, 962 challenges — and **58 Blast
+Radius boards of 2,248 candidate subjects**, with 2,120 refused by guardrail 4 and the cap 8× away
+from ever biting. One `require(<expression>)` in `src/platform/PlatformTools.ts` accounts for 1,912
+of its 1,921 tainted subjects. Point a supply measurement at this one before believing it
+generalises. Ark indexes **itself** as its first level, which is deliberate: every
 feature added becomes a new level, and if the tool cannot make its own architecture legible it does
 not work.
 

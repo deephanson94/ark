@@ -1052,6 +1052,58 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   with nothing to type-check it. Design documents are where this class of defect is **cheapest** to
   find and where nothing will find it for you: before writing a layer, walk this list and ask which
   entries are about a shape the new layer also has.
+- **A refusal with two clauses is re-opened by re-measuring both, and re-measuring one reads exactly
+  the same.** ADR-0032 §9.6 refused a district arch at `Region.centroid` because the nearest node
+  belonged to *another region* (118 of django's 175) **and** because 24 centroids sat *inside a
+  monolith*. A later session re-ran the first under new clustering, got 0 of 100, and wrote *"the
+  blocker is gone"* into `README.md` and into the Next line. The second was live on **20 of 61**
+  topology centroids across six repos, and stayed live for two milestones behind a status entry that
+  read as a clearance. This is the *bug-you-already-fixed-is-one-line-down* landmine with a
+  measurement instead of a line of code, and the same fix applies: **count the clauses in the thing
+  you are re-opening before you quote a number at it.** The tell is grammatical — §9.6's sentence
+  contains an "and", exactly like the class labels one row up.
+- **Two rules that constrain the same search hide each other's tests.** The clearance rule (*stand
+  clear of every building*) and the membership rule (*the nearest building is a member*) both push an
+  arch away from things, so over a mixed fixture the second alone satisfies the first: deleting the
+  clearance check changed **nothing** and its mutant lived, in a fixture written specifically to
+  reproduce the defect. Exercising it needs a district blocked by **its own** monolith, where the
+  membership rule is silent. So when two guards act on one search, **build the fixture where only the
+  guard under test can fire** — and note that the surviving mutant was invisible until mutation
+  testing, because every assertion was green and the fixture *looked* adversarial.
+- **Re-running a pipeline stage over its own output is a tautology, and it prints as a clean zero.**
+  *"Does re-scoring difficulty change the deck?"* was first measured by running `retain` over
+  `atlas.challenges` with new difficulties — but `atlas.challenges` **is** `retain`'s output, so the
+  list was already at or under the cap and the function returned it unchanged. `0 of 40`, on every
+  repo, in the direction that says *no cost*. The only honest instrument was the generator run twice
+  with the input patched, which says **45–79% of the deck is replaced on four of five repos**. Before
+  believing a no-change result, ask **which stage produced the data you are feeding back in.**
+- **A counterfactual patches a *variable*, and a variable can be read twice.** Widening `naive` to
+  measure the cost of an undirected hover moved `surpriseOf` — the intended lever — and also
+  `nonObvious`, which ADR-0012's `dedupe` uses to pick a colliding group's representative, four
+  hundred lines away. Split, the two are **not additive**: typeorm's entire change is `nonObvious`
+  (its cap does not bind, so difficulty is never consulted) and on graphql-js they **partially
+  cancel**, 33 apiece against 31 together. So *"say what your counterfactual holds fixed"* is not
+  enough when the thing you changed is a value rather than a decision — **grep every read of it, and
+  decompose before quoting the combined number**, which was wrong in both directions here.
+- **One fixture cannot test a pruning rule, because the pruning only bites on a configuration you
+  would not think to draw.** The arch search's nearest-neighbour query is a grid that stops when a
+  ring's distance floor clears both current bests, and **every invariant test passes against a grid
+  that stops a ring too early** — on any single field both neighbours are found before a break is
+  reachable. It takes a near member with a slightly further foreign, which you get by *varying* the
+  city rather than by designing one. Two escalations were needed and both were measured: 48 seeded
+  cities killed the early-break mutants, and half of those cities had to be built of **small**
+  buildings, because bucket size scales with the largest footprint and a city of monoliths steps the
+  floor in 30-unit jumps that almost never land where an answer changes. Then the `− maxFootprint`
+  term survived all 48 — a 2,000-city sweep found it changes **10 of 3,990** arches, and its first
+  five seeds are pinned. **A bound justified by a derivation still needs the evidence that it fires**,
+  which is the never-fires landmine pointed at a term instead of a branch.
+- **The nearest point satisfying an inequality is the point where the inequality is tightest.** A
+  search that returns the *closest* place meeting a strict condition lands on that condition's
+  boundary by construction — the arch stood **0.14 units** inside its own district in the fixture and
+  **0.53** on hugo, true under the metric the code uses and false under a Euclidean one. A predicate
+  used as a search's stopping rule needs a **margin**, in the units of the thing being placed, or the
+  claim it certifies holds by a rounding error. Note which instrument found it: not the six-repo probe
+  (which reported a clean `0 wrong district`) but a unit fixture and a second metric.
 
 ---
 
@@ -1116,9 +1168,15 @@ npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run test:pack          # ~30 s — pack, install outside the repo, run `ark index` and `ark play`
 npm run budget             # print measured budgets, fail over ceiling
+npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
+                           #   a real dependent as a wrong answer. The only check here that can see a
+                           #   *missing* edge; gates itself on a plant and fails if the detector is inert.
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
                            #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
+npx tsx scripts/shot-world.ts [repo]   # walk into the city and photograph it. `test:e2e`'s world
+                           #   shot is taken at the shore, so a change *inside* the city is invisible
+                           #   to it — this walks five legs, turning between them, into artifacts/.
 ```
 
 **If `test:e2e` reports `Executable doesn’t exist at .../chromium_headless_shell-NNNN/...`**, the
@@ -1234,6 +1292,14 @@ first, but it reads *this* line for what is already done. **A decision is not a 
 edit of this paragraph must not turn an ADR into a shipped verb. **M5 is next by the roadmap**
 (tree-sitter, 3–4 more languages), and the negative witness — the last rung, which improved every
 existing board rather than adding a fifth verb — is done.
+**The reference set has a taint-limited member now, and it did not for five milestones.**
+`typeorm/typeorm` `df07bf1e` — 3,704 files, **58 Blast Radius boards of 2,248 subjects**, 2,120
+refused by guardrail 4, the cap 8× from biting (ADR-0042 decision 2). Every other repo this project
+measures itself against — ark, hono, kysely, graphql-js, and both of `docs/experiments/0001`'s
+matched pair — is **cap-limited**, so every "the cap is the binding constraint" measurement in this
+repository was taken where the cap binds. **A supply measurement that has not been run on a
+taint-limited repo has not been run.**
+
 Run it: **`npm run play -- /path/to/repo`** indexes any repo and serves the player; `npm run dev`
 plays this one. Best third-party repo to try is **`honojs/hono`** (425 nodes, 2.51 edges/node at
 `7075369e` — and the only outside repo where the generator had more supply than the deck cap
@@ -1378,9 +1444,9 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. **112 KiB of JS** (95 before the walkable world), zero runtime dependencies, first paint
-**332 ms** measured by `test:e2e`. `npm run index` produces a valid **338.5 KiB** atlas in **691 ms**
-(measured at `1827ff93`, the commit this branch was cut from).
+sentence. **128 KiB of JS** (112 before the district arches, 95 before the walkable world), zero runtime
+dependencies, first paint **168 ms** measured by `test:e2e`. `npm run index` produces a valid
+**398.0 KiB** atlas in **634 ms** (measured at `8448fd1`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.

@@ -16,6 +16,7 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
+  budgetVerdicts,
   coverageSentence,
   isNodeId,
   serializeAtlas,
@@ -121,11 +122,34 @@ export function parseArgs(argv: readonly string[]): Args | null {
   return { command, root: rootPath, out: resolve(out ?? fallback), quiet };
 }
 
+/**
+ * The budget lines, printed only when a measurement is over a ceiling.
+ *
+ * `atlas 3961.0 KiB in 18246 ms` was the whole story this file told about the two budgets it is in
+ * a position to check, and neither number carried a verdict — so a user indexing a large repo saw a
+ * figure and no way to know whether it was fine. `npm run budget` knows the ceilings and is a repo
+ * script they do not have.
+ *
+ * Only the atlas-size total is reported here, and `src/atlas/budget.ts` records the three richer
+ * versions that were built, measured and withdrawn — a per-file *rate* breach fires on cobra's
+ * **145 KiB** atlas because the rate is fixed-overhead-dominated at small N, and an index-time
+ * verdict is not reproducible between runs. Enforcement stays in `scripts/budget.ts`, which has the
+ * scale context and the hard/soft distinction this line cannot carry.
+ *
+ * Nothing is printed when everything is inside its ceiling: a budget line on every run is noise, and
+ * noise is how the one that matters stops being read (this repo's own `pages.yml` landmine).
+ */
+function budgetLines(atlas: Atlas, bytes: number): string[] {
+  const files = atlas.nodes.reduce((total, node) => total + node.fileCount, 0);
+  return budgetVerdicts(files, bytes).map((verdict) => `budget      ${verdict.line}`);
+}
+
 function summarise(
   atlas: Atlas,
   generation: IndexResult['generation'],
   bytes: number,
   milliseconds: number,
+  subtree: string | null,
 ): string {
   const unresolved = atlas.nodes.reduce((total, node) => total + node.unresolved.length, 0);
   const probable = atlas.edges.filter((edge) => edge.confidence !== 'certain').length;
@@ -147,6 +171,15 @@ function summarise(
     `unresolved  ${unresolved} import(s) we could not pin down`,
     `history     ${atlas.history.commitsRetained}/${atlas.history.commitsWalked} commits kept, ${atlas.history.coChange.length} co-change pairs`,
   ];
+  // Rename detection is **off** in a subtree, because `--relative` makes git re-pair adds with
+  // deletes inside the prefix and invent renames the repository does not contain (ADR-0042 §7.1.1).
+  // Lineage is lost rather than wrong, and losing it silently is the half this line exists to stop.
+  if (subtree !== null) {
+    lines.push(
+      `subtree     indexing ${subtree}/ of a larger repository — renames are not detected here, ` +
+        'so churn is split across a moved file\'s two paths',
+    );
+  }
   // A measurement, printed whenever it is non-zero, in a file whose whole
   // discipline is that it prints measurements rather than estimates. It is not
   // the alarm — that is the refusal below, and it fires on a threshold. This
@@ -163,6 +196,7 @@ function summarise(
     // about the verbs that is not true (ADR-0025).
     lines.push(`deck        REFUSED: ${coverageSentence(coverage) ?? ''}`);
     lines.push(`atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`);
+    lines.push(...budgetLines(atlas, bytes));
     for (const truncation of atlas.report.truncations) {
       lines.push(`truncated   ${truncation.what}: kept ${truncation.kept}, dropped ${truncation.dropped}`);
     }
@@ -182,6 +216,7 @@ function summarise(
     `placement   ${generation.placement.challenges.length} of ${placement.commitsConsidered} commits Ark may ask about`,
     `archaeology ${generation.archaeology.challenges.length} of ${archaeology.subjectsConsidered} files with a history worth asking about`,
     `atlas       ${(bytes / 1024).toFixed(1)} KiB in ${milliseconds} ms`,
+    ...budgetLines(atlas, bytes),
   );
 
   // Which questions each verb refused to ship, and how much of each choice set
@@ -336,7 +371,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const started = Date.now();
-  const { atlas, generation } = await buildIndex(indexOptions(args.root));
+  const { atlas, generation, subtree } = await buildIndex(indexOptions(args.root));
   const text = serializeAtlas(atlas);
 
   // **A `play` with no `--out` gets a private copy of the player**, so two runs
@@ -355,7 +390,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   if (!args.quiet) {
     process.stdout.write(
-      `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started)}\n`,
+      `${summarise(atlas, generation, Buffer.byteLength(text), Date.now() - started, subtree)}\n`,
     );
     process.stdout.write(`written     ${outPath}\n`);
   }
