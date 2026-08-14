@@ -15,7 +15,7 @@
 |---|---|---|
 | 0 — pre-flight | **done** | **19** repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
-| 7 — synthesis + adversarial review | **done** | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
+| 7 — synthesis + adversarial review (PR #54) | **done** | Four reviewers, **~50 findings, most reproduced**. One was a **wrong answer key in shipped code** (§7.1) and is fixed; the rest are corrected in place with the reviewer's measurement beside mine. |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
 | 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 boards net, 0 directly-visible wrong answer keys** — on **3 repos of 19**, one of them the corpus's worst-starved (nest, 7 → 120). Three limits in decision 5. |
 | 4 — candidate B (taint stops at first unresolved edge) | **done** | **REFUSED.** Largest ceiling in the session — typeorm +1,902 subjects — and it puts a real dependent in the wrong-answer pool of **30 of nest's 68** and **18 of apollo-client's 47** unlocked subjects (corrected from 99% / 47%). |
