@@ -198,23 +198,37 @@ describe('the fog reads as three states', () => {
     return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
   };
 
-  it('separates every state from the one below it, and from the ground', () => {
-    // 1.2 is a low bar deliberately: this is a *floor* under "you can tell them
-    // apart", not a target. The shipped ramp measures 1.45x and 1.73x
-    // (`npx tsx scripts/probe-ramp.ts`), and the version this test was written
-    // against measured **1.00** for the top step — the two fills were the same
-    // string.
-    for (const index of [0, 3, TERRAIN_INDEX]) {
-      const ramp = [
-        INK.ground,
-        regionSilhouette(index, 1),
-        regionWash(index, 1),
-        regionKnown(index, 1),
-      ];
-      for (let i = 1; i < ramp.length; i++) {
-        const step = contrast(ramp[i] ?? '', ramp[i - 1] ?? '');
-        expect(step, `step ${i} of the ramp at region ${index}`).toBeGreaterThan(1.2);
-      }
+  it('separates the state you earned from the one below it, at every hue', () => {
+    // **The bar and the sample were both wrong in the first version.** It
+    // asserted a flat 1.2 over regions `[0, 3, TERRAIN]` — a number I chose
+    // without measuring, checked on three of the forty-eight hues the palette
+    // can produce. A review swept all of them: the silhouette→surveyed step is
+    // **1.18 at hue 243°**, under that bar, on a hue any repo with eight or more
+    // regions has. So the bar was not holding; it was being sampled around.
+    //
+    // Two claims now, at their measured values, over the whole population.
+    // **This one is the load-bearing half**: the step the core loop rewards.
+    // Worst case 1.47 across all forty-eight (`npx tsx scripts/probe-ramp.ts`),
+    // and it measured **1.00** before the third rung existed, because the two
+    // fills were the same string.
+    for (let index = 0; index < 48; index += 1) {
+      const step = contrast(regionKnown(index, 1), regionWash(index, 1));
+      expect(step, `reward step at region ${index}`).toBeGreaterThan(1.35);
+    }
+    expect(contrast(regionKnown(TERRAIN_INDEX, 1), regionWash(TERRAIN_INDEX, 1))).toBeGreaterThan(1.35);
+  });
+
+  it('keeps the unsurveyed state distinguishable, at the value it actually reaches', () => {
+    // **The weaker half, stated at its real floor rather than at a hopeful one.**
+    // HSL lightness is not perceptual and blue carries little luminance, so the
+    // same three lightnesses separate well at red and poorly at 243°. Fixing
+    // that properly means varying lightness by hue, which moves every colour on
+    // every map and is a decision about the palette rather than about the fog —
+    // not something to slip into a rendering commit. Recorded here at the
+    // measured floor so a regression is still visible.
+    for (let index = 0; index < 48; index += 1) {
+      expect(contrast(regionWash(index, 1), regionSilhouette(index, 1))).toBeGreaterThan(1.15);
+      expect(contrast(regionSilhouette(index, 1), INK.ground)).toBeGreaterThan(1.3);
     }
   });
 
@@ -229,5 +243,81 @@ describe('the fog reads as three states', () => {
       expect(rungs[0] ?? 0).toBeLessThan(rungs[1] ?? 0);
       expect(rungs[1] ?? 0).toBeLessThan(rungs[2] ?? 0);
     }
+  });
+});
+
+/**
+ * That the renderer *reaches for* the third rung, not merely that it exists.
+ *
+ * **A review unwired `regionKnown` from both shipped draw paths and all 934 unit
+ * tests passed.** The ramp tests above are about the palette — they prove three
+ * distinct colours exist and are ordered — and nothing connected them to the
+ * frame. So the defect the ramp was built to fix could have been reintroduced by
+ * deleting two ternaries, with the suite green and the palette still perfect.
+ *
+ * The stub records every `fillStyle` written, which is the cheapest thing that
+ * can tell a fill apart from a fill.
+ */
+describe('the renderer uses the ramp it is given', () => {
+  function fillsFor(understood: ReadonlySet<string>): string[] {
+    const seen: string[] = [];
+    const noop = (): void => {};
+    const target = {
+      measureText: (text: string) => ({ width: text.length * 7 }),
+      save: noop, restore: noop, beginPath: noop, closePath: noop, moveTo: noop,
+      lineTo: noop, arc: noop, ellipse: noop, rect: noop, fill: noop, stroke: noop,
+      fillRect: noop, fillText: noop, strokeText: noop, setLineDash: noop,
+      quadraticCurveTo: noop, bezierCurveTo: noop,
+      createLinearGradient: () => ({ addColorStop: noop }),
+      createRadialGradient: () => ({ addColorStop: noop }),
+    };
+    const context = new Proxy(target, {
+      get: (object, key) => Reflect.get(object, key) ?? undefined,
+      set: (_object, key, value) => {
+        if (key === 'fillStyle' && typeof value === 'string') seen.push(value);
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+
+    const atlas = atlasWith(
+      ['src/hub.ts', 'src/a.ts', 'src/b.ts', 'src/c.ts'],
+      [
+        ['src/a.ts', 'src/hub.ts'],
+        ['src/b.ts', 'src/hub.ts'],
+        ['src/c.ts', 'src/a.ts'],
+      ],
+    );
+    const scene = prepare(atlas);
+    const all = new Set(scene.nodes.map((node) => node.id));
+    drawFrame(context, {
+      scene,
+      camera: { x: 0, y: 0, scale: 1, bearing: NORTH },
+      viewport: VIEWPORT,
+      fog: { surveyed: all, understood },
+      hovered: null,
+      selected: null,
+      radius: null,
+      questions: new Set(),
+      peaks: new Set(),
+      ties: NO_TIES,
+      tieFocus: null,
+      board: null,
+      chrome: [],
+    });
+    return seen;
+  }
+
+  it('paints an understood node with a colour it paints nothing else with', () => {
+    const atlas = atlasWith(['src/hub.ts', 'src/a.ts', 'src/b.ts', 'src/c.ts'], []);
+    const scene = prepare(atlas);
+    const hub = scene.nodes.find((node) => node.path === 'src/hub.ts');
+    if (hub === undefined) throw new Error('fixture lost its hub');
+    const known = regionKnown(hub.regionIndex, 1);
+
+    // Nothing understood: the ramp's top colour must not appear at all. This is
+    // the half that catches the ternary being deleted.
+    expect(fillsFor(new Set())).not.toContain(known);
+    // One node understood: it must.
+    expect(fillsFor(new Set([hub.id]))).toContain(known);
   });
 });

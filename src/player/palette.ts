@@ -109,11 +109,21 @@ export function regionWash(index: number, alpha = 1): string {
  * **The ramp is 22 → 34 → 50 in HSL and that is not the claim**, because HSL
  * lightness is not perceptual and these fills sit on a near-black ground where
  * the bottom of the range is compressed. Measured as WCAG contrast by
- * `npx tsx scripts/probe-ramp.ts`: **1.49 : 2.16 : 3.75** against the `#0a0d13`
- * ground, so the steps are **1.45×** and **1.73×**. The larger step is the one
- * the loop rewards, which is the right way round — and the first draft of this
- * paragraph asserted "1.9 : 3.4 : 6.6, roughly 1.8× each" from no measurement at
- * all, which the probe was written to catch and did.
+ * `npx tsx scripts/probe-ramp.ts`: at region 0 the three fills read
+ * **1.49 : 2.16 : 3.75** against the `#0a0d13` ground, steps of **1.45×** and
+ * **1.73×**. The larger step is the one the loop rewards, which is the right way
+ * round — and the first draft of this paragraph asserted "1.9 : 3.4 : 6.6,
+ * roughly 1.8× each" from no measurement at all, which the probe was written to
+ * catch and did.
+ *
+ * **Those are one hue's numbers, and the hues are not alike.** Swept over all 48
+ * the palette can produce, the reward step's worst case is **1.47** and the
+ * silhouette→surveyed step's is **1.18, at hue 243°** — blue carries little
+ * luminance, so an HSL lightness ramp separates well at red and poorly there.
+ * The half the loop depends on holds everywhere; the lower half is weak on blue
+ * regions and is recorded rather than papered over, because fixing it means
+ * varying lightness by hue, which moves every colour on every map and is a
+ * decision about the palette rather than about the fog.
  */
 export function regionKnown(index: number, alpha = 1): string {
   const saturation = isTerrain(index) ? TERRAIN_SATURATION : 56;

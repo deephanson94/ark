@@ -86,6 +86,28 @@ export interface Pass {
   readonly shown: readonly AtlasId[];
 }
 
+/**
+ * One board that has been graded, and the answer key it revealed when it was.
+ *
+ * **The members are the datum both of `gradedKeys`'s holes were missing**, and a
+ * post-ship review found them by running the real code rather than by reading
+ * it. Recording only the key string cannot distinguish *"this board has never
+ * been attempted"* from *"this board was explained to you one click ago"* once
+ * the pass that used to stand in for that has decayed — see `gradedKeys`.
+ *
+ * Storing the answer key in the save gives nothing away that NORTH-STAR §7.1 has
+ * not already conceded: `truth` sits in `atlas.json` in plaintext, on the
+ * argument that *"anyone who opens devtools to cheat has opted out of the
+ * product"*. This is the same fact, one file over, about boards the player has
+ * already been shown.
+ */
+export interface GradedBoard {
+  /** `answerKey(verb, subject)`. */
+  readonly key: string;
+  /** The board's `truth` when it was graded. Sorted, unique. */
+  readonly members: readonly AtlasId[];
+}
+
 export interface Progress {
   readonly version: number;
   /**
@@ -96,9 +118,13 @@ export interface Progress {
   /** Sorted by `(verb, subject)`. */
   readonly passes: readonly Pass[];
   /**
-   * Every `(verb, subject)` this player has submitted an answer to, passing or
-   * not. Sorted, unique. `answerKey` strings, the same shape `answeredKeys`
-   * returns.
+   * Every board this player has submitted an answer to, passing or not, **with
+   * what the reveal named when they did**. Sorted by key, unique.
+   *
+   * The members are the challenge's `truth` at grading time. They are here so
+   * that a certificate can decay with *the board it certifies* rather than with
+   * a pass that may not exist — see `gradedKeys`, which is where the two holes
+   * this shape closes are written out.
    *
    * **This is what makes "the first submission" a thing the save can know**, and
    * it has to live on `Progress` rather than on `Pass` because a *failed* first
@@ -114,7 +140,7 @@ export interface Progress {
    * conditions this board was certified fair for", which is a sentence the save
    * can check.
    */
-  readonly graded: readonly string[];
+  readonly graded: readonly GradedBoard[];
 }
 
 export const EMPTY_PROGRESS: Progress = {
@@ -273,10 +299,18 @@ export function applyGrade(
   // explains a board is usually the one that failed, and it is the reason the
   // next one cannot prove anything.
   //
-  // Unioned into the *stored* list rather than the live one, so a key dropped by
-  // decay and re-earned later does not accumulate twice — and so that nothing
-  // here deletes a record, which is the rule the rest of this file keeps.
-  next = { ...next, graded: union(next.graded, [key]) };
+  // **With the members, which is what makes it decay correctly.** The entry
+  // replaces any earlier one for the same key rather than merging, because what
+  // it certifies is *the board as it was just graded* — a re-rolled board that
+  // has been answered again is certified by its current key, not by the one it
+  // used to have.
+  const certificate: GradedBoard = { key, members: [...challenge.truth].sort(byteCompare) };
+  next = {
+    ...next,
+    graded: [...next.graded.filter((entry) => entry.key !== key), certificate].sort((a, b) =>
+      byteCompare(a.key, b.key),
+    ),
+  };
   return { progress: next, unlocked: passed, register };
 }
 
@@ -441,14 +475,21 @@ export function livePasses(progress: Progress, liveness: Liveness): Pass[] {
  * disagree after a reindex, which is ADR-0011 decision 2.
  */
 export function gradedKeys(progress: Progress, liveness: Liveness): Set<string> {
-  const live = new Set(livePasses(progress, liveness).map((pass) => answerKey(pass.verb, pass.subject)));
-  const recorded = new Set(progress.passes.map((pass) => answerKey(pass.verb, pass.subject)));
   const keys = new Set<string>();
-  for (const key of progress.graded) {
-    const subject = key.slice(key.indexOf('\n') + 1);
+  for (const entry of progress.graded) {
+    const cut = entry.key.indexOf('\n');
+    const verb = entry.key.slice(0, cut) as VerbId;
+    const subject = entry.key.slice(cut + 1);
     if (!liveness.exists(subject)) continue;
-    if (recorded.has(key) && !live.has(key)) continue;
-    keys.add(key);
+    // **One rule, over the certificate's own members.** A certificate is live
+    // while any part of what it revealed still holds — the same test
+    // `livePasses` runs, on the same ids, asked of the thing that was actually
+    // shown rather than of a pass that may never have existed.
+    const alive = entry.members.some(
+      (member) => liveness.exists(member) && liveness.holds(verb, subject, member),
+    );
+    if (entry.members.length > 0 && !alive) continue;
+    keys.add(entry.key);
   }
   return keys;
 }

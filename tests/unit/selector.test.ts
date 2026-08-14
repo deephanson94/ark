@@ -647,8 +647,12 @@ describe('varying the verb', () => {
     // **The cost of forbidding *any* repeat, measured on a fixture rather than
     // argued — and the residue, stated rather than hidden.** With only two
     // boards of the second verb against twenty of the first, strict alternation
-    // serves both immediately and the hardest board in the whole deck arrives
-    // **third**. A cap of two pushes it to sixth. It does still arrive earlier
+    // spends both early and the hardest board in the whole deck arrives
+    // **fourth**. A cap of two pushes it to sixth. *(An earlier version of this
+    // comment said third, in four places including the commit message and the
+    // CHANGELOG; measured through the real selector it is fourth, and the
+    // assertion below said "first three", which cap 1 also satisfies — so the
+    // number that justified the cap was wrong and the test did not hold it.)* It does still arrive earlier
     // than banding alone would put it, because `sameVerb` outranks `progress`
     // by construction: on a starved verb, "vary the tour" and "ascend the
     // range" genuinely conflict and this rank resolves it towards variety.
@@ -680,7 +684,7 @@ describe('varying the verb', () => {
     // survives, and the half a starved deck can still honour.
     expect(served.indexOf('comp-b-easy')).toBeGreaterThanOrEqual(0);
     expect(served.indexOf('comp-b-easy')).toBeLessThan(served.indexOf('comp-b-hard'));
-    expect(served.slice(0, 3)).not.toContain('comp-b-hard');
+    expect(served.slice(0, 4)).not.toContain('comp-b-hard');
   });
 
   it('goes inert when only one verb has anything left', () => {

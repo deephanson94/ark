@@ -109,13 +109,33 @@ export interface Control {
  */
 export function controlsFor(arm: Arm | null, view: View): readonly Control[] {
   const controls: Control[] = [];
-  if (view === 'orbit') controls.push({ keys: 'drag', brief: 'turn', what: 'Turn the world.' });
   if (view === 'world') {
     controls.push(
       { keys: 'wasd', brief: 'move', what: 'Walk. Hold shift to run.' },
       { keys: 'q/e', brief: 'turn', what: 'Turn on the spot.' },
     );
   } else {
+    // **The orbit's pointer gestures are its own, and listing the map's beside
+    // them was this file's own recorded failure repeated.** The first version
+    // pushed the orbit's `drag — turn the world` and then fell through here, so
+    // the card carried **two `drag` rows with contradictory sentences** — and
+    // the map's *"hold shift to turn the map by hand"* is dead in the orbit,
+    // where every drag turns and `shiftKey` is only read when `orbit === null`.
+    // *"Zoom about the pointer"* was false there too: the wheel deliberately
+    // centre-anchors in the orbit, with a comment in `main.ts` explaining why.
+    // The e2e gate only opened the card in the map view, which is why nothing
+    // caught it — the gate covers both views now.
+    if (view === 'orbit') {
+      controls.push(
+        { keys: 'drag', brief: 'turn', what: 'Turn the world. Drag up and down to tip the eye.' },
+        { keys: 'scroll', brief: null, what: 'Zoom about the middle of the view.' },
+      );
+    } else {
+      controls.push(
+        { keys: 'drag', brief: null, what: 'Pan. Hold shift to turn the map by hand.' },
+        { keys: 'scroll', brief: null, what: 'Zoom about the pointer.' },
+      );
+    }
     // `f` and `n` are the flat map's and the orbit's; the world has neither.
     controls.push(
       {
@@ -130,8 +150,6 @@ export function controlsFor(arm: Arm | null, view: View): readonly Control[] {
         what: 'Pan, in the direction the screen is pointing rather than the map.',
       },
       { keys: '+ / −', brief: null, what: 'Zoom about the middle of the view.' },
-      { keys: 'drag', brief: null, what: 'Pan. Hold shift to turn the map by hand.' },
-      { keys: 'scroll', brief: null, what: 'Zoom about the pointer.' },
       { keys: 'click', brief: null, what: 'Survey a file — its name, its size and what imports it.' },
     );
   }

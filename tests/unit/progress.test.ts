@@ -211,7 +211,7 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     // A pass whose only member no longer depends on the subject: fully decayed.
     const dead = {
       ...recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')], 'proved'),
-      graded: [key],
+      graded: [{ key, members: [idFor('src/d.ts')] }],
     };
     expect(livePasses(dead, live)).toEqual([]);
     expect(gradedKeys(dead, live).has(key)).toBe(false);
@@ -233,6 +233,65 @@ describe('decay — a restored claim is re-checked against the atlas it is rende
     );
     expect(again.register).toBe('proved');
     expect(deriveFog(again.progress, live).understood.has(idFor('src/a.ts'))).toBe(true);
+  });
+
+  it('bars a typed-back pass on a decayed board that was failed once first', () => {
+    // **The hole the first version of `gradedKeys` had, found by review running
+    // the real code rather than reading it.** With the certificate keyed only by
+    // string, its liveness was proxied through *the pass*: decay the pass and
+    // the key dropped, which is right. But then **fail** the returning board —
+    // a failure creates no pass, so nothing re-armed the certificate — and the
+    // next submission read `first = true` and minted `proved` for a key the
+    // reveal had named one click earlier. ADR-0047 §2.1's exploit, reopened at
+    // the gate the fix itself built.
+    //
+    // The missing datum was what the reveal named. A certificate now carries its
+    // own members and decays by them, so a board that has been graded is
+    // certified by that grading whether or not it passed.
+    const live = livenessOf(graph, VERBS);
+    const board: Challenge = {
+      ...challenge,
+      subject: idFor('src/a.ts'),
+      candidates: [idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(),
+      truth: [idFor('src/b.ts'), idFor('src/c.ts')].sort(),
+      witness: witnessFor(
+        [idFor('src/b.ts'), idFor('src/c.ts'), idFor('src/d.ts')].sort(),
+        [idFor('src/b.ts'), idFor('src/c.ts')].sort(),
+      ),
+    };
+    // A decayed record: the pass is gone and the certificate is stale.
+    const dead = {
+      ...recordPass(EMPTY_PROGRESS, 'blastRadius', idFor('src/a.ts'), [idFor('src/d.ts')], 'proved'),
+      graded: [{ key: answerKey('blastRadius', idFor('src/a.ts')), members: [idFor('src/d.ts')] }],
+    };
+    expect(gradedKeys(dead, live).has(answerKey('blastRadius', idFor('src/a.ts')))).toBe(false);
+
+    // Answer it and get it wrong. No pass — and, before this fix, nothing at all
+    // to say the board had just explained itself.
+    const failed = applyGrade(
+      dead,
+      board,
+      gradeSet(board, { picked: [idFor('src/d.ts')] }, BLAST_PHRASING),
+      PASS_THRESHOLD,
+      live,
+    );
+    expect(failed.register).toBeNull();
+    // No *live* pass — the stored one is retained (nothing here deletes a
+    // record) and every member of it has decayed, which is the state that used
+    // to leave the certificate unarmed.
+    expect(livePasses(failed.progress, live)).toEqual([]);
+
+    // Now type back what that reveal named.
+    const laundered = applyGrade(
+      failed.progress,
+      board,
+      gradeSet(board, { picked: [...board.truth] }, BLAST_PHRASING),
+      PASS_THRESHOLD,
+      live,
+    );
+    expect(laundered.unlocked).toBe(true);
+    expect(laundered.register).toBe('shown');
+    expect(deriveFog(laundered.progress, live).understood.has(idFor('src/a.ts'))).toBe(false);
   });
 
   it('still bars a second answer while the first pass is alive', () => {
@@ -577,7 +636,9 @@ describe('a farmed board proves nothing', () => {
     const missed = answer(EMPTY_PROGRESS, [candidates[10] ?? '']);
     expect(missed.unlocked).toBe(false);
     expect(missed.progress.passes).toEqual([]);
-    expect(missed.progress.graded).toEqual([answerKey('blastRadius', subject)]);
+    expect(missed.progress.graded).toEqual([
+      { key: answerKey('blastRadius', subject), members: [...truth].sort() },
+    ]);
 
     const reloaded = parseProgress(serializeProgress(missed.progress));
     expect(answer(reloaded, truth).register).toBe('shown');

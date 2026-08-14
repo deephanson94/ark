@@ -17,7 +17,7 @@
 
 import type { AtlasId, NodeId, RepoMeta, VerbId } from '../atlas/index.js';
 import { VERB_IDS, byteCompare, isCommitId, isNodeId } from '../atlas/index.js';
-import type { Pass, Progress } from './progress.js';
+import type { GradedBoard, Pass, Progress } from './progress.js';
 import { EMPTY_PROGRESS, SAVE_VERSION, answerKey } from './progress.js';
 
 /** The subset of `Storage` this needs. Lets a test pass a plain object. */
@@ -123,12 +123,31 @@ function asPass(value: unknown): Pass | null {
   };
 }
 
-/** Sorted, unique, and free of anything that is not a string. */
-function asKeys(value: unknown): string[] {
+/**
+ * Graded certificates. Sorted by key, unique, junk dropped.
+ *
+ * **A bare string is accepted and read as a certificate with no members**, which
+ * is the shape this field had for exactly one unmerged commit. Such an entry
+ * cannot decay (`gradedKeys` treats an empty member list as "nothing to check"),
+ * so it stands until the board is graded again — the conservative direction: it
+ * can leave a board unprovable that ought to be provable, and cannot mint proof
+ * that was not earned.
+ */
+function asGraded(value: unknown): GradedBoard[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item): item is string => typeof item === 'string'))].sort(
-    byteCompare,
-  );
+  const byKey = new Map<string, GradedBoard>();
+  for (const item of value) {
+    if (typeof item === 'string') {
+      if (!byKey.has(item)) byKey.set(item, { key: item, members: [] });
+      continue;
+    }
+    if (typeof item !== 'object' || item === null) continue;
+    const record = item as Record<string, unknown>;
+    const key = record['key'];
+    if (typeof key !== 'string' || key === '') continue;
+    byKey.set(key, { key, members: asMemberIds(record['members']).sort(byteCompare) });
+  }
+  return [...byKey.values()].sort((a, b) => byteCompare(a.key, b.key));
 }
 
 /**
@@ -173,10 +192,18 @@ export function parseProgress(text: string | null): Progress {
   // v1 recorded passes and never attempts, which is the whole reason `graded`
   // exists. One board, one player, one time, and the alternative is discarding
   // every v1 notebook to close it.
-  const graded =
+  const graded: GradedBoard[] =
     version === SAVE_VERSION
-      ? asKeys(record['graded'])
-      : passes.map((pass) => answerKey(pass.verb, pass.subject)).sort(byteCompare);
+      ? asGraded(record['graded'])
+      : passes.map((pass) => ({
+          key: answerKey(pass.verb, pass.subject),
+          // A v1 record has no certificates at all, so the members it can offer
+          // are the ones the pass proved. Narrower than the board's real key —
+          // a pass holds a sample — which errs towards the certificate decaying
+          // sooner, i.e. towards letting a board be proved again. That is the
+          // safe direction: the alternative mints proof nobody earned.
+          members: [...pass.proved, ...pass.shown].sort(byteCompare),
+        }));
   return {
     version: SAVE_VERSION,
     surveyed: asNodeIds(record['surveyed']),
@@ -187,9 +214,16 @@ export function parseProgress(text: string | null): Progress {
     // second time — reachable only by hand-editing today, which NORTH-STAR §7.1
     // opts out of, but the invariant is one line and the alternative is a
     // comment claiming nobody will.
-    graded: [...new Set([...graded, ...passes.map((pass) => answerKey(pass.verb, pass.subject))])].sort(
-      byteCompare,
-    ),
+    graded: (() => {
+      const byKey = new Map(graded.map((entry) => [entry.key, entry] as const));
+      for (const pass of passes) {
+        const key = answerKey(pass.verb, pass.subject);
+        if (!byKey.has(key)) {
+          byKey.set(key, { key, members: [...pass.proved, ...pass.shown].sort(byteCompare) });
+        }
+      }
+      return [...byKey.values()].sort((a, b) => byteCompare(a.key, b.key));
+    })(),
   };
 }
 

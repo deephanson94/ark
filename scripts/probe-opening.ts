@@ -85,7 +85,7 @@ for (const repo of repos) {
     atlas.nodes.find((node) => node.id === subject)?.region ?? null;
 
   // The player model: pass everything, first try. `noteAttempt` is still driven
-  // so the rank's outermost term is exercised the way the shell drives it.
+  // so the rank's outermost term is exercised the way the shell drives `answered`; note the shell bumps `attempts` only on a failure, which this does not model and the `answered` filter masks.
   let state = NO_HISTORY;
   const served: Challenge[] = [];
   for (let step = 0; step < FIRST; step += 1) {

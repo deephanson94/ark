@@ -1550,6 +1550,29 @@ async function main(): Promise<number> {
       await page.screenshot({ path: join(SHOT_DIR, 'help.png') });
       await page.keyboard.press('Escape');
       await page.waitForTimeout(150);
+      // **The orbit's card too, because the map's was the only one gated and the
+      // orbit's was the one that lied**: it listed `drag` twice with
+      // contradictory sentences, one of them dead in that view. A gate that
+      // covers one view of three is a gate over the view least likely to be
+      // wrong.
+      await page.keyboard.press('o');
+      await page.waitForTimeout(220);
+      await page.keyboard.press('?');
+      await page.waitForSelector('.help', { state: 'visible', timeout: 3000 });
+      const orbitKeys = await page.locator('.help-keys').allInnerTexts();
+      const trimmed = orbitKeys.map((text) => text.trim());
+      if (new Set(trimmed).size !== trimmed.length) {
+        failures.push({ what: 'keys', detail: `the orbit card repeats a gesture: ${trimmed.join(', ')}` });
+      }
+      const orbitText = (await page.locator('.help').innerText()).toLowerCase();
+      if (orbitText.includes('about the pointer')) {
+        failures.push({ what: 'keys', detail: 'the orbit card offers pointer-anchored zoom, which is the map’s' });
+      }
+      process.stdout.write(`e2e: orbit card → ${trimmed.length} controls, no repeats\n`);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('o');
+      await page.waitForTimeout(150);
       if (await page.locator('.help').isVisible()) {
         failures.push({ what: 'keys', detail: 'Escape did not close the help card' });
       }
@@ -2273,7 +2296,15 @@ async function main(): Promise<number> {
         await exploitPage.locator('.hud-notes').click();
         await exploitPage.waitForSelector('.notes-panel', { timeout: 5000 });
         const claims = await exploitPage.locator('.field-note-claim').allInnerTexts();
-        const farmedNote = claims.find((claim) => claim.includes(subjectPath));
+        // **Through `claimAbout`, not `includes`.** A claim reads
+        // *"You were shown N … that depend on SUBJECT — member, member, …"*, so
+        // a note about somebody *else* that merely lists this subject as a
+        // member matches a substring test — and `find` takes the first, which
+        // is the largest-population note. This file has paid for that exact
+        // shape four times and built `claimAbout` because "a rule that lived
+        // three times had already diverged twice"; the first version of this
+        // step reintroduced it three call sites away from the helper.
+        const farmedNote = claims.find((claim) => claimAbout(claim).includes(subjectPath));
         if (farmedNote === undefined) {
           failures.push({ what: 'select-all', detail: `no note for the farmed board ${subjectPath}` });
         } else if (!farmedNote.includes('You were shown')) {

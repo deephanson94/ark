@@ -2,7 +2,7 @@
  * How far apart the three fog states actually are, in the eye rather than in HSL.
  *
  * `fog.ts` names three states — silhouette, surveyed, understood — and until
- * ADR-0048 the map drew **two**: the top two shared a fill and were separated by
+ * the ramp landed the map drew **two**: the top two shared a fill and were separated by
  * a stroke width of 2.5px against 1.4px. So the whole core loop's reward was one
  * pixel, which is why a cold playtester could not say what passing a board had
  * changed.
@@ -15,7 +15,7 @@
  *
  *   npx tsx scripts/probe-ramp.ts
  */
-import { INK, regionKnown, regionSilhouette, regionWash } from '../src/player/palette.js';
+import { INK, regionHue, regionKnown, regionSilhouette, regionWash } from '../src/player/palette.js';
 
 /** `hsla(h, s%, l%, a)` → sRGB 0..1, enough for the strings this palette emits. */
 function rgbOf(color: string): [number, number, number] {
@@ -53,23 +53,42 @@ function contrast(a: string, b: string): number {
   return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
 }
 
-// Region 0's hue. The ramp is a lightness ramp, so the hue only shifts every row
-// by the same factor and the *ratios between rows* — the thing being claimed —
-// are what this reports.
-const states = [
-  ['silhouette', regionSilhouette(0, 1)],
-  ['surveyed', regionWash(0, 1)],
-  ['understood', regionKnown(0, 1)],
+// **Every hue, not region 0's.** An earlier version sampled index 0 and said in
+// a comment that hue "only shifts every row by the same factor" — which is false
+// for exactly the reason this probe exists: HSL is not perceptual, and the same
+// three lightnesses at blue read very differently from the same three at red. A
+// review swept the indexes and found the silhouette→surveyed step at **1.18 at
+// hue ~240°**, under the unit test's own 1.2 floor, on a hue any repo with eight
+// or more regions has.
+const REGIONS = 48;
+const rows = [
+  ['silhouette', regionSilhouette],
+  ['surveyed', regionWash],
+  ['understood', regionKnown],
 ] as const;
 
-let previous: string | null = null;
-for (const [name, color] of states) {
-  const vsGround = contrast(color, INK.ground);
-  const vsBelow = previous === null ? null : contrast(color, previous);
+let previousName: string | null = null;
+let previousOf: ((index: number, alpha?: number) => string) | null = null;
+for (const [name, of] of rows) {
+  let worstGround = Infinity;
+  let worstStep = Infinity;
+  let worstStepAt = 0;
+  for (let index = 0; index < REGIONS; index += 1) {
+    worstGround = Math.min(worstGround, contrast(of(index, 1), INK.ground));
+    if (previousOf !== null) {
+      const step = contrast(of(index, 1), previousOf(index, 1));
+      if (step < worstStep) {
+        worstStep = step;
+        worstStepAt = index;
+      }
+    }
+  }
   console.log(
-    `${name.padEnd(12)} ${color.padEnd(28)} ` +
-      `vs ground ${vsGround.toFixed(2)}:1` +
-      (vsBelow === null ? '' : ` · vs the state below ${vsBelow.toFixed(2)}:1`),
+    `${name.padEnd(12)} worst vs ground ${worstGround.toFixed(2)}:1` +
+      (previousOf === null
+        ? ''
+        : ` · worst vs ${previousName} ${worstStep.toFixed(2)}:1 (region ${worstStepAt}, hue ${regionHue(worstStepAt).toFixed(0)}°)`),
   );
-  previous = color;
+  previousName = name;
+  previousOf = of;
 }

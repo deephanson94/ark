@@ -84,7 +84,7 @@ describe('parseProgress', () => {
     // visible: `parseProgress` re-seeds `graded` from `passes`, so a record
     // hand-built without it does not round-trip, correctly.
     const progress = recordPass(recordSurvey(EMPTY_PROGRESS, [id(1), id(2)]), 'blastRadius', id(3), [id(1)], 'proved');
-    const whole = { ...progress, graded: [answerKey('blastRadius', id(3))] };
+    const whole = { ...progress, graded: [{ key: answerKey('blastRadius', id(3)), members: [id(1)] }] };
     expect(parseProgress(serializeProgress(whole))).toEqual(whole);
   });
 
@@ -99,7 +99,9 @@ describe('parseProgress', () => {
       graded: [],
       passes: [{ verb: 'blastRadius', subject: id(3), proved: [id(1)], shown: [] }],
     });
-    expect(parseProgress(forged).graded).toEqual([answerKey('blastRadius', id(3))]);
+    expect(parseProgress(forged).graded).toEqual([
+      { key: answerKey('blastRadius', id(3)), members: [id(1)] },
+    ]);
   });
 
   it('returns an empty record for nothing, junk, and the wrong root type', () => {

@@ -134,10 +134,26 @@ so it survives a reindex. Ark indexes itself, so that is the ordinary case over 
 Two panels would also have lied about it: *"this board had already explained itself"* over a board
 whose current key was never explained.
 
-`gradedKeys` is the derived view — a key is live while its subject is, and, where a pass exists for
-it, while that pass is. This follows from decision 2's own argument rather than softening it: what
-`gate.ts` certifies is *this* board, and a re-rolled board is a different question wearing the same
-name. The sweep stays closed because a sweep decays nothing.
+`gradedKeys` is the derived view. This follows from decision 2's own argument rather than softening
+it: what `gate.ts` certifies is *this* board, and a re-rolled board is a different question wearing
+the same name.
+
+**The first implementation proxied that liveness through the *pass*, and a post-ship review broke it
+by running the real code.** A key was dropped when its pass had fully decayed — right — but a
+*failed* grade creates no pass, so nothing re-armed the certificate: fail the returning board once,
+read the reveal it serves, type it back, and `applyGrade` saw `first = true` and minted **proved**.
+§2.1's exploit, reopened at the gate this decision built. The symmetric hole was live too: a board
+failed once and abandoned, whose key later re-rolled, could never be proved again.
+
+Both were one missing datum. A `graded` entry is a **certificate carrying the members the reveal
+named** (`GradedBoard`), and it decays by its own members under the same test `livePasses` runs —
+so a board that has been graded is certified by that grading whether or not it passed, and one rule
+covers both paths. Storing an answer key in the save concedes nothing §7.1 has not: `truth` is in
+`atlas.json` in plaintext already.
+
+*An earlier draft of this section ended "the sweep stays closed because a sweep decays nothing",
+which is true within one repo state and false one state over — a board already decayed needs no
+further decay. That sentence is the reason the hole survived review once.*
 
 **Decision 4 — three consumers, three answers, and they are deliberately not the same.**
 

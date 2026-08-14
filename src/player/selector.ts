@@ -103,8 +103,13 @@ export interface SelectorState {
    */
   readonly skipped: ReadonlySet<string>;
   /**
-   * How many boards of `previous.verb` have just been served in a row,
-   * including `previous`. 0 when nothing has been served.
+   * How many boards of `previous.verb` have just been **graded** in a row,
+   * including `previous`. 0 when nothing has been graded.
+   *
+   * Graded, not served: the shell maintains this in `onGraded`, so a board that
+   * was opened and escaped does not count, and one board retried twice counts
+   * as a run of two. That is the right unit — a run is what the player *read*,
+   * not what the deck offered — but it is not what "served" says.
    *
    * Feeds `sameVerb`, which breaks a **run** rather than forbidding a repeat —
    * see `rankLess`. The distinction is the whole of why the term is safe.
@@ -386,7 +391,11 @@ interface Rank {
  *
  * **Two.** At one — forbid any repeat — the term becomes strict alternation, and
  * a unit fixture with only two boards of the second verb showed what that costs:
- * both are served immediately, so the hardest board in the deck arrives third.
+ * both are spent early, so the hardest board in the deck arrives **fourth**
+ * where a cap of two puts it sixth. (Measured through the real selector. This
+ * comment said *third* until a review checked it, and the test beside it
+ * asserted "not in the first three" — which cap 1 satisfies, so neither the
+ * figure nor the assertion was holding the decision up.)
  * That is `sameVerb` overriding ADR-0040's progression, which is the objection
  * this rank was built to answer rather than to create. At two it breaks the runs
  * a playtester actually complained about (3 here, 4 on hono and kysely, **5** on
