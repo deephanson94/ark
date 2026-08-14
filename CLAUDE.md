@@ -1429,9 +1429,9 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. **112 KiB of JS** (95 before the walkable world), zero runtime dependencies, first paint
-**332 ms** measured by `test:e2e`. `npm run index` produces a valid **338.5 KiB** atlas in **691 ms**
-(measured at `1827ff93`, the commit this branch was cut from).
+sentence. **128 KiB of JS** (112 before the district arches, 95 before the walkable world), zero runtime
+dependencies, first paint **168 ms** measured by `test:e2e`. `npm run index` produces a valid
+**398.0 KiB** atlas in **634 ms** (measured at `8448fd1`).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.
