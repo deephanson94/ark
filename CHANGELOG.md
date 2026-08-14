@@ -4318,3 +4318,38 @@ figure is **3% on hugo, 7% on kysely, 12% on graphql-js, 33% on hono**. Correcte
 
 **Next**: `upstream` is proposed and unbuilt; the residual deck after both gates is unmeasured and is
 the first thing to check if it is built. Then experiment 0001.
+
+---
+
+**2026-08-14 — `upstream` is refused too, by a review on the day it was proposed.**
+ADR-0045 §3 recommended building it. A Fable review re-ran both probes, **reproduced every table to
+the digit**, and killed the recommendation on how the benefits were measured: **ungated and uncapped
+for the payoff, per board for the cost.** Through the document's own two gates and the product's own
+cap the shipped deck is **the same size as Blast Radius's on four repos, 22 against 40 on ark, and 9
+against 58 on typeorm** — the taint-limited repo the whole structural supply argument was for. §5
+records it; the measurements stand and the conclusion does not.
+
+Four errors worth keeping. **The headline crossed its units** — uncapped `upstream` supply against a
+*capped* blast deck; in ADR-0042's own like-for-like numbers it is 1.4–1.8× and **kysely is 0.99×,
+less**. **The gates cannot be scored separately**: a player at end-game holds both channels on one
+board, and the union beats band A on 127 of ark's 149 where the two independently caught 33 and 81.
+**The fog claim counted refused boards** — recomputed on the residual, ark 60 → 56 rather than 28, and
+the Companion analogy survives on one repo of five. And **the ark sha was the branch head while every
+ark figure came from the corpus clone**, which is this repo's own landmine and not cosmetic: at the
+labelled commit the headline exposure halves.
+
+Two exposures the document never measured, both named in `CLAUDE.md` already: **reverse disclosure**
+(an `upstream` reveal states an atom of someone else's blast key — 40 of typeorm's 58 boards, 22 of
+hono's 54) and **the inspector**, whose `imported by: 0` elimination is the exact mirror of the one
+found in ADR-0043 §9.2 one day earlier.
+
+And the advice that outlives the refusal: **no ordering rule can give Blast Radius an easy opening.**
+15 of 15 of the easiest blast boards on every reference repo have a fixture-shaped subject, and there
+are zero easy boards about a real module — by construction, since §8.4 makes a real subject hard. The
+opening has to come from the history verbs plus one selector rank term. That is the next thing to
+measure and it is smaller than anything in ADR-0045.
+
+912 unit, 116 atlas, determinism byte-identical, `src/` untouched.
+
+**Next**: the `fixtureShaped` rank term, then experiment 0001 — which the review argues is worth more
+than everything else in the queue combined.

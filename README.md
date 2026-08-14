@@ -261,10 +261,23 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   proof, re-derived by an independent Tarjan pass, 1,326 of 1,326 containments), the only gate ADR-0020
   allows leaves **0 of ark's 2 and 0 of hugo's 133** boards open at session start, and ark has one
   2-node component. A second reformulation — **`upstream`**, *which of these does `X` depend on* —
-  **survives**: mirroring the relation mirrors ADR-0003's taint onto the subject's own closure, so it
-  is **3–7× Blast Radius's supply** (ark 149 boards to 40) and roughly **halves the permanently-fogged
-  set** on four of five repos. It needs two static gates, and it does **not** close this gap — it
-  routes around it.
+  looked like it survived and **is refused too**, by a review on the same day (§5). Every table in that
+  document reproduces; the conclusion did not, because **the benefits were measured on the ungated deck
+  and the costs per board**. Through its own two gates and the product's own cap the shipped deck is
+  **the same size as Blast Radius's on four repos, 22 against 40 on ark, and 9 against 58 on typeorm** —
+  the one repo the structural supply argument was for. The *"3–7× supply"* headline crossed its units
+  (uncapped supply against a capped deck; in like units 1.4–1.8×, and **kysely is less**), and the fog
+  win survives on one repo of five.
+
+- **No ordering rule can give Blast Radius an easy opening, and that is structural.** On all four
+  reference repos **15 of 15** of the easiest blast boards have a subject with zero non-leaf dependents,
+  and there are **zero** boards at difficulty ≤ 0.30 whose subject has even one — §8.4 makes a real
+  subject a hard question, which is ADR-0040's ρ = 0.96 read from the other end. So the current openings
+  are `jsr.json`, `package.json`, `keys.test.json` and eight `__testUtils__` files. The easy-and-real
+  boards already exist in the *other* verbs: Companion's easiest fifteen are **0 of 15** test-shaped on
+  all four repos. The measured proposal is one selector rank term — a blast board whose subject has zero
+  non-leaf dependents sorts last — ordering only, no board lost, no atlas change
+  ([ADR-0045](./docs/decisions/0045-tier-2s-third-question-is-two-questions-and-only-one-survives.md) §5.6).
 
 - **The deck has no tier 1 content, and that is what the opening still needs.**
   NORTH-STAR §5's six tiers are the curriculum and say tiers 1–3 "should ship first"; the four verbs

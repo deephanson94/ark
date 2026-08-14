@@ -92,7 +92,7 @@ function f1(picked: ReadonlySet<number>, truth: ReadonlySet<number>): number {
 }
 
 console.log(
-  '| repo | nodes | **closure clean** | boards | blast boards | **depth-1 hover** beats A | **end-game hover** beats A | key stated by a blast reveal | fogged by the whole deck | **still fogged with `upstream`** |',
+  '| repo | boards | blast deck (**not** its supply — see the comment) | depth-1 gate | end-game gate | **union gate** | **residual** | **shipped = min(residual, cap)** | fog now | fog after residual |',
 );
 console.log('|---|---|---|---|---|---|---|---|---|---|');
 
@@ -111,6 +111,12 @@ for (const repo of repos) {
     for (const member of board.truth) stated.add(`${member}->${board.subject}`);
   }
 
+  // **Blast Radius's shipped deck, and it is not the figure to compare against.**
+  // ADR-0045's headline divided this verb's *uncapped supply* by that capped
+  // deck, crossing the units and flattering the result by 2–4×. In like units —
+  // ADR-0042 §1.1's survey, same commits — blast *supply* is 88 / 218 / 331 / 220
+  // on ark / hono / kysely / graphql-js, so the honest multiples are 1.7× / 1.4× /
+  // **0.99×** / 1.8×. Kysely is *less*.
   let withImports = 0;
   let cleanClosure = 0;
   let boards = 0;
@@ -118,6 +124,8 @@ for (const repo of repos) {
   let disclosedNumer = 0;
   let disclosedDenom = 0;
   const endgame: number[] = [];
+  const unionScores: number[] = [];
+  const residual: number[] = [];
   const blastSubjects = new Set(blastBoards.map((board) => board.subject));
   // Coverage, which is what made Companion worth building: `progress.ts` promotes
   // a node only as a passed subject or as a correctly picked key member, so a
@@ -165,8 +173,21 @@ for (const repo of repos) {
     const share = key.length === 0 ? 0 : reachable / key.length;
     endgame.push(share === 0 ? 0 : (2 * share) / (1 + share));
 
-    provedByUpstream.add(idOf(subject));
-    for (const member of key) provedByUpstream.add(idOf(member));
+    // **The union is the guess a player actually runs**, and scoring the two
+    // channels separately is not the same thing: at end-game they hold both at
+    // once — hover an unproven candidate for the direct slice, an understood one
+    // for the deep slice. Precision stays 1.000 either way, so the union's recall
+    // is what decides. Two independent gates leave boards the union beats.
+    const union = new Set<number>(direct);
+    for (const ref of key) if (blastSubjects.has(idOf(ref))) union.add(ref);
+    const unionShare = key.length === 0 ? 0 : union.size / key.length;
+    const unionScore = unionShare === 0 ? 0 : (2 * unionShare) / (1 + unionShare);
+    unionScores.push(unionScore);
+    if (unionScore < BAND_A) {
+      residual.push(subject);
+      provedByUpstream.add(idOf(subject));
+      for (const member of key) provedByUpstream.add(idOf(member));
+    }
 
     // How much of this key has some shipped Blast Radius reveal already said?
     for (const member of key) {
@@ -183,12 +204,13 @@ for (const repo of repos) {
   const foggedAfter = atlas.nodes.filter(
     (node) => !provedByDeck.has(node.id) && !provedByUpstream.has(node.id),
   ).length;
+  const unionBeats = unionScores.filter((score) => score >= BAND_A).length;
+  const cap = Math.max(40, Math.ceil(atlas.nodes.length / 8));
   console.log(
-    `| ${repo} | ${atlas.nodes.length} | **${cleanClosure}** of ${withImports} | ${boards} | ${blastBoards.length} | ` +
-      `**${beats}** of ${boards} (mean ${mean(hover).toFixed(3)}) | ` +
-      `**${endBeats}** of ${boards} (mean ${mean(endgame).toFixed(3)}) | ` +
-      `${disclosedDenom === 0 ? '—' : `${((disclosedNumer / disclosedDenom) * 100).toFixed(1)}% of ${disclosedDenom}`} | ` +
-      `${fogged} | **${foggedAfter}** |`,
+    `| ${repo} | ${boards} | ${blastBoards.length} | ` +
+      `${beats} | ${endBeats} | **${unionBeats}** | **${residual.length}** | ` +
+      `**${Math.min(residual.length, cap)}** | ${fogged} | **${foggedAfter}** |`,
   );
   void refById;
+  void mean;
 }

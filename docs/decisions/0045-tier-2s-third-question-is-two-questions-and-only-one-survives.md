@@ -1,6 +1,10 @@
 # ADR-0045 — Tier 2's third question is two questions, and only one survives
 
-**Status**: proposed · nothing built · 2026-08-14
+**Status**: **`cycle` refused · `upstream` refused** · nothing built · 2026-08-14
+**Reversed by review on the day it was written.** §3 recommended building `upstream`; a Fable review
+re-ran every probe, reproduced every table, and killed the recommendation on a mistake in how the
+benefits were measured. §5 is the record. The measurements below stand; the conclusion they were used
+to reach does not.
 **Follows**: [ADR-0043](./0043-tier-2-is-unaskable-while-the-map-gives-away-depth-1.md) §7, which left this
 question open in as many words — *"this document does not clear it and does not condemn it; it was
 not measured."*
@@ -8,10 +12,16 @@ not measured."*
 [ADR-0008](./0008-truth-is-unbounded-and-the-prompt-promises-dependence.md) decision 1,
 NORTH-STAR §5 tier 2 and §6.2's Layering backlog verb.
 
-**Measured on** clean clones of `ark` `f5a77bd`, `honojs/hono` `7075369e`, `kysely-org/kysely`
+**Measured on** clean clones of `ark` **`9b86d12`**, `honojs/hono` `7075369e`, `kysely-org/kysely`
 `f24018c7`, `graphql/graphql-js` `9c245018`, `typeorm/typeorm` `df07bf1e`, `gohugoio/hugo` `44da0860`,
 `prometheus/prometheus`, `django/django` `c9eb16a87e`. Reproduce with `scripts/probe-layering.ts` and
 `scripts/probe-upstream.ts`. **No `src/` change.**
+
+*The ark sha above first read `f5a77bd`, the branch head, while every ark figure was measured on the
+corpus clone at `9b86d12`. Not a transcription slip: it is this repository's own landmine — a figure
+about a self-indexing repo taken from the tree that does not yet contain it — and the review showed it
+matters here, because at `f5a77bd` ark is 250 nodes and §3.1's end-game gate fires on 41 of 169 rather
+than 81 of 149. Three documentation commits halve the headline exposure.*
 
 ---
 
@@ -188,3 +198,131 @@ content at this price.
    overlap is unknown, so *"149 boards minus 33 minus 81"* is not a number anyone should quote. The
    residual deck is the first thing to measure if this is built, and typeorm's is small enough that
    it may not survive at all.
+
+---
+
+## 5. The review, and why `upstream` is refused
+
+A Fable review re-ran both probes and **reproduced every table in §2 and §3 to the digit** on the
+corpus commits — the 1,326/1,326 containment, the 111-of-114 leak, both hover tables, both disclosure
+percentages, the fog table. The document's instruments were sound. Its conclusion was not, and §4's
+own third caveat — *"the two gates' combined cost is not measured"* — is the hole the whole argument
+walks through.
+
+### 5.1 The mistake, stated plainly
+
+**Every benefit was measured on the ungated, uncapped deck; every cost was measured per board.** Put
+the same boards through this document's own two gates and the product's own cap and the case
+disappears. Re-derived here with an independent instrument (`scripts/probe-upstream.ts`, extended):
+
+| repo | boards | depth-1 gate | end-game gate | **union gate** | **residual** | **shipped** | Blast Radius deck |
+|---|---|---|---|---|---|---|---|
+| ark | 149 | 33 | 81 | **127** | **22** | **22** | 40 |
+| hono | 309 | 57 | 182 | **251** | **58** | 54 | 54 |
+| kysely | 328 | 20 | 81 | **127** | **201** | 75 | 75 |
+| graphql-js | 404 | 67 | 15 | **77** | **327** | 69 | 69 |
+| typeorm | 171 | 150 | 104 | **162** | **9** | **9** | 58 |
+
+On the four cap-limited repos the shipped deck is **the same size as Blast Radius's**, because the cap
+binds either way. On ark it is **smaller — 22 against 40**. And on typeorm — the taint-limited repo,
+the only one where mirror-certification buys anything, and the entire point of §3's structural
+argument — it is **9 boards against 58**. §3.1 already said typeorm would be the repo where this verb
+is worse supplied, quoting 21 from one gate; both gates make it 9. **The supply case has no repo left
+to stand on.**
+
+The gates also cannot be scored separately, which is how §3.1 scored them. A player at end-game holds
+both channels on one board: hover an unproven candidate for the direct slice, an understood one for
+the deep slice. Precision stays 1.000 either way, so the **union** is the guess, and it beats band A
+on 127 of ark's 149 where the two gates independently caught 33 and 81. The residuals above are the
+union's.
+
+### 5.2 Two figures that flattered the recommendation
+
+**"Three to seven times Blast Radius's supply" crosses its units.** It divides this verb's *uncapped
+supply* by Blast Radius's *capped deck*. In like units — ADR-0042 §1.1's survey, same commits — blast
+supply is 88 / 218 / 331 / 220 on ark / hono / kysely / graphql-js against 149 / 309 / 328 / 404 here.
+So **1.7× / 1.4× / 0.99× / 1.8×**, and **kysely is less**. The headline of §3 is the one comparison in
+the document that crosses units, and it does so by 2–4× in the direction that sells the verb.
+
+**The fog claim dies with the gates.** §3.2 counted coverage over all boards including the ones §3.1
+proposes to refuse, and a refused board proves nothing. On the union residual: ark 60 → **56** (not
+28), hono 149 → **139** (not 65), kysely 248 → **214** (not 166), typeorm 2,563 → **2,560**.
+graphql-js 201 → **104** is the one repo where the claim roughly survives. The Companion analogy —
+*reaching files the existing deck structurally cannot* — holds on one repo of five.
+
+And §3.2's sentence *"roughly halves … on four of five repos"* contradicted its own table before any
+of this: kysely's row read 248 → 166, which is a third.
+
+### 5.3 Two exposures the document never measured
+
+**Reverse disclosure, and it is larger than the direction that was measured.** §3.1 measured *blast
+reveals → upstream keys* at 1.7–9.5% and called disclosure mild. Run the other way — an `upstream`
+reveal states *"X depends on Y"*, which is an atom of **Y's** Blast Radius key — the guess decides
+**40 of typeorm's 58 blast boards, 22 of hono's 54, 11 of graphql-js's 69, 10 of ark's 40** on the
+ungated deck. That is ADR-0019 §7's landmine by name (*"the direction it runs in is the one nobody
+looks at"*), and `CLAUDE.md` requires the check before adding a verb. The union residual happens to
+suppress it to 0–1 boards per repo — by correlation with the end-game gate, not by construction, and
+closing it properly needs ADR-0022's `decidedBy` machinery, which this document neither prices nor
+mentions.
+
+**The inspector, unexamined by the author who found it the day before.** ADR-0043 §9.2 showed
+`imported by: 0` resurrecting route D's exploit on 800 of 1,436 boards. The mirror applies here: a
+truth member has in-degree ≥ 1 by construction, so every in-degree-0 candidate is eliminable and
+recall stays 1. The fix is cheap — a distractor floor of in-degree ≥ 1 — but it is design this
+document does not contain, and not noticing it one day after writing ADR-0043 §9.2 is the failure that
+section is *about*.
+
+### 5.4 Two corrections that do not change the verdict
+
+**`cycle`'s refusal stands, but *"permanently"* is struck.** One formulation was never priced: ban
+SCC-mates from Blast Radius candidate pools, which is legal under ADR-0008 (unsampled dependents are
+already banned) and makes the taught component worthless against blast boards. Measured cost: **0
+blast boards die on all six repos**; 114 of hugo's 156 keys and 22 of kysely's 75 would re-sample. It
+still probably fails — a passed subject's *drawn* radius contains its mates under decision 1,
+reopening the leak from the other side, and ark still has two subjects with a key of size one — but
+the record should say it was not priced rather than imply nothing was left to try.
+
+**Guardrail 4 has a language gate this document omits.** The certification argument is sound where
+dependencies *are* imports: cycles are handled, `probable` edges refuse the board, and an unresolved
+site anywhere in the closure refuses it, so a clean closure is the true closure. But ADR-0003's
+landmine names the exception — a dependency that is not an import records no unresolved site — so on a
+Python repo a distractor could be a real dynamic dependency (562 such pairs on django). `upstream`
+would need `GRADED_IMPORT_LANGS` exactly as Blast Radius does, and §3 never says so.
+
+**And every gate figure describes a generator nobody wrote.** The probe samples keys by node-id sort;
+ADR-0008 consequence 2 requires stratified sampling by distance, which changes the direct share of
+every key and therefore both gates' firing rates. ADR-0043 §9.1 carried that caveat for its own
+numbers and this document did not.
+
+### 5.5 The decision
+
+**`upstream` is refused.** Not because it is unsound — with the conditions in §5.3 and §5.4 it could
+be made sound — but because after them it ships a deck the same size as Blast Radius's on four repos,
+smaller on the bootstrap, a ninth of the size on the one repo it was supposed to rescue, and it buys
+real fog coverage on one repo of five. That is a Companion-sized build plus new cross-verb disclosure
+machinery, for a mirror of a verb that already exists.
+
+**The conditions under which it should be re-opened** are written down so the refusal is checkable:
+gate on the union rather than on two independent scores; declare its atoms through `disclosure.ts` and
+refuse boards whose reveals assemble a blast key past the bar; floor distractors at in-degree ≥ 1;
+restrict to `GRADED_IMPORT_LANGS`; sample truth stratified by distance and **re-score both gates**,
+since every figure here is about the id-sorted sample. If a future session changes the deck cap, or
+ADR-0008 decision 1's full-radius half, the first two rows of §5.1's table are what to re-measure.
+
+### 5.6 What the review says to do instead
+
+Recorded here rather than acted on, because it is a different decision. The measured problem is the
+*opening*: three cold playtests at 4/10, 5/10, 4/10, all naming the first fifteen boards. The review's
+finding is that **no ordering rule can fix that inside Blast Radius**: on all four reference repos,
+**15 of 15** of the easiest blast boards have a subject with zero non-leaf dependents, and there are
+**zero** boards at difficulty ≤ 0.30 whose subject has even one. That is by construction — §8.4 makes
+a real subject a hard question, which is ADR-0040's ρ = 0.96 read from the other end — so the easy
+boards are structurally the fixture-shaped ones (`jsr.json`, `package.json`, `keys.test.json`, eight
+`__testUtils__` files on graphql-js).
+
+The easy-and-real boards already exist in the **other** verbs: Companion's easiest fifteen are 0 of 15
+test-shaped on all four repos, with landmark subjects, and they are not lookups. So the proposal is
+one rank term — a blast board whose subject has zero non-leaf dependents sorts last — inserted between
+`progress` and `difficulty` in the selector. Ordering only: no board lost, no atlas change, no new
+disclosure. **That is the next thing to measure, and it is a smaller change than anything in this
+document.**
