@@ -175,7 +175,7 @@ for (const repo of repos) {
   };
   writeFileSync(join(out, `${repo}.json`), JSON.stringify(report, null, 2));
 
-  console.log(`\n### ${repo} \`${atlas.repo.head.slice(0, 8)}\` — ${baselineSubjects} of ${blastSubjects.size} blast subjects tainted today`);
+  console.log(`\n### ${repo} \`${(atlas.repo.head ?? '').slice(0, 8)}\` — ${baselineSubjects} of ${blastSubjects.size} blast subjects tainted today`);
   console.log('\n| fix | subjects still tainted after | **subjects freed** | as % of all subjects |');
   console.log('|---|---|---|---|');
   for (const r of rows) {

@@ -14,7 +14,7 @@
 | 0 — pre-flight | **done** | 20 repos, full depth, pinned; baseline 878 unit / atlas / determinism green |
 | 1 — the survey | **done** | **7 of 16** gradeable repos are taint-limited. **All 4 reference repos are cap-limited.** |
 | 2 — where the taint sits | **done** | Taint is **overdetermined**. Every resolver fix combined frees **5 of typeorm's 1,921** tainted subjects, 6 of excalidraw's 388, 1 of vue-core's 220 — and **192 of apollo-client's 217, 215 of nest's 249, 127 of rxjs's 141**. The corpus splits in two. |
-| 3 — candidate A (workspace specifiers) | pending | |
+| 3 — candidate A (workspace specifiers) | **done** | Built, measured, reverted. **+250 blast boards, 0 lost, 0 wrong answer keys** — but on **3 repos of 20**, and none of them the three worst-starved. |
 | 4 — candidate B (taint stops at first unresolved edge) | pending | |
 | 5 — candidate C (bounded depth) | pending | |
 | 6 — two smaller findings | pending | |
@@ -209,4 +209,122 @@ buildable is the second-to-last column, and on the three worst repos it is 0.2%,
 
 ---
 
-*Phases 3–7 follow.*
+## 3. Candidate A — resolving workspace self-references
+
+### 3.1 The refusal's stated reason is repo-dependent, and nothing had checked it
+
+`resolve.ts` refuses a specifier naming a package the repo itself defines, and gives a reason:
+
+> *a package's entry point is its `exports` or `main`, and in a monorepo those name **built** output
+> that is gitignored and not on the map.*
+
+Measured across the corpus's monorepos, that sentence is true of some repos and false of others:
+
+| repo | root/package `exports` for `.` | the comment is |
+|---|---|---|
+| apollo-client | `./src/core/index.ts` | **false** — source, on disk, build-free |
+| nest | *(none, and no `main`)* | **unaddressed** — `packages/common/utils/x.util.ts` is right there |
+| rxjs | `./dist/esm/index.js` | true — but `packages/*/src/` resolves anyway |
+| vue-core | `./dist/*.esm-bundler.js` | **true** |
+| typeorm | *(names `dist`)* | **true** |
+
+So the honest rule is *try, and keep the refusal when nothing lands on an indexed file*. Scored
+before implementing (`scripts/probe-workspace.ts`), in priority order — the `exports` entry, then
+`D/S`, then `D/src/S`:
+
+| repo | workspace specifiers | via `exports` | via `D/S` | via `D/src/S` | **still unresolved** |
+|---|---|---|---|---|---|
+| apollo-client | 1,197 | 1,176 | 12 | 0 | **9 (0.8%)** |
+| rxjs | 1,536 | 1 | 0 | 1,509 | **26 (1.7%)** |
+| nest | 564 | 0 | 493 | 0 | **71 (12.6%)** |
+| vue-core | 15 | 2 | 1 | 11 | **1 (6.7%)** |
+| excalidraw | 18 | 0 | 2 | 0 | **16 (88.9%)** |
+| typeorm | 247 | 0 | 0 | 0 | **247 (100%)** |
+
+### 3.2 Built, measured on all 20 repos, reverted
+
+Three resolver changes were implemented together, because §2 found three fixable causes and
+measuring one at a time would price each against a baseline the others had already moved (the
+landmine ADR-0019's counterfactual table hit): workspace resolution as above, the `dottedSegment`
+extension append, and the `rootSelfPath` leading slash.
+
+**What the counterfactual holds fixed**: the same 20 pinned commits, the same deck cap, the same
+generator, the same gate, the same everything downstream of resolution. One knob — `resolve.ts` and
+the config index feeding it.
+
+| repo | res% | subjects tainted% | **blast boards** | verdict |
+|---|---|---|---|---|
+| apollo-client | 60.9 → **98.8** | 62.4 → **16.8** | 46 → **108** *(at cap)* | **+62** |
+| nest | 60.1 → **99.0** | 87.1 → **70.4** | 7 → **120** | **+113** |
+| rxjs | 51.7 → **99.0** | 47.8 → **18.8** | 75 → **150** *(at cap)* | **+75** |
+| express | 74.2 → **98.5** | 66.7 → 67.6 | 2 → **2** | — |
+| date-fns | 93.0 → 99.9 | 0.3 → 0.0 | 226 → 226 *(at cap)* | — |
+| excalidraw | 97.0 → 98.0 | 81.0 → 81.4 | 21 → **21** | — |
+| typeorm | 97.6 → 97.9 | 86.5 → 86.5 | 58 → **58** | — |
+| vue-core | 96.3 → 96.5 | 86.6 → 86.5 | 7 → **7** | — |
+| kysely | 92.1 → 92.9 | 3.6 → **7.2** | 75 → 75 *(at cap)* | — |
+| hono, ark, graphql-js, hugo, prometheus, webpack, cobra, django, flask, system-design-primer | ±0.7 | ±0.2 | unchanged | — |
+
+**+250 blast boards, 0 lost.** `test:unit` 878 passed, `test:atlas` 112 passed, `test:determinism`
+byte-identical.
+
+### 3.3 Does it ship a wrong answer key? Measured from outside the atlas — no
+
+`scripts/probe-wrongkey.ts`. ADR-0026 §6.1's rule applies: an atlas-derived check structurally
+cannot see a missing edge, so the only atlas input is the board itself (subject, candidates, truth)
+and each node's path. Everything else is the file text and the filesystem, read with the probe's
+**own** regex lexer rather than `scan.ts`, because ADR-0028 §8.1's defect survived two instruments
+that shared one blindness.
+
+**The gate.** `--plant` moves one member of each board's key into the distractor set. It catches 20
+of ark's and 33 of hono's — so a zero from this probe is a measurement rather than a silence.
+
+| | wrong-answer slots | **violations** |
+|---|---|---|
+| original resolver, 15 repos | 42,584 | **0** |
+| **with all three fixes, 15 repos** | **46,373** | **0** |
+
+So the change adds 3,789 wrong-answer slots and **zero** wrong answer keys, on a probe that
+demonstrably fires.
+
+**The instrument needed three corrections, and every one made ark look worse than it was** — which
+is the direction that gets believed, so each is named:
+
+1. **24 violations on webpack** were JSDoc `/** @typedef {import("./util/fs").X} */` — type
+   references inside comments, which `scan.ts` masks and correctly makes no edge from.
+2. **1 on hugo** was `golang.org/x/text/transform` matched against hugo's own top-level `transform/`
+   by an unanchored suffix. An external package read as an internal edge. Anchoring on the `go.mod`
+   module path fixes it — ADR-0026's *a path prefix and a node key are not the same string*, now in
+   the probe rather than the product.
+3. **2 on webpack** were `require.main.require('./file')`, a different function whose specifier
+   resolves against the main module. The regex matched its trailing `.require(`.
+
+The residue of #1 is a real finding and not a defect: webpack states type dependencies in JSDoc,
+which is a **dependency that is not an import** — ADR-0024 decision 5's class, in JavaScript.
+
+### 3.4 The prediction that was wrong, and why
+
+§2's marginal probe predicted **express +17 subjects**. Measured: express gained **0 boards** and its
+subject-taint share **rose**, 66.7% → 67.6%. Three more repos rose too — kysely 3.6% → **7.2%**,
+excalidraw +0.4, prometheus +0.2.
+
+The mechanism is the one §2's counterfactual could not model, and it is worth stating because it
+bounds every future estimate of this kind: **resolving a specifier does not delete it, it turns it
+into an edge** — and an edge carries taint *out of its target's closure* into the importer. §2
+withheld sites without adding the edges they would become, so **every figure in §2.3 is an upper
+bound**, and on the repos where the newly-reachable code is itself unsound the realised value is
+zero.
+
+That is also why apollo-client and rxjs land exactly on their caps (108 and 150) rather than above
+them: past the cap, more supply buys nothing at all.
+
+### 3.5 What it is worth
+
+Three repos of twenty move. **None of them is one of the three worst-starved** — typeorm, excalidraw
+and vue-core gain 0, 0 and 0 boards, exactly as §2 predicted and for the reason §2 gave. The
+candidate is real, it is safe, and it is **not the answer to the starvation question**; it is the
+answer to a different and smaller question about monorepo resolution.
+
+---
+
+*Phases 4–7 follow.*

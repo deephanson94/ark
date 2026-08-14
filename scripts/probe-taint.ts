@@ -10,13 +10,13 @@
  *
  *   npx tsx scripts/probe-taint.ts /tmp/ark-corpus <repo>...
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { buildIndex, indexOptions } from '../src/indexer/build.js';
 import { buildGraph, reach, nodeAt } from '../src/atlas/graph.js';
 import type { Graph } from '../src/atlas/graph.js';
-import type { Atlas, NodeRef } from '../src/atlas/schema.js';
+import type { NodeRef } from '../src/atlas/schema.js';
 
 const corpus = process.argv[2] ?? '/tmp/ark-corpus';
 const repos = process.argv.slice(3);
@@ -128,7 +128,7 @@ for (const repo of repos) {
 
   writeFileSync(join(out, `${repo}.json`), JSON.stringify(report, null, 2));
 
-  console.log(`\n### ${repo}  \`${report.sha.slice(0, 8)}\``);
+  console.log(`\n### ${repo}  \`${(report.sha ?? '').slice(0, 8)}\``);
   console.log(
     `${report.blastSubjects} blast subjects, ${report.taintedSubjects} tainted (${((report.taintedSubjects / report.blastSubjects) * 100).toFixed(1)}%); ` +
       `${report.unsoundNodes} unsound nodes carrying ${report.unresolvedSites} unresolved sites of ${report.totalSites} ` +

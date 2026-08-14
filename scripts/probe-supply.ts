@@ -15,9 +15,8 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { buildIndex, indexOptions } from '../src/indexer/build.js';
-import { buildGraph, reach, taintedRefs, nodeAt } from '../src/atlas/graph.js';
+import { buildGraph, reach, taintedRefs } from '../src/atlas/graph.js';
 import { sourceCoverage } from '../src/atlas/coverage.js';
-import type { Atlas } from '../src/atlas/schema.js';
 
 const corpus = process.argv[2] ?? '/tmp/ark-corpus';
 const out = process.argv[3] ?? '/tmp/ark-supply';
@@ -105,7 +104,7 @@ async function measure(repo: string): Promise<SupplyRow> {
       for (const [reason, n] of result.report.skipped) skipped[reason] = n;
       verbs[name] = {
         generated: result.report.generated,
-        considered: result.report.subjectsConsidered,
+        considered: 'subjectsConsidered' in result.report ? result.report.subjectsConsidered : 0,
         skipped,
       };
     }

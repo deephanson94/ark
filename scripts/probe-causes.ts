@@ -156,7 +156,7 @@ for (const repo of repos) {
 
   writeFileSync(join(out, `${repo}.json`), JSON.stringify({ repo, sha: atlas.repo.head, tainted: allTainted.size, blastSubjects: blastSubjects.size, rows }, null, 2));
 
-  console.log(`\n### ${repo} \`${atlas.repo.head.slice(0, 8)}\` — ${allTainted.size} of ${blastSubjects.size} subjects tainted`);
+  console.log(`\n### ${repo} \`${(atlas.repo.head ?? '').slice(0, 8)}\` — ${allTainted.size} of ${blastSubjects.size} subjects tainted`);
   console.log('\n| cause | specifiers | files | subjects poisoned | share of taint | specimen |');
   console.log('|---|---|---|---|---|---|');
   for (const r of rows) {
