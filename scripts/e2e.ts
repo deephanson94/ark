@@ -2766,8 +2766,22 @@ async function main(): Promise<number> {
         }
         await exploitPage.keyboard.press('Escape');
         await exploitPage.waitForTimeout(200);
+        // **Only the `understood` number, and comparing the whole line was
+        // wrong.** Ticking twenty rows *shows* you twenty things, and a shown
+        // member promotes to `surveyed` by design — ADR-0047 in as many words,
+        // *"which is exactly what it is: you were shown it"*. So `surveyed`
+        // legitimately moves, by as much as twenty, and by **nothing at all**
+        // when the board's members are commits, which have no square on the
+        // map. That is verb-dependent, this step does not choose its board, and
+        // the string comparison passed here and failed on CI for exactly that
+        // reason. What the farm must not move is knowledge.
+        const countOf = (line: string): string =>
+          /(\d+) understood/.exec(line)?.[1] ?? 'missing';
         const understoodAfter = await exploitPage.locator('.hud-counts').innerText();
-        if (understoodAfter !== understoodBefore) {
+        process.stdout.write(
+          `e2e: farm counts → ${rendered(understoodBefore)} → ${rendered(understoodAfter)}\n`,
+        );
+        if (countOf(understoodAfter) !== countOf(understoodBefore)) {
           failures.push({
             what: 'select-all',
             detail: `the farm moved the understood count: ${understoodBefore} → ${understoodAfter}`,
