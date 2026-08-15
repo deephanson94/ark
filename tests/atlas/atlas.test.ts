@@ -1195,3 +1195,51 @@ describe('twin classes on this repo', () => {
     expect(nameableFresh).toBeLessThan(nameableCleared);
   });
 });
+
+/**
+ * The free hint is a subset of the answer, and the map used to draw it.
+ *
+ * ADR-0008 decision 1 draws every node's **direct importers** on the canvas for
+ * free — the arrival tip promises it, and §8.4 measures `surprise` against
+ * exactly that guess. A Blast Radius key is a sample of the **transitive**
+ * dependent set, which contains the direct one. So a board open on `S` drew a
+ * gold line from `S` to some of its own answers: measured on this repo, **37 of
+ * 40 boards and 81 of 216 key members**, and 94–96% of hono's and graphql-js's
+ * boards.
+ *
+ * The renderer no longer draws that channel while a board is open (`main.ts`,
+ * ADR-0016's rule). This is the *supply-side* half: it records that the overlap
+ * exists and is large, so nobody re-derives "direct importers are free" as safe
+ * to draw beside an open board. If this ever measures zero, the leak has moved
+ * rather than closed — check the generator before deleting the test.
+ */
+describe('the direct ring is part of the answer', () => {
+  it('overlaps the key on most boards, which is why the map may not draw it', () => {
+    const graph = buildGraph(atlas);
+    let boards = 0;
+    let leaking = 0;
+    let drawn = 0;
+    for (const challenge of atlas.challenges) {
+      if (challenge.verb !== 'blastRadius' || !isNodeId(challenge.subject)) continue;
+      const ref = graph.refById.get(challenge.subject);
+      if (ref === undefined) continue;
+      boards += 1;
+      const direct = new Set((graph.in[ref] ?? []).map((edge) => edge.from));
+      let hit = 0;
+      for (const id of challenge.truth) {
+        const memberRef = isNodeId(id) ? graph.refById.get(id) : undefined;
+        if (memberRef !== undefined && direct.has(memberRef)) hit += 1;
+      }
+      drawn += hit;
+      if (hit > 0) leaking += 1;
+    }
+    // Non-vacuous: there have to be boards to measure.
+    expect(boards).toBeGreaterThan(10);
+    // The overlap is the *reason* for the rendering rule, so it is asserted
+    // rather than hoped for. A repo where it vanished would be one where the
+    // free hint stopped being part of the answer, which the generator does not
+    // promise and no version of it has ever produced.
+    expect(leaking).toBeGreaterThan(boards / 2);
+    expect(drawn).toBeGreaterThan(0);
+  });
+});

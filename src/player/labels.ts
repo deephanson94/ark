@@ -23,6 +23,20 @@ export interface LabelCandidate {
   readonly offset: number;
   /** Higher wins the space. */
   readonly priority: number;
+  /**
+   * The node this label names, when it names one.
+   *
+   * Carried through to `PlacedLabel` so the shell can make the **text** a hit
+   * target for its own node. A label is anchored directly under its disc and is
+   * either placed there or skipped — it never drifts — but on a crowded map the
+   * text still lies across *other* discs, so pointing at a name picked whatever
+   * was underneath it. A cold playtester read that as the map naming the wrong
+   * object, and it is the reason they answered every board off the text list
+   * instead of the map.
+   *
+   * Absent for a region label, which names a cluster rather than a node.
+   */
+  readonly ref?: number;
 }
 
 /** A screen rectangle a label may not overlap. */
@@ -37,6 +51,8 @@ export interface PlacedLabel extends Box {
   readonly text: string;
   readonly x: number;
   readonly y: number;
+  /** @see LabelCandidate.ref */
+  readonly ref?: number;
 }
 
 export type Measure = (text: string) => number;
@@ -60,6 +76,57 @@ export interface PlaceOptions {
    * the call site and hands the slot to a name the player can actually read.
    */
   readonly occupied?: readonly Box[];
+  /**
+   * Where a label may sit relative to its anchor, tried in this order.
+   *
+   * **Dodging is why street zoom has names.** With `below` alone a label is
+   * either in its one slot or gone, and at street zoom this repo's discs
+   * overlap 30–60%, so the slots overlap too: 68 nodes on screen produced 10
+   * names, and the largest disc in the frame — a sixth of the viewport — had
+   * none. A reader who zooms in is asking what these things are, and the map
+   * was answering with mute circles.
+   *
+   * `below` stays first, so a label that fits under its own disc still takes
+   * that slot. **That is not the same as "nothing that could already be placed
+   * moves", which is what this comment used to claim and a review disproved by
+   * running it.** A dodged label is a new *blocker*: a high-priority name whose
+   * below-slot is taken used to be dropped and is now placed to one side, and
+   * that box can displace a lower-priority name that previously fit — or, under
+   * a tight budget, spend the slot it would have had. Priority winning is the
+   * intended behaviour; the invariant was the overclaim.
+   *
+   * `right` before `left` is the cartographic convention, and both hug the disc
+   * — a name that drifts is a name that looks like it belongs to a neighbour.
+   */
+  readonly anchors?: readonly Anchor[];
+}
+
+export type Anchor = 'below' | 'right' | 'left' | 'above';
+
+const DEFAULT_ANCHORS: readonly Anchor[] = ['below'];
+
+/**
+ * Where the text's centre goes for one anchor.
+ *
+ * `offset` is the anchored thing's radius, so it serves as both the vertical
+ * clearance under a disc and the horizontal clearance beside one.
+ */
+function placeAt(
+  anchor: Anchor,
+  candidate: LabelCandidate,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  switch (anchor) {
+    case 'below':
+      return { x: candidate.x, y: candidate.y + candidate.offset + height };
+    case 'right':
+      return { x: candidate.x + candidate.offset + width / 2, y: candidate.y + height / 2 };
+    case 'left':
+      return { x: candidate.x - candidate.offset - width / 2, y: candidate.y + height / 2 };
+    case 'above':
+      return { x: candidate.x, y: candidate.y - candidate.offset };
+  }
 }
 
 function overlaps(a: Box, b: Box): boolean {
@@ -95,29 +162,50 @@ export function placeLabels(
   // arithmetic slip away from returning a panel as a label.
   const blockers: Box[] = [...(options.occupied ?? [])];
   const placed: PlacedLabel[] = [];
+  const anchors = options.anchors ?? DEFAULT_ANCHORS;
   for (const candidate of ranked) {
     if (placed.length >= options.budget) break;
 
     const width = measure(candidate.text) + options.padding * 2;
     const height = options.lineHeight;
-    const x = candidate.x;
-    const y = candidate.y + candidate.offset + height;
-    const box: PlacedLabel = {
-      text: candidate.text,
-      x,
-      y,
-      left: x - width / 2,
-      top: y - height,
-      width,
-      height,
-    };
+    for (const anchor of anchors) {
+      const { x, y } = placeAt(anchor, candidate, width, height);
+      const box: PlacedLabel = {
+        text: candidate.text,
+        ...(candidate.ref === undefined ? {} : { ref: candidate.ref }),
+        x,
+        y,
+        left: x - width / 2,
+        top: y - height,
+        width,
+        height,
+      };
 
-    if (box.left + box.width < 0 || box.left > options.width) continue;
-    if (box.top + box.height < 0 || box.top > options.height) continue;
-    if (blockers.some((other) => overlaps(box, other))) continue;
+      // **Wholly inside, not merely touching.** This admitted any box that
+      // *intersected* the viewport, so a name anchored near an edge drew with
+      // its tail cut off — one street-zoom frame of this repo showed
+      // `disclosure` sheared at the right edge and two region names surviving
+      // as `ots` and `les` at the left. A half-name is worse than no name twice
+      // over: it reads as a rendering fault, and the fragment that survives is
+      // the *end* of the string, which is the half that identifies nothing.
+      //
+      // **It is not free, and the first version of this comment said it was.**
+      // `continue` does not spend budget, so under a *binding* budget the slot
+      // does pass to the next candidate — which is the node pass. The region
+      // pass runs with an infinite budget, where every placeable candidate
+      // places regardless and a dropped name is simply a name fewer: the `ots`
+      // and `les` in the paragraph above are region labels, so that example is
+      // the case the claim was false about. Dropping a sheared name is still
+      // right — a fragment is worse than a gap — but it is a cost, not a
+      // rearrangement.
+      if (box.left < 0 || box.left + box.width > options.width) continue;
+      if (box.top < 0 || box.top + box.height > options.height) continue;
+      if (blockers.some((other) => overlaps(box, other))) continue;
 
-    blockers.push(box);
-    placed.push(box);
+      blockers.push(box);
+      placed.push(box);
+      break;
+    }
   }
   return placed;
 }

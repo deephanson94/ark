@@ -103,6 +103,20 @@ export interface WorldMode {
   isActive(): boolean;
   /** Enter, standing at `at` if given, otherwise at the world's spawn point. */
   enter(scene: Scene, at: SceneNode | null): void;
+  /**
+   * Move the hero to a node without rebuilding the world.
+   *
+   * ADR-0032 §3.4's fast travel, reachable **while already walking**. The guide
+   * had no way to do this, so pressing "Where next?" in the world moved the flat
+   * map's camera — which is not what is on screen — and the caption then
+   * reported *"you are on labels.ts"* over a byte-identical canvas. A cold
+   * playtester proved the avatar never moved by hashing the canvas before and
+   * after, twice, on two different nodes.
+   *
+   * Returns false when there is no world to move in, so a caller cannot claim
+   * an arrival that did not happen.
+   */
+  travelTo(at: SceneNode): boolean;
   exit(): void;
   /** True if the key was the world's to handle. */
   keyDown(key: string): boolean;
@@ -139,6 +153,17 @@ export interface WorldMode {
   hero(): Hero | null;
   /** Metres, for the HUD. Null when there is nothing to walk to. */
   distanceTo(node: SceneNode): number | null;
+}
+
+/**
+ * Where the hero stands when it arrives at a node: clear of the footprint.
+ *
+ * A spawn *inside* a tower is resolved by the collision push on the first frame,
+ * which reads as being shoved rather than as arriving.
+ */
+function standingClearOf(at: SceneNode): Hero {
+  const clearance = at.radius + HERO_RADIUS + 7;
+  return { x: at.x, y: at.y + clearance, facing: 0 };
 }
 
 export function createWorldMode(): WorldMode {
@@ -251,13 +276,24 @@ export function createWorldMode(): WorldMode {
       // would be resolved by the collision push on the first frame, which reads
       // as being shoved.
       if (at !== null) {
-        const clearance = at.radius + HERO_RADIUS + 7;
-        hero = { x: at.x, y: at.y + clearance, facing: 0 };
+        hero = standingClearOf(at);
       } else {
         hero = { x: world.spawn.x, y: world.spawn.y, facing: world.spawn.facing };
       }
       lastMs = null;
       held.clear();
+    },
+
+    travelTo(at) {
+      if (world === null) return false;
+      // The **same** placement `enter` uses, from one helper: two copies of
+      // "stand clear of the tower" is one edit away from a spawn inside a
+      // footprint, which the collision push resolves on the first frame and
+      // reads as being shoved.
+      hero = standingClearOf(at);
+      lastMs = null;
+      held.clear();
+      return true;
     },
 
     exit() {

@@ -14,7 +14,7 @@ import {
   screenToWorld,
   worldToScreen,
   zoomAt,
-} from '../../src/player/camera.js';
+ sameCamera,} from '../../src/player/camera.js';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 
 const VIEWPORT: Viewport = { width: 800, height: 600 };
@@ -305,5 +305,48 @@ describe('boundsOf and fit', () => {
     expect(fit(square, VIEWPORT, Math.PI / 4, 0).scale).toBeLessThan(
       fit(square, VIEWPORT, NORTH, 0).scale,
     );
+  });
+});
+
+
+/**
+ * `sameCamera` is one guard with two directions, and only one of them was
+ * reachable from any suite.
+ *
+ * `onClose` gives back the pan a board took **only if the camera is still
+ * exactly where the board left it** — the e2e proves the restore happens, and
+ * never moves the camera behind the open board, so mutating this to `() => true`
+ * (restore always, stomping a deliberate mid-board pan) left every suite green.
+ * That is the count-the-branch rule: a protective condition nothing exercises.
+ */
+describe('sameCamera', () => {
+  const view = { x: 10, y: -4, scale: 1.5, bearing: 0.25 };
+
+  it('is true for a view nothing has touched', () => {
+    expect(sameCamera(view, { ...view })).toBe(true);
+  });
+
+  it('is false when any single field moved', () => {
+    expect(sameCamera(view, { ...view, x: 10.0001 })).toBe(false);
+    expect(sameCamera(view, { ...view, y: -3.9999 })).toBe(false);
+    expect(sameCamera(view, { ...view, scale: 1.5001 })).toBe(false);
+    expect(sameCamera(view, { ...view, bearing: 0.2501 })).toBe(false);
+  });
+
+  it('refuses a view the player has dragged', () => {
+    // Through the real `pan`, not hand-written coordinates: the guard's whole
+    // job is to tell a camera the *player* produced from one the board did, and
+    // both are produced by this arithmetic.
+    expect(sameCamera(view, pan(view, 37, 11))).toBe(false);
+  });
+
+  it('accepts a drag the player exactly reversed', () => {
+    // Stated because it is the one case exact equality gets "wrong", and it is
+    // harmless: pan out and back lands on the same numbers, so `onClose`
+    // restores — to the view already on screen. A no-op, not a theft. The first
+    // draft of this file asserted the *opposite*, on an assumption about
+    // floating point that this arithmetic does not have; the assertion below is
+    // what the code does.
+    expect(sameCamera(view, pan(pan(view, 37, 11), -37, -11))).toBe(true);
   });
 });

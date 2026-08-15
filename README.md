@@ -158,6 +158,7 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 | Ctrl+F gate (pillar 3, made computable) | ✅ | Nine heuristics; admission rule stated in ADR-0021. Its one *accepted* exposure is now closed rather than held under the bar — the structure-blind subtree hint is withheld, since a margin of 0.011 on a self-indexing repo lasted three milestones. |
 | Fog, progression, field notes, save | ✅ | Save keyed on the repo's root commit; claims re-checked at render. The guide ascends through **each verb's own** difficulty range, not through a shared number ([ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md)) — §8.4's difficulty is computed per verb, so comparing the values raw served every Blast Radius board below 0.49 before hono's first Companion one and a player met the second verb at board **25 / 19 / 9 / 17** (hono / graphql-js / kysely / ark). Now **7 / 8 / 7 / 5**, and the first fifteen boards' mean subject elevation rises on three repos of four — crossing from below the deck's mean to above it on two of them, hono and kysely.<br><br>**The fog is a three-state ramp and the map drew two.** `understood` shared `surveyed`'s fill and differed by a stroke width of 2.5px against 1.4px, so the reward for the whole core loop was one pixel; a cold playtester rated the loop 5/10 and could not say what passing had changed. `regionKnown` is the third rung, stated as measured contrast rather than three HSL numbers that look spaced — **1.49 : 2.16 : 3.75** against the ground, steps of 1.45× and 1.73× (`npx tsx scripts/probe-ramp.ts`).<br><br>**The guide has a way past a board** — "not this one" skips for the session, and `noteSkip` clears the list once every *unanswered* board is on it, so the guide can never say "every question answered" over a HUD saying "158 left". Session-only; a skip is a preference, not a claim about knowledge.<br><br>**No three boards of one verb in a row — where two verbs share a tier.** Longest same-verb run in the first fifteen was 3 / 4 / 4 / **5** (ark / hono / kysely / graphql-js) and is now **2** on all four. The qualifier is load-bearing and was missing from the first version of this row: `sameVerb` sits *below* `tier`, so it can only interleave verbs at the same tier — and on a repo whose deck holds no two such verbs it is **inert**. Measured: `flask` opens with **fifteen** companion boards in a row and `django` with fifteen archaeology, unchanged. Those are M5 repos with no Blast Radius deck at all, so the complaint this term answers is intact there; moving the term above `tier` would fix it and would let a verb-variety rule outrank §5's curriculum, which is a decision worth its own measurement rather than a line changed under a merge. The cap is two rather than one because forbidding any repeat is strict alternation, which on a starved verb spends its hardest board **fourth** where a cap of two puts it sixth. |
 | Map: semantic zoom, orbit, rotation | ✅ | Canvas 2D, zero runtime deps. |
+| Map typography and panel composition | ✅ | A graphic-design study over **57 browser screenshots on ark and hono**, at two viewport sizes, scored the product **6.5/10** and named the type layer as the most expensive absence: derived paths set as display type over discs that lose their names at the zoom you go to for names. Names are cartography now — a ground-colour halo under every glyph, four anchor positions per label (below first, so a name that fits under its own disc keeps that slot — **not** *"nothing that could already be placed moves"*, which this row claimed until a review ran it: a dodged label is a new blocker and can displace a lower-priority one, or spend its slot under a tight budget), region names paler and desaturated, and a basename shared with another node keeping one directory of context (**29 of ark's 259 nodes** shared one; `index.ts` ×7). Measured on a fresh page at `54d9888`: district **19 → 27** names, street **9 → 18** over 68 nodes, orbit **12 → 15**. A label the viewport edge would cut is dropped rather than sheared — a **cost**, not a rearrangement: `continue` does not spend budget, so under the node pass's binding budget the slot passes on, but the *region* pass runs with an infinite budget where a dropped name is simply a name fewer. The `ots` and `les` that motivated it are region labels, so the example was the case the free-of-charge claim was false about. Closing a board **returns the pan it took** (287 of 287 world units), the inspector and guide stand down instead of peeking out above and below the console's edges, and the console panel is measured into the label chrome it was the only panel missing from. **Refused**: capping summit rings at two, because the ring count *is* the elevation (ADR-0013) and halving it deletes two layers of a frozen channel to tidy a texture; the contrast ramp ends at 0.10 instead of 0.18 instead. |
 | Map: co-change history wires | ✅ | Drawn and gated. The gate is scoped to Companion boards deliberately (ADR-0016); the exposure that scope left is closed upstream, in the disclosure record (ADR-0022). |
 | Cross-verb disclosure accounting | ✅ | Both channels ship: `discloses` (what my reveal states) and `decidedBy` (what would beat me). ADR-0019 decision 7, ADR-0022. |
 | `ark` as an installed command | ✅ | `bin` → an emitted `dist/cli/`, `files` carries the built player, and **`npm run test:pack` packs the tarball, installs it outside this checkout and runs it** — because both real defects (an entry-point test false for every installed copy, and `dist/player` resolved against the working directory) are invisible from inside a repo. CI runs it. **Not published**: the package is `private` and the name is a placeholder, so `npx ark` off the registry is a naming decision away. ADR-0029. |
@@ -172,6 +173,39 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 ### Known gaps — things this project does *not* do
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
+
+- **A board's title is a 74-character slug set as display type.** The subject's path is embedded
+  inside the question sentence and the sentence belongs to the verb, so pulling the path onto its
+  own monospace line is a change to `Verb.prompt`, not to the panel — and putting the sentence
+  together in the console is the cheap fix ADR-0020 and ADR-0027 both forbid. Visible on every
+  board of every repo whose paths are long; worst on this one, whose decision records are 60+
+  characters.
+- **A region named after its hub prints the whole path on the map.** `around src/indexer/build.ts
+  (55)` is honest, derived and the longest thing on the frame. Shortening it for the map alone
+  would make the map and the legend disagree about a region's name, so this belongs to the naming
+  rule — the same one Next already names as blocking NORTH-STAR §5 tier 1 — rather than to the
+  renderer.
+- **The orbit's fit leaves about 45% of the frame empty**, where the flat map's fills it.
+- **Ark's own walkable world is mostly void**: two seconds' walk from the spawn leaves the hero
+  alone on an empty plane. hono at 425 nodes does not do this, so it is a density floor rather than
+  a rendering fault — but the bootstrap repo is the one every session and every playtester sees.
+
+- **A meaningful share of the history verbs' answer keys is documentation, and on this repo it is
+  most of some boards.** A cold playtester's objection is pillar 3's — *teach coupling, not trivia*:
+  a Companion key made of `CHANGELOG.md` says only that the author updates the changelog every
+  session, which is true, derived, gradeable and worth nothing. Measured by
+  `npx tsx scripts/probe-prose.ts`: Blast Radius is **0.0%** prose on both repos, because nothing
+  imports Markdown; Companion is **34.4%** of ark's key members and 5.6% of hono's; Placement is
+  **42.4%** and 8.9%, and **8 of ark's 40 Placement boards are prose end to end** — all measured on
+  a clean clone of `4c7ded5`. *(This row first said 35.6% for Companion, which is the figure at the
+  parent commit: measured on the tree that does not contain the change, which is this repository's
+  own named landmine, in a row about measurement.)* Concentrated on
+  the bootstrap repo, which is the one every session and every playtester sees.
+  **Refusing a board whose key is entirely prose is a change to what a verb refuses, which is an
+  owner decision** — it would cost **9 boards here and 4 on hono** — the rule is verb-blind and one all-prose *Companion*
+  board exists on each, so the Placement-only count of 8 and 3 undercounts it — and the deck cap would backfill from
+  a supply of 46 eligible commits against a retained 40, so the deck would shrink slightly. Measured
+  and put up rather than taken.
 
 - **A quarter of the deck is unreachable by clicking the map, and on `django` it is three
   quarters.** A Placement board's subject is a **commit** (ADR-0018), which has no square on the flat

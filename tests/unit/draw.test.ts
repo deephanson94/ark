@@ -15,10 +15,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { drawFrame } from '../../src/player/draw.js';
+import { drawFrame, regionLines } from '../../src/player/draw.js';
 import { INK, regionKnown, regionSilhouette, regionWash } from '../../src/player/palette.js';
 import type { FrameInput } from '../../src/player/draw.js';
-import { NORTH } from '../../src/player/camera.js';
+import { NORTH, worldToScreen } from '../../src/player/camera.js';
 import { NO_TIES } from '../../src/player/ties.js';
 import { TERRAIN_INDEX, prepare } from '../../src/player/scene.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -319,5 +319,184 @@ describe('the renderer uses the ramp it is given', () => {
     expect(fillsFor(new Set())).not.toContain(known);
     // One node understood: it must.
     expect(fillsFor(new Set([hub.id]))).toContain(known);
+  });
+});
+
+/**
+ * A drawn name is a handle on the node it names.
+ *
+ * A cold playtester answered **all eight** of their boards off the panel's text
+ * list and never used the map once, and reported the map as "naming the wrong
+ * objects": pointing at the label `draw.test.ts` selected `src/player/draw.ts`.
+ * `placeLabels` anchors a label directly under its own disc and skips it
+ * otherwise — it never drifts — so the labels were right and the *pointer* was
+ * wrong: text lies across other discs on a crowded map, and hit-testing went
+ * straight to whatever disc was underneath.
+ *
+ * `drawFrame` returns the placed labels with the node each names so the shell
+ * can hit-test the text. This pins the half that lives here: every returned
+ * nameplate names the node whose label it carries.
+ */
+describe('the labels a frame returns', () => {
+  it('carries the node each name belongs to', () => {
+    const atlas = atlasWith(
+      ['src/hub.ts', 'src/a.ts', 'src/b.ts', 'src/c.ts'],
+      [
+        ['src/a.ts', 'src/hub.ts'],
+        ['src/b.ts', 'src/hub.ts'],
+        ['src/c.ts', 'src/a.ts'],
+      ],
+    );
+    const scene = prepare(atlas);
+    const all = new Set(scene.nodes.map((node) => node.id));
+    const stats = drawFrame(stubContext(), {
+      scene,
+      camera: { x: 0, y: 0, scale: 4, bearing: NORTH },
+      viewport: VIEWPORT,
+      fog: { surveyed: all, understood: new Set() },
+      hovered: null,
+      selected: null,
+      radius: null,
+      questions: new Set(),
+      peaks: new Set(),
+      ties: NO_TIES,
+      tieFocus: null,
+      board: null,
+      chrome: [],
+    });
+    // Non-vacuous: a frame that drew no labels would satisfy any claim about
+    // them, and this is the assertion that would have caught the field being
+    // wired to an empty array.
+    expect(stats.nameplates.length).toBeGreaterThan(0);
+    // Not `=== labelsDrawn`: that holds only at street zoom, where region
+    // labels are off. At district `labelsDrawn` counts those too, and
+    // nameplates never will — the equality would be pinning a zoom-level
+    // coincidence rather than a contract.
+    expect(stats.nameplates.length).toBeLessThanOrEqual(stats.labelsDrawn);
+    for (const plate of stats.nameplates) {
+      expect(plate.ref, `"${plate.text}" carries no node`).toBeTypeOf('number');
+      // The name on screen is this node's name — the exact claim the playtester
+      // found false from the pointer's side.
+      expect(scene.nodes[plate.ref ?? -1]?.label).toBe(plate.text);
+    }
+  });
+
+  it('keeps each name touching its own node’s disc', () => {
+    // The other half of "a label identifies its node": it is *attached* to the
+    // disc it names.
+    //
+    // This asserted horizontal centring until labels learned to dodge, and the
+    // weaker claim is the right one — centring was never what made a name
+    // identify its node. That is `ref`, which the test above checks and which
+    // is what the reported defect was actually about; a centred label still
+    // lies across four other discs on a crowded frame. What a dodge must not
+    // do is let a name *drift*, which is the property here: whichever of the
+    // four anchors it took, the box hugs its own disc.
+    const atlas = atlasWith(['src/hub.ts', 'src/a.ts', 'src/b.ts'], [['src/a.ts', 'src/hub.ts']]);
+    const scene = prepare(atlas);
+    const all = new Set(scene.nodes.map((node) => node.id));
+    const camera = { x: 0, y: 0, scale: 4, bearing: NORTH };
+    const stats = drawFrame(stubContext(), {
+      scene, camera, viewport: VIEWPORT,
+      fog: { surveyed: all, understood: new Set() },
+      hovered: null, selected: null, radius: null,
+      questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
+      board: null, chrome: [],
+    });
+    expect(stats.nameplates.length).toBeGreaterThan(0);
+    for (const plate of stats.nameplates) {
+      const node = scene.nodes[plate.ref ?? -1];
+      if (node === undefined) throw new Error('nameplate names no node');
+      const point = worldToScreen(camera, VIEWPORT, node);
+      // The clearance the draw pass leaves around a disc, plus a pixel.
+      const reach = Math.max(1.4, node.radius * camera.scale) + 3;
+      const dx = Math.max(plate.left - point.x, 0, point.x - (plate.left + plate.width));
+      const dy = Math.max(plate.top - point.y, 0, point.y - (plate.top + plate.height));
+      expect(Math.hypot(dx, dy), `"${plate.text}"`).toBeLessThanOrEqual(reach);
+    }
+  });
+});
+
+describe('a region label sits inside the box reserved for it', () => {
+  /**
+   * `placeLabels` returns `y` as the box's **bottom**, and the pair was drawn
+   * at `y ∓ height/2` — so the file-count line landed a half-line below the
+   * rectangle every other label had been told to avoid. Node labels crossed it
+   * legally: `55 files` under `schema.ts` on this repo's own arrival frame.
+   *
+   * Reserving a rectangle and then drawing outside it is invisible to a
+   * collision pass by construction, which is why this is asserted here rather
+   * than left to "it looks fine".
+   */
+  const HEIGHT = 34;
+  const BOTTOM = 500;
+
+  it('keeps both lines between the box top and its bottom', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    // Baselines are middles here, so allow half a line of glyph either side.
+    for (const y of [line.name, line.count]) {
+      expect(y - HEIGHT / 4).toBeGreaterThanOrEqual(BOTTOM - HEIGHT);
+      expect(y + HEIGHT / 4).toBeLessThanOrEqual(BOTTOM);
+    }
+  });
+
+  it('puts the name above the count', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    expect(line.name).toBeLessThan(line.count);
+  });
+
+  it('centres the pair on the box', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    expect((line.name + line.count) / 2).toBeCloseTo(BOTTOM - HEIGHT / 2, 6);
+  });
+});
+
+
+/**
+ * The glyphs land inside the box the frame says they are in.
+ *
+ * `nameplates` is what the shell hit-tests, and nothing anywhere bound it to
+ * where `fillText` actually put the ink. A review demonstrated it: stamping node
+ * labels at `label.x + 10` passes all 956 unit tests, and the e2e cannot see it
+ * either — it hovers the centre of the published box and `pickName` hit-tests
+ * the *same* box, so the instrument and the code share the coordinate and only
+ * the pixels are somewhere else. That is the reported "the map names the wrong
+ * thing" defect, reintroduced with every gate green.
+ *
+ * Recording context rather than a stub, because the claim is about arguments to
+ * a draw call and there is no other way to see them.
+ */
+describe('a nameplate is drawn where the frame says it is', () => {
+  it('puts every label’s glyphs inside its own published box', () => {
+    const drawn: { text: string; x: number; y: number }[] = [];
+    const context = stubContext();
+    // The halo and the fill both go through `fillText`/`strokeText` at the same
+    // point; recording the fill is enough, and recording both would double every
+    // row without adding a claim.
+    Object.defineProperty(context, 'fillText', {
+      value: (text: string, x: number, y: number) => drawn.push({ text, x, y }),
+      writable: true,
+    });
+
+    const stats = drawFrame(context, frameInput([]));
+    expect(stats.nameplates.length).toBeGreaterThan(0);
+
+    for (const plate of stats.nameplates) {
+      const ink = drawn.filter((call) => call.text === plate.text);
+      expect(ink.length, `"${plate.text}" was never drawn`).toBeGreaterThan(0);
+      for (const call of ink) {
+        // **The exact centre, not "somewhere in the box".** The first version
+        // of this asserted containment and a 10px drift survived it, because a
+        // label is wider than 20px and the anchor stayed inside its own
+        // rectangle — the loose assertion passed against the defect it was
+        // written for, one more time. `textAlign` is centre, so there is one
+        // correct x and it is arithmetic.
+        expect(call.x, `"${plate.text}" x`).toBeCloseTo(plate.left + plate.width / 2, 6);
+        // y keeps containment: the baseline sits a few px above the box bottom
+        // and pinning that nudge would be pinning a constant, not a binding.
+        expect(call.y, `"${plate.text}" y`).toBeGreaterThanOrEqual(plate.top);
+        expect(call.y, `"${plate.text}" y`).toBeLessThanOrEqual(plate.top + plate.height);
+      }
+    }
   });
 });

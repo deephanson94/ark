@@ -29,6 +29,7 @@ import {
   pan,
   pivotAround,
   rotate,
+  sameCamera,
   screenToWorld,
   worldToScreen,
   zoomAt,
@@ -36,7 +37,7 @@ import {
 import { createConsole } from './challenge.js';
 import type { BoardMarks } from './draw.js';
 import { drawFrame, drawOrbitFrame } from './draw.js';
-import type { Box } from './labels.js';
+import type { Box, PlacedLabel } from './labels.js';
 import type { Fog } from './fog.js';
 import type { Arm, View } from './experiment.js';
 import { armFromSearch, keyHintFor, worldHintFor } from './experiment.js';
@@ -46,7 +47,7 @@ import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
-import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, recordSurvey, subjectsPassed, verbOfKey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
@@ -59,7 +60,7 @@ import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
-import { NO_HISTORY, noteAttempt, noteSkip, suggestNext } from './selector.js';
+import { NO_HISTORY, noteAttempt, noteSkipped, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
 import {
   createError,
@@ -130,6 +131,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * `heading.ts` exists to break.
    */
   let camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+
+  /**
+   * The view a board borrowed, and what it turned it into.
+   *
+   * `null` whenever no board has panned the map — including a board whose
+   * subject is a commit, which has nowhere to pan to (ADR-0018) and so borrows
+   * nothing. See `openBoard` and the console's `onClose`.
+   */
+  let borrowed: { own: Camera; lent: Camera } | null = null;
 
   /**
    * What holds still while the world turns, and where on screen it holds.
@@ -356,10 +366,57 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * described one file while the cursor sat on another — and the click wrote
    * that wrong file into the saved `surveyed` set.
    */
+  /**
+   * The node labels the last frame drew, so the **text** can be pointed at.
+   *
+   * A label is anchored directly under its own disc and never drifts, but on a
+   * crowded map it lies across other discs — so pointing at a name picked
+   * whatever was beneath it. A cold playtester reported that as the map naming
+   * the wrong objects, answered all eight of their boards off the panel's text
+   * list, and never used the map once. A name you cannot point at is not a
+   * handle, and the map not being a handle is the whole thesis not pulling.
+   */
+  let nameplates: readonly PlacedLabel[] = [];
+
   const pickAt = (local: { x: number; y: number }): SceneNode | null => {
+    // **Names first, in both views.** A nameplate is a screen box wherever it
+    // was drawn, so this loop is view-agnostic; only the fall-through differs.
+    const named = pickName(local);
+    if (named !== null) return named;
     if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
     const world = screenToWorld(camera, viewport, local);
     return pick(scene, world.x, world.y, camera.scale);
+  };
+
+  /**
+   * The node whose drawn **name** is under this point.
+   *
+   * The text is on top of the discs visually, so it has to be on top of them
+   * for the pointer too, or the two disagree about what is in front.
+   *
+   * Iterated in reverse for a stable order and **not** because a later label
+   * paints over an earlier one: `placeLabels` adds every placed box to its own
+   * blockers, so two placed labels cannot overlap and the direction cannot
+   * change an answer. *(The comment here claimed the painter's-order reason
+   * until a review pointed out the mechanism does not exist — and the edit that
+   * was supposed to correct it silently matched nothing, so the wrong sentence
+   * shipped one commit longer than its correction claimed.)*
+   */
+  const pickName = (local: { x: number; y: number }): SceneNode | null => {
+    for (let i = nameplates.length - 1; i >= 0; i -= 1) {
+      const label = nameplates[i];
+      if (label === undefined || label.ref === undefined) continue;
+      if (
+        local.x >= label.left &&
+        local.x <= label.left + label.width &&
+        local.y >= label.top &&
+        local.y <= label.top + label.height
+      ) {
+        const node = scene.nodes[label.ref];
+        if (node !== undefined) return node;
+      }
+    }
+    return null;
   };
 
   /**
@@ -456,6 +513,45 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selector = { ...selector, answered };
   };
   retally();
+  /**
+   * **A board this player has already been shown does not come back as fresh.**
+   *
+   * `selector.attempts` counts boards served and not passed, and it lived only
+   * in memory — so a reload made every failed board look untried. A cold
+   * playtester hit exactly that: the guide kept re-offering a board they had
+   * answered at 18%, ahead of 155 boards they had never seen. Under ADR-0047
+   * that board is the *worst* possible suggestion, because it has already
+   * explained itself and can never mint proof again, so re-serving it ahead of
+   * an unseen one is the deck spending its best asset on nothing.
+   *
+   * Seeded from `graded`, which persists and decays — so a board whose key has
+   * since re-rolled comes back genuinely fresh, which it is. Seeded **once**,
+   * before any grading, so in-session increments accumulate on top rather than
+   * being flattened by the next `retally`.
+   */
+  {
+    const seen = gradedKeys(progress, liveness);
+    let attempts = selector.attempts;
+    // **And the verbs, for the same reason and from the same record.** A review
+    // caught this one field over: `unmetVerb` lifts the first board of a verb
+    // the player has not met, and `metVerbs` lived only in memory — so every
+    // reload re-ran the whole out-of-tier introduction for verbs this player
+    // had already answered. The rank comment's "inert forever after" was true
+    // within one session and nowhere else, and nothing said per-session
+    // re-introduction had been chosen. The argument is the paragraph above,
+    // verbatim, with `attempts` swapped for `metVerbs`; the fix is the line
+    // below, four lines from the block that proves it is ADR-0011-legal.
+    const metVerbs = new Set(selector.metVerbs);
+    for (const key of seen) {
+      metVerbs.add(verbOfKey(key));
+      if (!selector.answered.has(key)) attempts = noteAttempt(attempts, key);
+    }
+    // Answered boards are met too — `gradedKeys` decays with its pass, so a
+    // board whose key re-rolled is absent from it, and meeting a verb is not a
+    // claim that decays.
+    for (const key of selector.answered) metVerbs.add(verbOfKey(key));
+    selector = { ...selector, attempts, metVerbs };
+  }
   // Wires a restored save has already earned, before the first frame.
   retie();
 
@@ -692,6 +788,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           selector.previous !== null && selector.previous.verb === challenge.verb
             ? selector.verbRun + 1
             : 1,
+        // A verb the player has now met. One-shot: `unmetVerb` goes inert once
+        // this set covers the deck.
+        metVerbs: new Set([...selector.metVerbs, challenge.verb]),
         previous: challenge,
         attempts: progression.unlocked
           ? selector.attempts
@@ -733,6 +832,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       return register;
     },
     onClose() {
+      // **Give back the pan the board took.** `openBoard` slides the subject to
+      // 30% from the left so the panel does not sit on top of it — the
+      // product's camera move, never the player's — and nothing was undoing it.
+      // The turn then swung the map about that off-centre point, so the frame a
+      // player lands in after *every* grade had the map huddled in one corner
+      // and the other half of the screen empty. That is the reward beat of the
+      // core loop and it was the worst-composed frame the product made.
+      //
+      // Only when the camera is still exactly where the board left it. The map
+      // stays live behind an open board on purpose (ADR-0016 and the docked
+      // panel), so a camera the player has moved since is theirs and restoring
+      // it would be the same theft in the other direction.
+      if (borrowed !== null && sameCamera(camera, borrowed.lent)) camera = borrowed.own;
+      borrowed = null;
       if (turnPending) {
         turnPending = false;
         turnTo(camera.bearing + GOLDEN_TURN, pivotOn(selected));
@@ -774,6 +887,18 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selected = node;
     hovered = null;
     remember(recordSurvey(progress, [node.id]));
+    // **In the world, move the hero — the camera is not what is on screen.**
+    // This moved the flat map's camera unconditionally, so in the world the
+    // button did nothing visible and the caption then said *"you are on
+    // labels.ts"*. A cold playtester proved the avatar never moved by hashing
+    // the canvas before and after, twice, on two nodes. `travelTo` is ADR-0032
+    // §3.4's fast travel, which the world already does on entry.
+    if (world.isActive()) {
+      world.travelTo(node);
+      describe(node);
+      invalidate();
+      return;
+    }
     // Far enough in that the destination's name is drawn — arriving at an
     // unlabelled dot is arriving nowhere.
     camera = centreOn(camera, node, DISTRICT_SCALE);
@@ -790,10 +915,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const remaining = scene.atlas.challenges
       .map((board) => answerKey(board.verb, board.subject))
       .filter((key) => !selector.answered.has(key));
-    selector = {
-      ...selector,
-      skipped: noteSkip(selector.skipped, answerKey(challenge.verb, challenge.subject), remaining),
-    };
+    // One call, because a skip has two consequences and the shell forgetting
+    // the second was invisible to every test (`selector.noteSkipped`).
+    selector = noteSkipped(
+      selector,
+      challenge.verb,
+      answerKey(challenge.verb, challenge.subject),
+      remaining,
+    );
     retally();
     invalidate();
   });
@@ -826,7 +955,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * corner-anchored panels that *move* without changing size.
    */
   let chrome: Box[] = [];
-  const panels = [hud.root, legend, inspector.root, guide.root];
+  // The console's *panel*, never its scrim: the scrim is `inset: 0` and would
+  // block every label on the canvas. See `Console.panel` for what it was
+  // costing while it was missing from this list.
+  const panels = [hud.root, legend, inspector.root, guide.root, challengePanel.panel];
   function measureChrome(): void {
     const host = root.getBoundingClientRect();
     chrome = panels
@@ -881,6 +1013,19 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const targetRef =
       upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
     const target = targetRef === undefined ? null : (scene.nodes[targetRef] ?? null);
+    // **The hero's position, for the e2e, published from the path that draws
+    // it.** The walk is canvas-only, so a browser test has no other way to ask
+    // whether the avatar moved — and a canvas hash is not a substitute: the
+    // guide selects, describes and repaints a waypoint regardless, so "some
+    // pixel changed" is true whether or not the hero went anywhere. A gate
+    // written that way survived a `travelTo` that did nothing at all, which is
+    // this repo's instrument-that-measures-nothing landmine reading as good
+    // news. The first version of this publish sat in the *flat map's* draw
+    // branch, which never runs here — so it reported `null` in the one mode it
+    // was about.
+    const standing = world.hero();
+    (globalThis as unknown as { __arkHero?: unknown }).__arkHero =
+      standing === null ? null : { x: Math.round(standing.x), y: Math.round(standing.y) };
     const stats = world.draw(context, {
       viewport,
       chrome,
@@ -1044,10 +1189,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         x: viewport.width * 0.3,
         y: viewport.height * 0.5,
       });
+      const own = camera;
       camera = centreOn(camera, {
         x: node.x + (anchor.x - wanted.x),
         y: node.y + (anchor.y - wanted.y),
       });
+      // What the view was before this pan, and what the pan made of it. `close`
+      // gives the first back if the second is still on screen untouched.
+      borrowed = { own, lent: camera };
     }
     challengePanel.open(challenge);
     invalidate();
@@ -1121,7 +1270,33 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         fog,
         hovered,
         selected,
-        radius,
+        // **No import radius while a board is open, and this is a pillar-3
+        // fix rather than a tidy-up.**
+        //
+        // ADR-0008 decision 1 gives every node its *direct importers* for free
+        // on the canvas, and the arrival tip promises exactly that — "hover to
+        // see what imports it — the rest of the radius is earned". A Blast
+        // Radius key is a sample of the **transitive** dependent set, which
+        // contains the direct one. Each decision is right alone; together,
+        // opening a board on `S` drew a gold line from `S` to some of its own
+        // answers.
+        //
+        // Measured by `npx tsx scripts/probe-ring.ts`: **37 of ark's 40 Blast
+        // Radius boards (92.5%) drew at least one key member, 81 of 216 members
+        // in all** — and 94.4% of hono's boards, 95.7% of graphql-js's. A cold
+        // playtester found it at street zoom and proved the lines belonged to
+        // the subject by deselecting with the camera untouched. That is the
+        // `Ctrl+F` failure pillar 3 exists to prevent, on nearly every board of
+        // the verb the roadmap calls the kill point.
+        //
+        // The rule is ADR-0016's, which settled the identical question for
+        // history wires: *ink on the map is a lookup where text in a closed
+        // panel is a memory test*. So the whole channel is off while a board is
+        // open — not just the subject's ring, because the containment argument
+        // `depthFor` documents (if D imports S then `dependents(D) ⊆
+        // dependents(S)`) makes a hovered candidate's importers key members too.
+        // One rule; every leak in ADR-0014 was a rule that lived twice.
+        radius: challengePanel.isOpen() ? null : radius,
         chrome,
         questions: unanswered,
         peaks,
@@ -1133,6 +1308,43 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         orbit === null
           ? drawFrame(context, frameInput)
           : drawOrbitFrame(context, frameInput, orbit);
+      // **What the import channel actually carried this frame**, for the e2e.
+      // The leak this guards is ink on a canvas, so a browser test needs the
+      // renderer's own answer rather than a pixel heuristic: `none` means no
+      // import radius was handed to the frame at all.
+      (globalThis as unknown as { __arkRadius?: unknown }).__arkRadius =
+        frameInput.radius === null ? 'none' : `subject ${frameInput.radius.subject}`;
+      // The view, for the e2e's composition gate. A board pans the map and
+      // gives the pan back on close; a canvas hash cannot tell that from the
+      // turn that follows it, and the camera is the thing the rule is about.
+      (globalThis as unknown as { __arkCamera?: unknown }).__arkCamera = {
+        x: camera.x,
+        y: camera.y,
+        scale: camera.scale,
+      };
+      // What the frame just drew is what the pointer may hit. Kept from the
+      // frame rather than recomputed, so the two can never disagree about where
+      // a name is.
+      nameplates = stats.nameplates;
+      // **For the e2e only, and it is a measurement rather than a hook.** The
+      // labels live on the canvas, so a browser test has no way to find where a
+      // name was drawn — and the defect this closes was precisely that pointing
+      // at a name selected someone else. Publishing the boxes is what lets the
+      // suite point at one.
+      (globalThis as unknown as { __arkNameplates?: unknown }).__arkNameplates =
+        stats.nameplates.map((plate) => ({
+          text: plate.text,
+          // **The path, not just the label.** Comparing an inspector path
+          // against a label with `endsWith` is a substring match: this repo has
+          // seven `index.ts` nodes, so pointing at one name and surveying a
+          // different file passed that check — the exact defect this whole
+          // change is about, invisible to its own gate. It fails the other way
+          // too, since `shortLabel` truncates a long name with `…` and a
+          // truncated label can never suffix-match its own path.
+          path: scene.atlas.nodes[plate.ref ?? -1]?.path ?? '',
+          x: plate.left + plate.width / 2,
+          y: plate.top + plate.height / 2,
+        }));
       hud.update(
         coverage(fog, scene.nodes.length),
         orbit === null ? stats.level : 'orbit',

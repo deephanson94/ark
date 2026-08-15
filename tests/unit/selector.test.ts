@@ -15,8 +15,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { Challenge, NodeId } from '../../src/atlas/index.js';
-import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, suggestNext } from '../../src/player/selector.js';
+import type { VerbId, Challenge, NodeId } from '../../src/atlas/index.js';
+import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, noteSkipped, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 import { witnessFor } from '../fixtures/atlas.js';
 
@@ -331,17 +331,18 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      skipped: new Set<string>(), verbRun: 0, previous: failed,
+      skipped: new Set<string>(), verbRun: 0, metVerbs: new Set<VerbId>(), previous: failed,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
 
   it('comes back to it only after the rest of the deck', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, metVerbs: new Set<VerbId>(), previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
       skipped: Set<string>;
       verbRun: number;
+      metVerbs: Set<VerbId>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -358,11 +359,12 @@ describe('a wrong answer rotates rather than repeats', () => {
   });
 
   it('keeps cycling instead of stalling when the whole deck has been failed', () => {
-    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, previous: null } as {
+    let state = { answered: new Set<string>(), attempts: new Map<string, number>(), skipped: new Set<string>(), verbRun: 0, metVerbs: new Set<VerbId>(), previous: null } as {
       answered: Set<string>;
       attempts: Map<string, number>;
       skipped: Set<string>;
       verbRun: number;
+      metVerbs: Set<VerbId>;
       previous: Challenge | null;
     };
     const served: string[] = [];
@@ -383,7 +385,7 @@ describe('a wrong answer rotates rather than repeats', () => {
     const state = {
       answered: new Set<string>(),
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(1))),
-      skipped: new Set<string>(), verbRun: 0, previous: null,
+      skipped: new Set<string>(), verbRun: 0, metVerbs: new Set<VerbId>(), previous: null,
     };
     expect(suggestNext(deck, regionOf, state)?.id).toBe('blast-b');
   });
@@ -406,6 +408,7 @@ describe('a wrong answer rotates rather than repeats', () => {
       attempts: noteAttempt(new Map(), answerKey('blastRadius', id(3))),
       skipped: new Set<string>(),
       verbRun: 0,
+      metVerbs: new Set<VerbId>(),
       previous,
     });
     expect(next?.id).toBe('blast-fresh');
@@ -504,7 +507,7 @@ describe('the opening', () => {
     const answered = new Set<string>();
     const served: string[] = [];
     for (let step = 0; step < deck.length; step += 1) {
-      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), skipped: new Set(), verbRun: 0, previous: null }, pathOf);
+      const next = suggestNext(deck, regionOf, { answered, attempts: new Map(), skipped: new Set(), verbRun: 0, metVerbs: new Set<VerbId>(), previous: null }, pathOf);
       expect(next).not.toBeNull();
       if (next === null) break;
       served.push(next.id);
@@ -596,6 +599,7 @@ describe('varying the verb', () => {
         ...state,
         answered: new Set([...state.answered, answerKey(next.verb, next.subject)]),
         verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+        metVerbs: new Set<VerbId>(),
         previous: next,
       };
     }
@@ -677,6 +681,7 @@ describe('varying the verb', () => {
         ...state,
         answered: new Set([...state.answered, answerKey(next.verb, next.subject)]),
         verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+        metVerbs: new Set<VerbId>(),
         previous: next,
       };
     }
@@ -696,5 +701,133 @@ describe('varying the verb', () => {
       challenge({ name: 'a2', subject: 102, truth: [12], difficulty: 0.6 }),
     ];
     expect(run(deck, 3)).toHaveLength(3);
+  });
+});
+
+/**
+ * Meeting every verb the deck has.
+ *
+ * A cold playtester was offered **two of this deck's four verbs across sixty
+ * consecutive suggestions** — no Archaeology, no Placement — because `tier` is
+ * strict and the history verbs sit at tiers 5 and 6 behind a hundred-odd tier-3
+ * boards. Measured on all four reference repos, and django met one of its two
+ * in sixty, in a single run.
+ */
+describe('introducing the deck', () => {
+  /** Two verbs at tier 3, one at tier 5 — the shape a real deck has. */
+  const deck: Challenge[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    deck.push(challenge({ name: `a${i}`, subject: 100 + i, truth: [10 + i], difficulty: 0.1 + i * 0.05 }));
+    deck.push(other({ name: `b${i}`, subject: 200 + i, truth: [30 + i], difficulty: 0.1 + i * 0.05 }));
+  }
+  const late = { ...other({ name: 'late', subject: 300, truth: [50], difficulty: 0.9 }), tier: 5 as const, verb: 'archaeology' as const, id: 'arch-late' };
+  deck.push(late);
+
+  function serve(n: number): string[] {
+    const out: string[] = [];
+    let state = NO_HISTORY;
+    for (let i = 0; i < n; i += 1) {
+      const next = suggestNext(deck, regionOf, state);
+      if (next === null) break;
+      out.push(next.verb);
+      state = {
+        ...state,
+        answered: new Set([...state.answered, answerKey(next.verb, next.subject)]),
+        verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+        metVerbs: new Set([...state.metVerbs, next.verb]),
+        previous: next,
+      };
+    }
+    return out;
+  }
+
+  it('serves a board of every verb in the deck, early', () => {
+    // The lone tier-5 board would otherwise sit behind all twenty-four tier-3
+    // ones. This is the whole claim: you meet the deck's shape, not its tail.
+    const met = new Set(serve(5));
+    expect(met.size).toBe(3);
+    expect(met.has('archaeology')).toBe(true);
+  });
+
+  it('treats a skipped verb as met, so one skip is not a wall', () => {
+    // **`unmetVerb` outranks `tier`**, so until a verb is met every board of it
+    // outranks every board of the verb you are playing. Grading clears that in
+    // one board; skipping cleared it in none, so a player who declined the
+    // introduction was offered the entire unmet deck one skip at a time —
+    // measured at **102 consecutive suggestions on ark, 160 on hono, 274 on
+    // django**. Skip exists precisely for "I did not want that board", and the
+    // term turned one skip into a wall of the same kind.
+    const first = suggestNext(deck, regionOf, NO_HISTORY);
+    if (first === null) throw new Error('the fixture served nothing');
+    const all = deck.map((board) => answerKey(board.verb, board.subject));
+    const afterSkip = {
+      ...NO_HISTORY,
+      skipped: noteSkip(new Set(), answerKey(first.verb, first.subject), all),
+      metVerbs: new Set([first.verb]),
+    };
+    const second = suggestNext(deck, regionOf, afterSkip);
+    expect(second).not.toBeNull();
+    // The skipped verb is met, so the next offer is *not* forced to be another
+    // unmet verb ahead of everything — it is whatever the curriculum wants.
+    expect(afterSkip.metVerbs.has(first.verb)).toBe(true);
+    expect(second?.id).not.toBe(first.id);
+  });
+
+  it('goes inert once every verb has been met, leaving the tiers alone', () => {
+    // **One-shot, which is what keeps it from reordering §5's curriculum.**
+    // After the introduction the tier-5 board's verb is met, so the term stops
+    // discriminating and the rest of the deck is tier-3 as the progression
+    // intends. Without this the term would be a standing licence to jump tiers.
+    const served = serve(12);
+    expect(served.slice(0, 4)).toContain('archaeology');
+    // Exactly one tier-5 board exists, so seeing it once and never again is the
+    // observable form of "inert".
+    expect(served.filter((verb) => verb === 'archaeology')).toHaveLength(1);
+    expect(served.slice(4)).not.toContain('archaeology');
+  });
+});
+
+
+/**
+ * A skip has two consequences and the shell used to apply them separately.
+ *
+ * A review deleted the second — the met-verb update — and every one of 956 unit
+ * tests stayed green, because the test that claimed to cover it asserted a
+ * `metVerbs` set the test itself had built two lines earlier. The measured cost
+ * of losing it is a wall: `unmetVerb` outranks `tier`, so declining the
+ * introduction offers the whole unmet deck one skip at a time (102 consecutive
+ * suggestions on this repo, 274 on django).
+ *
+ * Both consequences now come from `noteSkipped`, so this can hold them to each
+ * other rather than to a fixture.
+ */
+describe('noteSkipped', () => {
+  const base = { ...NO_HISTORY, metVerbs: new Set<VerbId>(['blastRadius']) };
+
+  it('records the skip and meets the verb in one move', () => {
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', [
+      'companion\nn:a.ts',
+      'companion\nn:b.ts',
+    ]);
+    expect(next.skipped.has('companion\nn:a.ts')).toBe(true);
+    expect([...next.metVerbs].sort()).toEqual(['blastRadius', 'companion']);
+  });
+
+  it('meets the verb even on the skip that empties the list', () => {
+    // The anti-lockout clear returns an empty skip set. The verb is still met —
+    // these are two different facts and the clear must not take the other with
+    // it, which is the failure mode of folding them into one assignment.
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', [
+      'companion\nn:a.ts',
+    ]);
+    expect(next.skipped.size).toBe(0);
+    expect(next.metVerbs.has('companion' as VerbId)).toBe(true);
+  });
+
+  it('leaves everything else alone', () => {
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', ['x', 'y']);
+    expect(next.attempts).toBe(base.attempts);
+    expect(next.answered).toBe(base.answered);
+    expect(next.previous).toBe(base.previous);
   });
 });

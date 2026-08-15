@@ -88,12 +88,22 @@ body {
 /* What this map is missing (ADR-0025). Warmer than `--text-dim` and dimmer than
    `--accent`: it is a standing qualification on everything else in the panel,
    not an error and not a thing to click. */
+/* **`pointer-events: auto`, because `.hud` is `none` and this row carries the
+   only explanation of itself.** Its `title` reads "This map holds 201 of this
+   repository's 203 source files. The other 2 are Shell, which ark cannot read."
+   — correct to the digit, and unreachable: a native tooltip needs a mouseover
+   the element could never receive, so `elementFromPoint` at its centre returned
+   the canvas. A cold playtester found it by reading the DOM, which is not a
+   thing a player does. Third instance of this exact contradiction in this file;
+   the other two carry comments a few rules down. */
 .hud-partial {
   margin-top: 3px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--accent);
   opacity: 0.75;
+  pointer-events: auto;
+  cursor: help;
 }
 
 .hud-progress {
@@ -289,13 +299,19 @@ body {
   color: var(--text-dim);
 }
 
+/* The third of three, found by grepping the *property* rather than the class —
+   which is how the first two were missed in turn. A path has slashes and hyphens
+   to break at, so `anywhere` splits a token only when one genuinely cannot fit;
+   `break-all` was splitting `…-half-the-real-rep / ositories.md` with a hyphen
+   two characters away. */
 .inspector-path {
   margin: 0 0 10px;
   font-family: var(--mono);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.5;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
   color: var(--text);
 }
 
@@ -416,6 +432,43 @@ body {
 
 .console-scrim[hidden] {
   display: none;
+}
+
+/* **The two panels the board stands on top of stand down while it is open.**
+   Both live in the right column — the inspector at `top: 16` and the guide at
+   `bottom: 16` — and the console docks over that column at 520px, so neither
+   is readable while a board is up. What they were doing instead was *peeking*:
+   the inspector's first two lines above the panel's rounded top edge and the
+   guide's caption below its bottom, each sliced by a border it has no relation
+   to. A panel cut in half by another panel reads as a layout fault, which is
+   the same complaint as a label cut in half by the window edge.
+
+   Opacity rather than `display: none` on purpose. These are measured into the
+   label placer's `occupied` boxes and queried by name in the e2e; taking them
+   out of layout would change what both of those see, to buy nothing — the
+   console panel covers the same column and is itself measured now.
+
+   No transition, and that is a decision rather than an omission: a 120ms fade
+   here is invisible to a player and *visible to the e2e*, which shoots the
+   panel the moment it opens and so photographed both panels mid-dissolve —
+   an artifact showing a state the product does not rest in. A screenshot is
+   this project's only instrument for how a frame looks; it should not have to
+   be timed. */
+#app:has(> .console-scrim:not([hidden])) .inspector,
+#app:has(> .console-scrim:not([hidden])) .guide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The two panels that stay are the two that are still *about* the board — the
+   legend says what a marked disc's colour means, the HUD says how much is left
+   — but they were the only things on screen the scrim did not wash, so the map
+   receded behind a gradient while the chrome over it stayed at full strength.
+   They recede with it now, and stay readable, because reading them is the
+   reason they are still here. */
+#app:has(> .console-scrim:not([hidden])) .hud,
+#app:has(> .console-scrim:not([hidden])) .legend {
+  opacity: 0.58;
 }
 
 .console-panel {
@@ -559,8 +612,16 @@ body {
   background: var(--accent);
 }
 
+/* **`break-all` broke inside words and it looks like a rendering bug.** A
+   commit row reads `2026-08-14 097cd2fabb0c "fix: on a busy repo, every Archaeol
+   ogy row said the same thing"` — the message split mid-word, six times in one
+   list. `break-all` is for text that has no word boundaries; these rows are a
+   path or an English sentence, both of which have plenty. `anywhere` breaks at
+   boundaries first and only splits a token when it genuinely cannot fit, which
+   is what a 40-character path needs and a sentence never does. */
 .choice-path {
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .console-footer {
@@ -600,39 +661,69 @@ body {
   cursor: default;
 }
 
+/* **The reward beat, sized like one.**
+
+   This was a 30px chip with a 15px letter beside a 19px percentage — smaller
+   than the question text had been, and identical whether the answer was exact
+   or nowhere near. Games spend their budget on the moment after an answer; the
+   whole of ark's was one small square. Nothing new is said here, it is just
+   said at the size of the thing it is reporting.
+
+   Note what does **not** change: `incomplete` stays neutral grey and gains no
+   red, because guardrail 6 says a wrong answer is never punished. The ramp goes
+   from warm to cool to quiet, never to alarm. */
 .console-score {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 10px;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
 }
 
 .score-band {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   background: rgba(255, 214, 130, 0.16);
+  border: 1px solid rgba(255, 214, 130, 0.4);
   color: var(--accent);
-  font-size: 15px;
+  font-size: 24px;
   font-weight: 700;
+  line-height: 1;
+}
+
+.console-score.band-A .score-band {
+  background: rgba(126, 214, 214, 0.14);
+  border-color: rgba(126, 214, 214, 0.4);
+  color: rgba(146, 224, 224, 0.95);
+}
+
+.console-score.band-B .score-band,
+.console-score.band-C .score-band {
+  background: rgba(160, 190, 230, 0.12);
+  border-color: rgba(160, 190, 230, 0.34);
+  color: rgba(186, 206, 236, 0.95);
 }
 
 .console-score.band-incomplete .score-band {
-  background: rgba(140, 165, 200, 0.14);
+  background: rgba(140, 165, 200, 0.1);
+  border-color: rgba(140, 165, 200, 0.22);
   color: var(--text-dim);
 }
 
 .score-value {
   font-family: var(--mono);
-  font-size: 19px;
+  font-size: 28px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
 }
 
 .score-label {
-  font-size: 12px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
@@ -657,9 +748,16 @@ body {
   flex-direction: column;
 }
 
+/* Same fix as `.choice-path`, and it is here because the first pass grepped the
+   selector instead of the pattern — the wrapping was corrected on the *question*
+   rows and left standing on the reveal's, twenty lines apart, so one graded
+   panel still read `resolve a workspace self-refe / rence` and `three
+   transcribed slo / t totals`. A history verb's member is a commit line: a date,
+   a sha and an English sentence, which is the text `break-all` is worst on. */
 .note-path {
   font-family: var(--mono);
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .note-why {
@@ -918,20 +1016,30 @@ body {
 
 
 /* "Not this one" — the guide's skip. Deliberately quieter than the primary
-   action: it is an escape hatch, not the path through the game. */
+   action: it is an escape hatch, not the path through the game.
+
+   **Quieter is not the same as invisible.** With no border and no background
+   this rendered as a line of small grey lowercase under a gold button, which a
+   design review read as a debug caption rather than a control — the one thing
+   an escape hatch must not be, since a player who cannot see it is back to
+   having exactly one next. It keeps its rank: a hairline outline and a hover
+   fill, against a filled gold primary. */
 .guide-skip {
   display: block;
   width: 100%;
   margin-top: 6px;
-  padding: 4px 0;
+  padding: 5px 0;
   background: none;
-  border: none;
-  font: 11px/1.4 var(--sans);
+  border: 1px solid rgba(140, 165, 200, 0.22);
+  border-radius: 6px;
+  font: 11.5px/1.4 var(--sans);
   letter-spacing: 0.04em;
   color: var(--text-dim);
   cursor: pointer;
 }
 
 .guide-skip:hover {
+  border-color: rgba(140, 165, 200, 0.42);
+  background: rgba(140, 165, 200, 0.08);
   color: var(--text);
 }

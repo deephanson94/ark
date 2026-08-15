@@ -29,7 +29,7 @@
 import { join } from 'node:path';
 
 import { buildGraph, dependents } from '../src/atlas/graph.js';
-import type { Atlas, Challenge } from '../src/atlas/index.js';
+import type { Atlas, Challenge, VerbId } from '../src/atlas/index.js';
 import { buildIndex, indexOptions } from '../src/indexer/build.js';
 import { answerKey } from '../src/player/progress.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../src/player/selector.js';
@@ -37,7 +37,7 @@ import { NO_HISTORY, noteAttempt, suggestNext } from '../src/player/selector.js'
 const corpus = process.argv[2] ?? '/tmp/ark-corpus';
 const repos = process.argv.slice(3);
 
-const FIRST = 15;
+const FIRST = Number(process.env['ARK_FIRST'] ?? '15');
 /** Cross-check only. Never a rule — see the header. */
 const TEST_PATH = /(^|\/)(tests?|__tests__|__testutils__|fixtures?|benchmarks?)(\/|$)|\.(test|spec)\.|(^|\/)(package|tsconfig|jsr)\.json$|\.json$/i;
 
@@ -70,13 +70,13 @@ function fixtureShapedSubjects(atlas: Atlas): Set<string> {
   return out;
 }
 
-console.log('| repo | deck | **fixture-shaped in the first 15** | test-pathed | 2nd verb at | longest same-verb run | opening five verbs |');
-console.log('|---|---|---|---|---|---|---|');
+console.log('| repo | deck | **fixture-shaped** | test-pathed | 2nd verb at | longest run | verbs met | opening five verbs |');
+console.log('|---|---|---|---|---|---|---|---|');
 
 for (const repo of repos) {
   const { atlas } = await buildIndex(indexOptions(join(corpus, repo)));
   if (atlas.challenges.length === 0) {
-    console.log(`| ${repo} | 0 | — | — | — | — | — |`);
+    console.log(`| ${repo} | 0 | — | — | — | — | — | — |`);
     continue;
   }
   const shaped = fixtureShapedSubjects(atlas);
@@ -98,6 +98,7 @@ for (const repo of repos) {
       attempts: noteAttempt(state.attempts, key),
       skipped: new Set(),
       verbRun: state.previous !== null && state.previous.verb === next.verb ? state.verbRun + 1 : 1,
+      metVerbs: new Set<VerbId>([...state.metVerbs, next.verb]),
       previous: next,
     };
   }
@@ -109,6 +110,12 @@ for (const repo of repos) {
   // second verb *arrives*; that is a different question from what the opening
   // feels like, and only this row answers it.
   const opening = served.slice(0, 5).map((board) => board.verb).join(' ');
+  // **How many of the deck's verbs a player actually meets.** A cold playtester
+  // was offered two of four across sixty consecutive suggestions — no
+  // Archaeology, no Placement — while the HUD counted all 160 boards as "left".
+  const deckVerbs = new Set(atlas.challenges.map((board) => board.verb));
+  const metVerbs = new Set(served.map((board) => board.verb));
+  const unmet = [...deckVerbs].filter((verb) => !metVerbs.has(verb)).sort();
   const runLength = (() => {
     let longest = 1;
     let run = 1;
@@ -133,7 +140,7 @@ for (const repo of repos) {
     .map((board) => pathOf.get(board.subject) ?? board.subject.slice(0, 10))
     .join(', ');
   console.log(
-    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${secondAt === 0 ? '—' : secondAt} | **${runLength}** | ${opening} |`,
+    `| ${repo} | ${atlas.challenges.length} | **${shapedCount}** of ${served.length} | ${testCount} | ${secondAt === 0 ? '—' : secondAt} | **${runLength}** | ${metVerbs.size}/${deckVerbs.size}${unmet.length === 0 ? '' : ` (no ${unmet.join(', ')})`} | ${opening} |`,
   );
   if (process.env['ARK_PATHS'] === '1') console.log(`|   first five: ${firstFive}`);
   if (process.env['ARK_SHOW'] === '1') {

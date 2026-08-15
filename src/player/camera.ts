@@ -62,6 +62,18 @@ export interface Bounds {
 export const MIN_SCALE = 0.05;
 export const MAX_SCALE = 8;
 
+/**
+ * Whether two cameras are the same view.
+ *
+ * Exact equality on all four fields, and it has to be: the one caller asks
+ * *"has the player moved since we moved it?"*, so a tolerance would silently
+ * discard a small deliberate pan. Every camera in the player is produced by
+ * arithmetic on the last one, so an untouched view is bit-identical.
+ */
+export function sameCamera(a: Camera, b: Camera): boolean {
+  return a.x === b.x && a.y === b.y && a.scale === b.scale && a.bearing === b.bearing;
+}
+
 export function clampScale(scale: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 }

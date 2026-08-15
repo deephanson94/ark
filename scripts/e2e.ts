@@ -80,6 +80,46 @@ function rendered(text: string): string {
  *
  * One rule in one place, because a rule that lives three times diverges twice.
  */
+/**
+ * Wait for a condition, with a deadline.
+ *
+ * The player writes most of what a test reads from the rAF loop, so a fixed
+ * `waitForTimeout` before reading is a race that only loses on a slower
+ * machine — this file already carries a landmine about CI reporting `0 marks`
+ * on a board that draws six. The deadline is what keeps a genuinely dead
+ * surface failing rather than hanging.
+ */
+async function pollUntil(check: () => Promise<boolean>, deadlineMs: number): Promise<boolean> {
+  const until = Date.now() + deadlineMs;
+  for (;;) {
+    if (await check()) return true;
+    if (Date.now() > until) return false;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+}
+
+/**
+ * Wait for the renderer to have actually drawn.
+ *
+ * **A panel appearing is synchronous DOM; what the frame drew is not.** The
+ * canvas publishes `__arkRadius`, `__arkCamera` and `__arkNameplates` from
+ * inside its `requestAnimationFrame` loop, so reading one straight after
+ * `waitForSelector` reads the *previous* frame. Locally a frame had always
+ * landed first; CI is slower, and the answer-key gate reported an open board
+ * still drawing its import radius — the defect it exists to catch, green here
+ * and red there on an identical tree.
+ *
+ * Two frames rather than one: `invalidate()` sets a dirty flag that the *next*
+ * loop iteration consumes, so one is the boundary and two is inside it. Passed
+ * as a string because tsx transpiles this file with `keepNames`, which wraps a
+ * named inner function in a `__name` helper the page does not have.
+ */
+async function drawn(page: Page): Promise<void> {
+  await page.evaluate(
+    'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null))))',
+  );
+}
+
 function claimAbout(claim: string): string {
   return claim.split(' — ')[0] ?? claim;
 }
@@ -1487,6 +1527,374 @@ async function main(): Promise<number> {
       failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
     }
 
+    // ---- the map does not draw an open board's answer key ----------------
+    //
+    // ADR-0008 decision 1 draws every node's **direct importers** for free, and
+    // a Blast Radius key is a sample of the **transitive** dependent set, which
+    // contains them. So a board open on `S` drew a gold line from `S` to some of
+    // its own answers: measured, **37 of ark's 40 boards and 81 of 216 key
+    // members**, 94–96% of hono's and graphql-js's. A cold playtester found it
+    // at street zoom and proved the lines belonged to the subject by
+    // deselecting with the camera untouched.
+    //
+    // Gated the way they found it — on the pixels, at street zoom, with the
+    // camera fixed — because the whole defect is that the ink is only obvious
+    // when you zoom in to read the map, which is what a player does.
+    {
+      const marked = await page.evaluate('window.__arkEdgeInk ?? null');
+      if (marked !== null) {
+        failures.push({ what: 'ring', detail: 'stale ink probe left on the page' });
+      }
+      // Open a board, then compare the frame against the same camera with the
+      // board closed. The subject's ring is the only thing that differs.
+      await page.keyboard.press('f');
+      await page.waitForTimeout(220);
+      const openBoard = await page.locator('.console-panel').isVisible();
+      if (!openBoard) {
+        await page.locator('.guide-action').click();
+        await page.waitForTimeout(350);
+        await page.keyboard.press('Enter');
+      }
+      await page.waitForSelector('.choice-button', { timeout: 5000 });
+      await drawn(page);
+      const withBoard = await page.evaluate('window.__arkRadius ?? "absent"');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      await drawn(page);
+      const withoutBoard = await page.evaluate('window.__arkRadius ?? "absent"');
+      if (withBoard !== 'none') {
+        failures.push({
+          what: 'ring',
+          detail: `an open board drew an import radius (${String(withBoard)}) — that is the answer key`,
+        });
+      }
+      // **The control, and it was only printed.** If the radius channel died
+      // outright both reads would say `none` and this gate would stay green
+      // forever, asserting a suppression of nothing — the never-fires shape. A
+      // selected, passed node draws its cone with the board closed, and that is
+      // the thing whose absence must be noticed.
+      if (withoutBoard === 'none') {
+        failures.push({
+          what: 'ring',
+          detail: 'no import radius with the board closed either, so the suppression above proves nothing',
+        });
+      }
+      process.stdout.write(
+        `e2e: radius with a board open → ${String(withBoard)}, closed → ${String(withoutBoard)}\n`,
+      );
+    }
+
+    // ---- a skipped verb counts as met ------------------------------------
+    //
+    // `unmetVerb` is a one-shot rank term that lifts the first board of a verb
+    // the player has not met, so that a strict `tier` does not hide the history
+    // verbs behind a hundred tier-3 boards. A verb counts as met when it is
+    // **graded or skipped** — without the second half, skipping the
+    // introduction offers the entire unmet deck one skip at a time (measured:
+    // 102 consecutive suggestions on this repo, 274 on django).
+    //
+    // **What this holds is that skipping never re-offers what it just declined**,
+    // and that is deliberately narrower than the paragraph above. The first
+    // version of this step claimed to cover the met-verb half of a skip, and it
+    // did not: deleting that half leaves `12 suggestions, 12 distinct` either
+    // way, because `noteSkip`'s list already prevents a repeat on its own. The
+    // met-verb half is a unit test now (`noteSkipped`), where it can be held to
+    // the state rather than to a symptom this step cannot see.
+    //
+    // It stays because the anti-lockout clear is real and shell-side: a skip
+    // list that never emptied would strand the player, and that *is* visible
+    // here.
+    {
+      await page.keyboard.press('f');
+      await page.waitForTimeout(200);
+      const suggestion = async (): Promise<string> =>
+        (await page.locator('.guide-caption').innerText()).trim();
+      const seen: string[] = [];
+      for (let i = 0; i < 12; i += 1) {
+        if ((await page.locator('.guide-skip').count()) === 0) break;
+        seen.push(await suggestion());
+        await page.locator('.guide-skip').click();
+        await page.waitForTimeout(120);
+      }
+      const distinct = new Set(seen).size;
+      process.stdout.write(`e2e: skipped ${seen.length} suggestions, ${distinct} distinct\n`);
+      if (seen.length < 3) {
+        failures.push({
+          what: 'skip',
+          detail: `the skip control disappeared after ${seen.length} presses, so nothing was measured`,
+        });
+      } else if (distinct < seen.length) {
+        failures.push({
+          what: 'skip',
+          detail: `skipping re-offered a suggestion: ${distinct} distinct of ${seen.length}`,
+        });
+      }
+    }
+
+    // ---- closing a board gives back the pan it took ----------------------
+    //
+    // `openBoard` slides the subject to 30% from the left so the docked panel
+    // does not sit on top of it. Nothing gave that back, and the golden-angle
+    // turn then swung the map about the off-centre point it was left at — so
+    // the frame a player lands in after **every** grade had the map in one
+    // corner and half the screen empty. A design review called it the
+    // worst-composed frame the product produces, and it is the reward beat of
+    // the core loop.
+    //
+    // Gated on the camera rather than on pixels, because the rule is about the
+    // camera and a canvas hash cannot tell a restored view from the turn that
+    // follows it. Read after the turn has landed, so what is asserted is the
+    // frame the player is actually left sitting in.
+    {
+      type Cam = { x: number; y: number; scale: number };
+      const cameraNow = async (): Promise<Cam> => {
+        await drawn(page);
+        return (await page.evaluate('window.__arkCamera ?? null')) as Cam;
+      };
+      await page.keyboard.press('f');
+      await page.waitForTimeout(240);
+
+      // **Open the board off a name on the map, never off the guide.** The
+      // first version pressed "Where next?" and then Enter, which on CI opened
+      // a **Placement** board — its subject is a commit, there is nowhere to
+      // pan to, and `openBoard` correctly borrows nothing. The control then
+      // fired: *"opening a board moved the camera by nothing"*. That is the
+      // control doing its job on a step that had predicted what the shell
+      // would serve, which is this file's oldest recurring mistake.
+      //
+      // A nameplate is a node by construction, so the board it opens has a
+      // place. Walk them until one carries an "answer this" control.
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      let opened = false;
+      let before: Cam | null = null;
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(120);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        // Read *after* selecting: a click on the map selects and surveys, and
+        // does not move the camera, but reading before it would fold any
+        // movement it did make into the board's borrowing.
+        before = await cameraNow();
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        opened = true;
+        break;
+      }
+      if (!opened || before === null) {
+        failures.push({
+          what: 'pan',
+          detail: `no drawn name of ${Array.isArray(plates) ? plates.length : 0} carried a board to open`,
+        });
+      } else {
+        const panned = await cameraNow();
+        await page.keyboard.press('Escape');
+        // Escape does not grade, so no turn runs — what is compared is the pan
+        // alone.
+        await page.waitForTimeout(400);
+        const back = await cameraNow();
+        const moved = Math.hypot(panned.x - before.x, panned.y - before.y);
+        const kept = Math.hypot(back.x - before.x, back.y - before.y);
+        process.stdout.write(
+          `e2e: board pan → borrowed ${moved.toFixed(1)} world units, ${kept.toFixed(1)} left after closing\n`,
+        );
+        if (moved < 1) {
+          // The control, and it earns its place twice over: the first version
+          // of this gate asserted the *composition* instead — how many nodes
+          // stay in frame — and a run with the give-back deleted kept 345.9
+          // units of pan while still reporting `261 of 261 nodes`, because
+          // ark's map at fit scale survives being shoved half a screen
+          // sideways. Then this line caught the placeless board above.
+          failures.push({
+            what: 'pan',
+            detail: 'opening a board moved the camera by nothing, so the give-back cannot be measured',
+          });
+        } else if (kept > 0.5) {
+          failures.push({
+            what: 'pan',
+            detail: `closing the board kept ${kept.toFixed(1)} of the ${moved.toFixed(1)} units it borrowed`,
+          });
+        }
+
+        // **The other direction, which no suite could see.** `onClose` restores
+        // only when the camera is still exactly where the board left it, and
+        // every gate above moves it only via the board — so mutating
+        // `sameCamera` to `() => true`, which would stomp a pan the *player*
+        // made behind the open board, left the whole pyramid green. The
+        // comment in `main.ts` calls that "the same theft in the other
+        // direction"; this is the step that would notice it.
+        //
+        // The map stays live behind a docked board on purpose, so dragging here
+        // is an ordinary thing to do and the camera it produces is the
+        // player's.
+        await page.locator('.inspector-action').count();
+        for (const plate of Array.isArray(plates) ? plates : []) {
+          await page.mouse.click(plate.x, plate.y);
+          await page.waitForTimeout(120);
+          if ((await page.locator('.inspector-action').count()) === 0) continue;
+          await page.locator('.inspector-action').click();
+          await page.waitForSelector('.choice-button', { timeout: 5000 });
+          const onOpen = await cameraNow();
+          // Drag the map behind the scrim — a deliberate pan, mid-board.
+          await page.mouse.move(700, 700);
+          await page.mouse.down();
+          await page.mouse.move(560, 640, { steps: 8 });
+          await page.mouse.up();
+          await page.waitForTimeout(160);
+          const mine = await cameraNow();
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(400);
+          const after = await cameraNow();
+          const dragged = Math.hypot(mine.x - onOpen.x, mine.y - onOpen.y);
+          const stolen = Math.hypot(after.x - mine.x, after.y - mine.y);
+          process.stdout.write(
+            `e2e: pan behind an open board → dragged ${dragged.toFixed(1)}, ` +
+              `${stolen.toFixed(1)} taken back on close\n`,
+          );
+          if (dragged < 1) {
+            failures.push({
+              what: 'pan',
+              detail: 'dragging behind an open board moved the camera by nothing, so the guard cannot be measured',
+            });
+          } else if (stolen > 0.5) {
+            failures.push({
+              what: 'pan',
+              detail: `closing undid ${stolen.toFixed(1)} units of a pan the player made themselves`,
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    // ---- a drawn name is a handle on its node ----------------------------
+    //
+    // A cold playtester answered **all eight** of their boards off the panel's
+    // text list and never used the map once, reporting it as "naming the wrong
+    // objects": pointing at a label selected whatever disc lay under the text.
+    // The labels were right — `placeLabels` anchors each under its own node —
+    // and the *pointer* was not. The unit half pins that the frame returns the
+    // right node per label; this is the half that only a browser can check, that
+    // clicking the pixels of a name selects the file that name belongs to.
+    {
+      await page.keyboard.press('f');
+      await page.waitForTimeout(220);
+      await drawn(page);
+      const plates = await page.evaluate('window.__arkNameplates ?? []');
+      const rows = Array.isArray(plates) ? plates : [];
+      if (rows.length === 0) {
+        failures.push({ what: 'labels', detail: 'the frame exposed no nameplates to point at' });
+      }
+      let checked = 0;
+      let wrong = 0;
+      // **Spread across the placed labels, not the top six.** `nameplates` is
+      // priority-ordered, so the first six are the biggest hubs — the easiest
+      // possible sample, and re-rolled every commit since ark indexes itself.
+      // An interval walk reaches the crowded low-priority end, where a name is
+      // most likely to sit over someone else.
+      const typed = rows as { text: string; path: string; x: number; y: number }[];
+      const step = Math.max(1, Math.floor(typed.length / 6));
+      for (let i = 0; i < typed.length && checked < 6; i += step) {
+        const row = typed[i];
+        if (row === undefined) continue;
+        // **Click empty water, not move to it.** Moving clears a *hover*; the
+        // selection survives, and `pointermove` on a miss re-describes it — so
+        // a hover that missed entirely was scored as "named someone else" with
+        // the stale selection's path, and the 1.5s poll below simply timed out
+        // with its result discarded. A click on empty space sets `selected =
+        // null`, which is what "cleared" was supposed to mean. Asserted rather
+        // than dropped, because a clear that silently fails puts every row that
+        // follows into the failure mode this line exists to remove.
+        await page.mouse.click(4, 4);
+        const cleared = await pollUntil(
+          async () => (await page.locator('.inspector-path').count()) === 0,
+          1500,
+        );
+        if (!cleared) {
+          failures.push({ what: 'labels', detail: 'could not clear the selection before a hover' });
+          break;
+        }
+        await page.mouse.move(row.x, row.y);
+        // Polled with a deadline rather than slept: the inspector is written
+        // from the rAF loop, and this file already carries a landmine about
+        // reading a rAF-driven value after a fixed wait.
+        const landed = await pollUntil(
+          async () => (await page.locator('.inspector-path').count()) > 0,
+          2000,
+        );
+        if (!landed) continue;
+        const shown = (await page.locator('.inspector-path').innerText()).trim();
+        checked += 1;
+        // **Exact, against the path the frame published.** `endsWith` on the
+        // label is a substring match, and this repo has seven `index.ts` nodes:
+        // pointing at one and surveying another passed that check — the defect
+        // this step exists for, invisible to it.
+        if (shown !== row.path) {
+          wrong += 1;
+          failures.push({
+            what: 'labels',
+            detail: `pointing at the name "${row.text}" (${row.path}) surveyed ${shown}`,
+          });
+        }
+      }
+      if (checked < 3) {
+        failures.push({ what: 'labels', detail: `only ${checked} label hovers landed` });
+      }
+      process.stdout.write(`e2e: pointed at ${checked} names → ${wrong} named someone else\n`);
+
+      // **And in the orbit**, which returned no nameplates at all until a review
+      // pointed out the stated reason was a wrong technical claim: its peak
+      // labels come from the same screen-space pass. Pointing at a summit name
+      // there selected whatever column was behind the text — the same defect,
+      // one view over — so it gets the same gate.
+      await page.keyboard.press('o');
+      await page.waitForTimeout(300);
+      await drawn(page);
+      const orbitPlates = await page.evaluate('window.__arkNameplates ?? []');
+      const orbitRows = (Array.isArray(orbitPlates) ? orbitPlates : []) as {
+        text: string;
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      if (orbitRows.length === 0) {
+        failures.push({ what: 'labels', detail: 'the orbit exposed no nameplates to point at' });
+      }
+      let orbitChecked = 0;
+      let orbitWrong = 0;
+      for (const row of orbitRows.slice(0, 4)) {
+        await page.mouse.click(4, 4);
+        if (!(await pollUntil(async () => (await page.locator('.inspector-path').count()) === 0, 1500))) {
+          failures.push({ what: 'labels', detail: 'could not clear the selection before an orbit hover' });
+          break;
+        }
+        await page.mouse.move(row.x, row.y);
+        if (!(await pollUntil(async () => (await page.locator('.inspector-path').count()) > 0, 2000))) {
+          continue;
+        }
+        const shown = (await page.locator('.inspector-path').innerText()).trim();
+        orbitChecked += 1;
+        if (shown !== row.path) {
+          orbitWrong += 1;
+          failures.push({
+            what: 'labels',
+            detail: `orbit: pointing at "${row.text}" (${row.path}) surveyed ${shown}`,
+          });
+        }
+      }
+      if (orbitChecked < 2) {
+        failures.push({ what: 'labels', detail: `only ${orbitChecked} orbit label hovers landed` });
+      }
+      process.stdout.write(
+        `e2e: orbit — pointed at ${orbitChecked} names → ${orbitWrong} named someone else\n`,
+      );
+      await page.keyboard.press('o');
+      await page.waitForTimeout(250);
+    }
+
     // ---- keyboard navigation and the help card ---------------------------
     //
     // A cold playtester scored the controls 6 of 10, and the flat map could not
@@ -2330,6 +2738,65 @@ async function main(): Promise<number> {
       } finally {
         for (const error of exploitErrors) failures.push({ what: 'console', detail: error });
         await exploitContext.close();
+      }
+    }
+
+    // ---- the guide moves you in the world, not just on the flat map ------
+    //
+    // A cold playtester proved the avatar never moved: clicking "Where next?"
+    // in world mode took the caption from *"next is labels.ts"* to *"you are on
+    // labels.ts"* with the canvas **byte-identical**, twice, on two nodes. The
+    // handler was moving the flat map's camera, which is not what is on screen
+    // there, and then the caption asserted an arrival that had not happened.
+    //
+    // Gated the same way they found it — on the pixels — because a caption
+    // saying "you are on X" is exactly the thing that lied.
+    {
+      const worldContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const worldPage = await worldContext.newPage();
+      const worldErrors: string[] = [];
+      worldPage.on('pageerror', (error: Error) => worldErrors.push(String(error)));
+      worldPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') worldErrors.push(message.text());
+      });
+      try {
+        await worldPage.goto(url, { waitUntil: 'networkidle' });
+        await worldPage.waitForSelector('.hud-detail');
+        await worldPage.keyboard.press('g');
+        await worldPage.waitForTimeout(400);
+        const inWorld = (await worldPage.locator('.hud-detail').innerText()).trim();
+        if (!inWorld.includes('world')) {
+          failures.push({ what: 'world guide', detail: `g did not enter the world: "${inWorld}"` });
+        }
+        // **The hero's position, not a canvas hash.** The first version of this
+        // gate compared the canvas and a `travelTo` that moved nothing at all
+        // still passed it: the guide selects, describes and repaints a waypoint
+        // regardless, so "some pixel changed" is true either way. That is this
+        // repo's instrument-that-measures-nothing landmine, and it read as good
+        // news exactly as the landmine says.
+        const where = async (): Promise<string> =>
+          JSON.stringify(await worldPage.evaluate('window.__arkHero ?? null'));
+        const before = await where();
+        const captionBefore = (await worldPage.locator('.guide-caption').innerText()).trim();
+        await worldPage.locator('.guide-action').click();
+        await worldPage.waitForTimeout(500);
+        const after = await where();
+        const captionAfter = (await worldPage.locator('.guide-caption').innerText()).trim();
+        if (before === 'null' || after === 'null') {
+          failures.push({ what: 'world guide', detail: 'no hero position was published' });
+        } else if (after === before) {
+          failures.push({
+            what: 'world guide',
+            detail: `the hero did not move: ${before} → ${after}, caption "${captionBefore}" → "${captionAfter}"`,
+          });
+        }
+        process.stdout.write(
+          `e2e: world guide → "${captionAfter}", hero ${before} → ${after}\n`,
+        );
+        await worldPage.screenshot({ path: join(SHOT_DIR, 'world-guide.png') });
+      } finally {
+        for (const error of worldErrors) failures.push({ what: 'console', detail: error });
+        await worldContext.close();
       }
     }
 

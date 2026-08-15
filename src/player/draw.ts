@@ -18,7 +18,7 @@ import type { Fog } from './fog.js';
 import { visibilityOf } from './fog.js';
 import type { Box, LabelCandidate, PlaceOptions, PlacedLabel } from './labels.js';
 import { placeLabels } from './labels.js';
-import { INK, regionColor, regionKnown, regionSilhouette, regionWash } from './palette.js';
+import { INK, regionColor, regionKnown, regionLabelColor, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
 import { projectAll } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
@@ -126,6 +126,17 @@ export interface FrameStats {
    * confident numbers about a map that was not moving.
    */
   readonly islandsDrawn: number;
+  /**
+   * The node labels this frame drew, with the node each names.
+   *
+   * Returned so the shell can hit-test the **text**. A label sits directly under
+   * its own disc and never drifts, but on a crowded map it lies across other
+   * discs — so pointing at a name selected whatever happened to be beneath it,
+   * and a cold playtester reported the map as naming the wrong objects. They
+   * answered all eight of their boards off the panel's text list and never used
+   * the map once; a name you cannot point at is not a handle.
+   */
+  readonly nameplates: readonly PlacedLabel[];
 }
 
 /**
@@ -142,11 +153,85 @@ const ISLAND_SHELF = 30;
 const ISLAND_SHORE = 14;
 
 const LABEL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-/** Tall enough for the label and its file count, which are drawn as a pair. */
-const REGION_LINE_HEIGHT = 34;
+/**
+ * Tall enough for the label and its file count, which are drawn as a pair.
+ *
+ * The two lines sit in the middles of their own halves (`regionLines`), so the
+ * baseline separation is `0.44 · H`. At 34 that is 15px between a 15px name and
+ * a 12px count — they touched, which is how the first version of the box fix
+ * traded one collision for another. 46 gives 20px and the pair reads as two
+ * lines.
+ */
+const REGION_LINE_HEIGHT = 46;
 const REGION_LABEL_PADDING = 10;
 
 const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
+
+/**
+ * Where the two lines of a region label sit inside the box that was reserved
+ * for them.
+ *
+ * **They did not, and that was a real defect rather than a nicety.** `place`
+ * returns `y` as the box's *bottom*, so the pair was drawn at `y ∓ H/2` — which
+ * puts the name inside the box and the file count a full half-line *below* it,
+ * outside the rectangle every other label was told to avoid. Node labels
+ * therefore crossed region captions legally: `around src/indexer/build.ts`'s
+ * `55 files` sat under `schema.ts` on this repo's own arrival frame, and hono
+ * had the same collision twice. Reserving a box and then drawing outside it is
+ * the one thing a collision pass cannot defend against.
+ *
+ * Quarters rather than halves: two lines centred in their own halves of the
+ * box, which is also what centres the pair on the region's centroid instead of
+ * hanging it below.
+ */
+/**
+ * A file's name may sit under its disc, beside it, or over it, in that order.
+ *
+ * Region names keep the single centred slot: a two-line block that slid to one
+ * side would stop reading as the label of the territory it is standing on.
+ */
+const NODE_ANCHORS = ['below', 'right', 'left', 'above'] as const;
+
+/**
+ * Where the two lines of a region label sit inside the box reserved for them.
+ * See the block above `REGION_LINE_HEIGHT` for why this exists — a review found
+ * that argument stacked over `NODE_ANCHORS` with nothing attached to the
+ * function it is about.
+ */
+export function regionLines(boxBottom: number, height: number): { name: number; count: number } {
+  return { name: boxBottom - height * 0.72, count: boxBottom - height * 0.28 };
+}
+
+/**
+ * Draw text with a halo of the ground colour behind it.
+ *
+ * The map's names had no halo, so a label crossing a disc, an edge or another
+ * region's wash lost its counters and read as noise — and the collision pass
+ * could not help, because it only knows about *other labels*. Cartography's
+ * answer is older than any of this: stroke the ground colour under the glyphs
+ * and the name sits on top of whatever it lands on. It is also what makes
+ * dodging a label onto its own disc a legal move rather than a worse one.
+ *
+ * `lineJoin: 'round'` because the default mitre spikes off the corners of
+ * glyphs at this weight, which looks like a font rendering fault.
+ */
+function stamp(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fill: string,
+): void {
+  context.save();
+  context.strokeStyle = INK.ground;
+  context.lineWidth = 3;
+  context.lineJoin = 'round';
+  context.miterLimit = 2;
+  context.strokeText(text, x, y);
+  context.restore();
+  context.fillStyle = fill;
+  context.fillText(text, x, y);
+}
 
 /**
  * How far a history wire bows off the straight line, as a fraction of its span.
@@ -212,6 +297,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // because the claim degrades smoothly rather than inventing a corridor.
   //
   // Drawn first, under the edges, because it is ground.
+  let nameplates: readonly PlacedLabel[] = [];
   let islandsDrawn = 0;
   {
     const byRegion = new Map<number, SceneNode[]>();
@@ -399,10 +485,20 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     const point = project(node);
     const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
     // One ring per layer, capped: twelve rings is a target, not a summit.
+    //
+    // **The cap stays at four.** A design review asked for two, because in a
+    // dense cluster a dozen neighbouring peaks put their rings 4px apart and
+    // the field tiles into moiré — which is true, and the count of rings *is*
+    // the elevation (ADR-0013), so halving it deletes two layers of a frozen
+    // channel to tidy a texture. Pillars beat aesthetics. What is answerable
+    // without touching the data is the contrast: the ramp used to end at 0.18,
+    // bright enough that the fourth ring of one node argued with the first of
+    // the next. It ends at 0.10 now, so a summit still counts to four and the
+    // cluster stops vibrating.
     const rings = Math.min(4, node.elevation);
     context.strokeStyle = regionColor(node.regionIndex, 1);
     for (let ring = 1; ring <= rings; ring++) {
-      context.globalAlpha = 0.5 - ring * 0.08;
+      context.globalAlpha = 0.42 - ring * 0.08;
       context.lineWidth = 1;
       context.beginPath();
       context.arc(point.x, point.y, drawn + ring * 4, 0, Math.PI * 2);
@@ -487,12 +583,20 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     for (const label of placedRegions) {
       const region = byText.get(label.text);
       if (region === undefined) continue;
-      context.fillStyle = regionColor(region.index, 0.85);
+      const line = regionLines(label.y, REGION_LINE_HEIGHT);
       context.font = REGION_FONT;
-      context.fillText(label.text, label.x, label.y - REGION_LINE_HEIGHT / 2);
-      context.fillStyle = INK.textDim;
+      stamp(context, label.text, label.x, line.name, regionLabelColor(region.index, 0.92));
       context.font = LABEL_FONT;
-      context.fillText(`${region.nodeCount} files`, label.x, label.y + REGION_LINE_HEIGHT / 2);
+      // `1 files` was printed on every one-file region, dozens of times per
+      // session on a repo with small clusters — `.claude 1 files`, `.github
+      // 1 files`. Nothing derived is lost by agreeing with English.
+      stamp(
+        context,
+        region.nodeCount === 1 ? '1 file' : `${region.nodeCount} files`,
+        label.x,
+        line.count,
+        INK.textDim,
+      );
       labelsDrawn++;
     }
     context.font = REGION_FONT;
@@ -510,6 +614,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       const point = project(node);
       candidates.push({
         text: node.label,
+        ref: node.ref,
         x: point.x,
         y: point.y,
         offset: Math.max(1.4, node.radius * camera.scale * style.nodeScale) + 2,
@@ -528,12 +633,16 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       height: viewport.height,
       // Region labels went down first and keep their space.
       occupied: placedRegions,
+      // Below first, so a name that fits under its own disc keeps that slot.
+      // Not "nothing moves" — a dodged label is a new blocker and can displace
+      // a lower-priority one; see `PlaceOptions.anchors`.
+      anchors: NODE_ANCHORS,
     });
     for (const label of placed) {
-      context.fillStyle = INK.text;
-      context.fillText(label.text, label.x, label.y - 3);
+      stamp(context, label.text, label.x, label.y - 3, INK.text);
     }
     labelsDrawn += placed.length;
+    nameplates = placed;
   }
 
 
@@ -594,6 +703,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     tiesDrawn,
     boardDrawn,
     islandsDrawn,
+    nameplates,
   };
 }
 
@@ -789,6 +899,13 @@ export function drawOrbitFrame(
     if (visibilityOf(fog, column.node.id) === 'silhouette') continue;
     candidates.push({
       text: column.node.label,
+      // The orbit's names are handles too. These boxes are screen rectangles
+      // where the glyphs are — the same `placeLabels` pass the flat map uses —
+      // so hit-testing them needs no footprint and no inverse projection. An
+      // earlier comment on the return below claimed otherwise, and the effect
+      // was that pointing at a summit name in the orbit selected whatever
+      // column was behind the text: the reported defect, one view over.
+      ref: column.node.ref,
       x: column.top.x,
       y: column.top.y,
       offset: Math.max(1.4, column.node.radius * camera.scale * style.nodeScale) + 2,
@@ -802,10 +919,10 @@ export function drawOrbitFrame(
     width: viewport.width,
     height: viewport.height,
     occupied: input.chrome,
+    anchors: NODE_ANCHORS,
   });
   for (const label of placed) {
-    context.fillStyle = INK.text;
-    context.fillText(label.text, label.x, label.y - 3);
+    stamp(context, label.text, label.x, label.y - 3, INK.text);
   }
 
   context.restore();
@@ -816,6 +933,13 @@ export function drawOrbitFrame(
     // so a fill in the ground plane would be underfoot and read as a shadow
     // nothing is casting. Zero because it is zero, not because it is unwired.
     islandsDrawn: 0,
+    // The orbit's names are handles on the same terms as the flat map's: these
+    // are screen boxes where the glyphs are, from the same pass. An earlier
+    // version returned `[]` and justified it with "a screen box is not a node's
+    // footprint in the tipped projection", which is a wrong technical claim in
+    // the place the next session would read it as settled — the box needs no
+    // footprint, because it is not standing in for one.
+    nameplates: placed,
     tiesDrawn: 0,
     labelsDrawn: placed.length,
     level,

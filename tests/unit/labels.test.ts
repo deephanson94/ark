@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { placeLabels } from '../../src/player/labels.js';
-import type { LabelCandidate } from '../../src/player/labels.js';
+import type { Box, LabelCandidate } from '../../src/player/labels.js';
 
 /** Fixed-width measurement, so the geometry is exactly predictable. */
 const measure = (text: string): number => text.length * 8;
@@ -73,6 +73,101 @@ describe('placeLabels', () => {
       OPTIONS,
     );
     expect(placed.map((label) => label.text)).toEqual(['onscreen.ts']);
+  });
+
+  /**
+   * A name cut in half by the window edge reads as a rendering fault, and a
+   * street-zoom frame of this repo carried three at once — `disclosure` sheared
+   * at the right edge, `ots` and `les` surviving as the tails of two region
+   * names at the left. The old test only covered a candidate *entirely* off
+   * screen, so the straddling case had never been asserted either way.
+   *
+   * Dropping costs nothing: `continue` does not spend budget, so the slot goes
+   * to the next candidate and the frame draws the same number of names, all of
+   * them whole.
+   */
+  it('drops a label the viewport edge would cut in half', () => {
+    const placed = placeLabels(
+      [candidate('straddles-left.ts', 10, 100), candidate('straddles-right.ts', 995, 300)],
+      measure,
+      OPTIONS,
+    );
+    expect(placed).toEqual([]);
+  });
+
+  it('keeps a label that fits against the edge exactly', () => {
+    // 'ab.ts' measures 5·8 + 2·3 = 46 wide, so x = 23 puts its left edge on 0.
+    const placed = placeLabels([candidate('ab.ts', 23, 100)], measure, OPTIONS);
+    expect(placed.map((label) => label.text)).toEqual(['ab.ts']);
+  });
+
+  /**
+   * Dodging is opt-in, so every existing caller keeps the placement it had.
+   */
+  it('places below only, unless told otherwise', () => {
+    const placed = placeLabels(
+      [candidate('alpha.ts', 100, 100, 10), candidate('beta.ts', 104, 100, 1)],
+      measure,
+      OPTIONS,
+    );
+    expect(placed.map((label) => label.text)).toEqual(['alpha.ts']);
+  });
+
+  /**
+   * Driven by blockers rather than by a second label, and that is the point:
+   * the four anchors sit within a few pixels of each other around a small
+   * radius, so a fixture that crowds one label with another cannot say *which*
+   * alternative was taken — the first draft asserted `right` and got `above`,
+   * because a side placement is vertically centred on the anchor and so still
+   * clipped the neighbour's box. A blocker per anchor makes each step exact.
+   *
+   * 'beta.ts' measures 7·8 + 2·3 = 62 wide, so a side placement's centre is
+   * `offset + 31` from the anchor point.
+   */
+  const DODGE = { ...OPTIONS, anchors: ['below', 'right', 'left', 'above'] as const };
+  /**
+   * A blocker small enough to spoil exactly one anchor. Four slots around a
+   * 4px radius are only 12px apart vertically, so a big rectangle spoils all of
+   * them at once — the second draft used 400×400 walls and reached `above`
+   * before it meant to, which reads as the fall-through working.
+   *
+   * The four boxes for 'beta.ts' at (500, 400): below [469..531]×[404..418],
+   * right [504..566]×[393..407], left [434..496]×[393..407],
+   * above [469..531]×[382..396].
+   */
+  const pin = (left: number, top: number): Box => ({ left, top, width: 40, height: 6 });
+
+  it('dodges right when the slot below is taken', () => {
+    const placed = placeLabels([candidate('beta.ts', 500, 400)], measure, {
+      ...DODGE,
+      occupied: [pin(480, 408)],
+    });
+    expect(placed[0]?.x).toBe(500 + 4 + 31);
+  });
+
+  it('dodges left when below and right are taken', () => {
+    const placed = placeLabels([candidate('beta.ts', 500, 400)], measure, {
+      ...DODGE,
+      occupied: [pin(480, 408), pin(520, 396)],
+    });
+    expect(placed[0]?.x).toBe(500 - 4 - 31);
+  });
+
+  it('falls through to above when all three are taken', () => {
+    const placed = placeLabels([candidate('beta.ts', 500, 400)], measure, {
+      ...DODGE,
+      occupied: [pin(480, 408), pin(520, 396), pin(440, 396)],
+    });
+    expect(placed[0]?.x).toBe(500);
+    expect(placed[0]?.y).toBe(400 - 4);
+  });
+
+  it('drops the label when every anchor is taken', () => {
+    const placed = placeLabels([candidate('beta.ts', 500, 400)], measure, {
+      ...DODGE,
+      occupied: [pin(480, 408), pin(520, 396), pin(440, 396), pin(480, 386)],
+    });
+    expect(placed).toEqual([]);
   });
 
   it('does not reorder its input', () => {

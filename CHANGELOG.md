@@ -4501,3 +4501,147 @@ The gaps left are smaller: Placement is reachable only through the guide (a
 player clicking the map never meets 25% of the deck), the same-day commit gloss
 says nothing when a repo lands several commits a day, `UNREAD` is still a
 whitelist, and there is no deck browser.
+
+---
+
+## 2026-08-14 (later still) — the map becomes a handle, and stops drawing the answer
+
+Two cold playthroughs of the merged build, each measured against the last:
+intuitiveness 5 → 6 → **7**, core loop 5 → 7 → **8**, controls 6 → 5 → **7**,
+visual appeal 6 → 6 → **7**. The second run's verdict — *"the map does not
+participate in the loop"* — is what most of this is aimed at.
+
+**The map drew the answer key.** ADR-0008 decision 1 draws every node's direct
+importers for free, and a Blast Radius key is a sample of the *transitive*
+dependent set, which contains them. So a board open on `S` drew a gold line from
+`S` to some of its own answers: **37 of ark's 40 boards and 81 of 216 key
+members**, 94.4% of hono's boards and 95.7% of graphql-js's. A playtester found
+it at street zoom and proved the lines belonged to the subject by deselecting
+with the camera untouched. That is pillar 3's `Ctrl+F` failure on nearly every
+board of the verb the roadmap calls the kill point. The whole import channel is
+now off while a board is open — ADR-0016's rule, *ink on the map is a lookup
+where text in a closed panel is a memory test* — and the overlap is recorded as
+an atlas invariant so nobody re-derives "direct importers are free" as safe to
+draw beside a board.
+
+**A drawn name is a handle on the node it names**, in the flat map and the
+orbit. Labels never drifted — `placeLabels` anchors each under its own disc —
+but the text lies across other discs and hit-testing went straight through, so
+pointing at a name selected a different file. That is why the tester answered
+all eight of their boards off the panel's text list.
+
+**You meet every verb the deck has**: 2/4 → **4/4** on all four reference repos,
+inside the first four boards, django 1/2 → 2/2. A one-shot rank term above
+`tier`, inert once every verb is met — and a *skipped* verb counts as met, or one
+skip walls the player behind the entire unmet deck (measured at 102 consecutive
+suggestions here, 274 on django).
+
+Also: a failed board no longer returns as fresh after a reload; the guide moves
+the hero in the world instead of an invisible camera; the one tooltip in the
+product is reachable; the engine range is tested on Node 20, which immediately
+caught the indexer needing 22.
+
+945 unit, 117 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001`. Two things are the owner's and are measured
+and waiting — the map turning after every graded answer (ADR-0017; the tester's
+stated reason they would close the tab) and refusing boards whose answer key is
+entirely documentation (9 here, 4 on hono). The map still contributes nothing
+*during* answering: it marks candidates, but fog-gated labels mean the boxes are
+anonymous, so there is no path from a checkbox row to its node.
+
+## A cartography pass over the map's type, and the frame after a grade
+
+A graphic-design study — 57 browser screenshots on ark and hono at two viewport
+sizes, against my own reading of the e2e artifact set — scored the product
+**6.5/10** and put the whole gap in one place: the least-designed layer on
+screen was sitting at the highest visual priority. Derived paths were set as
+display type at full saturation across the discs they named, and street zoom —
+the zoom a reader goes to *for* names — drew **9 over 68 nodes**, with the
+largest disc in the frame anonymous.
+
+Names are cartography now. A ground-colour halo under every glyph, which is what
+makes the rest legal; four anchor positions per label with below still first, so a
+name that fits under its own disc keeps that slot; region names paler and
+desaturated, because a place name is not a data mark; a basename
+shared with another node keeping one directory of context (**29 of ark's 259
+nodes** shared one, `index.ts` seven ways). District **19 → 27** names on a fresh
+page, street **9 → 18**, orbit **12 → 15**, measured at `54d9888`. Two defects
+fell out of looking rather than out of the study: a label the viewport edge would
+cut was **sheared rather than dropped**, and a region's file-count line was drawn
+a half-line *outside* the box every other label had been told to avoid, so node
+labels crossed it legally.
+
+The frame after a grade was the other half. Opening a board slides the subject
+left so the docked panel does not cover it; nothing gave that back, and the
+golden-angle turn then swung the map about the off-centre point it was left at —
+so the reward beat of the core loop landed on half an empty screen, every time.
+It is returned now (287 of 287 world units), but only when the camera is still
+exactly where the board left it. The inspector and the guide stand down instead
+of peeking out above and below the console's edges; the console panel is measured
+into the label chrome it was the only panel missing from; the grade band is sized
+like a result.
+
+Refused: capping summit rings at two. The ring count *is* the elevation
+(ADR-0013), so halving it deletes two layers of a frozen channel to tidy a
+texture — pillars beat aesthetics. The contrast ramp ends at 0.10 rather than
+0.18, which answers the moiré without touching the data.
+
+**The browser gate for the camera give-back was vacuous on its first draft**, and
+that is the entry worth keeping. It asserted *composition* — how many nodes stay
+in frame — which is what the defect looks like to a player; run with the fix
+deleted it reported `345.9 world units of pan kept` and `261 of 261 nodes still
+in frame`, green against the exact defect it was written for, because ark's map
+at fit scale survives being shoved half a screen sideways. It reads the camera
+now and the mutant dies.
+
+**Next**: the two things this pass could not reach are both naming rather than
+rendering — a board's title is a 74-character slug because the path lives inside
+a sentence the *verb* owns, and a hub-named region prints its whole path because
+shortening it on the map alone would desync the map from the legend. Both are in
+Known gaps with the reason. Beyond that, `docs/experiments/0001` is still the
+open thing, and it is still twelve participants.
+
+## Two claims the pass was proudest of, corrected
+
+A pre-merge review ran the entry above rather than reading it, and both of its
+headline invariants are false as stated. **"Every name that could already be
+placed is placed exactly where it was"** holds for a label's *own* slot and not
+for the frame: a dodged label is a new **blocker**, so a high-priority name that
+used to be dropped now sits to one side and can displace a lower-priority name
+that previously fit — or, under a binding budget, take the slot it would have
+had. Priority winning is the intended behaviour; the invariant was the
+overclaim. And **"dropping a sheared label costs no labels"** is true only where
+the budget binds. The region pass runs with an infinite budget, where every
+placeable candidate places regardless and a dropped name is a name fewer — and
+the `ots` and `les` in the comment's own example are region labels, so the
+example was precisely the case the claim was false about. The unit fixture said
+so too: under the old rule it placed 2, the new test asserts 0.
+
+Both sentences are corrected in `labels.ts`, `draw.ts`, the README status row
+and the entry above. The behaviour is unchanged and still right; only the
+claims were wrong, which is this repo's most-repeated failure and the first
+time it has been caught before merge rather than three milestones after.
+
+Four guards that fired in no test now have one. `sameCamera` had only its
+restore direction exercised — mutating it to `() => true`, which stomps a pan
+the *player* made behind an open board, left the whole pyramid green; there is a
+unit test and an e2e step that drags behind the scrim. A skip's two consequences
+were two assignments in the shell and the second could be deleted silently, so
+they are one `noteSkipped` in the selector where a test can hold them to each
+other. Nothing bound a drawn glyph to the nameplate box the shell hit-tests, so
+a 10px stamp offset — the reported "the map names the wrong thing" defect —
+passed everything; a recording context now pins the anchor to the box's exact
+centre, after the first version asserted mere containment and the mutant walked
+straight through it. And the answer-key gate asserted a suppression with no
+control, so a dead radius channel would have read as a pass. `metVerbs` is also
+seeded from the persisted record now, like `attempts` one paragraph above it,
+because a verb this player has met was coming back unmet on every reload.
+
+**Next**: the panel of ten. First-10-minutes scores on the current build are
+**visual 7.1, continue 6.3** across ten personas, target 8. The ranked costs are
+walk-mode's spawn (6 of 10 named it, three as *the* thing dragging their score),
+a sub-pass grade badge that renders as an empty box (3 of 10 read it as a
+missing asset), no legend for what size and colour and fog encode (4 of 10), and
+a loop that never changes shape (6 of 10 on continue).
+

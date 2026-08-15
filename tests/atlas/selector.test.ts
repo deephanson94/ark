@@ -21,7 +21,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-import type { Atlas, Challenge, AtlasId } from '../../src/atlas/index.js';
+import type { VerbId, Atlas, Challenge, AtlasId } from '../../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../../src/indexer/build.js';
 import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
@@ -80,7 +80,7 @@ function playthrough(outcomeFor: (step: number) => Outcome): Step[] {
   const limit = atlas.challenges.length * 3;
   for (let step = 0; step < limit; step++) {
     const open = atlas.challenges.filter((c) => !answered.has(answerKey(c.verb, c.subject))).length;
-    const next = suggestNext(atlas.challenges, regionOf, { answered, attempts, skipped: new Set(), verbRun: 0, previous });
+    const next = suggestNext(atlas.challenges, regionOf, { answered, attempts, skipped: new Set(), verbRun: 0, metVerbs: new Set<VerbId>(), previous });
     if (next === null) break;
     served.push({ challenge: next, open });
     previous = next;
@@ -232,6 +232,7 @@ describe('every rank component earns its place on real data', () => {
         attempts: new Map(),
         skipped: new Set(),
         verbRun: 0,
+        metVerbs: new Set<VerbId>(),
         previous,
       });
       // Neutralised: with no subject anywhere, `sameRegion` is 0 for every
@@ -241,6 +242,7 @@ describe('every rank component earns its place on real data', () => {
         attempts: new Map(),
         skipped: new Set(),
         verbRun: 0,
+        metVerbs: new Set<VerbId>(),
         previous,
       });
       if (withRegion === null) break;
@@ -267,6 +269,7 @@ describe('every rank component earns its place on real data', () => {
         attempts: new Map(),
         skipped: new Set(),
         verbRun: 0,
+        metVerbs: new Set<VerbId>(),
         previous,
       });
       // The same rank with the overlap term neutralised: every candidate is
@@ -276,6 +279,7 @@ describe('every rank component earns its place on real data', () => {
         attempts: new Map(),
         skipped: new Set(),
         verbRun: 0,
+        metVerbs: new Set<VerbId>(),
         previous: previous === null ? null : { ...previous, truth: [] },
       });
       if (withOverlap === null) break;

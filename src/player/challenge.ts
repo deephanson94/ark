@@ -54,6 +54,18 @@ export interface BoardView {
 
 export interface Console {
   readonly root: HTMLElement;
+  /**
+   * The docked panel itself, as distinct from the full-viewport scrim `root`.
+   *
+   * Exposed for one reason: the shell measures the DOM chrome into the label
+   * placer's `occupied` list so a name is never spent under a panel, and this
+   * was the one panel missing from that list — the largest of them, 520px of
+   * the right column, so a board open at district zoom drew **7** names where
+   * the same view draws 19 with it closed, most of the difference being slots
+   * laid down behind the board. Measuring `root` instead would block the whole
+   * canvas: the scrim is `inset: 0`.
+   */
+  readonly panel: HTMLElement;
   open(challenge: Challenge): void;
   close(): void;
   isOpen(): boolean;
@@ -339,6 +351,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
 
   return {
     root,
+    panel,
     open(challenge) {
       open = challenge;
       root.hidden = false;
