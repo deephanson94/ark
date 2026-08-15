@@ -322,6 +322,31 @@ body {
   animation: arrival-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* **A ground of its own**, because the card lands in the middle of the frame
+   and the middle of the frame is where the map is densest. The first version
+   had none, and the arrival screenshot caught the repository's name sitting on
+   top of `src/verbs` with its own second line crossing two file labels — a
+   title card that reads as a rendering collision, in the change that exists to
+   make the opening look composed. Radial and soft-edged so it reads as the map
+   receding rather than as a panel appearing. */
+.arrival::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  height: 320%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(10, 13, 19, 0.92) 0%,
+    rgba(10, 13, 19, 0.82) 38%,
+    rgba(10, 13, 19, 0) 72%
+  );
+  z-index: -1;
+}
+
 .arrival.is-gone {
   opacity: 0;
   transform: translate(-50%, calc(-50% - 10px));
