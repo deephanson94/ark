@@ -804,6 +804,13 @@ export function drawOrbitFrame(
     if (visibilityOf(fog, column.node.id) === 'silhouette') continue;
     candidates.push({
       text: column.node.label,
+      // The orbit's names are handles too. These boxes are screen rectangles
+      // where the glyphs are — the same `placeLabels` pass the flat map uses —
+      // so hit-testing them needs no footprint and no inverse projection. An
+      // earlier comment on the return below claimed otherwise, and the effect
+      // was that pointing at a summit name in the orbit selected whatever
+      // column was behind the text: the reported defect, one view over.
+      ref: column.node.ref,
       x: column.top.x,
       y: column.top.y,
       offset: Math.max(1.4, column.node.radius * camera.scale * style.nodeScale) + 2,
@@ -831,16 +838,13 @@ export function drawOrbitFrame(
     // so a fill in the ground plane would be underfoot and read as a shadow
     // nothing is casting. Zero because it is zero, not because it is unwired.
     islandsDrawn: 0,
-    // **Empty because the orbit is out of scope here, not because it cannot be
-    // done.** An earlier version of this comment said a screen box is not a
-    // node's footprint in the tipped projection — which is a wrong technical
-    // claim in the place the next session would read it as settled: the orbit
-    // places its peak labels through the *same* `placeLabels` pass, in screen
-    // space, and draws them at the box's own coordinates. Hit-testing them
-    // needs no footprint and no inverse; the candidates simply do not carry
-    // `ref` yet. Pointing at a summit name in the orbit still selects whatever
-    // column is behind the text — the reported defect, one view over.
-    nameplates: [],
+    // The orbit's names are handles on the same terms as the flat map's: these
+    // are screen boxes where the glyphs are, from the same pass. An earlier
+    // version returned `[]` and justified it with "a screen box is not a node's
+    // footprint in the tipped projection", which is a wrong technical claim in
+    // the place the next session would read it as settled — the box needs no
+    // footprint, because it is not standing in for one.
+    nameplates: placed,
     tiesDrawn: 0,
     labelsDrawn: placed.length,
     level,

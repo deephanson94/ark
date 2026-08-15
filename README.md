@@ -173,6 +173,19 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
+- **A meaningful share of the history verbs' answer keys is documentation, and on this repo it is
+  most of some boards.** A cold playtester's objection is pillar 3's — *teach coupling, not trivia*:
+  a Companion key made of `CHANGELOG.md` says only that the author updates the changelog every
+  session, which is true, derived, gradeable and worth nothing. Measured by
+  `npx tsx scripts/probe-prose.ts`: Blast Radius is **0.0%** prose on both repos, because nothing
+  imports Markdown; Companion is **35.6%** of ark's key members and 5.6% of hono's; Placement is
+  **42.4%** and 8.9%, and **8 of ark's 40 Placement boards are prose end to end**. Concentrated on
+  the bootstrap repo, which is the one every session and every playtester sees.
+  **Refusing a board whose key is entirely prose is a change to what a verb refuses, which is an
+  owner decision** — it would cost 8 boards here and 3 on hono, and the deck cap would backfill from
+  a supply of 46 eligible commits against a retained 40, so the deck would shrink slightly. Measured
+  and put up rather than taken.
+
 - **A quarter of the deck is unreachable by clicking the map, and on `django` it is three
   quarters.** A Placement board's subject is a **commit** (ADR-0018), which has no square on the flat
   map and therefore no marker to click. The guide reaches them — it labels the control *"Open the

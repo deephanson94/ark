@@ -1570,6 +1570,51 @@ async function main(): Promise<number> {
         failures.push({ what: 'labels', detail: `only ${checked} label hovers landed` });
       }
       process.stdout.write(`e2e: pointed at ${checked} names → ${wrong} named someone else\n`);
+
+      // **And in the orbit**, which returned no nameplates at all until a review
+      // pointed out the stated reason was a wrong technical claim: its peak
+      // labels come from the same screen-space pass. Pointing at a summit name
+      // there selected whatever column was behind the text — the same defect,
+      // one view over — so it gets the same gate.
+      await page.keyboard.press('o');
+      await page.waitForTimeout(300);
+      const orbitPlates = await page.evaluate('window.__arkNameplates ?? []');
+      const orbitRows = (Array.isArray(orbitPlates) ? orbitPlates : []) as {
+        text: string;
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      if (orbitRows.length === 0) {
+        failures.push({ what: 'labels', detail: 'the orbit exposed no nameplates to point at' });
+      }
+      let orbitChecked = 0;
+      let orbitWrong = 0;
+      for (const row of orbitRows.slice(0, 4)) {
+        await page.mouse.move(4, 4);
+        await pollUntil(async () => (await page.locator('.inspector-path').count()) === 0, 1500);
+        await page.mouse.move(row.x, row.y);
+        if (!(await pollUntil(async () => (await page.locator('.inspector-path').count()) > 0, 2000))) {
+          continue;
+        }
+        const shown = (await page.locator('.inspector-path').innerText()).trim();
+        orbitChecked += 1;
+        if (shown !== row.path) {
+          orbitWrong += 1;
+          failures.push({
+            what: 'labels',
+            detail: `orbit: pointing at "${row.text}" (${row.path}) surveyed ${shown}`,
+          });
+        }
+      }
+      if (orbitChecked < 2) {
+        failures.push({ what: 'labels', detail: `only ${orbitChecked} orbit label hovers landed` });
+      }
+      process.stdout.write(
+        `e2e: orbit — pointed at ${orbitChecked} names → ${orbitWrong} named someone else\n`,
+      );
+      await page.keyboard.press('o');
+      await page.waitForTimeout(250);
     }
 
     // ---- keyboard navigation and the help card ---------------------------

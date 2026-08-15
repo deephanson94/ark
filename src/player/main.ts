@@ -369,11 +369,30 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   let nameplates: readonly PlacedLabel[] = [];
 
   const pickAt = (local: { x: number; y: number }): SceneNode | null => {
+    // **Names first, in both views.** A nameplate is a screen box wherever it
+    // was drawn, so this loop is view-agnostic; only the fall-through differs.
+    const named = pickName(local);
+    if (named !== null) return named;
     if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
-    // **Labels first, and only where they name a node.** The text is on top of
-    // the discs visually, so it has to be on top of them for the pointer too or
-    // the two disagree about what is in front. Reversed, so the last label drawn
-    // — the one painted over any it overlaps — is the one that answers.
+    const world = screenToWorld(camera, viewport, local);
+    return pick(scene, world.x, world.y, camera.scale);
+  };
+
+  /**
+   * The node whose drawn **name** is under this point.
+   *
+   * The text is on top of the discs visually, so it has to be on top of them
+   * for the pointer too, or the two disagree about what is in front.
+   *
+   * Iterated in reverse for a stable order and **not** because a later label
+   * paints over an earlier one: `placeLabels` adds every placed box to its own
+   * blockers, so two placed labels cannot overlap and the direction cannot
+   * change an answer. *(The comment here claimed the painter's-order reason
+   * until a review pointed out the mechanism does not exist — and the edit that
+   * was supposed to correct it silently matched nothing, so the wrong sentence
+   * shipped one commit longer than its correction claimed.)*
+   */
+  const pickName = (local: { x: number; y: number }): SceneNode | null => {
     for (let i = nameplates.length - 1; i >= 0; i -= 1) {
       const label = nameplates[i];
       if (label === undefined || label.ref === undefined) continue;
@@ -387,8 +406,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         if (node !== undefined) return node;
       }
     }
-    const world = screenToWorld(camera, viewport, local);
-    return pick(scene, world.x, world.y, camera.scale);
+    return null;
   };
 
   /**
