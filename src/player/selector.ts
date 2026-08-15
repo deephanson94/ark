@@ -59,7 +59,7 @@
  * reading a hot region counter should know it means "one region", not "bug".
  */
 
-import type { Challenge, AtlasId } from '../atlas/index.js';
+import type { VerbId, Challenge, AtlasId } from '../atlas/index.js';
 import { byteCompare, round2 } from '../atlas/index.js';
 import { answerKey } from './progress.js';
 
@@ -116,6 +116,14 @@ export interface SelectorState {
    */
   readonly verbRun: number;
   /**
+   * Verbs this player has already been served a board of, this session.
+   *
+   * Feeds `unmetVerb`, which is a **one-shot** rank term: it lifts the first
+   * board of a verb you have never seen, and goes inert the moment you have
+   * seen them all. See `rankLess`.
+   */
+  readonly metVerbs: ReadonlySet<VerbId>;
+  /**
    * The last challenge the player was **graded** on, by either path — the
    * suggestion or a map click.
    *
@@ -133,6 +141,7 @@ export const NO_HISTORY: SelectorState = {
   attempts: new Map(),
   skipped: new Set(),
   verbRun: 0,
+  metVerbs: new Set(),
   previous: null,
 };
 
@@ -377,6 +386,7 @@ export function isSideshow(path: string | null): boolean {
 interface Rank {
   readonly attempts: number;
   readonly sameRegion: number;
+  readonly unmetVerb: number;
   readonly sameVerb: number;
   readonly tier: number;
   readonly progress: number;
@@ -410,6 +420,23 @@ function rankLess(a: Rank, b: Rank): boolean {
   // it could have had for free. A unit test pins that.
   if (a.attempts !== b.attempts) return a.attempts < b.attempts;
   if (a.sameRegion !== b.sameRegion) return a.sameRegion < b.sameRegion;
+  // **A verb you have never seen outranks the curriculum, once.** A cold
+  // playtester was offered **two of this deck's four verbs across sixty
+  // consecutive suggestions** — no Archaeology, no Placement — because `tier`
+  // below is strict and the history verbs sit at tiers 5 and 6 behind more than
+  // a hundred tier-3 boards. Measured, that is every one of the four reference
+  // repos; django meets one of its two verbs in sixty, in a single run.
+  //
+  // NORTH-STAR §5's tiers are the progression and this does not reorder them:
+  // the term is **one-shot**. It lifts the *first* board of a verb you have not
+  // met and is inert forever after, so what it buys is an introduction — the
+  // player learns the deck has four kinds of question in it — and what it costs
+  // is one out-of-tier board per verb. §5 itself says the tiers are a
+  // curriculum rather than a gate (*"consider doing tier 5 before tier 4"*).
+  //
+  // Above `tier` deliberately, because below it the term cannot fire at all:
+  // that is the whole defect it answers.
+  if (a.unmetVerb !== b.unmetVerb) return a.unmetVerb < b.unmetVerb;
   // `(tier, …)` rather than bare difficulty because §5's tiers *are* the
   // progression. This was written when every challenge was tier 3, against the
   // day the git verbs landed; they landed, and the term below it was the one
@@ -515,6 +542,7 @@ export function suggestNext(
     const rank: Rank = {
       attempts: state.attempts.get(key) ?? 0,
       sameRegion: previousRegion !== null && regionOf(challenge.subject) === previousRegion ? 1 : 0,
+      unmetVerb: state.metVerbs.has(challenge.verb) ? 1 : 0,
       sameVerb:
         state.previous !== null && challenge.verb === state.previous.verb && state.verbRun >= RUN_CAP
           ? 1

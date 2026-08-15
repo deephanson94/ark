@@ -46,7 +46,7 @@ import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
-import { answerKey, answeredKeys, applyGrade, deriveFog, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
@@ -485,6 +485,30 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selector = { ...selector, answered };
   };
   retally();
+  /**
+   * **A board this player has already been shown does not come back as fresh.**
+   *
+   * `selector.attempts` counts boards served and not passed, and it lived only
+   * in memory — so a reload made every failed board look untried. A cold
+   * playtester hit exactly that: the guide kept re-offering a board they had
+   * answered at 18%, ahead of 155 boards they had never seen. Under ADR-0047
+   * that board is the *worst* possible suggestion, because it has already
+   * explained itself and can never mint proof again, so re-serving it ahead of
+   * an unseen one is the deck spending its best asset on nothing.
+   *
+   * Seeded from `graded`, which persists and decays — so a board whose key has
+   * since re-rolled comes back genuinely fresh, which it is. Seeded **once**,
+   * before any grading, so in-session increments accumulate on top rather than
+   * being flattened by the next `retally`.
+   */
+  {
+    const seen = gradedKeys(progress, liveness);
+    let attempts = selector.attempts;
+    for (const key of seen) {
+      if (!selector.answered.has(key)) attempts = noteAttempt(attempts, key);
+    }
+    selector = { ...selector, attempts };
+  }
   // Wires a restored save has already earned, before the first frame.
   retie();
 
@@ -721,6 +745,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           selector.previous !== null && selector.previous.verb === challenge.verb
             ? selector.verbRun + 1
             : 1,
+        // A verb the player has now met. One-shot: `unmetVerb` goes inert once
+        // this set covers the deck.
+        metVerbs: new Set([...selector.metVerbs, challenge.verb]),
         previous: challenge,
         attempts: progression.unlocked
           ? selector.attempts
