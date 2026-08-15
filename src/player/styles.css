@@ -254,6 +254,34 @@ body {
   border-radius: 50%;
 }
 
+/* The map's own channels, said once. Four of ten cold playtesters could not
+   read them, which is a legend problem and not a map problem. Quiet: it is a
+   reference, not a thing to look at. */
+.legend-key {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.legend-key-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+.legend-key-mark {
+  flex: none;
+  width: 42px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(186, 200, 224, 0.72);
+}
+
 /* ---- inspector --------------------------------------------------------- */
 
 /*
@@ -707,10 +735,49 @@ body {
   color: rgba(186, 206, 236, 0.95);
 }
 
+/* **Below C there is no letter, so the chip carries a measurement instead.**
+   It drew `·`, and three cold playtesters read that as a missing asset rather
+   than as a deliberate blank — one said so in those words. The arc is how far
+   the answer reached toward the pass mark, set inline as `--reach`: checkable
+   against the percentage beside it, and no red anywhere, because guardrail 6
+   says a wrong answer is never punished. */
 .console-score.band-incomplete .score-band {
-  background: rgba(140, 165, 200, 0.1);
-  border-color: rgba(140, 165, 200, 0.22);
-  color: var(--text-dim);
+  position: relative;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+/* The dial, drawn as its own layer so the chip keeps a visible edge at every
+   reading. The first version painted the conic straight onto the chip and
+   masked it, which at 0% left a near-black rounded square — the missing-asset
+   complaint, reproduced exactly, in the fix for it. The track is bright enough
+   to read as an empty gauge rather than as nothing. */
+.console-score.band-incomplete .score-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: conic-gradient(
+    rgba(170, 200, 240, 0.85) var(--reach, 0%),
+    rgba(140, 165, 200, 0.3) var(--reach, 0%)
+  );
+  mask: radial-gradient(circle at 50% 50%, transparent 56%, black 59%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 56%, black 59%);
+}
+
+/* A dash in the middle: there is no letter down here, and saying so in a glyph
+   is what stops an empty dial reading as a broken one. */
+.console-score.band-incomplete .score-band::after {
+  content: '–';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 600;
+  color: rgba(160, 180, 210, 0.55);
 }
 
 .score-value {

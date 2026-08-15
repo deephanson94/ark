@@ -37,6 +37,7 @@ function stubContext(): CanvasRenderingContext2D {
     arc: noop,
     ellipse: noop,
     rect: noop,
+    roundRect: noop,
     fill: noop,
     stroke: noop,
     fillRect: noop,
@@ -265,7 +266,7 @@ describe('the renderer uses the ramp it is given', () => {
     const target = {
       measureText: (text: string) => ({ width: text.length * 7 }),
       save: noop, restore: noop, beginPath: noop, closePath: noop, moveTo: noop,
-      lineTo: noop, arc: noop, ellipse: noop, rect: noop, fill: noop, stroke: noop,
+      lineTo: noop, arc: noop, ellipse: noop, rect: noop, roundRect: noop, fill: noop, stroke: noop,
       fillRect: noop, fillText: noop, strokeText: noop, setLineDash: noop,
       quadraticCurveTo: noop, bezierCurveTo: noop,
       createLinearGradient: () => ({ addColorStop: noop }),

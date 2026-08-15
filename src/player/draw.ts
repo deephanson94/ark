@@ -681,8 +681,14 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       const side = Math.max(7, drawn + 5);
       context.lineWidth = focused ? 2.4 : 1.4;
       context.strokeStyle = ticked ? INK.picked : INK.candidate;
+      // **A tick box, rounded.** The square is the right encoding — it mirrors
+      // the panel's checkboxes and must not read as another ring, since the
+      // deck already draws two — but sharp corners among 260 discs read as a
+      // rendering fault rather than as a control, which is how a cold
+      // playtester described it. A radius of a third of the side keeps it
+      // unmistakably a box and stops it looking like stray geometry.
       context.beginPath();
-      context.rect(point.x - side, point.y - side, side * 2, side * 2);
+      context.roundRect(point.x - side, point.y - side, side * 2, side * 2, side * 0.34);
       context.stroke();
       if (ticked) {
         context.fillStyle = INK.picked;

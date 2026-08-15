@@ -492,6 +492,40 @@ export function createLegend(scene: Scene): HTMLElement {
   return el('div', 'legend', [
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
+    key(),
+  ]);
+}
+
+/**
+ * What a disc's size, ring and brightness mean.
+ *
+ * **Four of ten cold playtesters could not read the map's own encodings**, and
+ * two of them said the HUD's counts were worse than useless without it —
+ * *"what is a peak vs an isle vs a wire"*. The map has spent four milestones
+ * being careful that every channel is derived and true, and never once said
+ * what any of them was. A legend of region colours alone answers the one
+ * question a reader can already guess.
+ *
+ * Repo-agnostic (guardrail 2) — these are the renderer's channels, not this
+ * repository's facts — and deliberately four rows: size, the question ring, and
+ * the two ends of the fog. The peaks' summit rings are the fifth and are left
+ * out, because a row per channel is a wall of text and elevation is legible as
+ * *taller thing on the orbit* without being named here.
+ */
+function key(): HTMLElement {
+  const rows: HTMLElement[] = [
+    row('size', 'lines of code'),
+    row('ring', 'has a question you have not answered'),
+    row('dim', 'not surveyed yet'),
+    row('bright', 'you proved its question'),
+  ];
+  return el('div', 'legend-key', [el('div', 'legend-title', ['what you see']), ...rows]);
+}
+
+function row(mark: string, meaning: string): HTMLElement {
+  return el('div', 'legend-key-row', [
+    el('span', 'legend-key-mark', [mark]),
+    el('span', 'legend-key-what', [meaning]),
   ]);
 }
 

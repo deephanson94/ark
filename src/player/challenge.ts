@@ -22,7 +22,7 @@
 
 import type { AtlasId, Challenge } from '../atlas/index.js';
 import type { Grade, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
-import { VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
+import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -264,8 +264,20 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     const band = bandFor(grade.score);
     const verb = VERBS[challenge.verb];
 
+    // **A sub-pass grade needs a mark of its own, not an empty one.** The chip
+    // drew `·` below band C, and three cold playtesters read it as a missing
+    // asset rather than as "no letter down here" — one of them said so in those
+    // words. It carries how far the answer reached toward the pass mark
+    // instead: a fact the player can check against the percentage beside it,
+    // and non-punitive, which guardrail 6 requires. Above the mark the letter
+    // is the mark and the ring is off.
+    const chip = el('span', 'score-band', [band === 'incomplete' ? '' : band]);
+    if (band === 'incomplete') {
+      chip.style.setProperty('--reach', `${Math.min(1, grade.score / PASS_THRESHOLD) * 100}%`);
+      chip.title = `${Math.round((grade.score / PASS_THRESHOLD) * 100)}% of the way to a pass`;
+    }
     const score = el('div', `console-score band-${band}`, [
-      el('span', 'score-band', [band === 'incomplete' ? '·' : band]),
+      chip,
       el('span', 'score-value', [`${Math.round(grade.score * 100)}%`]),
       el('span', 'score-label', [BAND_LABEL[band] ?? band]),
     ]);
@@ -296,6 +308,23 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
             el('p', 'console-register', [
               'Recorded as shown rather than proved — this board had already ' +
                 'explained itself. The first answer is the one that counts as knowledge.',
+            ]),
+          ]
+        : []),
+      // **Why the notebook stayed empty**, which nothing said. Two cold
+      // playtesters answered several boards, watched `0 understood` and
+      // *"Nothing here yet"* the whole time, and reported the codex as simply
+      // not working; a third asked for "a one-line hint like *notes appear once
+      // you pass*". The threshold was invisible, so its consequence read as a
+      // defect. About the grading contract rather than about the question, so
+      // the console still knows nothing of verbs — and it does not shame the
+      // answer, which guardrail 6 forbids.
+      ...(register === null
+        ? [
+            el('p', 'console-register', [
+              `Below the pass mark of ${Math.round(PASS_THRESHOLD * 100)}%, so this ` +
+                'is not written to your field notes yet and the question stays on the ' +
+                'map. Nothing is lost — come back to it whenever you like.',
             ]),
           ]
         : []),
