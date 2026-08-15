@@ -83,6 +83,23 @@ export function regionColor(index: number, alpha = 1): string {
   return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 62%, ${alpha})`;
 }
 
+/**
+ * A region's **name**, as distinct from its ink.
+ *
+ * Paler and much less saturated than `regionColor`, because a place name is
+ * not a data mark. Set at full strength it was the loudest thing on the map —
+ * five sentences of derived path in 600-weight sans at the same saturation as
+ * the discs they sit on — so the layer that should say *"this is a
+ * neighbourhood"* said *"this is a clustering algorithm's output"* instead.
+ *
+ * The hue survives, which is what keeps the name tied to its swatch in the
+ * legend and to the wash under it; only the shouting goes.
+ */
+export function regionLabelColor(index: number, alpha = 1): string {
+  const saturation = isTerrain(index) ? TERRAIN_SATURATION : 34;
+  return `hsla(${regionHue(index).toFixed(1)}, ${saturation}%, 76%, ${alpha})`;
+}
+
 /** A darker companion for fills that sit behind the node colour. */
 export function regionWash(index: number, alpha = 1): string {
   const saturation = isTerrain(index) ? TERRAIN_SATURATION : 52;

@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { drawFrame } from '../../src/player/draw.js';
+import { drawFrame, regionLines } from '../../src/player/draw.js';
 import { INK, regionKnown, regionSilhouette, regionWash } from '../../src/player/palette.js';
 import type { FrameInput } from '../../src/player/draw.js';
 import { NORTH, worldToScreen } from '../../src/player/camera.js';
@@ -381,10 +381,17 @@ describe('the labels a frame returns', () => {
     }
   });
 
-  it('puts each name inside its own node’s column, never beside it', () => {
-    // The other half of "a label identifies its node": it is centred on the
-    // disc it names. `placeLabels` guarantees this by construction — the test
-    // is here because "by construction" is what the drift claim assumed too.
+  it('keeps each name touching its own node’s disc', () => {
+    // The other half of "a label identifies its node": it is *attached* to the
+    // disc it names.
+    //
+    // This asserted horizontal centring until labels learned to dodge, and the
+    // weaker claim is the right one — centring was never what made a name
+    // identify its node. That is `ref`, which the test above checks and which
+    // is what the reported defect was actually about; a centred label still
+    // lies across four other discs on a crowded frame. What a dodge must not
+    // do is let a name *drift*, which is the property here: whichever of the
+    // four anchors it took, the box hugs its own disc.
     const atlas = atlasWith(['src/hub.ts', 'src/a.ts', 'src/b.ts'], [['src/a.ts', 'src/hub.ts']]);
     const scene = prepare(atlas);
     const all = new Set(scene.nodes.map((node) => node.id));
@@ -396,11 +403,50 @@ describe('the labels a frame returns', () => {
       questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
       board: null, chrome: [],
     });
+    expect(stats.nameplates.length).toBeGreaterThan(0);
     for (const plate of stats.nameplates) {
       const node = scene.nodes[plate.ref ?? -1];
       if (node === undefined) throw new Error('nameplate names no node');
-      const screenX = worldToScreen(camera, VIEWPORT, node).x;
-      expect(Math.abs(plate.x - screenX), `"${plate.text}"`).toBeLessThan(1);
+      const point = worldToScreen(camera, VIEWPORT, node);
+      // The clearance the draw pass leaves around a disc, plus a pixel.
+      const reach = Math.max(1.4, node.radius * camera.scale) + 3;
+      const dx = Math.max(plate.left - point.x, 0, point.x - (plate.left + plate.width));
+      const dy = Math.max(plate.top - point.y, 0, point.y - (plate.top + plate.height));
+      expect(Math.hypot(dx, dy), `"${plate.text}"`).toBeLessThanOrEqual(reach);
     }
+  });
+});
+
+describe('a region label sits inside the box reserved for it', () => {
+  /**
+   * `placeLabels` returns `y` as the box's **bottom**, and the pair was drawn
+   * at `y ∓ height/2` — so the file-count line landed a half-line below the
+   * rectangle every other label had been told to avoid. Node labels crossed it
+   * legally: `55 files` under `schema.ts` on this repo's own arrival frame.
+   *
+   * Reserving a rectangle and then drawing outside it is invisible to a
+   * collision pass by construction, which is why this is asserted here rather
+   * than left to "it looks fine".
+   */
+  const HEIGHT = 34;
+  const BOTTOM = 500;
+
+  it('keeps both lines between the box top and its bottom', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    // Baselines are middles here, so allow half a line of glyph either side.
+    for (const y of [line.name, line.count]) {
+      expect(y - HEIGHT / 4).toBeGreaterThanOrEqual(BOTTOM - HEIGHT);
+      expect(y + HEIGHT / 4).toBeLessThanOrEqual(BOTTOM);
+    }
+  });
+
+  it('puts the name above the count', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    expect(line.name).toBeLessThan(line.count);
+  });
+
+  it('centres the pair on the box', () => {
+    const line = regionLines(BOTTOM, HEIGHT);
+    expect((line.name + line.count) / 2).toBeCloseTo(BOTTOM - HEIGHT / 2, 6);
   });
 });

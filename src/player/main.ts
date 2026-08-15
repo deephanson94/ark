@@ -29,6 +29,7 @@ import {
   pan,
   pivotAround,
   rotate,
+  sameCamera,
   screenToWorld,
   worldToScreen,
   zoomAt,
@@ -130,6 +131,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * `heading.ts` exists to break.
    */
   let camera: Camera = { x: 0, y: 0, scale: 1, bearing: NORTH };
+
+  /**
+   * The view a board borrowed, and what it turned it into.
+   *
+   * `null` whenever no board has panned the map — including a board whose
+   * subject is a commit, which has nowhere to pan to (ADR-0018) and so borrows
+   * nothing. See `openBoard` and the console's `onClose`.
+   */
+  let borrowed: { own: Camera; lent: Camera } | null = null;
 
   /**
    * What holds still while the world turns, and where on screen it holds.
@@ -807,6 +817,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       return register;
     },
     onClose() {
+      // **Give back the pan the board took.** `openBoard` slides the subject to
+      // 30% from the left so the panel does not sit on top of it — the
+      // product's camera move, never the player's — and nothing was undoing it.
+      // The turn then swung the map about that off-centre point, so the frame a
+      // player lands in after *every* grade had the map huddled in one corner
+      // and the other half of the screen empty. That is the reward beat of the
+      // core loop and it was the worst-composed frame the product made.
+      //
+      // Only when the camera is still exactly where the board left it. The map
+      // stays live behind an open board on purpose (ADR-0016 and the docked
+      // panel), so a camera the player has moved since is theirs and restoring
+      // it would be the same theft in the other direction.
+      if (borrowed !== null && sameCamera(camera, borrowed.lent)) camera = borrowed.own;
+      borrowed = null;
       if (turnPending) {
         turnPending = false;
         turnTo(camera.bearing + GOLDEN_TURN, pivotOn(selected));
@@ -922,7 +946,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * corner-anchored panels that *move* without changing size.
    */
   let chrome: Box[] = [];
-  const panels = [hud.root, legend, inspector.root, guide.root];
+  // The console's *panel*, never its scrim: the scrim is `inset: 0` and would
+  // block every label on the canvas. See `Console.panel` for what it was
+  // costing while it was missing from this list.
+  const panels = [hud.root, legend, inspector.root, guide.root, challengePanel.panel];
   function measureChrome(): void {
     const host = root.getBoundingClientRect();
     chrome = panels
@@ -1153,10 +1180,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         x: viewport.width * 0.3,
         y: viewport.height * 0.5,
       });
+      const own = camera;
       camera = centreOn(camera, {
         x: node.x + (anchor.x - wanted.x),
         y: node.y + (anchor.y - wanted.y),
       });
+      // What the view was before this pan, and what the pan made of it. `close`
+      // gives the first back if the second is still on screen untouched.
+      borrowed = { own, lent: camera };
     }
     challengePanel.open(challenge);
     invalidate();
@@ -1274,6 +1305,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // import radius was handed to the frame at all.
       (globalThis as unknown as { __arkRadius?: unknown }).__arkRadius =
         frameInput.radius === null ? 'none' : `subject ${frameInput.radius.subject}`;
+      // The view, for the e2e's composition gate. A board pans the map and
+      // gives the pan back on close; a canvas hash cannot tell that from the
+      // turn that follows it, and the camera is the thing the rule is about.
+      (globalThis as unknown as { __arkCamera?: unknown }).__arkCamera = {
+        x: camera.x,
+        y: camera.y,
+        scale: camera.scale,
+      };
       // What the frame just drew is what the pointer may hit. Kept from the
       // frame rather than recomputed, so the two can never disagree about where
       // a name is.

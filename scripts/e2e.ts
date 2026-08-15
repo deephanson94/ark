@@ -1549,6 +1549,64 @@ async function main(): Promise<number> {
       );
     }
 
+    // ---- closing a board gives back the pan it took ----------------------
+    //
+    // `openBoard` slides the subject to 30% from the left so the docked panel
+    // does not sit on top of it. Nothing gave that back, and the golden-angle
+    // turn then swung the map about the off-centre point it was left at — so
+    // the frame a player lands in after **every** grade had the map in one
+    // corner and half the screen empty. A design review called it the
+    // worst-composed frame the product produces, and it is the reward beat of
+    // the core loop.
+    //
+    // Gated on the camera rather than on pixels, because the rule is about the
+    // camera and a canvas hash cannot tell a restored view from the turn that
+    // follows it. Read after the turn has landed, so what is asserted is the
+    // frame the player is actually left sitting in.
+    {
+      type Cam = { x: number; y: number; scale: number };
+      const cameraNow = async (): Promise<Cam> =>
+        (await page.evaluate('window.__arkCamera ?? null')) as Cam;
+      await page.keyboard.press('f');
+      await page.waitForTimeout(240);
+      // Travel to the suggestion *first*, and read the camera after arriving.
+      // The guide's own `centreOn` is a second pan with nothing to do with the
+      // board, and the first draft of this step compared against the fitted
+      // camera instead — which left 93.8 units unaccounted for and got written
+      // up as "the turn". Escape does not grade, so no turn runs here at all.
+      await page.locator('.guide-action').click();
+      await page.waitForTimeout(350);
+      const before = await cameraNow();
+      await page.keyboard.press('Enter');
+      await page.waitForSelector('.choice-button', { timeout: 5000 });
+      const panned = await cameraNow();
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      const back = await cameraNow();
+      const moved = Math.hypot(panned.x - before.x, panned.y - before.y);
+      const kept = Math.hypot(back.x - before.x, back.y - before.y);
+      process.stdout.write(
+        `e2e: board pan → borrowed ${moved.toFixed(1)} world units, ${kept.toFixed(1)} left after closing\n`,
+      );
+      if (moved < 1) {
+        // The control, and it earns its place: the first version of this gate
+        // asserted the *composition* instead — how many nodes stay in frame —
+        // and a run with the give-back deleted kept 345.9 units of pan and
+        // still reported `261 of 261 nodes`, because ark's map at fit scale is
+        // small enough to survive being shoved half a screen sideways. The
+        // assertion was green against the defect it was written for.
+        failures.push({
+          what: 'pan',
+          detail: 'opening a board moved the camera by nothing, so the give-back cannot be measured',
+        });
+      } else if (kept > 0.5) {
+        failures.push({
+          what: 'pan',
+          detail: `closing the board kept ${kept.toFixed(1)} of the ${moved.toFixed(1)} units it borrowed`,
+        });
+      }
+    }
+
     // ---- a drawn name is a handle on its node ----------------------------
     //
     // A cold playtester answered **all eight** of their boards off the panel's

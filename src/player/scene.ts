@@ -101,7 +101,7 @@ export function prepare(atlas: Atlas): Scene {
     ref,
     id: node.id,
     path: node.path,
-    label: shortLabel(node.path),
+    label: '',
     x: node.layout[0],
     y: node.layout[1],
     radius: radiusFor(node.loc),
@@ -109,6 +109,37 @@ export function prepare(atlas: Atlas): Scene {
     dependentCount: new Set((graph.in[ref] ?? []).map((edge) => edge.from)).size,
     elevation: node.elevation,
   }));
+
+  /**
+   * **A name that names six things is not a label.** `shortLabel` takes the
+   * basename, and a street-zoom frame of this repo showed **six discs all
+   * reading `index.ts`** — a cold playtester named it, and it is the map's
+   * central promise failing at the one zoom where you go to read names.
+   *
+   * So a basename shared with another node keeps one directory of context:
+   * `verbs/index.ts` against `atlas/index.ts`. Only where it is ambiguous, so
+   * the common case stays short, and only one segment, because the point is to
+   * separate them rather than to print the path — which the inspector does.
+   *
+   * Computed once here rather than per frame: it is a property of the atlas.
+   */
+  const seen = new Map<string, number>();
+  for (const node of nodes) {
+    const base = shortLabel(node.path);
+    seen.set(base, (seen.get(base) ?? 0) + 1);
+  }
+  for (const [ref, node] of nodes.entries()) {
+    const path = atlas.nodes[ref]?.path ?? '';
+    const base = shortLabel(path);
+    if ((seen.get(base) ?? 0) < 2) {
+      nodes[ref] = { ...node, label: base };
+      continue;
+    }
+    const cut = path.lastIndexOf('/');
+    const parent = cut === -1 ? '' : path.slice(0, cut);
+    const dir = parent.slice(parent.lastIndexOf('/') + 1);
+    nodes[ref] = { ...node, label: dir === '' ? base : `${dir}/${base}` };
+  }
 
   const edges: SceneEdge[] = atlas.edges.map((edge: AtlasEdge) => ({
     from: edge.from,
