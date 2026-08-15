@@ -1268,15 +1268,27 @@ async function main(): Promise<number> {
           // witness. The bar is gone (ADR-0047) and the shape is kept anyway,
           // because it is the honest near-miss this step is about and it leaves
           // exactly one spurious row to explain.
+          // **Rendered text on both sides.** `commitLabel` separates its date,
+          // sha and subject with *two* spaces and `innerText` collapses them to
+          // one, so a commit row can never equal the string the verb built.
+          // This file's own landmine says exactly that, about a step four
+          // hundred lines up; this site kept the raw comparison and was
+          // invisible for as long as the deck happened to land on a
+          // file-candidate verb. Adding one script to this repo re-rolled the
+          // deck onto Archaeology and it went red — ark indexes itself, so
+          // "which board this step plays" is not a constant.
           const wanted = new Set(
-            [...witnessBoard.truth].map((id) => labelById.get(id) ?? '').filter((l) => l !== ''),
+            [...witnessBoard.truth]
+              .map((id) => rendered(labelById.get(id) ?? ''))
+              .filter((l) => l !== ''),
           );
+          const spokenLabel = rendered(spoken.label);
           const count = await page.locator('.choice-button').count();
           let picked = false;
           for (let i = 0; i < count; i++) {
             const button = page.locator('.choice-button').nth(i);
-            const label = (await button.innerText()).trim();
-            if (label === spoken.label) {
+            const label = rendered(await button.innerText());
+            if (label === spokenLabel) {
               await button.click();
               picked = true;
             } else if (wanted.has(label)) {

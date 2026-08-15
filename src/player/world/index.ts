@@ -41,11 +41,32 @@ import { drawWorldFrame } from './render.js';
  * inside as legibility allows, which is a compromise and is named as one.
  */
 const EYE_DISTANCE = 46;
+/** The rig's full extension, for `scripts/probe-eye.ts` and the tests. */
+export const EYE_DISTANCE_FULL = EYE_DISTANCE;
 /** Never closer than this, or the body fills the screen in a tight alley. */
 const EYE_MIN_DISTANCE = 18;
+/**
+ * How far above `EYE_HEIGHT` the eye may climb to clear a roof.
+ *
+ * A bound rather than a free climb: ark's tallest file stands at roughly sixty
+ * and hono's taller, so an uncapped rule would answer one awkward neighbour by
+ * going to orbit. Three times the resting height is a rooftop view of a dense
+ * quarter, which is legible; ten times is the flat map with extra steps.
+ */
+const EYE_CLIMB_CAP = 3;
+/**
+ * How much of the dead-on angle the eye actually takes.
+ *
+ * Looking exactly at the hero's feet puts the horizon off the top of the frame
+ * and shows nothing of where you are walking. Slightly shallower keeps the
+ * ground ahead in view, which is the whole reason to be down here.
+ */
+const EYE_PITCH_SOFTEN = 0.86;
 /** How far clear of a wall the eye keeps. */
 const EYE_CLEARANCE = 1.4;
 const EYE_HEIGHT = 33;
+/** The eye's height at full extension; it scales down with the boom. */
+export const EYE_HEIGHT_AT_FULL = EYE_HEIGHT;
 export const EYE_PITCH = -0.52;
 const FOV = 1.05;
 
@@ -166,6 +187,87 @@ function standingClearOf(at: SceneNode): Hero {
   return { x: at.x, y: at.y + clearance, facing: 0 };
 }
 
+/**
+ * Where the eye stands behind the hero: how far back, and how high.
+ *
+ * Pure and exported so `scripts/probe-eye.ts` and the unit tests measure the
+ * *shipped* rule rather than a copy of it — a re-implemented probe agrees with
+ * the code by sharing whatever the code got wrong.
+ *
+ * ## The frame this exists to stop
+ *
+ * Six of ten cold playtesters named the walk as the thing dragging their score
+ * and three named it as *the* thing, all describing one image: a flat wall
+ * filling most of the screen, no hero visible, a black wedge where the near
+ * plane cuts the geometry. The rig had a pull-in for exactly that, and three
+ * things defeated it:
+ *
+ *  - **The floor sat above the obstruction.** `Math.max(18, hit)` put the eye
+ *    back inside any building found within 18 units, which in a dense quarter
+ *    is all of them — and dense quarters are where every interesting file is.
+ *  - **The test was 2D**, so a one-storey file pulled the camera in exactly as
+ *    hard as a tower the boom could not clear.
+ *  - **A tower is drawn as a square and was tested as its inscribed circle**, so
+ *    the eye could sit in a corner that is drawn solid. `√2` is the corner
+ *    reach — the glyph-radius-is-not-a-ground-area landmine one level down.
+ *
+ * ## Why it rises rather than shortens
+ *
+ * The obvious repair is to let the boom shorten as far as it likes. Built and
+ * photographed: at five units the eye is inside the figure's legs looking up,
+ * which is worse than the wall and is **precisely what the 18 was written to
+ * prevent** — its comment says *"or the body fills the screen in a tight
+ * alley"*. Removing a guard without pricing what it was guarding is this
+ * repo's own landmine, and it took one screenshot to collect.
+ *
+ * So the boom keeps a usable length and the eye **climbs over** what it cannot
+ * see past, which is what a third-person rig does in a tight space. Pitch is
+ * derived from the geometry rather than fixed, because a camera that rises
+ * without looking further down loses the hero off the bottom of the frame — the
+ * same defect from the other end.
+ */
+export interface Rig {
+  readonly distance: number;
+  readonly height: number;
+  readonly pitch: number;
+}
+
+export function rigFor(world: World, at: Hero): Rig {
+  const back = { x: -Math.sin(at.facing), y: Math.cos(at.facing) };
+  let distance = EYE_DISTANCE;
+  let clear = 0;
+  for (const tower of near(world, at.x, at.y, EYE_DISTANCE + EYE_CLEARANCE)) {
+    // Where the boom enters this tower's square, if it does.
+    const ox = at.x - tower.node.x;
+    const oy = at.y - tower.node.y;
+    const radius = tower.footprint * Math.SQRT2 + EYE_CLEARANCE;
+    const b = ox * back.x + oy * back.y;
+    const c = ox * ox + oy * oy - radius * radius;
+    if (c < 0) continue; // the hero is already inside it; the boom cannot help
+    const discriminant = b * b - c;
+    if (discriminant <= 0) continue;
+    const hit = -b - Math.sqrt(discriminant);
+    if (hit <= 0 || hit >= EYE_DISTANCE) continue;
+    // The boom rises linearly to `EYE_HEIGHT`, so at `hit` it is this high. A
+    // building under that is already cleared and must not pull anything in.
+    if (tower.height <= (EYE_HEIGHT * hit) / EYE_DISTANCE) continue;
+    if (hit < distance) distance = hit;
+    clear = Math.max(clear, tower.height + EYE_CLEARANCE);
+  }
+  // Back off no further than the alley allows, and never into the figure.
+  distance = Math.max(EYE_MIN_DISTANCE, distance);
+  // At full extension this is exactly `EYE_HEIGHT`; shortened, it keeps the
+  // rig's proportions; obstructed, it clears the roof. Capped, or a single tall
+  // neighbour would put the eye in the stratosphere.
+  const height = Math.min(
+    EYE_HEIGHT * EYE_CLIMB_CAP,
+    Math.max((EYE_HEIGHT * distance) / EYE_DISTANCE, clear),
+  );
+  // Look at the hero's feet, softened so the ground ahead stays in frame. A
+  // fixed pitch and a climbing eye is how you lose the hero off the bottom.
+  return { distance, height, pitch: -Math.atan2(height, distance) * EYE_PITCH_SOFTEN };
+}
+
 export function createWorldMode(): WorldMode {
   let world: World | null = null;
   let hero: Hero | null = null;
@@ -217,26 +319,11 @@ export function createWorldMode(): WorldMode {
   };
 
   const eyeOf = (at: Hero): Eye => {
-    const back = { x: -Math.sin(at.facing), y: Math.cos(at.facing) };
-    let distance = EYE_DISTANCE;
-    if (world !== null) {
-      // `near` already widens by each tower's own footprint, so the boom's
-      // length is the whole reach.
-      for (const tower of near(world, at.x, at.y, EYE_DISTANCE + EYE_CLEARANCE)) {
-        // Where the boom enters this tower's circle, if it does.
-        const ox = at.x - tower.node.x;
-        const oy = at.y - tower.node.y;
-        const radius = tower.footprint + EYE_CLEARANCE;
-        const b = ox * back.x + oy * back.y;
-        const c = ox * ox + oy * oy - radius * radius;
-        if (c < 0) continue; // the hero is already inside it; the boom cannot help
-        const discriminant = b * b - c;
-        if (discriminant <= 0) continue;
-        const hit = -b - Math.sqrt(discriminant);
-        if (hit > 0 && hit < distance) distance = hit;
-      }
-    }
-    return follow(at, Math.max(EYE_MIN_DISTANCE, distance), EYE_HEIGHT, EYE_PITCH, FOV);
+    const rig =
+      world === null
+        ? { distance: EYE_DISTANCE, height: EYE_HEIGHT, pitch: EYE_PITCH }
+        : rigFor(world, at);
+    return follow(at, rig.distance, rig.height, rig.pitch, FOV);
   };
 
   const focusOf = (
