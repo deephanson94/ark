@@ -173,6 +173,37 @@ export function noteSkip(
 }
 
 /**
+ * Fold a skipped board into the whole selector state — the skip list **and**
+ * the met-verb set, which are two consequences of one act.
+ *
+ * They were two assignments in the shell's skip handler, and a review showed the
+ * second could be deleted with all 956 unit tests green: the test that claimed
+ * to cover it asserted a `metVerbs` set the test itself had constructed, and the
+ * real wiring lived in `main.ts` where no unit test can reach. The measured cost
+ * of losing it is a wall — `unmetVerb` outranks `tier`, so a player who declines
+ * the introduction is offered the entire unmet deck one skip at a time (102
+ * consecutive suggestions on ark, 274 on django).
+ *
+ * So the two moves live together, here, where a test can hold them to each
+ * other. The shell now has nothing left to forget.
+ */
+export function noteSkipped(
+  state: SelectorState,
+  verb: VerbId,
+  key: string,
+  remaining: readonly string[],
+): SelectorState {
+  return {
+    ...state,
+    skipped: noteSkip(state.skipped, key, remaining),
+    // Being *offered* a verb teaches that the deck has four kinds of question
+    // in it exactly as well as answering one does, which is the term's stated
+    // purpose.
+    metVerbs: new Set([...state.metVerbs, verb]),
+  };
+}
+
+/**
  * How much of the previous answer key this one repeats, 0..1.
  *
  * This replaced a `sameTruth` byte-equality flag, and the reason is the whole

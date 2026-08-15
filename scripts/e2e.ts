@@ -1568,9 +1568,67 @@ async function main(): Promise<number> {
           detail: `an open board drew an import radius (${String(withBoard)}) — that is the answer key`,
         });
       }
+      // **The control, and it was only printed.** If the radius channel died
+      // outright both reads would say `none` and this gate would stay green
+      // forever, asserting a suppression of nothing — the never-fires shape. A
+      // selected, passed node draws its cone with the board closed, and that is
+      // the thing whose absence must be noticed.
+      if (withoutBoard === 'none') {
+        failures.push({
+          what: 'ring',
+          detail: 'no import radius with the board closed either, so the suppression above proves nothing',
+        });
+      }
       process.stdout.write(
         `e2e: radius with a board open → ${String(withBoard)}, closed → ${String(withoutBoard)}\n`,
       );
+    }
+
+    // ---- a skipped verb counts as met ------------------------------------
+    //
+    // `unmetVerb` is a one-shot rank term that lifts the first board of a verb
+    // the player has not met, so that a strict `tier` does not hide the history
+    // verbs behind a hundred tier-3 boards. A verb counts as met when it is
+    // **graded or skipped** — without the second half, skipping the
+    // introduction offers the entire unmet deck one skip at a time (measured:
+    // 102 consecutive suggestions on this repo, 274 on django).
+    //
+    // **What this holds is that skipping never re-offers what it just declined**,
+    // and that is deliberately narrower than the paragraph above. The first
+    // version of this step claimed to cover the met-verb half of a skip, and it
+    // did not: deleting that half leaves `12 suggestions, 12 distinct` either
+    // way, because `noteSkip`'s list already prevents a repeat on its own. The
+    // met-verb half is a unit test now (`noteSkipped`), where it can be held to
+    // the state rather than to a symptom this step cannot see.
+    //
+    // It stays because the anti-lockout clear is real and shell-side: a skip
+    // list that never emptied would strand the player, and that *is* visible
+    // here.
+    {
+      await page.keyboard.press('f');
+      await page.waitForTimeout(200);
+      const suggestion = async (): Promise<string> =>
+        (await page.locator('.guide-caption').innerText()).trim();
+      const seen: string[] = [];
+      for (let i = 0; i < 12; i += 1) {
+        if ((await page.locator('.guide-skip').count()) === 0) break;
+        seen.push(await suggestion());
+        await page.locator('.guide-skip').click();
+        await page.waitForTimeout(120);
+      }
+      const distinct = new Set(seen).size;
+      process.stdout.write(`e2e: skipped ${seen.length} suggestions, ${distinct} distinct\n`);
+      if (seen.length < 3) {
+        failures.push({
+          what: 'skip',
+          detail: `the skip control disappeared after ${seen.length} presses, so nothing was measured`,
+        });
+      } else if (distinct < seen.length) {
+        failures.push({
+          what: 'skip',
+          detail: `skipping re-offered a suggestion: ${distinct} distinct of ${seen.length}`,
+        });
+      }
     }
 
     // ---- closing a board gives back the pan it took ----------------------
@@ -1659,6 +1717,55 @@ async function main(): Promise<number> {
             what: 'pan',
             detail: `closing the board kept ${kept.toFixed(1)} of the ${moved.toFixed(1)} units it borrowed`,
           });
+        }
+
+        // **The other direction, which no suite could see.** `onClose` restores
+        // only when the camera is still exactly where the board left it, and
+        // every gate above moves it only via the board — so mutating
+        // `sameCamera` to `() => true`, which would stomp a pan the *player*
+        // made behind the open board, left the whole pyramid green. The
+        // comment in `main.ts` calls that "the same theft in the other
+        // direction"; this is the step that would notice it.
+        //
+        // The map stays live behind a docked board on purpose, so dragging here
+        // is an ordinary thing to do and the camera it produces is the
+        // player's.
+        await page.locator('.inspector-action').count();
+        for (const plate of Array.isArray(plates) ? plates : []) {
+          await page.mouse.click(plate.x, plate.y);
+          await page.waitForTimeout(120);
+          if ((await page.locator('.inspector-action').count()) === 0) continue;
+          await page.locator('.inspector-action').click();
+          await page.waitForSelector('.choice-button', { timeout: 5000 });
+          const onOpen = await cameraNow();
+          // Drag the map behind the scrim — a deliberate pan, mid-board.
+          await page.mouse.move(700, 700);
+          await page.mouse.down();
+          await page.mouse.move(560, 640, { steps: 8 });
+          await page.mouse.up();
+          await page.waitForTimeout(160);
+          const mine = await cameraNow();
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(400);
+          const after = await cameraNow();
+          const dragged = Math.hypot(mine.x - onOpen.x, mine.y - onOpen.y);
+          const stolen = Math.hypot(after.x - mine.x, after.y - mine.y);
+          process.stdout.write(
+            `e2e: pan behind an open board → dragged ${dragged.toFixed(1)}, ` +
+              `${stolen.toFixed(1)} taken back on close\n`,
+          );
+          if (dragged < 1) {
+            failures.push({
+              what: 'pan',
+              detail: 'dragging behind an open board moved the camera by nothing, so the guard cannot be measured',
+            });
+          } else if (stolen > 0.5) {
+            failures.push({
+              what: 'pan',
+              detail: `closing undid ${stolen.toFixed(1)} units of a pan the player made themselves`,
+            });
+          }
+          break;
         }
       }
     }

@@ -47,7 +47,7 @@ import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
-import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, recordSurvey, subjectsPassed } from './progress.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, recordSurvey, subjectsPassed, verbOfKey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
@@ -60,7 +60,7 @@ import { NO_TIES, tiesNamedBy } from './ties.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
-import { NO_HISTORY, noteAttempt, noteSkip, suggestNext } from './selector.js';
+import { NO_HISTORY, noteAttempt, noteSkipped, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
 import {
   createError,
@@ -532,10 +532,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   {
     const seen = gradedKeys(progress, liveness);
     let attempts = selector.attempts;
+    // **And the verbs, for the same reason and from the same record.** A review
+    // caught this one field over: `unmetVerb` lifts the first board of a verb
+    // the player has not met, and `metVerbs` lived only in memory — so every
+    // reload re-ran the whole out-of-tier introduction for verbs this player
+    // had already answered. The rank comment's "inert forever after" was true
+    // within one session and nowhere else, and nothing said per-session
+    // re-introduction had been chosen. The argument is the paragraph above,
+    // verbatim, with `attempts` swapped for `metVerbs`; the fix is the line
+    // below, four lines from the block that proves it is ADR-0011-legal.
+    const metVerbs = new Set(selector.metVerbs);
     for (const key of seen) {
+      metVerbs.add(verbOfKey(key));
       if (!selector.answered.has(key)) attempts = noteAttempt(attempts, key);
     }
-    selector = { ...selector, attempts };
+    // Answered boards are met too — `gradedKeys` decays with its pass, so a
+    // board whose key re-rolled is absent from it, and meeting a verb is not a
+    // claim that decays.
+    for (const key of selector.answered) metVerbs.add(verbOfKey(key));
+    selector = { ...selector, attempts, metVerbs };
   }
   // Wires a restored save has already earned, before the first frame.
   retie();
@@ -900,20 +915,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const remaining = scene.atlas.challenges
       .map((board) => answerKey(board.verb, board.subject))
       .filter((key) => !selector.answered.has(key));
-    selector = {
-      ...selector,
-      skipped: noteSkip(selector.skipped, answerKey(challenge.verb, challenge.subject), remaining),
-      // **A skipped verb counts as met, and without this the introduction is a
-      // wall.** `unmetVerb` outranks `tier`, so until a verb has been met every
-      // one of its boards outranks every board of the verb you are playing.
-      // Grading clears that in one board; *skipping* did not clear it at all,
-      // so a player who declines the introduction is offered the entire unmet
-      // deck one skip at a time — measured at **102 consecutive suggestions on
-      // ark, 160 on hono, 274 on django**. The term's stated purpose is that the
-      // player learns the deck has four kinds of question in it, and being
-      // *offered* one serves that exactly as well as answering it.
-      metVerbs: new Set([...selector.metVerbs, challenge.verb]),
-    };
+    // One call, because a skip has two consequences and the shell forgetting
+    // the second was invisible to every test (`selector.noteSkipped`).
+    selector = noteSkipped(
+      selector,
+      challenge.verb,
+      answerKey(challenge.verb, challenge.subject),
+      remaining,
+    );
     retally();
     invalidate();
   });

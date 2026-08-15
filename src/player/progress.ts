@@ -500,6 +500,20 @@ export function answerKey(verb: VerbId, subject: AtlasId): string {
 }
 
 /**
+ * The verb half of an `answerKey`.
+ *
+ * A key is `verb \n subject` and the subject may contain anything a path or a
+ * sha may contain — but never a newline — so the first field is the verb and
+ * splitting on the first separator is exact. Here rather than at the call site
+ * because the format is defined one function up, and a reader who has to
+ * re-derive it is one `split('\n')[1]` away from a subject with a slash in it.
+ */
+export function verbOfKey(key: string): VerbId {
+  const cut = key.indexOf('\n');
+  return (cut === -1 ? key : key.slice(0, cut)) as VerbId;
+}
+
+/**
  * The questions the player has actually answered, as `(verb, subject)` keys.
  *
  * Deliberately **not** the same as `fog.understood`. Picking a file correctly in

@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { VerbId, Challenge, NodeId } from '../../src/atlas/index.js';
-import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, suggestNext } from '../../src/player/selector.js';
+import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, noteSkipped, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 import { witnessFor } from '../fixtures/atlas.js';
 
@@ -784,5 +784,50 @@ describe('introducing the deck', () => {
     // observable form of "inert".
     expect(served.filter((verb) => verb === 'archaeology')).toHaveLength(1);
     expect(served.slice(4)).not.toContain('archaeology');
+  });
+});
+
+
+/**
+ * A skip has two consequences and the shell used to apply them separately.
+ *
+ * A review deleted the second — the met-verb update — and every one of 956 unit
+ * tests stayed green, because the test that claimed to cover it asserted a
+ * `metVerbs` set the test itself had built two lines earlier. The measured cost
+ * of losing it is a wall: `unmetVerb` outranks `tier`, so declining the
+ * introduction offers the whole unmet deck one skip at a time (102 consecutive
+ * suggestions on this repo, 274 on django).
+ *
+ * Both consequences now come from `noteSkipped`, so this can hold them to each
+ * other rather than to a fixture.
+ */
+describe('noteSkipped', () => {
+  const base = { ...NO_HISTORY, metVerbs: new Set<VerbId>(['blastRadius']) };
+
+  it('records the skip and meets the verb in one move', () => {
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', [
+      'companion\nn:a.ts',
+      'companion\nn:b.ts',
+    ]);
+    expect(next.skipped.has('companion\nn:a.ts')).toBe(true);
+    expect([...next.metVerbs].sort()).toEqual(['blastRadius', 'companion']);
+  });
+
+  it('meets the verb even on the skip that empties the list', () => {
+    // The anti-lockout clear returns an empty skip set. The verb is still met —
+    // these are two different facts and the clear must not take the other with
+    // it, which is the failure mode of folding them into one assignment.
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', [
+      'companion\nn:a.ts',
+    ]);
+    expect(next.skipped.size).toBe(0);
+    expect(next.metVerbs.has('companion' as VerbId)).toBe(true);
+  });
+
+  it('leaves everything else alone', () => {
+    const next = noteSkipped(base, 'companion' as VerbId, 'companion\nn:a.ts', ['x', 'y']);
+    expect(next.attempts).toBe(base.attempts);
+    expect(next.answered).toBe(base.answered);
+    expect(next.previous).toBe(base.previous);
   });
 });

@@ -450,3 +450,53 @@ describe('a region label sits inside the box reserved for it', () => {
     expect((line.name + line.count) / 2).toBeCloseTo(BOTTOM - HEIGHT / 2, 6);
   });
 });
+
+
+/**
+ * The glyphs land inside the box the frame says they are in.
+ *
+ * `nameplates` is what the shell hit-tests, and nothing anywhere bound it to
+ * where `fillText` actually put the ink. A review demonstrated it: stamping node
+ * labels at `label.x + 10` passes all 956 unit tests, and the e2e cannot see it
+ * either — it hovers the centre of the published box and `pickName` hit-tests
+ * the *same* box, so the instrument and the code share the coordinate and only
+ * the pixels are somewhere else. That is the reported "the map names the wrong
+ * thing" defect, reintroduced with every gate green.
+ *
+ * Recording context rather than a stub, because the claim is about arguments to
+ * a draw call and there is no other way to see them.
+ */
+describe('a nameplate is drawn where the frame says it is', () => {
+  it('puts every label’s glyphs inside its own published box', () => {
+    const drawn: { text: string; x: number; y: number }[] = [];
+    const context = stubContext();
+    // The halo and the fill both go through `fillText`/`strokeText` at the same
+    // point; recording the fill is enough, and recording both would double every
+    // row without adding a claim.
+    Object.defineProperty(context, 'fillText', {
+      value: (text: string, x: number, y: number) => drawn.push({ text, x, y }),
+      writable: true,
+    });
+
+    const stats = drawFrame(context, frameInput([]));
+    expect(stats.nameplates.length).toBeGreaterThan(0);
+
+    for (const plate of stats.nameplates) {
+      const ink = drawn.filter((call) => call.text === plate.text);
+      expect(ink.length, `"${plate.text}" was never drawn`).toBeGreaterThan(0);
+      for (const call of ink) {
+        // **The exact centre, not "somewhere in the box".** The first version
+        // of this asserted containment and a 10px drift survived it, because a
+        // label is wider than 20px and the anchor stayed inside its own
+        // rectangle — the loose assertion passed against the defect it was
+        // written for, one more time. `textAlign` is centre, so there is one
+        // correct x and it is arithmetic.
+        expect(call.x, `"${plate.text}" x`).toBeCloseTo(plate.left + plate.width / 2, 6);
+        // y keeps containment: the baseline sits a few px above the box bottom
+        // and pinning that nudge would be pinning a constant, not a binding.
+        expect(call.y, `"${plate.text}" y`).toBeGreaterThanOrEqual(plate.top);
+        expect(call.y, `"${plate.text}" y`).toBeLessThanOrEqual(plate.top + plate.height);
+      }
+    }
+  });
+});

@@ -86,11 +86,17 @@ export interface PlaceOptions {
    * none. A reader who zooms in is asking what these things are, and the map
    * was answering with mute circles.
    *
-   * `below` stays first so every label that could already be placed is placed
-   * in the same spot as before; the alternatives only catch what would
-   * otherwise have been dropped. `right` before `left` is the cartographic
-   * convention, and both hug the disc — a name that drifts is a name that
-   * looks like it belongs to a neighbour.
+   * `below` stays first, so a label that fits under its own disc still takes
+   * that slot. **That is not the same as "nothing that could already be placed
+   * moves", which is what this comment used to claim and a review disproved by
+   * running it.** A dodged label is a new *blocker*: a high-priority name whose
+   * below-slot is taken used to be dropped and is now placed to one side, and
+   * that box can displace a lower-priority name that previously fit — or, under
+   * a tight budget, spend the slot it would have had. Priority winning is the
+   * intended behaviour; the invariant was the overclaim.
+   *
+   * `right` before `left` is the cartographic convention, and both hug the disc
+   * — a name that drifts is a name that looks like it belongs to a neighbour.
    */
   readonly anchors?: readonly Anchor[];
 }
@@ -183,9 +189,15 @@ export function placeLabels(
       // over: it reads as a rendering fault, and the fragment that survives is
       // the *end* of the string, which is the half that identifies nothing.
       //
-      // It costs no labels. `continue` does not spend budget, so the slot
-      // passes to the next candidate and the frame draws the same count, all
-      // readable.
+      // **It is not free, and the first version of this comment said it was.**
+      // `continue` does not spend budget, so under a *binding* budget the slot
+      // does pass to the next candidate — which is the node pass. The region
+      // pass runs with an infinite budget, where every placeable candidate
+      // places regardless and a dropped name is simply a name fewer: the `ots`
+      // and `les` in the paragraph above are region labels, so that example is
+      // the case the claim was false about. Dropping a sheared name is still
+      // right — a fragment is worse than a gap — but it is a cost, not a
+      // rearrangement.
       if (box.left < 0 || box.left + box.width > options.width) continue;
       if (box.top < 0 || box.top + box.height > options.height) continue;
       if (blockers.some((other) => overlaps(box, other))) continue;

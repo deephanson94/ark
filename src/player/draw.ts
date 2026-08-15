@@ -192,6 +192,12 @@ const REGION_FONT = '600 15px ui-sans-serif, system-ui, sans-serif';
  */
 const NODE_ANCHORS = ['below', 'right', 'left', 'above'] as const;
 
+/**
+ * Where the two lines of a region label sit inside the box reserved for them.
+ * See the block above `REGION_LINE_HEIGHT` for why this exists — a review found
+ * that argument stacked over `NODE_ANCHORS` with nothing attached to the
+ * function it is about.
+ */
 export function regionLines(boxBottom: number, height: number): { name: number; count: number } {
   return { name: boxBottom - height * 0.72, count: boxBottom - height * 0.28 };
 }
@@ -627,8 +633,9 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       height: viewport.height,
       // Region labels went down first and keep their space.
       occupied: placedRegions,
-      // Below first, so every name that could already be placed stays exactly
-      // where it was; the alternatives only catch what was being dropped.
+      // Below first, so a name that fits under its own disc keeps that slot.
+      // Not "nothing moves" — a dodged label is a new blocker and can displace
+      // a lower-priority one; see `PlaceOptions.anchors`.
       anchors: NODE_ANCHORS,
     });
     for (const label of placed) {

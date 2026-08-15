@@ -4561,9 +4561,9 @@ the zoom a reader goes to *for* names — drew **9 over 68 nodes**, with the
 largest disc in the frame anonymous.
 
 Names are cartography now. A ground-colour halo under every glyph, which is what
-makes the rest legal; four anchor positions per label with below still first, so
-every name that could already be placed is placed exactly where it was; region
-names paler and desaturated, because a place name is not a data mark; a basename
+makes the rest legal; four anchor positions per label with below still first, so a
+name that fits under its own disc keeps that slot; region names paler and
+desaturated, because a place name is not a data mark; a basename
 shared with another node keeping one directory of context (**29 of ark's 259
 nodes** shared one, `index.ts` seven ways). District **19 → 27** names on a fresh
 page, street **9 → 18**, orbit **12 → 15**, measured at `54d9888`. Two defects
@@ -4601,4 +4601,47 @@ a sentence the *verb* owns, and a hub-named region prints its whole path because
 shortening it on the map alone would desync the map from the legend. Both are in
 Known gaps with the reason. Beyond that, `docs/experiments/0001` is still the
 open thing, and it is still twelve participants.
+
+## Two claims the pass was proudest of, corrected
+
+A pre-merge review ran the entry above rather than reading it, and both of its
+headline invariants are false as stated. **"Every name that could already be
+placed is placed exactly where it was"** holds for a label's *own* slot and not
+for the frame: a dodged label is a new **blocker**, so a high-priority name that
+used to be dropped now sits to one side and can displace a lower-priority name
+that previously fit — or, under a binding budget, take the slot it would have
+had. Priority winning is the intended behaviour; the invariant was the
+overclaim. And **"dropping a sheared label costs no labels"** is true only where
+the budget binds. The region pass runs with an infinite budget, where every
+placeable candidate places regardless and a dropped name is a name fewer — and
+the `ots` and `les` in the comment's own example are region labels, so the
+example was precisely the case the claim was false about. The unit fixture said
+so too: under the old rule it placed 2, the new test asserts 0.
+
+Both sentences are corrected in `labels.ts`, `draw.ts`, the README status row
+and the entry above. The behaviour is unchanged and still right; only the
+claims were wrong, which is this repo's most-repeated failure and the first
+time it has been caught before merge rather than three milestones after.
+
+Four guards that fired in no test now have one. `sameCamera` had only its
+restore direction exercised — mutating it to `() => true`, which stomps a pan
+the *player* made behind an open board, left the whole pyramid green; there is a
+unit test and an e2e step that drags behind the scrim. A skip's two consequences
+were two assignments in the shell and the second could be deleted silently, so
+they are one `noteSkipped` in the selector where a test can hold them to each
+other. Nothing bound a drawn glyph to the nameplate box the shell hit-tests, so
+a 10px stamp offset — the reported "the map names the wrong thing" defect —
+passed everything; a recording context now pins the anchor to the box's exact
+centre, after the first version asserted mere containment and the mutant walked
+straight through it. And the answer-key gate asserted a suppression with no
+control, so a dead radius channel would have read as a pass. `metVerbs` is also
+seeded from the persisted record now, like `attempts` one paragraph above it,
+because a verb this player has met was coming back unmet on every reload.
+
+**Next**: the panel of ten. First-10-minutes scores on the current build are
+**visual 7.1, continue 6.3** across ten personas, target 8. The ranked costs are
+walk-mode's spawn (6 of 10 named it, three as *the* thing dragging their score),
+a sub-pass grade badge that renders as an empty box (3 of 10 read it as a
+missing asset), no legend for what size and colour and fog encode (4 of 10), and
+a loop that never changes shape (6 of 10 on continue).
 
