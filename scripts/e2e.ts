@@ -98,6 +98,28 @@ async function pollUntil(check: () => Promise<boolean>, deadlineMs: number): Pro
   }
 }
 
+/**
+ * Wait for the renderer to have actually drawn.
+ *
+ * **A panel appearing is synchronous DOM; what the frame drew is not.** The
+ * canvas publishes `__arkRadius`, `__arkCamera` and `__arkNameplates` from
+ * inside its `requestAnimationFrame` loop, so reading one straight after
+ * `waitForSelector` reads the *previous* frame. Locally a frame had always
+ * landed first; CI is slower, and the answer-key gate reported an open board
+ * still drawing its import radius — the defect it exists to catch, green here
+ * and red there on an identical tree.
+ *
+ * Two frames rather than one: `invalidate()` sets a dirty flag that the *next*
+ * loop iteration consumes, so one is the boundary and two is inside it. Passed
+ * as a string because tsx transpiles this file with `keepNames`, which wraps a
+ * named inner function in a `__name` helper the page does not have.
+ */
+async function drawn(page: Page): Promise<void> {
+  await page.evaluate(
+    'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null))))',
+  );
+}
+
 function claimAbout(claim: string): string {
   return claim.split(' — ')[0] ?? claim;
 }
@@ -1534,9 +1556,11 @@ async function main(): Promise<number> {
         await page.keyboard.press('Enter');
       }
       await page.waitForSelector('.choice-button', { timeout: 5000 });
+      await drawn(page);
       const withBoard = await page.evaluate('window.__arkRadius ?? "absent"');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);
+      await drawn(page);
       const withoutBoard = await page.evaluate('window.__arkRadius ?? "absent"');
       if (withBoard !== 'none') {
         failures.push({
@@ -1619,6 +1643,7 @@ async function main(): Promise<number> {
     {
       await page.keyboard.press('f');
       await page.waitForTimeout(220);
+      await drawn(page);
       const plates = await page.evaluate('window.__arkNameplates ?? []');
       const rows = Array.isArray(plates) ? plates : [];
       if (rows.length === 0) {
@@ -1688,6 +1713,7 @@ async function main(): Promise<number> {
       // one view over — so it gets the same gate.
       await page.keyboard.press('o');
       await page.waitForTimeout(300);
+      await drawn(page);
       const orbitPlates = await page.evaluate('window.__arkNameplates ?? []');
       const orbitRows = (Array.isArray(orbitPlates) ? orbitPlates : []) as {
         text: string;
