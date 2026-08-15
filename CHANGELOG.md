@@ -4549,3 +4549,56 @@ stated reason they would close the tab) and refusing boards whose answer key is
 entirely documentation (9 here, 4 on hono). The map still contributes nothing
 *during* answering: it marks candidates, but fog-gated labels mean the boxes are
 anonymous, so there is no path from a checkbox row to its node.
+
+## A cartography pass over the map's type, and the frame after a grade
+
+A graphic-design study — 57 browser screenshots on ark and hono at two viewport
+sizes, against my own reading of the e2e artifact set — scored the product
+**6.5/10** and put the whole gap in one place: the least-designed layer on
+screen was sitting at the highest visual priority. Derived paths were set as
+display type at full saturation across the discs they named, and street zoom —
+the zoom a reader goes to *for* names — drew **9 over 68 nodes**, with the
+largest disc in the frame anonymous.
+
+Names are cartography now. A ground-colour halo under every glyph, which is what
+makes the rest legal; four anchor positions per label with below still first, so
+every name that could already be placed is placed exactly where it was; region
+names paler and desaturated, because a place name is not a data mark; a basename
+shared with another node keeping one directory of context (**29 of ark's 259
+nodes** shared one, `index.ts` seven ways). District **19 → 27** names on a fresh
+page, street **9 → 18**, orbit **12 → 15**, measured at `54d9888`. Two defects
+fell out of looking rather than out of the study: a label the viewport edge would
+cut was **sheared rather than dropped**, and a region's file-count line was drawn
+a half-line *outside* the box every other label had been told to avoid, so node
+labels crossed it legally.
+
+The frame after a grade was the other half. Opening a board slides the subject
+left so the docked panel does not cover it; nothing gave that back, and the
+golden-angle turn then swung the map about the off-centre point it was left at —
+so the reward beat of the core loop landed on half an empty screen, every time.
+It is returned now (287 of 287 world units), but only when the camera is still
+exactly where the board left it. The inspector and the guide stand down instead
+of peeking out above and below the console's edges; the console panel is measured
+into the label chrome it was the only panel missing from; the grade band is sized
+like a result.
+
+Refused: capping summit rings at two. The ring count *is* the elevation
+(ADR-0013), so halving it deletes two layers of a frozen channel to tidy a
+texture — pillars beat aesthetics. The contrast ramp ends at 0.10 rather than
+0.18, which answers the moiré without touching the data.
+
+**The browser gate for the camera give-back was vacuous on its first draft**, and
+that is the entry worth keeping. It asserted *composition* — how many nodes stay
+in frame — which is what the defect looks like to a player; run with the fix
+deleted it reported `345.9 world units of pan kept` and `261 of 261 nodes still
+in frame`, green against the exact defect it was written for, because ark's map
+at fit scale survives being shoved half a screen sideways. It reads the camera
+now and the mutant dies.
+
+**Next**: the two things this pass could not reach are both naming rather than
+rendering — a board's title is a 74-character slug because the path lives inside
+a sentence the *verb* owns, and a hub-named region prints its whole path because
+shortening it on the map alone would desync the map from the legend. Both are in
+Known gaps with the reason. Beyond that, `docs/experiments/0001` is still the
+open thing, and it is still twelve participants.
+
