@@ -1589,45 +1589,77 @@ async function main(): Promise<number> {
     // frame the player is actually left sitting in.
     {
       type Cam = { x: number; y: number; scale: number };
-      const cameraNow = async (): Promise<Cam> =>
-        (await page.evaluate('window.__arkCamera ?? null')) as Cam;
+      const cameraNow = async (): Promise<Cam> => {
+        await drawn(page);
+        return (await page.evaluate('window.__arkCamera ?? null')) as Cam;
+      };
       await page.keyboard.press('f');
       await page.waitForTimeout(240);
-      // Travel to the suggestion *first*, and read the camera after arriving.
-      // The guide's own `centreOn` is a second pan with nothing to do with the
-      // board, and the first draft of this step compared against the fitted
-      // camera instead — which left 93.8 units unaccounted for and got written
-      // up as "the turn". Escape does not grade, so no turn runs here at all.
-      await page.locator('.guide-action').click();
-      await page.waitForTimeout(350);
-      const before = await cameraNow();
-      await page.keyboard.press('Enter');
-      await page.waitForSelector('.choice-button', { timeout: 5000 });
-      const panned = await cameraNow();
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(400);
-      const back = await cameraNow();
-      const moved = Math.hypot(panned.x - before.x, panned.y - before.y);
-      const kept = Math.hypot(back.x - before.x, back.y - before.y);
-      process.stdout.write(
-        `e2e: board pan → borrowed ${moved.toFixed(1)} world units, ${kept.toFixed(1)} left after closing\n`,
-      );
-      if (moved < 1) {
-        // The control, and it earns its place: the first version of this gate
-        // asserted the *composition* instead — how many nodes stay in frame —
-        // and a run with the give-back deleted kept 345.9 units of pan and
-        // still reported `261 of 261 nodes`, because ark's map at fit scale is
-        // small enough to survive being shoved half a screen sideways. The
-        // assertion was green against the defect it was written for.
+
+      // **Open the board off a name on the map, never off the guide.** The
+      // first version pressed "Where next?" and then Enter, which on CI opened
+      // a **Placement** board — its subject is a commit, there is nowhere to
+      // pan to, and `openBoard` correctly borrows nothing. The control then
+      // fired: *"opening a board moved the camera by nothing"*. That is the
+      // control doing its job on a step that had predicted what the shell
+      // would serve, which is this file's oldest recurring mistake.
+      //
+      // A nameplate is a node by construction, so the board it opens has a
+      // place. Walk them until one carries an "answer this" control.
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      let opened = false;
+      let before: Cam | null = null;
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(120);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        // Read *after* selecting: a click on the map selects and surveys, and
+        // does not move the camera, but reading before it would fold any
+        // movement it did make into the board's borrowing.
+        before = await cameraNow();
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        opened = true;
+        break;
+      }
+      if (!opened || before === null) {
         failures.push({
           what: 'pan',
-          detail: 'opening a board moved the camera by nothing, so the give-back cannot be measured',
+          detail: `no drawn name of ${Array.isArray(plates) ? plates.length : 0} carried a board to open`,
         });
-      } else if (kept > 0.5) {
-        failures.push({
-          what: 'pan',
-          detail: `closing the board kept ${kept.toFixed(1)} of the ${moved.toFixed(1)} units it borrowed`,
-        });
+      } else {
+        const panned = await cameraNow();
+        await page.keyboard.press('Escape');
+        // Escape does not grade, so no turn runs — what is compared is the pan
+        // alone.
+        await page.waitForTimeout(400);
+        const back = await cameraNow();
+        const moved = Math.hypot(panned.x - before.x, panned.y - before.y);
+        const kept = Math.hypot(back.x - before.x, back.y - before.y);
+        process.stdout.write(
+          `e2e: board pan → borrowed ${moved.toFixed(1)} world units, ${kept.toFixed(1)} left after closing\n`,
+        );
+        if (moved < 1) {
+          // The control, and it earns its place twice over: the first version
+          // of this gate asserted the *composition* instead — how many nodes
+          // stay in frame — and a run with the give-back deleted kept 345.9
+          // units of pan while still reporting `261 of 261 nodes`, because
+          // ark's map at fit scale survives being shoved half a screen
+          // sideways. Then this line caught the placeless board above.
+          failures.push({
+            what: 'pan',
+            detail: 'opening a board moved the camera by nothing, so the give-back cannot be measured',
+          });
+        } else if (kept > 0.5) {
+          failures.push({
+            what: 'pan',
+            detail: `closing the board kept ${kept.toFixed(1)} of the ${moved.toFixed(1)} units it borrowed`,
+          });
+        }
       }
     }
 
