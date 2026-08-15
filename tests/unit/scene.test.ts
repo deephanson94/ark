@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 import { NORTH } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
-import { TERRAIN_INDEX, blastRadius, legendRows, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
+import { TERRAIN_INDEX, blastRadius, legendRows, pick, prepare, provedByRegion, visibleEdges, visibleNodes } from '../../src/player/scene.js';
 import { DISTRICT_SCALE, STREET_SCALE, levelFor, shortLabel, styleFor } from '../../src/player/zoom.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -360,5 +360,55 @@ describe('legendRows', () => {
       { id: 'x', label: 'x', index: 1, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
     ];
     expect(legendRows({ regions: tied }).map((row) => row.label)).toEqual(['x', 'y']);
+  });
+});
+
+/**
+ * What each region has proved, for the legend's tallies.
+ *
+ * Three of ten cold playtesters said the loop had nothing to build toward, and
+ * regions are the one structure the map already has — so the legend counts
+ * them. Pure here because the claim is arithmetic and the legend is a render of
+ * it.
+ *
+ * **`understood`, and the legend's own wording had to be corrected to match.**
+ * That set is "you proved you knew something about it", which includes a file
+ * picked correctly inside *someone else's* question — so the key row saying
+ * "you proved its question" was false of every member-promoted node, and it
+ * shipped for one commit before this function made me read `deriveFog`.
+ */
+describe('provedByRegion', () => {
+  const scene = prepare(
+    atlasWith(
+      ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
+      [
+        ['src/b.ts', 'src/a.ts'],
+        ['src/c.ts', 'src/a.ts'],
+        ['src/d.ts', 'src/c.ts'],
+      ],
+    ),
+  );
+
+  it('counts nothing before anything is proved', () => {
+    expect(provedByRegion(scene, new Set())).toEqual(new Map());
+  });
+
+  it('counts a node into its own region', () => {
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error('empty fixture');
+    const counts = provedByRegion(scene, new Set([first.id]));
+    expect(counts.get(first.regionIndex)).toBe(1);
+  });
+
+  it('adds up to the number proved, however the regions fell', () => {
+    const all = new Set(scene.nodes.map((node) => node.id));
+    const counts = provedByRegion(scene, all);
+    expect([...counts.values()].reduce((sum, n) => sum + n, 0)).toBe(scene.nodes.length);
+  });
+
+  it('ignores an id the map does not have', () => {
+    // A save carries commit ids and renamed paths; a tally that counted them
+    // would climb past the region's own size.
+    expect(provedByRegion(scene, new Set(['c:deadbeef' as never]))).toEqual(new Map());
   });
 });

@@ -501,3 +501,39 @@ describe('a nameplate is drawn where the frame says it is', () => {
     }
   });
 });
+
+/**
+ * A board marker for a node off the edge of the screen.
+ *
+ * The mark block iterated the visible set without re-checking the box a marker
+ * occupies, which reaches past the disc — so a candidate just outside the frame
+ * drew a rounded rectangle clipped by the viewport and lying across the HUD. A
+ * frontend engineer on the panel reported it as "a stray white artifact
+ * overlapping the header", which is what it looks like if you do not know what
+ * it is.
+ */
+describe('board markers stay inside the frame', () => {
+  it('marks a candidate on screen and not one in the cull’s margin', () => {
+    // **Inside the margin, not far away.** The first version scrolled 90,000
+    // units off, where `visibleNodes` returns nothing and the count is zero
+    // with or without the fix — a test that could not fail, for a defect about
+    // a node that is *nearly* on screen. `drawFrame` culls at the viewport plus
+    // **120px**, so the marks block sees nodes up to 120px outside the frame and
+    // drew a box for every one of them. The camera here puts the fixture just
+    // inside that band.
+    const atlas = atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts'], [['src/b.ts', 'src/a.ts']]);
+    const scene = prepare(atlas);
+    const base = frameInput([]);
+    const board = { subject: null, candidates: new Set([0, 1, 2]), picked: new Set<number>(), hovered: null };
+    const centred = drawFrame(stubContext(), { ...base, scene, board });
+    expect(centred.boardDrawn).toBeGreaterThan(0);
+
+    // Push the whole fixture past the right edge by a little over half the
+    // viewport, so every node lands in the 120px margin rather than in frame.
+    const off = { ...base.camera, x: base.camera.x + VIEWPORT.width / 2 + 60 };
+    const margin = drawFrame(stubContext(), { ...base, scene, board, camera: off });
+    const seen = drawFrame(stubContext(), { ...base, scene, camera: off }).nodesDrawn;
+    expect(seen, 'the cull must still hand the marks block these nodes').toBeGreaterThan(0);
+    expect(margin.boardDrawn).toBe(0);
+  });
+});

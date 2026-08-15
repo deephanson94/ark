@@ -12,7 +12,7 @@
  * the repo at all.
  */
 
-import type { Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
+import type { VerbId, Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
 import {
   challengeOrder,
   coverageSentence,
@@ -68,12 +68,32 @@ import {
   createHud,
   createInspector,
   createHelp,
+  createArrival,
   createLegend,
   createNotebook,
 } from './ui.js';
 import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
+/**
+ * How long the arrival card stays before it withdraws on its own.
+ *
+ * Two short lines at reading speed, and every playtest that complained about
+ * the opening complained about *nothing happening* rather than about waiting —
+ * so this is the shortest interval that is still an event.
+ */
+const ARRIVAL_MS = 3200;
+
+/**
+ * Is the open board one the import graph grades?
+ *
+ * `null` verb means no board is open. Asked of the console rather than tracked
+ * beside it, so the two cannot disagree about what is on screen.
+ */
+function importGraded(console: { openVerb(): VerbId | null }): boolean {
+  const verb = console.openVerb();
+  return verb !== null && channelOf(verb) === 'importRadius';
+}
 /** Pointer movement below this is a click, not a drag. */
 const DRAG_THRESHOLD = 4;
 /**
@@ -929,16 +949,40 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
 
   const legend = createLegend(scene);
   const help = createHelp();
+  /**
+   * **The repository introduces itself, for about three seconds.**
+   *
+   * Not in an arm. `docs/experiments/0001` is between-subjects and its whole
+   * point is that the two arms differ in one thing; a card that says *"the most
+   * load-bearing file is X"* before either arm has been played is a free hint
+   * in both, and an unequal one if it ever fails to render. `?arm=` gets the
+   * opening the experiment was designed around, which is the one without it.
+   */
+  const arrival = arm === null ? createArrival(scene) : null;
   root.replaceChildren(
     canvas,
     hud.root,
-    legend,
+    legend.root,
     inspector.root,
     guide.root,
     notebook.root,
     help.root,
     challengePanel.root,
+    ...(arrival === null ? [] : [arrival.root]),
   );
+  if (arrival !== null) {
+    canvas.classList.add('is-arriving');
+    // Long enough to read two short lines, and gone on the first sign of a
+    // player — an opening you have to sit through is worse than no opening.
+    const leave = (): void => {
+      arrival.dismiss();
+      window.clearTimeout(timer);
+    };
+    const timer = window.setTimeout(leave, ARRIVAL_MS);
+    for (const event of ['pointerdown', 'keydown', 'wheel'] as const) {
+      window.addEventListener(event, leave, { once: true, passive: true });
+    }
+  }
 
   /** Which of the three views is on screen, for the arm-aware control list. */
   const viewNow = (): View => (world.isActive() ? 'world' : orbit === null ? 'map' : 'orbit');
@@ -958,7 +1002,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // The console's *panel*, never its scrim: the scrim is `inset: 0` and would
   // block every label on the canvas. See `Console.panel` for what it was
   // costing while it was missing from this list.
-  const panels = [hud.root, legend, inspector.root, guide.root, challengePanel.panel];
+  const panels = [hud.root, legend.root, inspector.root, guide.root, challengePanel.panel];
   function measureChrome(): void {
     const host = root.getBoundingClientRect();
     chrome = panels
@@ -1291,12 +1335,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         //
         // The rule is ADR-0016's, which settled the identical question for
         // history wires: *ink on the map is a lookup where text in a closed
-        // panel is a memory test*. So the whole channel is off while a board is
-        // open — not just the subject's ring, because the containment argument
-        // `depthFor` documents (if D imports S then `dependents(D) ⊆
-        // dependents(S)`) makes a hovered candidate's importers key members too.
-        // One rule; every leak in ADR-0014 was a rule that lived twice.
-        radius: challengePanel.isOpen() ? null : radius,
+        // panel is a memory test*. So the channel is off while an
+        // **import-graded** board is open — not just the subject's ring,
+        // because the containment argument `depthFor` documents (if D imports S
+        // then `dependents(D) ⊆ dependents(S)`) makes a hovered candidate's
+        // importers key members too. One rule; every leak in ADR-0014 was a
+        // rule that lived twice.
+        //
+        // **Scoped by channel, and the blanket version was a regression nobody
+        // asked for.** Companion and Archaeology are graded on git; a file's
+        // importers are not their answer key by any argument, and switching the
+        // channel off for them left a player with *no* evidence on screen while
+        // answering. A PL academic on the panel named exactly that as the thing
+        // holding their score down — *"the evidence you need to reason lives on
+        // a different screen from the reasoning, so early play is guess-then-
+        // learn"* — which is pillar 3's own complaint about its own product.
+        // What is restored is `DIRECT_ONLY`, the hint ADR-0008 decision 1 gives
+        // away to everyone at all times; the full cone stays gated on
+        // `subjectsPassed` exactly as before.
+        radius: importGraded(challengePanel) ? null : radius,
         chrome,
         questions: unanswered,
         peaks,
@@ -1345,6 +1402,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           x: plate.left + plate.width / 2,
           y: plate.top + plate.height / 2,
         }));
+      // The regions filling in, from the same `fog` the HUD's coverage reads —
+      // so the panel and the map can never disagree about what is proved.
+      legend.update(fog.understood, orbit === null ? 'map' : 'orbit');
       hud.update(
         coverage(fog, scene.nodes.length),
         orbit === null ? stats.level : 'orbit',
@@ -1527,7 +1587,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * second place for the two views to disagree about what a node is — and this
    * repo's landmine about a rule living twice has been paid for four times.
    */
-  const mapOnlyPanels = [legend, inspector.root];
+  const mapOnlyPanels = [legend.root, inspector.root];
 
   function enterWorld(): void {
     landTurn();

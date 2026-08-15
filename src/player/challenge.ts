@@ -20,7 +20,7 @@
  * whatever it scored.
  */
 
-import type { AtlasId, Challenge } from '../atlas/index.js';
+import type { AtlasId, Challenge, VerbId } from '../atlas/index.js';
 import type { Grade, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
 import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
@@ -69,6 +69,21 @@ export interface Console {
   open(challenge: Challenge): void;
   close(): void;
   isOpen(): boolean;
+  /**
+   * Which verb the open board asks, or `null` when nothing is open.
+   *
+   * The shell needs this for one decision and only one: whether to switch off
+   * the map's import channel, which is an answer key for a board graded on
+   * imports and is ordinary evidence for a board graded on git. It is a
+   * question about the **channel**, not about the question — the console still
+   * does not know what any verb asks, and neither does the caller, which asks
+   * `channelOf` rather than comparing to a name.
+   *
+   * Still set while a result is on screen, unlike `board()`: the reveal has
+   * just named the truth set, so that is the last moment to start drawing cones
+   * again.
+   */
+  openVerb(): VerbId | null;
   /** The open, unanswered board — `null` while closed or showing a result. */
   board(): BoardView | null;
   /** Tick or untick from outside the panel. What a click on the map calls. */
@@ -390,6 +405,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     },
     close,
     isOpen: () => open !== null,
+    openVerb: () => open?.verb ?? null,
     board: () =>
       live === null
         ? null

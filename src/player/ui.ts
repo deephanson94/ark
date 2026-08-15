@@ -11,8 +11,9 @@
  * inferred — if the panel says 14 dependents, a graph query said 14.
  */
 
-import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
+import type { Atlas, AtlasNode, Challenge, NodeId } from '../atlas/index.js';
 import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
+import { arrivalLines, arrivalOf } from './arrival.js';
 import { guideExhausted, notesEmpty, questsLine } from './empty.js';
 import type { Arm, View } from './experiment.js';
 import { controlsFor } from './experiment.js';
@@ -23,7 +24,7 @@ import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { legendRows } from './scene.js';
+import { legendRows, provedByRegion } from './scene.js';
 import type { TwinClass } from './twins.js';
 
 type Children = readonly (Node | string)[];
@@ -481,45 +482,130 @@ export function createError(message: string): HTMLElement {
 }
 
 /** Renders `legendRows`, which is where the ordering rules and their reasons live. */
-export function createLegend(scene: Scene): HTMLElement {
-  const items = legendRows(scene).map((row) => {
+/**
+ * The arrival card: the repository introducing itself, then getting out of the
+ * way.
+ *
+ * A `<div>` that fades and is removed, rather than a mode: the map is live and
+ * clickable underneath from the first frame, and the first pointer or key
+ * dismisses it. A splash you have to wait out would be worse than the silence
+ * it replaces.
+ */
+export interface ArrivalCard {
+  readonly root: HTMLElement;
+  dismiss(): void;
+}
+
+export function createArrival(scene: Scene): ArrivalCard {
+  const arrival = arrivalOf(scene);
+  const lines = arrivalLines(arrival).map((line, i) =>
+    el('div', i === 0 ? 'arrival-counts' : 'arrival-landmark', [line]),
+  );
+  const root = el('div', 'arrival', [
+    el('div', 'arrival-eyebrow', ['you have arrived at']),
+    el('div', 'arrival-name', [arrival.name]),
+    ...lines,
+  ]);
+  let gone = false;
+  return {
+    root,
+    dismiss() {
+      if (gone) return;
+      gone = true;
+      root.classList.add('is-gone');
+      // Removed rather than left at zero opacity: an invisible element over the
+      // canvas is the pointer-events contradiction this stylesheet has three
+      // comments about.
+      window.setTimeout(() => root.remove(), 700);
+    },
+  };
+}
+
+export interface Legend {
+  readonly root: HTMLElement;
+  /**
+   * Repaint the per-region tallies, and the channel key for the view on
+   * screen. Called wherever the HUD's counts are, from the same `fog`.
+   */
+  update(understood: ReadonlySet<NodeId>, view: 'map' | 'orbit'): void;
+}
+
+export function createLegend(scene: Scene): Legend {
+  const rows = legendRows(scene);
+  const tallies = new Map<number, HTMLElement>();
+  const items = rows.map((row) => {
     const swatch = el('span', 'legend-swatch');
     // Straight from the same function the canvas uses — a legend that computes
     // its own colours is a legend that will eventually disagree with the map.
     swatch.style.background = regionColor(row.index, 1);
-    return el('li', 'legend-item', [swatch, row.text]);
+    // **Something to fill in.** Three of ten cold playtesters said the loop had
+    // nothing to build toward — *"no sense of building toward something, a
+    // completed region"* — while the one structure the map already has is
+    // regions. This is the same derived number the fog draws, per region, so a
+    // player can watch a neighbourhood come in and can decide to finish one.
+    const tally = el('span', 'legend-tally');
+    tallies.set(row.index, tally);
+    return el('li', 'legend-item', [swatch, el('span', 'legend-name', [row.text]), tally]);
   });
-  return el('div', 'legend', [
+  const keyBox = el('div', 'legend-key', [
+    el('div', 'legend-title', ['what you see']),
+    ...keyRows('map'),
+  ]);
+  let shown: 'map' | 'orbit' = 'map';
+  const root = el('div', 'legend', [
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
-    key(),
+    keyBox,
   ]);
+  return {
+    root,
+    update(understood, view) {
+      if (view !== shown) {
+        shown = view;
+        keyBox.replaceChildren(el('div', 'legend-title', ['what you see']), ...keyRows(view));
+      }
+      const proved = provedByRegion(scene, understood);
+      for (const row of rows) {
+        const tally = tallies.get(row.index);
+        if (tally === undefined) continue;
+        const n = proved.get(row.index) ?? 0;
+        // Silent at zero: a column of `0/46` on arrival is a scoreboard of
+        // failure, and guardrail 6's spirit is that nothing shames a player who
+        // has not started. It appears with the first thing they prove.
+        tally.textContent = n === 0 ? '' : `${n}/${row.nodeCount}`;
+        tally.classList.toggle('is-done', n > 0 && n >= row.nodeCount);
+      }
+    },
+  };
 }
 
 /**
- * What a disc's size, ring and brightness mean.
+ * What a disc's size, ring and brightness mean — **in the view you are in**.
  *
- * **Four of ten cold playtesters could not read the map's own encodings**, and
- * two of them said the HUD's counts were worse than useless without it —
- * *"what is a peak vs an isle vs a wire"*. The map has spent four milestones
- * being careful that every channel is derived and true, and never once said
- * what any of them was. A legend of region colours alone answers the one
- * question a reader can already guess.
+ * Four of ten cold playtesters could not read the map's own encodings, and one
+ * of them then found the sharper version of the same gap: the key does not
+ * change when the view does, so the orbit adds a whole channel — height — and
+ * names it nowhere. *"A chart-literate viewer is staring at building heights
+ * with no key at all."* The map has spent five milestones being careful that
+ * every channel is derived and true, and never once said what any of them was.
  *
- * Repo-agnostic (guardrail 2) — these are the renderer's channels, not this
- * repository's facts — and deliberately four rows: size, the question ring, and
- * the two ends of the fog. The peaks' summit rings are the fifth and are left
- * out, because a row per channel is a wall of text and elevation is legible as
- * *taller thing on the orbit* without being named here.
+ * Repo-agnostic (guardrail 2): these are the renderer's channels, not this
+ * repository's facts. Ordered with the view's own channel first, because that
+ * is the one a reader has just met.
  */
-function key(): HTMLElement {
-  const rows: HTMLElement[] = [
+function keyRows(view: 'map' | 'orbit'): readonly HTMLElement[] {
+  const shared = [
     row('size', 'lines of code'),
     row('ring', 'has a question you have not answered'),
     row('dim', 'not surveyed yet'),
-    row('bright', 'you proved its question'),
+    row('bright', 'you proved something about it'),
   ];
-  return el('div', 'legend-key', [el('div', 'legend-title', ['what you see']), ...rows]);
+  if (view === 'orbit') {
+    // Height is ADR-0013's elevation: each layer is twice as depended-upon, so
+    // "how many" would be a claim the channel does not make.
+    return [row('height', 'how much leans on it, through any chain'), ...shared];
+  }
+  return [...shared, row('box', 'on the question that is open')];
 }
 
 function row(mark: string, meaning: string): HTMLElement {

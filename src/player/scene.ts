@@ -229,6 +229,31 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
 }
 
 /**
+ * How many of each region's files the player has proved something about.
+ *
+ * Indexed the same way the palette is, so `TERRAIN_INDEX` collects every
+ * terrain area into one bucket exactly as the legend's own row does.
+ *
+ * **Reads `understood`, and the legend's wording had to be corrected to match
+ * it.** That set is *"you proved you knew something about it, by being graded"*
+ * — which includes a file you picked correctly in **someone else's** question,
+ * not only a file whose own board you passed. A legend row saying *"you proved
+ * its question"* was therefore false of every member-promoted node, and it
+ * shipped for one commit before this function made me read `deriveFog`.
+ */
+export function provedByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  understood: ReadonlySet<NodeId>,
+): ReadonlyMap<number, number> {
+  const counts = new Map<number, number>();
+  for (const node of scene.nodes) {
+    if (!understood.has(node.id)) continue;
+    counts.set(node.regionIndex, (counts.get(node.regionIndex) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
  * Nodes whose disc lands within `padding` px of the viewport. Radius is
  * included so a large node whose centre is just off screen still draws its
  * visible edge.

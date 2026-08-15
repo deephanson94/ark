@@ -1402,7 +1402,14 @@ async function main(): Promise<number> {
     if (legendRowText.length === 0) {
       failures.push({ what: 'legend', detail: 'the legend drew no rows at all' });
     }
-    const legendCounts = legendRowText.map((row) => Number(/\((\d+)[^)]*\)\s*$/.exec(row)?.[1] ?? '-1'));
+    // **`rendered`, because a row is now two spans and a tally.** The region
+    // name and its per-region proved count are separate elements, so
+    // `innerText` puts a newline between them and an anchored `$` no longer
+    // matches — the rendered-text landmine, met from the layout side rather
+    // than from the whitespace side.
+    const legendCounts = legendRowText.map((row) =>
+      Number(/\((\d+)[^)]*\)/.exec(rendered(row))?.[1] ?? '-1'),
+    );
     if (legendCounts.some((n) => n < 0)) {
       failures.push({ what: 'legend', detail: `a row printed no count: ${legendRowText.join(' | ')}` });
     }
@@ -1557,43 +1564,67 @@ async function main(): Promise<number> {
       if (marked !== null) {
         failures.push({ what: 'ring', detail: 'stale ink probe left on the page' });
       }
-      // Open a board, then compare the frame against the same camera with the
-      // board closed. The subject's ring is the only thing that differs.
-      await page.keyboard.press('f');
-      await page.waitForTimeout(220);
-      const openBoard = await page.locator('.console-panel').isVisible();
-      if (!openBoard) {
-        await page.locator('.guide-action').click();
-        await page.waitForTimeout(350);
-        await page.keyboard.press('Enter');
+      // **Both directions, because the rule is now scoped by channel.** The
+      // import channel is off while an *import-graded* board is open — that ring
+      // is the answer key — and stays on for a board graded on git, where a
+      // file's importers are ordinary evidence and switching them off left a
+      // player with nothing on screen to reason from. A blanket assertion would
+      // pass against either rule and so tests neither.
+      //
+      // Which board each node serves is read off the panel, never predicted:
+      // this file has paid three times for a step that guessed.
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      const seen = new Map<string, string>();
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        if (seen.size >= 2) break;
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(110);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        await drawn(page);
+        // `innerText` is rendered text and the CSS uppercases this element.
+        const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
+        const kind = verb === 'blast radius' ? 'imports' : 'history';
+        if (!seen.has(kind)) {
+          seen.set(kind, String(await page.evaluate('window.__arkRadius ?? "absent"')));
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
       }
-      await page.waitForSelector('.choice-button', { timeout: 5000 });
       await drawn(page);
-      const withBoard = await page.evaluate('window.__arkRadius ?? "absent"');
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(300);
-      await drawn(page);
-      const withoutBoard = await page.evaluate('window.__arkRadius ?? "absent"');
-      if (withBoard !== 'none') {
+      const closed = String(await page.evaluate('window.__arkRadius ?? "absent"'));
+      process.stdout.write(
+        `e2e: radius — import board ${seen.get('imports') ?? 'not reached'}, ` +
+          `history board ${seen.get('history') ?? 'not reached'}, closed ${closed}\n`,
+      );
+      const onImports = seen.get('imports');
+      if (onImports === undefined) {
+        failures.push({ what: 'ring', detail: 'no import-graded board was reached, so nothing was measured' });
+      } else if (onImports !== 'none') {
         failures.push({
           what: 'ring',
-          detail: `an open board drew an import radius (${String(withBoard)}) — that is the answer key`,
+          detail: `an open Blast Radius board drew an import radius (${onImports}) — that is the answer key`,
         });
       }
-      // **The control, and it was only printed.** If the radius channel died
-      // outright both reads would say `none` and this gate would stay green
-      // forever, asserting a suppression of nothing — the never-fires shape. A
-      // selected, passed node draws its cone with the board closed, and that is
-      // the thing whose absence must be noticed.
-      if (withoutBoard === 'none') {
+      const onHistory = seen.get('history');
+      if (onHistory !== undefined && onHistory === 'none') {
+        failures.push({
+          what: 'ring',
+          detail: 'a history board switched the import channel off, which is the regression that left a player nothing to reason from',
+        });
+      }
+      // The control: without it a dead radius channel reads as a pass.
+      if (closed === 'none') {
         failures.push({
           what: 'ring',
           detail: 'no import radius with the board closed either, so the suppression above proves nothing',
         });
       }
-      process.stdout.write(
-        `e2e: radius with a board open → ${String(withBoard)}, closed → ${String(withoutBoard)}\n`,
-      );
     }
 
     // ---- a skipped verb counts as met ------------------------------------
