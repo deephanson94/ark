@@ -4645,3 +4645,49 @@ a sub-pass grade badge that renders as an empty box (3 of 10 read it as a
 missing asset), no legend for what size and colour and fog encode (4 of 10), and
 a loop that never changes shape (6 of 10 on continue).
 
+## Five rounds against a number, and the number says the next work is structural
+
+The goal became measurable: *the first ten minutes, visually and "do I want to keep
+playing", at 8/10 across ten coding-literate agents from different backgrounds.*
+Ten personas, one fixed build per round, each with its own browser, each told
+only what a new player is told, each scoring off screenshots it actually looked
+at.
+
+**7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80.**
+
+Every round closed what the previous one named. The camera stopped standing
+inside buildings (1 of 11,880 walkable positions on ark, from 232). The map said
+what it encodes, in a key that follows the view. A sub-pass grade became a dial
+instead of a dot three testers read as a missing asset. The reveal said why the
+notebook stayed empty. The repository introduced itself. Regions began filling
+in. The import channel came back for the two verbs it is not an answer key for.
+
+And the score barely moved, which is the finding. The complaints **changed** each
+round rather than shrinking, and the two that now dominate are structural:
+
+**Answering is a checkbox list and the map is a picture of it** — 6 of 10 in the
+third round, from four backgrounds. The map already boxes every candidate and a
+click already ticks it; nothing says so, so nobody uses it. *"The one moment that
+matters most is the least spatial part of the experience."*
+
+**Label crowding at the arrival zoom** — 6 of 10, on the frame everyone sees
+first. Dodging and a wider gap took district names from 19 to 29 with no box
+overlapping any other, and the densest region still reads as stacked text.
+
+Both are in Known gaps with their vote counts. Neither is a polish item, which is
+why five rounds of polish did not move the number.
+
+**Six of my own instruments were wrong before they were right**, all green when
+wrong: a camera repair that put the eye in the hero's shins (exactly what the
+guard it removed was for); a badge fix that reproduced the missing-asset defect
+inside itself; a camera gate that reported `345.9 units of pan kept` beside `261
+of 261 nodes in frame`; a cull test that scrolled 90,000 units to where the count
+is zero either way; an eye probe that sampled deliberately-clear standing spots;
+and a farm gate that compared a whole HUD line, so it passed here and failed on
+CI because `surveyed` legitimately moves when a board's members are files and not
+when they are commits.
+
+**Next**: make the map the way you answer. It is the most-requested change, it is
+already half-built, and it is the only one of these that changes what the player
+*does* rather than what they look at.
+

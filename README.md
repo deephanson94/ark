@@ -174,6 +174,28 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
+- **The first ten minutes score 7.2 visual and 6.8 "would you keep playing", against a goal of 8.**
+  Ten personas from different technical backgrounds, one fixed build each round, each told only what
+  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Three rounds:
+  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80**. Every round closed the defects the previous one named
+  and the complaints changed rather than shrank, which is the honest reading of a flat visual score.
+  The two that now dominate are structural rather than cosmetic, and both are named below.
+- **Answering is a checkbox list, and the map is a picture of it** — 6 of 10 testers in the third
+  round, from four different backgrounds. The map already boxes every candidate when a board opens
+  and a click on one already ticks it; what is missing is that nothing says so, so nobody uses it.
+  *"The one moment that matters most is the least spatial part of the experience."* This is the
+  single most-requested change in the panel and the one that would make NORTH-STAR §9's
+  spatial-memory claim true of the **interaction** rather than only of the picture.
+- **Label crowding at the arrival zoom** — 6 of 10 in the third round, on the one frame everyone
+  sees first. Dodging and a wider gap (ADR-pending, `labels.ts`) took district names from 19 to 29
+  and stopped every box overlap, but the densest region still reads as stacked text to a newcomer.
+  A rank cut at fit zoom is the obvious lever and it has never been measured.
+- **The walk's shore spawn faces away from the city.** The camera-inside-a-building defect is closed
+  (1 of 11,880 positions on ark, from 232 — `npm run probe-eye`), and this is the other half that is
+  not: `world.spawn` faces `π` at a point outside the north edge, so the first frame after `g` is
+  empty ground until you turn. Three testers across two rounds called it the worst first impression
+  in the product.
+
 - **A board's title is a 74-character slug set as display type.** The subject's path is embedded
   inside the question sentence and the sentence belongs to the verb, so pulling the path onto its
   own monospace line is a change to `Verb.prompt`, not to the panel — and putting the sentence
