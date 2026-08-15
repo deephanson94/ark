@@ -830,6 +830,18 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selected = node;
     hovered = null;
     remember(recordSurvey(progress, [node.id]));
+    // **In the world, move the hero — the camera is not what is on screen.**
+    // This moved the flat map's camera unconditionally, so in the world the
+    // button did nothing visible and the caption then said *"you are on
+    // labels.ts"*. A cold playtester proved the avatar never moved by hashing
+    // the canvas before and after, twice, on two nodes. `travelTo` is ADR-0032
+    // §3.4's fast travel, which the world already does on entry.
+    if (world.isActive()) {
+      world.travelTo(node);
+      describe(node);
+      invalidate();
+      return;
+    }
     // Far enough in that the destination's name is drawn — arriving at an
     // unlabelled dot is arriving nowhere.
     camera = centreOn(camera, node, DISTRICT_SCALE);
@@ -937,6 +949,19 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     const targetRef =
       upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
     const target = targetRef === undefined ? null : (scene.nodes[targetRef] ?? null);
+    // **The hero's position, for the e2e, published from the path that draws
+    // it.** The walk is canvas-only, so a browser test has no other way to ask
+    // whether the avatar moved — and a canvas hash is not a substitute: the
+    // guide selects, describes and repaints a waypoint regardless, so "some
+    // pixel changed" is true whether or not the hero went anywhere. A gate
+    // written that way survived a `travelTo` that did nothing at all, which is
+    // this repo's instrument-that-measures-nothing landmine reading as good
+    // news. The first version of this publish sat in the *flat map's* draw
+    // branch, which never runs here — so it reported `null` in the one mode it
+    // was about.
+    const standing = world.hero();
+    (globalThis as unknown as { __arkHero?: unknown }).__arkHero =
+      standing === null ? null : { x: Math.round(standing.x), y: Math.round(standing.y) };
     const stats = world.draw(context, {
       viewport,
       chrome,
@@ -1201,6 +1226,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       (globalThis as unknown as { __arkNameplates?: unknown }).__arkNameplates =
         stats.nameplates.map((plate) => ({
           text: plate.text,
+          // **The path, not just the label.** Comparing an inspector path
+          // against a label with `endsWith` is a substring match: this repo has
+          // seven `index.ts` nodes, so pointing at one name and surveying a
+          // different file passed that check — the exact defect this whole
+          // change is about, invisible to its own gate. It fails the other way
+          // too, since `shortLabel` truncates a long name with `…` and a
+          // truncated label can never suffix-match its own path.
+          path: scene.atlas.nodes[plate.ref ?? -1]?.path ?? '',
           x: plate.left + plate.width / 2,
           y: plate.top + plate.height / 2,
         }));

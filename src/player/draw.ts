@@ -831,10 +831,15 @@ export function drawOrbitFrame(
     // so a fill in the ground plane would be underfoot and read as a shadow
     // nothing is casting. Zero because it is zero, not because it is unwired.
     islandsDrawn: 0,
-    // The orbit places its labels through the same pass but does not hit-test
-    // them: `pickColumn` works in the tipped projection, where a screen box is
-    // not a node's footprint. Empty because it is empty, not because it is
-    // unwired.
+    // **Empty because the orbit is out of scope here, not because it cannot be
+    // done.** An earlier version of this comment said a screen box is not a
+    // node's footprint in the tipped projection — which is a wrong technical
+    // claim in the place the next session would read it as settled: the orbit
+    // places its peak labels through the *same* `placeLabels` pass, in screen
+    // space, and draws them at the box's own coordinates. Hit-testing them
+    // needs no footprint and no inverse; the candidates simply do not carry
+    // `ref` yet. Pointing at a summit name in the orbit still selects whatever
+    // column is behind the text — the reported defect, one view over.
     nameplates: [],
     tiesDrawn: 0,
     labelsDrawn: placed.length,

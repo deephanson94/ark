@@ -80,6 +80,24 @@ function rendered(text: string): string {
  *
  * One rule in one place, because a rule that lives three times diverges twice.
  */
+/**
+ * Wait for a condition, with a deadline.
+ *
+ * The player writes most of what a test reads from the rAF loop, so a fixed
+ * `waitForTimeout` before reading is a race that only loses on a slower
+ * machine — this file already carries a landmine about CI reporting `0 marks`
+ * on a board that draws six. The deadline is what keeps a genuinely dead
+ * surface failing rather than hanging.
+ */
+async function pollUntil(check: () => Promise<boolean>, deadlineMs: number): Promise<boolean> {
+  const until = Date.now() + deadlineMs;
+  for (;;) {
+    if (await check()) return true;
+    if (Date.now() > until) return false;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+}
+
 function claimAbout(claim: string): string {
   return claim.split(' — ')[0] ?? claim;
 }
@@ -1506,23 +1524,50 @@ async function main(): Promise<number> {
       }
       let checked = 0;
       let wrong = 0;
-      for (const row of rows.slice(0, 6) as { text: string; x: number; y: number }[]) {
+      // **Spread across the placed labels, not the top six.** `nameplates` is
+      // priority-ordered, so the first six are the biggest hubs — the easiest
+      // possible sample, and re-rolled every commit since ark indexes itself.
+      // An interval walk reaches the crowded low-priority end, where a name is
+      // most likely to sit over someone else.
+      const typed = rows as { text: string; path: string; x: number; y: number }[];
+      const step = Math.max(1, Math.floor(typed.length / 6));
+      for (let i = 0; i < typed.length && checked < 6; i += step) {
+        const row = typed[i];
+        if (row === undefined) continue;
+        // Clear the selection first, so a hover that *misses* cannot be scored
+        // against whatever was selected before: `pointermove` re-describes the
+        // selection on a miss, which would read as a wrong pick with a
+        // misleading path — or as a pass, if that path happened to match.
+        await page.mouse.move(4, 4);
+        await pollUntil(
+          async () => (await page.locator('.inspector-path').count()) === 0,
+          1500,
+        );
         await page.mouse.move(row.x, row.y);
-        await page.waitForTimeout(90);
-        const shown = (await page.locator('.inspector-path').innerText().catch(() => '')).trim();
-        if (shown === '') continue;
+        // Polled with a deadline rather than slept: the inspector is written
+        // from the rAF loop, and this file already carries a landmine about
+        // reading a rAF-driven value after a fixed wait.
+        const landed = await pollUntil(
+          async () => (await page.locator('.inspector-path').count()) > 0,
+          2000,
+        );
+        if (!landed) continue;
+        const shown = (await page.locator('.inspector-path').innerText()).trim();
         checked += 1;
-        // The inspector prints the full path; the label is its basename.
-        if (!shown.endsWith(row.text)) {
+        // **Exact, against the path the frame published.** `endsWith` on the
+        // label is a substring match, and this repo has seven `index.ts` nodes:
+        // pointing at one and surveying another passed that check — the defect
+        // this step exists for, invisible to it.
+        if (shown !== row.path) {
           wrong += 1;
           failures.push({
             what: 'labels',
-            detail: `pointing at the name "${row.text}" surveyed ${shown}`,
+            detail: `pointing at the name "${row.text}" (${row.path}) surveyed ${shown}`,
           });
         }
       }
-      if (checked === 0) {
-        failures.push({ what: 'labels', detail: 'no label hover reached the inspector at all' });
+      if (checked < 3) {
+        failures.push({ what: 'labels', detail: `only ${checked} label hovers landed` });
       }
       process.stdout.write(`e2e: pointed at ${checked} names → ${wrong} named someone else\n`);
     }
@@ -2370,6 +2415,65 @@ async function main(): Promise<number> {
       } finally {
         for (const error of exploitErrors) failures.push({ what: 'console', detail: error });
         await exploitContext.close();
+      }
+    }
+
+    // ---- the guide moves you in the world, not just on the flat map ------
+    //
+    // A cold playtester proved the avatar never moved: clicking "Where next?"
+    // in world mode took the caption from *"next is labels.ts"* to *"you are on
+    // labels.ts"* with the canvas **byte-identical**, twice, on two nodes. The
+    // handler was moving the flat map's camera, which is not what is on screen
+    // there, and then the caption asserted an arrival that had not happened.
+    //
+    // Gated the same way they found it — on the pixels — because a caption
+    // saying "you are on X" is exactly the thing that lied.
+    {
+      const worldContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const worldPage = await worldContext.newPage();
+      const worldErrors: string[] = [];
+      worldPage.on('pageerror', (error: Error) => worldErrors.push(String(error)));
+      worldPage.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') worldErrors.push(message.text());
+      });
+      try {
+        await worldPage.goto(url, { waitUntil: 'networkidle' });
+        await worldPage.waitForSelector('.hud-detail');
+        await worldPage.keyboard.press('g');
+        await worldPage.waitForTimeout(400);
+        const inWorld = (await worldPage.locator('.hud-detail').innerText()).trim();
+        if (!inWorld.includes('world')) {
+          failures.push({ what: 'world guide', detail: `g did not enter the world: "${inWorld}"` });
+        }
+        // **The hero's position, not a canvas hash.** The first version of this
+        // gate compared the canvas and a `travelTo` that moved nothing at all
+        // still passed it: the guide selects, describes and repaints a waypoint
+        // regardless, so "some pixel changed" is true either way. That is this
+        // repo's instrument-that-measures-nothing landmine, and it read as good
+        // news exactly as the landmine says.
+        const where = async (): Promise<string> =>
+          JSON.stringify(await worldPage.evaluate('window.__arkHero ?? null'));
+        const before = await where();
+        const captionBefore = (await worldPage.locator('.guide-caption').innerText()).trim();
+        await worldPage.locator('.guide-action').click();
+        await worldPage.waitForTimeout(500);
+        const after = await where();
+        const captionAfter = (await worldPage.locator('.guide-caption').innerText()).trim();
+        if (before === 'null' || after === 'null') {
+          failures.push({ what: 'world guide', detail: 'no hero position was published' });
+        } else if (after === before) {
+          failures.push({
+            what: 'world guide',
+            detail: `the hero did not move: ${before} → ${after}, caption "${captionBefore}" → "${captionAfter}"`,
+          });
+        }
+        process.stdout.write(
+          `e2e: world guide → "${captionAfter}", hero ${before} → ${after}\n`,
+        );
+        await worldPage.screenshot({ path: join(SHOT_DIR, 'world-guide.png') });
+      } finally {
+        for (const error of worldErrors) failures.push({ what: 'console', detail: error });
+        await worldContext.close();
       }
     }
 

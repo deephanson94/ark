@@ -368,7 +368,11 @@ describe('the labels a frame returns', () => {
     // them, and this is the assertion that would have caught the field being
     // wired to an empty array.
     expect(stats.nameplates.length).toBeGreaterThan(0);
-    expect(stats.nameplates.length).toBe(stats.labelsDrawn);
+    // Not `=== labelsDrawn`: that holds only at street zoom, where region
+    // labels are off. At district `labelsDrawn` counts those too, and
+    // nameplates never will — the equality would be pinning a zoom-level
+    // coincidence rather than a contract.
+    expect(stats.nameplates.length).toBeLessThanOrEqual(stats.labelsDrawn);
     for (const plate of stats.nameplates) {
       expect(plate.ref, `"${plate.text}" carries no node`).toBeTypeOf('number');
       // The name on screen is this node's name — the exact claim the playtester
