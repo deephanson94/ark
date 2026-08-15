@@ -879,6 +879,16 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selector = {
       ...selector,
       skipped: noteSkip(selector.skipped, answerKey(challenge.verb, challenge.subject), remaining),
+      // **A skipped verb counts as met, and without this the introduction is a
+      // wall.** `unmetVerb` outranks `tier`, so until a verb has been met every
+      // one of its boards outranks every board of the verb you are playing.
+      // Grading clears that in one board; *skipping* did not clear it at all,
+      // so a player who declines the introduction is offered the entire unmet
+      // deck one skip at a time — measured at **102 consecutive suggestions on
+      // ark, 160 on hono, 274 on django**. The term's stated purpose is that the
+      // player learns the deck has four kinds of question in it, and being
+      // *offered* one serves that exactly as well as answering it.
+      metVerbs: new Set([...selector.metVerbs, challenge.verb]),
     };
     retally();
     invalidate();
@@ -1220,7 +1230,33 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         fog,
         hovered,
         selected,
-        radius,
+        // **No import radius while a board is open, and this is a pillar-3
+        // fix rather than a tidy-up.**
+        //
+        // ADR-0008 decision 1 gives every node its *direct importers* for free
+        // on the canvas, and the arrival tip promises exactly that — "hover to
+        // see what imports it — the rest of the radius is earned". A Blast
+        // Radius key is a sample of the **transitive** dependent set, which
+        // contains the direct one. Each decision is right alone; together,
+        // opening a board on `S` drew a gold line from `S` to some of its own
+        // answers.
+        //
+        // Measured by `npx tsx scripts/probe-ring.ts`: **37 of ark's 40 Blast
+        // Radius boards (92.5%) drew at least one key member, 81 of 216 members
+        // in all** — and 94.4% of hono's boards, 95.7% of graphql-js's. A cold
+        // playtester found it at street zoom and proved the lines belonged to
+        // the subject by deselecting with the camera untouched. That is the
+        // `Ctrl+F` failure pillar 3 exists to prevent, on nearly every board of
+        // the verb the roadmap calls the kill point.
+        //
+        // The rule is ADR-0016's, which settled the identical question for
+        // history wires: *ink on the map is a lookup where text in a closed
+        // panel is a memory test*. So the whole channel is off while a board is
+        // open — not just the subject's ring, because the containment argument
+        // `depthFor` documents (if D imports S then `dependents(D) ⊆
+        // dependents(S)`) makes a hovered candidate's importers key members too.
+        // One rule; every leak in ADR-0014 was a rule that lived twice.
+        radius: challengePanel.isOpen() ? null : radius,
         chrome,
         questions: unanswered,
         peaks,
@@ -1232,6 +1268,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         orbit === null
           ? drawFrame(context, frameInput)
           : drawOrbitFrame(context, frameInput, orbit);
+      // **What the import channel actually carried this frame**, for the e2e.
+      // The leak this guards is ink on a canvas, so a browser test needs the
+      // renderer's own answer rather than a pixel heuristic: `none` means no
+      // import radius was handed to the frame at all.
+      (globalThis as unknown as { __arkRadius?: unknown }).__arkRadius =
+        frameInput.radius === null ? 'none' : `subject ${frameInput.radius.subject}`;
       // What the frame just drew is what the pointer may hit. Kept from the
       // frame rather than recomputed, so the two can never disagree about where
       // a name is.

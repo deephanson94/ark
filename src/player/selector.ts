@@ -116,7 +116,14 @@ export interface SelectorState {
    */
   readonly verbRun: number;
   /**
-   * Verbs this player has already been served a board of, this session.
+   * Verbs this player has already met — **graded a board of, or skipped one of**.
+   *
+   * Not "served": the shell updates this in `onGraded` and when a suggestion is
+   * skipped, so a board merely opened and escaped does not count and a declined
+   * one does. Skipping counts because the term's purpose is that the player
+   * learns the deck's shape, which being offered a verb serves as well as
+   * answering it — and because without it a single skip walls the player behind
+   * the whole unmet deck (102 consecutive suggestions on this repo).
    *
    * Feeds `unmetVerb`, which is a **one-shot** rank term: it lifts the first
    * board of a verb you have never seen, and goes inert the moment you have

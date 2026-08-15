@@ -4501,3 +4501,51 @@ The gaps left are smaller: Placement is reachable only through the guide (a
 player clicking the map never meets 25% of the deck), the same-day commit gloss
 says nothing when a repo lands several commits a day, `UNREAD` is still a
 whitelist, and there is no deck browser.
+
+---
+
+## 2026-08-14 (later still) — the map becomes a handle, and stops drawing the answer
+
+Two cold playthroughs of the merged build, each measured against the last:
+intuitiveness 5 → 6 → **7**, core loop 5 → 7 → **8**, controls 6 → 5 → **7**,
+visual appeal 6 → 6 → **7**. The second run's verdict — *"the map does not
+participate in the loop"* — is what most of this is aimed at.
+
+**The map drew the answer key.** ADR-0008 decision 1 draws every node's direct
+importers for free, and a Blast Radius key is a sample of the *transitive*
+dependent set, which contains them. So a board open on `S` drew a gold line from
+`S` to some of its own answers: **37 of ark's 40 boards and 81 of 216 key
+members**, 94.4% of hono's boards and 95.7% of graphql-js's. A playtester found
+it at street zoom and proved the lines belonged to the subject by deselecting
+with the camera untouched. That is pillar 3's `Ctrl+F` failure on nearly every
+board of the verb the roadmap calls the kill point. The whole import channel is
+now off while a board is open — ADR-0016's rule, *ink on the map is a lookup
+where text in a closed panel is a memory test* — and the overlap is recorded as
+an atlas invariant so nobody re-derives "direct importers are free" as safe to
+draw beside a board.
+
+**A drawn name is a handle on the node it names**, in the flat map and the
+orbit. Labels never drifted — `placeLabels` anchors each under its own disc —
+but the text lies across other discs and hit-testing went straight through, so
+pointing at a name selected a different file. That is why the tester answered
+all eight of their boards off the panel's text list.
+
+**You meet every verb the deck has**: 2/4 → **4/4** on all four reference repos,
+inside the first four boards, django 1/2 → 2/2. A one-shot rank term above
+`tier`, inert once every verb is met — and a *skipped* verb counts as met, or one
+skip walls the player behind the entire unmet deck (measured at 102 consecutive
+suggestions here, 274 on django).
+
+Also: a failed board no longer returns as fresh after a reload; the guide moves
+the hero in the world instead of an invisible camera; the one tooltip in the
+product is reachable; the engine range is tested on Node 20, which immediately
+caught the indexer needing 22.
+
+945 unit, 117 atlas, determinism byte-identical, e2e clean.
+
+**Next**: `docs/experiments/0001`. Two things are the owner's and are measured
+and waiting — the map turning after every graded answer (ADR-0017; the tester's
+stated reason they would close the tab) and refusing boards whose answer key is
+entirely documentation (9 here, 4 on hono). The map still contributes nothing
+*during* answering: it marks candidates, but fog-gated labels mean the boxes are
+anonymous, so there is no path from a checkbox row to its node.

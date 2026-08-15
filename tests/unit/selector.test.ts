@@ -749,6 +749,30 @@ describe('introducing the deck', () => {
     expect(met.has('archaeology')).toBe(true);
   });
 
+  it('treats a skipped verb as met, so one skip is not a wall', () => {
+    // **`unmetVerb` outranks `tier`**, so until a verb is met every board of it
+    // outranks every board of the verb you are playing. Grading clears that in
+    // one board; skipping cleared it in none, so a player who declined the
+    // introduction was offered the entire unmet deck one skip at a time —
+    // measured at **102 consecutive suggestions on ark, 160 on hono, 274 on
+    // django**. Skip exists precisely for "I did not want that board", and the
+    // term turned one skip into a wall of the same kind.
+    const first = suggestNext(deck, regionOf, NO_HISTORY);
+    if (first === null) throw new Error('the fixture served nothing');
+    const all = deck.map((board) => answerKey(board.verb, board.subject));
+    const afterSkip = {
+      ...NO_HISTORY,
+      skipped: noteSkip(new Set(), answerKey(first.verb, first.subject), all),
+      metVerbs: new Set([first.verb]),
+    };
+    const second = suggestNext(deck, regionOf, afterSkip);
+    expect(second).not.toBeNull();
+    // The skipped verb is met, so the next offer is *not* forced to be another
+    // unmet verb ahead of everything — it is whatever the curriculum wants.
+    expect(afterSkip.metVerbs.has(first.verb)).toBe(true);
+    expect(second?.id).not.toBe(first.id);
+  });
+
   it('goes inert once every verb has been met, leaving the tiers alone', () => {
     // **One-shot, which is what keeps it from reordering §5's curriculum.**
     // After the introduction the tier-5 board's verb is met, so the term stops

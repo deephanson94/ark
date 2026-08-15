@@ -12,8 +12,13 @@
  * argued from a number. Reports the share of key members that are prose, the
  * share of *subjects* that are, and how many boards are prose end to end.
  *
- * "Prose" is the walk's own notion of a non-source file rather than a new list:
- * a node whose language the scanner does not read as program source.
+ * **"Prose" is a list, and saying so is the point.** An earlier version of this
+ * comment claimed it was "the walk's own notion of a non-source file rather than
+ * a new list" — directly above a new list. On ark and hono every non-source
+ * extension present is covered, so the figures stand; on another repo it will
+ * silently miss one, in a probe whose output feeds an owner decision. ADR-0025's
+ * landmine: a decision not to include something and a failure to think of it
+ * look identical in a table.
  *
  *   npx tsx scripts/probe-prose.ts /tmp/ark-corpus <repo>...
  */

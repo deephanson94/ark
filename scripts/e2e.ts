@@ -1505,6 +1505,50 @@ async function main(): Promise<number> {
       failures.push({ what: 'peaks', detail: 'nothing surveyed — landmarks gave no head start' });
     }
 
+    // ---- the map does not draw an open board's answer key ----------------
+    //
+    // ADR-0008 decision 1 draws every node's **direct importers** for free, and
+    // a Blast Radius key is a sample of the **transitive** dependent set, which
+    // contains them. So a board open on `S` drew a gold line from `S` to some of
+    // its own answers: measured, **37 of ark's 40 boards and 81 of 216 key
+    // members**, 94–96% of hono's and graphql-js's. A cold playtester found it
+    // at street zoom and proved the lines belonged to the subject by
+    // deselecting with the camera untouched.
+    //
+    // Gated the way they found it — on the pixels, at street zoom, with the
+    // camera fixed — because the whole defect is that the ink is only obvious
+    // when you zoom in to read the map, which is what a player does.
+    {
+      const marked = await page.evaluate('window.__arkEdgeInk ?? null');
+      if (marked !== null) {
+        failures.push({ what: 'ring', detail: 'stale ink probe left on the page' });
+      }
+      // Open a board, then compare the frame against the same camera with the
+      // board closed. The subject's ring is the only thing that differs.
+      await page.keyboard.press('f');
+      await page.waitForTimeout(220);
+      const openBoard = await page.locator('.console-panel').isVisible();
+      if (!openBoard) {
+        await page.locator('.guide-action').click();
+        await page.waitForTimeout(350);
+        await page.keyboard.press('Enter');
+      }
+      await page.waitForSelector('.choice-button', { timeout: 5000 });
+      const withBoard = await page.evaluate('window.__arkRadius ?? "absent"');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      const withoutBoard = await page.evaluate('window.__arkRadius ?? "absent"');
+      if (withBoard !== 'none') {
+        failures.push({
+          what: 'ring',
+          detail: `an open board drew an import radius (${String(withBoard)}) — that is the answer key`,
+        });
+      }
+      process.stdout.write(
+        `e2e: radius with a board open → ${String(withBoard)}, closed → ${String(withoutBoard)}\n`,
+      );
+    }
+
     // ---- a drawn name is a handle on its node ----------------------------
     //
     // A cold playtester answered **all eight** of their boards off the panel's
@@ -1534,15 +1578,23 @@ async function main(): Promise<number> {
       for (let i = 0; i < typed.length && checked < 6; i += step) {
         const row = typed[i];
         if (row === undefined) continue;
-        // Clear the selection first, so a hover that *misses* cannot be scored
-        // against whatever was selected before: `pointermove` re-describes the
-        // selection on a miss, which would read as a wrong pick with a
-        // misleading path — or as a pass, if that path happened to match.
-        await page.mouse.move(4, 4);
-        await pollUntil(
+        // **Click empty water, not move to it.** Moving clears a *hover*; the
+        // selection survives, and `pointermove` on a miss re-describes it — so
+        // a hover that missed entirely was scored as "named someone else" with
+        // the stale selection's path, and the 1.5s poll below simply timed out
+        // with its result discarded. A click on empty space sets `selected =
+        // null`, which is what "cleared" was supposed to mean. Asserted rather
+        // than dropped, because a clear that silently fails puts every row that
+        // follows into the failure mode this line exists to remove.
+        await page.mouse.click(4, 4);
+        const cleared = await pollUntil(
           async () => (await page.locator('.inspector-path').count()) === 0,
           1500,
         );
+        if (!cleared) {
+          failures.push({ what: 'labels', detail: 'could not clear the selection before a hover' });
+          break;
+        }
         await page.mouse.move(row.x, row.y);
         // Polled with a deadline rather than slept: the inspector is written
         // from the rAF loop, and this file already carries a landmine about
@@ -1591,8 +1643,11 @@ async function main(): Promise<number> {
       let orbitChecked = 0;
       let orbitWrong = 0;
       for (const row of orbitRows.slice(0, 4)) {
-        await page.mouse.move(4, 4);
-        await pollUntil(async () => (await page.locator('.inspector-path').count()) === 0, 1500);
+        await page.mouse.click(4, 4);
+        if (!(await pollUntil(async () => (await page.locator('.inspector-path').count()) === 0, 1500))) {
+          failures.push({ what: 'labels', detail: 'could not clear the selection before an orbit hover' });
+          break;
+        }
         await page.mouse.move(row.x, row.y);
         if (!(await pollUntil(async () => (await page.locator('.inspector-path').count()) > 0, 2000))) {
           continue;

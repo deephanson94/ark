@@ -178,11 +178,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   a Companion key made of `CHANGELOG.md` says only that the author updates the changelog every
   session, which is true, derived, gradeable and worth nothing. Measured by
   `npx tsx scripts/probe-prose.ts`: Blast Radius is **0.0%** prose on both repos, because nothing
-  imports Markdown; Companion is **35.6%** of ark's key members and 5.6% of hono's; Placement is
-  **42.4%** and 8.9%, and **8 of ark's 40 Placement boards are prose end to end**. Concentrated on
+  imports Markdown; Companion is **34.4%** of ark's key members and 5.6% of hono's; Placement is
+  **42.4%** and 8.9%, and **8 of ark's 40 Placement boards are prose end to end** — all measured on
+  a clean clone of `4c7ded5`. *(This row first said 35.6% for Companion, which is the figure at the
+  parent commit: measured on the tree that does not contain the change, which is this repository's
+  own named landmine, in a row about measurement.)* Concentrated on
   the bootstrap repo, which is the one every session and every playtester sees.
   **Refusing a board whose key is entirely prose is a change to what a verb refuses, which is an
-  owner decision** — it would cost 8 boards here and 3 on hono, and the deck cap would backfill from
+  owner decision** — it would cost **9 boards here and 4 on hono** — the rule is verb-blind and one all-prose *Companion*
+  board exists on each, so the Placement-only count of 8 and 3 undercounts it — and the deck cap would backfill from
   a supply of 46 eligible commits against a retained 40, so the deck would shrink slightly. Measured
   and put up rather than taken.
 
