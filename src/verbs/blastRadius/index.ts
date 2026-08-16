@@ -53,6 +53,19 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     question: `A breaking change lands in ${words.label(challenge.subject)}. Which of these ${members.many} depend on it — directly, or through a chain of imports?`,
     instruction: `Select every ${members.one} that reaches it. ${keyRule(challenge)}`,
     action: 'Map its blast radius',
+    // **Where to look, which the map has been able to answer all along.** Point
+    // at anything and its direct importers light up (ADR-0008 decision 1, and
+    // ADR-0048 for the two sessions the player spent switching that off). This
+    // says so rather than assuming it is discovered: six cold testers reported
+    // the board as a checkbox list over a map that told them nothing, and one
+    // named the cause — *"the evidence you need to reason lives on a different
+    // screen from the reasoning."*
+    //
+    // Phrased as an instrument rather than as a claim about the current frame:
+    // *"hover"* is true whenever a player reads it, where *"the lines you can
+    // see"* would depend on what is selected and would be false the moment it
+    // is not.
+    evidence: `Hover any ${members.one} on the map to see what imports it directly — this question is about what reaches ${words.label(challenge.subject)} beyond that.`,
   };
 }
 

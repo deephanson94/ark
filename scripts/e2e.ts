@@ -1635,6 +1635,60 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- the panel only promises inputs the board actually has -----------
+    //
+    // "Tick a row here, or click its marker on the map" is verb-blind copy, and
+    // whether it is **true** depends on what a candidate is: Archaeology's are
+    // commits, which have nowhere to stand (ADR-0018), so on that board there is
+    // no marker to click. A screenshot caught it; no test would have, because
+    // both the sentence and the board are individually correct.
+    //
+    // Read off the panel rather than predicted: open boards until both kinds
+    // have been seen, and assert the sentence is present exactly where the map
+    // marked something.
+    {
+      await page.keyboard.press('f');
+      await page.waitForTimeout(220);
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        x: number;
+        y: number;
+      }[];
+      let checked = 0;
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        if (checked >= 4) break;
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(110);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        await drawn(page);
+        const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
+        const says = (await page.locator('.console-how').count()) > 0;
+        const marks = Number(
+          /(\d+) marks/.exec(await page.locator('.hud-detail').innerText())?.[1] ?? '0',
+        );
+        checked += 1;
+        process.stdout.write(`e2e: ${verb} → ${marks} marks, click hint ${says ? 'shown' : 'absent'}\n`);
+        if (marks > 0 && !says) {
+          failures.push({
+            what: 'inputs',
+            detail: `${verb} marked ${marks} places and did not say they can be clicked`,
+          });
+        }
+        if (marks === 0 && says) {
+          failures.push({
+            what: 'inputs',
+            detail: `${verb} marked nothing and told the player to click a marker`,
+          });
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(180);
+      }
+      if (checked === 0) {
+        failures.push({ what: 'inputs', detail: 'no board was opened, so nothing was measured' });
+      }
+    }
+
     // ---- a skipped verb counts as met ------------------------------------
     //
     // `unmetVerb` is a one-shot rank term that lifts the first board of a verb
@@ -2532,6 +2586,19 @@ async function main(): Promise<number> {
         }
         const asked = (await seededPage.locator('.console-question').innerText()).trim();
         process.stdout.write(`e2e: archaeology → ${asked}\n`);
+        // **The negative arm of the click-hint rule, here because this is the
+        // only step that reaches this verb.** Archaeology's candidates are
+        // commits and a commit has nowhere to stand (ADR-0018), so there is no
+        // marker to click and the panel must not say there is. The sweep four
+        // hundred lines up covers the positive arm and never reaches this verb,
+        // which would have left half that gate asserting nothing — the
+        // uncovered-arm landmine, in a gate written to catch a false sentence.
+        if ((await seededPage.locator('.console-how').count()) > 0) {
+          failures.push({
+            what: 'inputs',
+            detail: 'an archaeology board told the player to click a marker; its candidates are commits',
+          });
+        }
         const subjectPath = pathById.get(target.subject) ?? '';
         if (!asked.includes(subjectPath)) {
           failures.push({

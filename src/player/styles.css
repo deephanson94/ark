@@ -738,6 +738,24 @@ body {
   color: var(--text-dim);
 }
 
+/* Where the answer comes from, and how to give it. Quieter than the
+   instruction — these point at the instrument, they are not part of the
+   question. */
+.console-evidence-hint {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(126, 214, 214, 0.82);
+}
+
+.console-how {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
 .console-choices,
 .console-notes {
   flex: 1;

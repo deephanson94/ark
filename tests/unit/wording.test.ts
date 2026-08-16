@@ -212,3 +212,41 @@ describe('a commit that shares one word does not “name” the file', () => {
     expect(noteFor('c')).toContain('A log of subjects is not a log of files');
   });
 });
+
+/**
+ * Where the answer comes from, said by the verb that is graded on it.
+ *
+ * Six cold testers reported the board as a checkbox list over a map that told
+ * them nothing, and one named the cause: *"the evidence you need to reason
+ * lives on a different screen from the reasoning."* Half of that was a real
+ * defect — the import channel was switched off while a board was open, against
+ * ADR-0008 decision 1, restored by ADR-0048 — and the other half is that
+ * nothing ever said the map answers this question at all.
+ *
+ * The claim worth holding is the **seam**: only the verb graded on imports may
+ * say the map shows evidence. The three graded on git must stay silent, because
+ * a shared sentence here is the class-label failure this repo has paid for
+ * repeatedly — true of one verb, printed over four.
+ */
+describe('the evidence line', () => {
+  const atlas = fixture();
+  const words = wordsFor(buildGraph(atlas));
+  const board = challengeFor(atlas, { verb: 'blastRadius' });
+
+  it('is present on the verb the import graph grades', () => {
+    const evidence = VERBS.blastRadius.prompt(board, words).evidence;
+    expect(evidence).toBeDefined();
+    expect(evidence).toContain('imports it directly');
+  });
+
+  it('is absent on every verb graded on git', () => {
+    // The seam: a shared sentence here would be the class-label failure this
+    // repo has paid for repeatedly — true of one verb, printed over four.
+    for (const verb of ['companion', 'placement', 'archaeology'] as const) {
+      expect(
+        VERBS[verb].prompt(challengeFor(atlas, { verb }) as never, words).evidence,
+        `${verb} claims the map shows evidence for it`,
+      ).toBeUndefined();
+    }
+  });
+});
