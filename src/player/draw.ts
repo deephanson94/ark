@@ -113,6 +113,17 @@ export interface FrameStats {
    */
   readonly boardDrawn: number;
   /**
+   * How many of those were **candidates** — the markers a click can answer with.
+   *
+   * Split out because merging them made a gate wrong: an Archaeology board's
+   * subject is a file and its candidates are commits, so it draws exactly one
+   * marker and **none of them is an input**. A check that read `boardDrawn`
+   * concluded the panel should offer click-to-answer on a board where clicking
+   * answers nothing. Two different claims — *something is marked* and *something
+   * can be clicked* — that happened to coincide on three verbs out of four.
+   */
+  readonly candidatesDrawn: number;
+  /**
    * Regions whose landmass was filled this frame.
    *
    * Counted for the same reason as every other layer here — a rendering nobody
@@ -659,6 +670,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // Nothing here draws an **edge** — the relation between the subject and its
   // candidates *is* the answer, and it stays where ADR-0008 put it.
   let boardDrawn = 0;
+  let candidatesDrawn = 0;
   if (board !== null) {
     // **Culled, and it was not.** `nodes` here is the *visible* set for the
     // flat map but the marks are drawn from it without re-checking the box a
@@ -714,6 +726,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
         context.globalAlpha = 1;
       }
       boardDrawn++;
+      candidatesDrawn++;
     }
   }
   context.restore();
@@ -725,6 +738,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     peaksDrawn,
     tiesDrawn,
     boardDrawn,
+    candidatesDrawn,
     islandsDrawn,
     nameplates,
   };
@@ -979,5 +993,6 @@ export function drawOrbitFrame(
     // where nothing is drawn, which is this file's oldest scar. Marking columns
     // is a design question of its own and this is not it.
     boardDrawn: 0,
+    candidatesDrawn: 0,
   };
 }

@@ -537,3 +537,41 @@ describe('board markers stay inside the frame', () => {
     expect(margin.boardDrawn).toBe(0);
   });
 });
+
+/**
+ * A marked subject is not a clickable answer.
+ *
+ * `boardDrawn` counts every marker the board layer draws, including the
+ * subject's ring. Archaeology's subject is a **file** and its candidates are
+ * **commits**, so that board draws exactly one marker and none of it is an
+ * input — and a gate that read the merged number concluded the panel should
+ * offer click-to-answer on the one board where clicking answers nothing. CI
+ * caught it; locally the sweep never reached that verb.
+ */
+describe('candidate markers are counted apart from the subject’s', () => {
+  const [subject, one, two] = [0, 1, 2];
+
+  function marksOf(board: FrameInput['board']): { all: number; candidates: number } {
+    const stats = drawFrame(stubContext(), { ...frameInput([]), board });
+    return { all: stats.boardDrawn, candidates: stats.candidatesDrawn };
+  }
+
+  it('counts a subject-only board as marked and not as clickable', () => {
+    // The shape of every Archaeology board: a placed subject, no placed
+    // candidate.
+    const marks = marksOf({ subject, candidates: new Set(), picked: new Set(), hovered: null });
+    expect(marks.all).toBe(1);
+    expect(marks.candidates).toBe(0);
+  });
+
+  it('counts candidates when the board has them', () => {
+    const marks = marksOf({
+      subject,
+      candidates: new Set([one, two]),
+      picked: new Set([one]),
+      hovered: null,
+    });
+    expect(marks.all).toBe(3);
+    expect(marks.candidates).toBe(2);
+  });
+});

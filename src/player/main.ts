@@ -1368,6 +1368,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // The view, for the e2e's composition gate. A board pans the map and
       // gives the pan back on close; a canvas hash cannot tell that from the
       // turn that follows it, and the camera is the thing the rule is about.
+      // How many *candidate* markers this frame drew, as against how many marks
+      // in total. An Archaeology board marks its subject — a file — and none of
+      // its candidates, which are commits, so the two numbers differ on exactly
+      // the verb where the click hint must not appear.
+      (globalThis as unknown as { __arkCandidateMarks?: unknown }).__arkCandidateMarks =
+        stats.candidatesDrawn;
       (globalThis as unknown as { __arkCamera?: unknown }).__arkCamera = {
         x: camera.x,
         y: camera.y,

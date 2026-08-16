@@ -1664,21 +1664,27 @@ async function main(): Promise<number> {
         await drawn(page);
         const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
         const says = (await page.locator('.console-how').count()) > 0;
-        const marks = Number(
-          /(\d+) marks/.exec(await page.locator('.hud-detail').innerText())?.[1] ?? '0',
-        );
+        // **Candidate markers, not marks.** The HUD's `marks` counts the
+        // subject's ring too, and an Archaeology board marks its subject — a
+        // file — while none of its candidates, which are commits, has a place.
+        // Reading the merged number made this gate demand a click hint on the
+        // one board where clicking answers nothing; CI caught it, on a rule I
+        // had written the same day to stop a sentence being false.
+        const marks = Number(await page.evaluate('window.__arkCandidateMarks ?? 0'));
         checked += 1;
-        process.stdout.write(`e2e: ${verb} → ${marks} marks, click hint ${says ? 'shown' : 'absent'}\n`);
+        process.stdout.write(
+          `e2e: ${verb} → ${marks} candidate marks, click hint ${says ? 'shown' : 'absent'}\n`,
+        );
         if (marks > 0 && !says) {
           failures.push({
             what: 'inputs',
-            detail: `${verb} marked ${marks} places and did not say they can be clicked`,
+            detail: `${verb} marked ${marks} clickable candidates and did not say they can be clicked`,
           });
         }
         if (marks === 0 && says) {
           failures.push({
             what: 'inputs',
-            detail: `${verb} marked nothing and told the player to click a marker`,
+            detail: `${verb} marked no clickable candidate and told the player to click a marker`,
           });
         }
         await page.keyboard.press('Escape');
