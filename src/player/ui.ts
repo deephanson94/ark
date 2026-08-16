@@ -363,7 +363,24 @@ export function createInspector(
 
       body.append(
         el('h2', 'inspector-path', [atlasNode.path]),
-        field('region', region?.label ?? atlasNode.region),
+        // **"clusters with", not "region", and the word was the whole defect.**
+        // A region is a *derived* cluster — pillar 4, geography is topology — but
+        // it is *named* after a directory when one holds at least half of it
+        // (`NAMEABLE_SHARE`), so the panel printed `src/indexer/layout.ts` beside
+        // `region: scripts` and four cold playtesters read it as the tool
+        // claiming the file lives in `scripts/`. One filed it as "regions are
+        // mislabelled", one as "the region field lies", and a third said it cost
+        // more trust than anything else they saw — while explicitly granting the
+        // clustering was probably honest. It was: `layout.ts` really does cluster
+        // with the scripts, because the scripts import it.
+        //
+        // Nothing about the analysis was wrong and nothing about it changed. A
+        // locational noun beside a directory-shaped value asserts a location;
+        // this asserts the relation the number actually comes from. It is
+        // `CLAUDE.md`'s class-label landmine arriving in a single word — the
+        // label was right every time and the gloss was a separate claim nobody
+        // had checked.
+        field('clusters with', region?.label ?? atlasNode.region),
         field('lines', String(atlasNode.loc)),
         field('imports', String(dependencies)),
         // "imported by", not "depended on by": the second reads as transitive,

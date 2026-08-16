@@ -46,7 +46,34 @@ export const INK: Ink = {
   ground: '#0a0d13',
   fog: 'rgba(10, 13, 19, 0.72)',
   silhouette: '#2b3444',
-  edge: 'rgba(140, 160, 190, 0.16)',
+  /**
+   * **0.16 → 0.44, because at 0.16 this is not a graph.**
+   *
+   * `edgeAlpha` multiplies it per zoom level, so the effective opacity at the
+   * fit view every session opens on was `0.16 × 0.7 = 0.112`, and at maximum
+   * zoom 0.16. Three cold playtesters of ten described the same thing
+   * independently and none of them used the word "faint" as a nicety: *"802
+   * edges drawn as near-invisible hairlines, so the one thing an architect looks
+   * for — who points at whom, and where the cross-region traffic is — is
+   * essentially unrendered"*; *"the two things it claims to encode (size = LOC,
+   * line = import) are the two things I cannot read a value off"*; *"it reads as
+   * a bubble chart, not a graph"*. Pillar 4 is *geography is topology*, and the
+   * topology was the part not being drawn.
+   *
+   * Chosen by rendering 0.16 / 0.30 / 0.44 and looking at them, which is the
+   * right instrument for a question about whether something is visible. At 0.44
+   * the fan out of `atlas/index.ts` and the traffic between `src/verbs` and
+   * `src/player` read as structure, and the regions and labels are unharmed —
+   * risk #2's hairball is what the upper end was checked against.
+   *
+   * **Undirected, and that is not an omission.** Drawing which way an edge
+   * points is the obvious next step and it is barred: walking backwards along
+   * drawn arrows scores F1 1.000 exact on 100% of both reference repos' Blast
+   * Radius boards, because ADR-0008's `candidates ∩ dependents = truth` makes a
+   * directed graph the answer key by construction. Brighter is a legibility
+   * change; directed would be handing over the deck.
+   */
+  edge: 'rgba(140, 160, 190, 0.44)',
   edgeHighlight: 'rgba(255, 214, 130, 0.85)',
   tie: 'rgba(240, 122, 92, 0.92)',
   tieRest: 'rgba(240, 122, 92, 0.30)',
