@@ -69,9 +69,44 @@ const EYE_HEIGHT = 33;
 export const EYE_HEIGHT_AT_FULL = EYE_HEIGHT;
 export const EYE_PITCH = -0.52;
 const FOV = 1.05;
+/** The vertical field of view, for `scripts/probe-spawn.ts` and the tests. */
+export const FOV_VERTICAL = FOV;
 
 /** How close you must be to a tower's edge for its board to be openable. */
 export const INTERACT_RANGE = 14;
+/**
+ * How far clear of the target's footprint `g` stands you.
+ *
+ * **Was 7, and 7 is why the walk was the worst-rated surface in the product.**
+ * Seven of ten cold playtesters named it, three as *the* thing dragging their
+ * score, all describing the same first frame: a flat untextured wall filling
+ * 1440×900, no horizon, no sky. The diagnosis that looked obvious — the camera
+ * resolving inside a building — is **wrong, and measured wrong**:
+ * `scripts/probe-spawn.ts` reports 0 of ark's 227 and 0 of hono's 381 real spawn
+ * positions putting the eye inside any tower.
+ *
+ * What actually happens is framing. You are stood in front of the target facing
+ * it, and a target is a *challenge subject*, which by ADR-0013 means tall — so
+ * the arithmetic is that a 60-unit tower seen from the rig's resting position
+ * subtends about 98% of the vertical field of view. The wall is the building you
+ * were sent to, seen from its foot.
+ *
+ * **This does not fix that, and saying so is the point of the paragraph.**
+ * Spawns where the target fills ≥90% of frame height go 3.1% → 3.5% on ark and
+ * 4.2% → 3.9% on hono — inside the noise, in opposite directions, worst case
+ * still 119%. The binding variable is eye *height* against the target's, and no
+ * standoff reaches it from down here: at the rig's resting position you would
+ * have to stand outside `INTERACT_RANGE` to frame a sixty-unit tower, which
+ * would stand the player where they cannot open the board they came for. The
+ * real fix is a rig that considers what is **ahead** as well as what is behind,
+ * and it is not built. `scripts/probe-spawn.ts` is the instrument for it.
+ *
+ * What this *did* fix is a different bug the same measurement uncovered: the
+ * standoff was computed off the glyph radius and the gate off the footprint, so
+ * a unit test found a spawn 14.12 from a tower with a range of 14 — stood at the
+ * building you were sent to, unable to open it.
+ */
+const SPAWN_STANDOFF = 11;
 /**
  * How close counts as having looked at a building.
  *
@@ -182,9 +217,41 @@ export interface WorldMode {
  * A spawn *inside* a tower is resolved by the collision push on the first frame,
  * which reads as being shoved rather than as arriving.
  */
-function standingClearOf(at: SceneNode): Hero {
-  const clearance = at.radius + HERO_RADIUS + 7;
-  return { x: at.x, y: at.y + clearance, facing: 0 };
+/**
+ * Where `g` stands you when you enter on a particular building.
+ *
+ * Exported so `scripts/probe-spawn.ts` and the unit tests measure the **shipped**
+ * rule rather than a copy of it — a re-implemented probe agrees with the code by
+ * sharing whatever the code got wrong, which is how `probe-eye.ts` came to
+ * report a healthy number about a population the product never uses.
+ */
+export function spawnFacing(world: World, at: SceneNode): Hero {
+  // **Off the tower's ground `footprint`, not the scene node's glyph `radius`.**
+  // Those are different numbers wearing one name — CLAUDE.md's landmine about
+  // reusing a measurement in a new dimension — and the standoff and the interact
+  // gate were reading one each. `focus()` opens a board within `INTERACT_RANGE`
+  // of the **footprint**, so a standoff computed off the glyph drifts against
+  // the gate by however much the two differ, and a unit test caught it landing
+  // at 14.12 against a range of 14: stood at the building you were sent to, and
+  // unable to open it.
+  //
+  // Measured off the footprint the gap is exactly `HERO_RADIUS + STANDOFF`, so
+  // the relationship to the gate is arithmetic rather than hopeful.
+  const tower = world.byRef.get(at.ref);
+  const footprint = tower === undefined ? at.radius : tower.footprint;
+  // Two rules pulling opposite ways, and measuring them is the only reason this
+  // is not one or the other. Standing off the **glyph radius** frames better by
+  // accident — radius scales with lines of code, so it happens to back you away
+  // from exactly the big buildings, which are the tall ones. Standing off the
+  // **footprint** is the only thing the gate below agrees with. Swapping to the
+  // footprint alone made framing *worse* on ark (3.1% → 9.7% of spawns with the
+  // target filling the frame), and raising the standoff to the gate's ceiling
+  // did not recover it (8.4%).
+  //
+  // So: back off as far as framing wants, and never past what the gate allows.
+  const want = Math.max(at.radius, footprint) + HERO_RADIUS + SPAWN_STANDOFF;
+  const limit = footprint + INTERACT_RANGE;
+  return { x: at.x, y: at.y + Math.min(want, limit), facing: 0 };
 }
 
 /**
@@ -363,7 +430,7 @@ export function createWorldMode(): WorldMode {
       // would be resolved by the collision push on the first frame, which reads
       // as being shoved.
       if (at !== null) {
-        hero = standingClearOf(at);
+        hero = spawnFacing(world, at);
       } else {
         hero = { x: world.spawn.x, y: world.spawn.y, facing: world.spawn.facing };
       }
@@ -377,7 +444,7 @@ export function createWorldMode(): WorldMode {
       // "stand clear of the tower" is one edit away from a spawn inside a
       // footprint, which the collision push resolves on the first frame and
       // reads as being shoved.
-      hero = standingClearOf(at);
+      hero = spawnFacing(world, at);
       lastMs = null;
       held.clear();
       return true;

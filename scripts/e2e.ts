@@ -1718,8 +1718,20 @@ async function main(): Promise<number> {
     {
       await page.keyboard.press('f');
       await page.waitForTimeout(200);
+      // **The selector's own key, not the rendered caption.** The caption reads
+      // "N left · next is X" and X is the *subject*; the key the selector
+      // de-duplicates on is `(verb, subject)`. So two boards asking different
+      // questions about one file render one caption, and this step scored a
+      // correct pair as a re-offer — `11 distinct of 12` on a run where the
+      // selector had done nothing wrong. Same family as this file's other
+      // three: identify the thing by what identifies it, never by a sentence
+      // that happens to mention it.
       const suggestion = async (): Promise<string> =>
-        (await page.locator('.guide-caption').innerText()).trim();
+        String(
+          await page.evaluate(
+            () => (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey,
+          ),
+        );
       const seen: string[] = [];
       for (let i = 0; i < 12; i += 1) {
         if ((await page.locator('.guide-skip').count()) === 0) break;

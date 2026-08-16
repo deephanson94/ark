@@ -1249,6 +1249,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   function refreshGuide(openQuestions: number): void {
     const upcoming = nextUp();
     const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+    // **What the guide is offering, as the selector's own key.** The e2e used to
+    // identify a suggestion by its rendered caption, which names the *subject*
+    // and not the verb — so two boards asking different questions about one file
+    // read as the same suggestion and a correct pair scored as a repeat. The key
+    // is `(verb, subject)` everywhere else in the player and it is not on screen
+    // anywhere, so the test needs it from here rather than from a sentence.
+    (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey =
+      upcoming === null ? null : answerKey(upcoming.verb, upcoming.subject);
     guide.update({
       next: upcoming,
       // Only when the deck is empty *because it was refused*. A repo whose

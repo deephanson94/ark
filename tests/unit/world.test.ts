@@ -27,7 +27,13 @@ import type { RegionKind } from '../../src/atlas/index.js';
 import { HERO_RADIUS, WALK_SPEED, step, wrapAngle } from '../../src/player/world/hero.js';
 import { DEFAULT_ORBIT, project as projectOrbit } from '../../src/player/orbit.js';
 import { horizonY } from '../../src/player/world/render.js';
-import { EYE_PITCH as RIG_PITCH, createWorldMode, rigFor } from '../../src/player/world/index.js';
+import {
+  EYE_PITCH as RIG_PITCH,
+  INTERACT_RANGE,
+  createWorldMode,
+  rigFor,
+  spawnFacing,
+} from '../../src/player/world/index.js';
 import type { World } from '../../src/player/world/build.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -802,5 +808,57 @@ describe('rigFor', () => {
     // for a widening that any width would pass.
     const rig = rigFor(worldOf([tower(11, 20, 8, 90)]), AT);
     expect(rig.height).toBeGreaterThan(90);
+  });
+});
+
+describe('where `g` stands you', () => {
+  const scene = prepare(
+    atlasWith(
+      ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/core/hub.ts', 'docs/readme.md'],
+      [
+        ['src/a.ts', 'src/core/hub.ts'],
+        ['src/b.ts', 'src/core/hub.ts'],
+        ['src/c.ts', 'src/b.ts'],
+      ],
+    ),
+  );
+  const world = buildWorld(scene);
+
+  // **The standoff and the interact gate are one decision and nothing checked
+  // it.** `spawnFacing` stands you off by `radius + HERO_RADIUS + n`, and
+  // `focus()` will only open a board within `INTERACT_RANGE` of the tower — so
+  // raising `n` to get the building out of the camera's face can silently put
+  // the player out of reach of the thing they were sent to. Worse, the two
+  // quantities are measured against *different* geometries: the standoff off
+  // the scene node's glyph `radius`, the gate off the tower's ground
+  // `footprint`, which CLAUDE.md has a landmine about being different numbers
+  // wearing one name.
+  it('stands you close enough to open the board you were sent to', () => {
+    for (const node of scene.nodes) {
+      const tower = world.byRef.get(node.ref);
+      if (tower === undefined) continue;
+      const hero = spawnFacing(world, node);
+      const gap = Math.hypot(hero.x - tower.node.x, hero.y - tower.node.y) - tower.footprint;
+      expect(gap).toBeLessThanOrEqual(INTERACT_RANGE);
+    }
+  });
+
+  it('faces the building it stood you at', () => {
+    for (const node of scene.nodes) {
+      const hero = spawnFacing(world, node);
+      // `yaw` 0 faces −Y, and the hero is placed at +Y of the target, so the
+      // target is dead ahead. A spawn facing away is the shore's own defect and
+      // must not arrive here too.
+      // Forward is `(sin, -cos)`. The first draft of this used `(-sin, cos)`,
+      // which is `rigFor`'s **back** vector — the basis the camera booms along,
+      // not the one the hero faces — and reported dot -1 on a spawn that faces
+      // its target correctly.
+      const ahead = { x: Math.sin(hero.facing), y: -Math.cos(hero.facing) };
+      const toTarget = { x: node.x - hero.x, y: node.y - hero.y };
+      const length = Math.hypot(toTarget.x, toTarget.y);
+      if (length === 0) continue;
+      const dot = (ahead.x * toTarget.x + ahead.y * toTarget.y) / length;
+      expect(dot).toBeGreaterThan(0.9);
+    }
   });
 });
