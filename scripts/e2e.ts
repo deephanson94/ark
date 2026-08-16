@@ -1564,15 +1564,18 @@ async function main(): Promise<number> {
       if (marked !== null) {
         failures.push({ what: 'ring', detail: 'stale ink probe left on the page' });
       }
-      // **Both directions, because the rule is now scoped by channel.** The
-      // import channel is off while an *import-graded* board is open — that ring
-      // is the answer key — and stays on for a board graded on git, where a
-      // file's importers are ordinary evidence and switching them off left a
-      // player with nothing on screen to reason from. A blanket assertion would
-      // pass against either rule and so tests neither.
+      // **The rule ADR-0008 decision 1 states, both halves of it.** Depth 1 is
+      // drawn *"for every node, always — in free roam and while a challenge is
+      // open alike"*, and the **full** cone only for a subject in
+      // `fog.understood`. The decision's Rejected list names *"suppress
+      // everything while a challenge is open"* explicitly.
       //
-      // Which board each node serves is read off the panel, never predicted:
-      // this file has paid three times for a step that guessed.
+      // This gate has now asserted three different rules in three commits — off
+      // for every board, off for import-graded boards, and the ADR's — which is
+      // what happens when a gate is written from the code instead of from the
+      // decision. It reads the decision now: with a board open, whatever its
+      // verb, the channel is live and bounded at depth 1 for an unproved
+      // subject.
       const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
         path: string;
         x: number;
@@ -1605,24 +1608,29 @@ async function main(): Promise<number> {
       const onImports = seen.get('imports');
       if (onImports === undefined) {
         failures.push({ what: 'ring', detail: 'no import-graded board was reached, so nothing was measured' });
-      } else if (onImports !== 'none') {
+      } else if (!onImports.startsWith('subject ')) {
         failures.push({
           what: 'ring',
-          detail: `an open Blast Radius board drew an import radius (${onImports}) — that is the answer key`,
+          detail: `an open Blast Radius board drew no import radius (${onImports}) — ADR-0008 decision 1 draws depth 1 always, and §8.4 calibrates difficulty against exactly that guess`,
+        });
+      } else if (!onImports.endsWith('depth 1')) {
+        failures.push({
+          what: 'ring',
+          detail: `an open board drew more than depth 1 (${onImports}) — the full cone is earned, not shown`,
         });
       }
       const onHistory = seen.get('history');
-      if (onHistory !== undefined && onHistory === 'none') {
+      if (onHistory !== undefined && !onHistory.startsWith('subject ')) {
         failures.push({
           what: 'ring',
-          detail: 'a history board switched the import channel off, which is the regression that left a player nothing to reason from',
+          detail: `a history board drew no import radius (${onHistory}) — the rule must not depend on which board is open`,
         });
       }
       // The control: without it a dead radius channel reads as a pass.
       if (closed === 'none') {
         failures.push({
           what: 'ring',
-          detail: 'no import radius with the board closed either, so the suppression above proves nothing',
+          detail: 'no import radius with the board closed either, so the assertions above prove nothing',
         });
       }
     }

@@ -12,7 +12,7 @@
  * the repo at all.
  */
 
-import type { VerbId, Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
+import type { Atlas, Challenge, NodeId, NodeRef, AtlasId } from '../atlas/index.js';
 import {
   challengeOrder,
   coverageSentence,
@@ -84,16 +84,6 @@ const ATLAS_URL = 'atlas.json';
  */
 const ARRIVAL_MS = 3200;
 
-/**
- * Is the open board one the import graph grades?
- *
- * `null` verb means no board is open. Asked of the console rather than tracked
- * beside it, so the two cannot disagree about what is on screen.
- */
-function importGraded(console: { openVerb(): VerbId | null }): boolean {
-  const verb = console.openVerb();
-  return verb !== null && channelOf(verb) === 'importRadius';
-}
 /** Pointer movement below this is a click, not a drag. */
 const DRAG_THRESHOLD = 4;
 /**
@@ -1314,46 +1304,45 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         fog,
         hovered,
         selected,
-        // **No import radius while a board is open, and this is a pillar-3
-        // fix rather than a tidy-up.**
+        // **Depth 1 is drawn on every board, which is ADR-0008 decision 1 as
+        // written** — and this line spent two sessions contradicting the
+        // decision it cited.
         //
-        // ADR-0008 decision 1 gives every node its *direct importers* for free
-        // on the canvas, and the arrival tip promises exactly that — "hover to
-        // see what imports it — the rest of the radius is earned". A Blast
-        // Radius key is a sample of the **transitive** dependent set, which
-        // contains the direct one. Each decision is right alone; together,
-        // opening a board on `S` drew a gold line from `S` to some of its own
-        // answers.
+        // A cold playtester used a subject's ring as a lookup and it was
+        // measured (37 of ark's 40 Blast Radius boards drew at least one key
+        // member), so the channel was switched off while a board was open, then
+        // narrowed to import-graded boards. No ADR was written, and the comment
+        // that shipped with it named decision 1 as its authority on the line
+        // that nulled it.
         //
-        // Measured by `npx tsx scripts/probe-ring.ts`: **37 of ark's 40 Blast
-        // Radius boards (92.5%) drew at least one key member, 81 of 216 members
-        // in all** — and 94.4% of hono's boards, 95.7% of graphql-js's. A cold
-        // playtester found it at street zoom and proved the lines belonged to
-        // the subject by deselecting with the camera untouched. That is the
-        // `Ctrl+F` failure pillar 3 exists to prevent, on nearly every board of
-        // the verb the roadmap calls the kill point.
+        // Decision 1 had already reasoned about exactly this and **rejected**
+        // it, in sentences that are still right: *"no modal special-casing and
+        // no per-subject suppression: the rule must not depend on whether a
+        // challenge is open, because the leak happens at the moment of choosing
+        // the subject"*; *"depth 1 is not a leak — those edges are already drawn
+        // on the canvas"*; and *"suppress everything while a challenge is open —
+        // fixes nothing at the moment of choosing"*. Which is true: close the
+        // board, hover, reopen. It was a speed bump, not a gate.
         //
-        // The rule is ADR-0016's, which settled the identical question for
-        // history wires: *ink on the map is a lookup where text in a closed
-        // panel is a memory test*. So the channel is off while an
-        // **import-graded** board is open — not just the subject's ring,
-        // because the containment argument `depthFor` documents (if D imports S
-        // then `dependents(D) ⊆ dependents(S)`) makes a hovered candidate's
-        // importers key members too. One rule; every leak in ADR-0014 was a
-        // rule that lived twice.
+        // The cost was not a speed bump. §8.4 defines `surprise` against the
+        // naive direct-neighbour guess, so a player who cannot see direct
+        // neighbours cannot form the baseline difficulty is calibrated against —
+        // and `gate.ts` declines to score that guess for the same reason, in
+        // writing: *"a question that strategy passes is an easy question, which
+        // the progression needs."* Measured by `scripts/probe-depth1.ts`, it
+        // scores **0.985 / 1.000 / 0.611 / 0.800 over the first fifteen boards
+        // the shipped selector serves** and **0.531 / 0.561 / 0.293 / 0.467
+        // deck-wide** (ark, hono, kysely, graphql-js). That is the difficulty
+        // curve: it wins the opening, which is what an opening is *for*, and
+        // loses most of the deck. Taking it away made the boards designed to be
+        // winnable unwinnable — three cold rounds of "my first three boards
+        // scored zero".
         //
-        // **Scoped by channel, and the blanket version was a regression nobody
-        // asked for.** Companion and Archaeology are graded on git; a file's
-        // importers are not their answer key by any argument, and switching the
-        // channel off for them left a player with *no* evidence on screen while
-        // answering. A PL academic on the panel named exactly that as the thing
-        // holding their score down — *"the evidence you need to reason lives on
-        // a different screen from the reasoning, so early play is guess-then-
-        // learn"* — which is pillar 3's own complaint about its own product.
-        // What is restored is `DIRECT_ONLY`, the hint ADR-0008 decision 1 gives
-        // away to everyone at all times; the full cone stays gated on
-        // `subjectsPassed` exactly as before.
-        radius: importGraded(challengePanel) ? null : radius,
+        // What stays gated is what decision 1 actually gates: the **full** cone,
+        // on `subjectsPassed`. ADR-0016's wire gate is untouched — a co-change
+        // wire *is* Companion's answer relation, where this is the baseline
+        // Blast Radius measures departure from.
+        radius,
         chrome,
         questions: unanswered,
         peaks,
@@ -1369,8 +1358,13 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // The leak this guards is ink on a canvas, so a browser test needs the
       // renderer's own answer rather than a pixel heuristic: `none` means no
       // import radius was handed to the frame at all.
+      // The depth too, because the rule ADR-0008 decision 1 states has two
+      // halves — depth 1 always, the full cone only for a proved subject — and
+      // a gate that reads only "is there a radius" cannot tell them apart.
       (globalThis as unknown as { __arkRadius?: unknown }).__arkRadius =
-        frameInput.radius === null ? 'none' : `subject ${frameInput.radius.subject}`;
+        frameInput.radius === null
+          ? 'none'
+          : `subject ${frameInput.radius.subject} depth ${frameInput.radius.maxDepth}`;
       // The view, for the e2e's composition gate. A board pans the map and
       // gives the pan back on close; a canvas hash cannot tell that from the
       // turn that follows it, and the camera is the thing the rule is about.

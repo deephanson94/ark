@@ -4691,3 +4691,53 @@ when they are commits.
 already half-built, and it is the only one of these that changes what the player
 *does* rather than what they look at.
 
+## The free hint was the difficulty model, and I had taken it away
+
+A Fable consult on *why players stop* found a live divergence between the code
+and a decision of record, and the divergence was mine, from this session.
+
+ADR-0008 decision 1 draws every node's direct importers **"for every node,
+always — in free roam and while a challenge is open alike"**, says *"no modal
+special-casing and no per-subject suppression"*, and lists *"suppress everything
+while a challenge is open"* under **Rejected**. A cold playtester used a
+subject's ring as a lookup, it was measured at 37 of ark's 40 boards, and I
+switched the channel off while a board was open — then narrowed that to
+import-graded boards, under a comment citing decision 1 as its authority **on the
+line that nulled it**.
+
+Decision 1 had already rejected exactly this, and was right twice. It fixes
+nothing (close the board, hover, reopen — a speed bump, not a gate). And it
+disables the difficulty model: §8.4 defines `surprise` against the naive
+direct-neighbour guess, so a player who cannot see direct neighbours cannot form
+the baseline difficulty is calibrated against. `gate.ts` says the same in
+writing, declining to score that guess because *"a question that strategy passes
+is an easy question, which the progression needs."* Three cold rounds reporting
+*"my first three boards scored zero"* is that arithmetic, felt.
+
+Measured (`scripts/probe-depth1.ts`, ADR-0048), scored with `scoreSet` rather
+than precision: the guess scores **0.985 / 1.000 / 0.611 / 0.800 over the first
+fifteen boards the shipped selector serves** and **0.531 / 0.561 / 0.293 / 0.467
+deck-wide** on ark, hono, kysely and graphql-js. That two-column shape *is* the
+difficulty curve — it wins the opening, which is what an opening is for, and
+loses most of the deck. The suppression converted the designed-winnable boards
+into unwinnable ones and left the hard ones as hard as ever.
+
+Restored as written. The full cone stays gated on `subjectsPassed`; ADR-0016's
+wire gate is untouched, because a co-change wire *is* Companion's answer relation
+where this is the baseline Blast Radius measures departure from — that analogy
+is where the borrowing failed.
+
+**The e2e gate had asserted three different rules in three commits**, each
+written from whatever the code did rather than from the decision, which is how a
+gate ends up certifying a divergence. It reads ADR-0008 now and asserts both
+halves; nulling the channel and unbounding the depth each turn it red.
+
+**Next**: the same review argues the checkbox complaint is a proxy — the map
+already boxes every candidate and clicking one already ticks it, and six testers
+failed to find it *even by accident*, because nobody probes a map that shows
+nothing during a board. With the hint restored the map has something to say
+again, so the affordance is worth naming in a sentence and re-measuring. And a
+premise worth checking before the next five rounds: these personas score largely
+off screenshots, and a still cannot register feel — which may be why five rounds
+of real fixes read as flat.
+
