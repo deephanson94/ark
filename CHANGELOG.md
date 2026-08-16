@@ -4741,3 +4741,44 @@ premise worth checking before the next five rounds: these personas score largely
 off screenshots, and a still cannot register feel — which may be why five rounds
 of real fixes read as flat.
 
+
+## Round 4 of the playtest panel, and two regressions it found in my own work
+
+Ten personas, one build, same protocol: **6.20 visual / 6.70 continue** against 7.20 / 6.80. The
+visual score fell a full point and the cause was the change made to raise it — the arrival card,
+named by 8 of 10 as the single thing holding the score down, printing through a dozen map labels in
+the frame everyone sees first. It has a full-frame scrim now and no longer greets a returning player
+with "you have arrived" over files they already surveyed.
+
+The sharper finding is one I had already measured and read backwards. Last round's probe said the
+depth-1 guess scores ~1.0 on the boards the selector serves first, and I reported that as evidence
+the opening was *winnable* with ADR-0008's hint restored. It is equally evidence the opening was
+**free**: 7 of ark's 7 and 6 of hono's 6 opening Blast Radius boards were beaten by ticking what the
+map had already drawn, 5 and 6 of them exactly, against 11 of 40 and 18 of 54 deck-wide. All 7 of
+ark's give-away boards — 4.4% of a 160-board deck — sat inside the first fifteen served, and the very
+first was a one-file key entirely at depth 1. A cold playtester put it better than the number did:
+*"it does not flatter in the reveal, it flatters in the selection."* `showsItsKey` folds into
+`withinVerbRank`, measured at three heights because as a rank term it compares Blast Radius against
+Companion rather than board against board. Exact solves in the opening go 5/6/1/2 → 0 on all four
+repos; Blast Radius's share of the first fifteen goes up.
+
+Also: edges were drawn at an effective 11% opacity, so three testers read the map as a bubble chart
+rather than a graph (0.44 now, chosen by rendering three values and looking at them; still
+undirected, because directed arrows reconstruct Blast Radius's key exactly). `region:` printed a
+locational noun beside a derived cluster and four testers read it as a lie. Five `overflow-y: auto`
+regions had no scrollbar at all, and one tester nearly submitted a board without seeing three
+candidates below the fold.
+
+**The walk's bad first frame is diagnosed and not fixed, and the diagnosis is the useful part.** It
+is not a collision: `scripts/probe-spawn.ts` finds 0 of ark's 227 and 0 of hono's 381 real spawn
+positions with the eye inside a tower. You are stood at the foot of the building you were sent to and
+a challenge subject is tall, so it subtends ~98% of the vertical field of view. No standoff reaches
+that — framing a tall tower means standing outside `INTERACT_RANGE`. What the standoff work did fix
+is a bug the measurement uncovered: it was computed off the glyph radius while the interact gate uses
+the ground footprint, and a unit test caught a spawn 14.12 from a tower with a range of 14.
+
+**Next**: run a fifth round — round 4's fixes are unmeasured, and its brief carried *"wrong answers
+cost you nothing"*, a sentence §8.2 makes false and this repo had already deleted from its own
+prompts, for four rounds. Then the two structural gaps: there is no session arc, only a decrementing
+counter (4 of 10, the largest remaining lever on "would you keep playing"), and a wrong answer you
+did not pick is never explained, so a perfect score teaches nothing about the other eighteen.

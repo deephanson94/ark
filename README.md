@@ -174,27 +174,62 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
-- **The first ten minutes score 7.2 visual and 6.8 "would you keep playing", against a goal of 8.**
+- **The first ten minutes score 6.2 visual and 6.7 "would you keep playing", against a goal of 8.**
   Ten personas from different technical backgrounds, one fixed build each round, each told only what
-  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Three rounds:
-  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80**. Every round closed the defects the previous one named
-  and the complaints changed rather than shrank, which is the honest reading of a flat visual score.
-  The two that now dominate are structural rather than cosmetic, and both are named below.
+  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Four rounds:
+  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70** (round 4 measured at `454ab43`).
+  Every round closed the defects the previous one named and the complaints changed rather than
+  shrank, which is the honest reading of a flat score.
+  **Round 4's visual fell a full point and the cause was a change made to raise it**: the arrival
+  card, named by 8 of 10 as the single thing holding the score down, printed through a dozen map
+  labels in the opening frame. It is fixed (a full-frame scrim, and it no longer greets a returning
+  player), along with the edges — drawn at an effective 11% opacity, so 3 of 10 read the map as a
+  bubble chart rather than a graph — but **the number those fixes earn has not been measured**, so
+  the row above stands until a fifth round runs.
+  **The instrument carried a false sentence for four rounds.** Every brief told the tester *"wrong
+  answers cost you nothing"*, which §8.2 makes false and which this repo had already deleted from its
+  own prompts — a backend engineer caught it as a contradiction against what the board says. The last
+  four personas of round 4 got a corrected brief; the first six did not, so that round is not a clean
+  single sample either.
 - **Answering is a checkbox list, and the map is a picture of it** — 6 of 10 testers in the third
   round, from four different backgrounds. The map already boxes every candidate when a board opens
   and a click on one already ticks it; what is missing is that nothing says so, so nobody uses it.
   *"The one moment that matters most is the least spatial part of the experience."* This is the
   single most-requested change in the panel and the one that would make NORTH-STAR §9's
   spatial-memory claim true of the **interaction** rather than only of the picture.
-- **Label crowding at the arrival zoom** — 6 of 10 in the third round, on the one frame everyone
-  sees first. Dodging and a wider gap (ADR-pending, `labels.ts`) took district names from 19 to 29
-  and stopped every box overlap, but the densest region still reads as stacked text to a newcomer.
-  A rank cut at fit zoom is the obvious lever and it has never been measured.
-- **The walk's shore spawn faces away from the city.** The camera-inside-a-building defect is closed
-  (1 of 11,880 positions on ark, from 232 — `npm run probe-eye`), and this is the other half that is
-  not: `world.spawn` faces `π` at a point outside the north edge, so the first frame after `g` is
-  empty ground until you turn. Three testers across two rounds called it the worst first impression
-  in the product.
+- **Label crowding at the arrival zoom** — 6 of 10 in the third round and **10 of 10 in the fourth**,
+  on the one frame everyone sees first. Dodging and a wider gap (ADR-pending, `labels.ts`) took
+  district names from 19 to 29 and stopped every box overlap, but the densest region still reads as
+  stacked text to a newcomer. A rank cut at fit zoom is the obvious lever and it has never been
+  measured. **The density also runs backwards with zoom**: 3 testers reported more labels at
+  `district` (29 of 266 nodes) than at `street` (8 of 59), where the budget is `Infinity` and
+  collision rejection is doing all the work — so zooming *in* names fewer files than zooming out.
+- **There is no session, only a decrementing counter.** Four of ten in round 4, independently:
+  *"160 left → 159 left is the entire arc"*, *"a quiz queue, not a curriculum"*, *"no session shape,
+  no ending, no chapter"*. The reward for a pass is a sentence in a modal and a number going down by
+  one. This is now the largest single lever on "would you keep playing" and nothing has been built
+  for it.
+- **A wrong answer you did not pick is never explained.** Two of ten, and one of them scored 100% and
+  said so: the reveal builds its rows from `correct ∪ missed ∪ spurious`, which is `picked ∪ truth`,
+  so a candidate that is neither picked nor in the key gets no line at all — and ADR-0020's witness,
+  which exists precisely to say *why a wrong answer was offered*, is never shown for it. On a perfect
+  score the best players therefore learn the least. The prompt's *"every answer is explained"* is
+  read by a player as a claim about the twenty rows on screen, and under that reading it is false.
+- **The walk's first frame is a wall, and it is the target's own height.** Seven of ten testers in
+  round 4 named the walk, three as *the* thing dragging their score, all describing one image: a flat
+  untextured wall filling the frame, no horizon, "spawned inside a building". **It is not a
+  collision** — `npx tsx scripts/probe-spawn.ts` reports **0 of ark's 227 and 0 of hono's 381 real
+  spawn positions** putting the eye inside any tower, agreeing with `probe-eye`'s 1 in 11,880 over
+  the walkable grid. You are stood at the foot of the building you were sent to, facing it, and a
+  challenge subject is by ADR-0013 tall: a sixty-unit tower subtends ~98% of the vertical field of
+  view from the rig's resting position. Spawns where the target fills ≥90% of frame height are
+  **3.5% on ark and 3.9% on hono** at `e86573b`, worst case 119%. The standoff cannot fix it —
+  framing a tall tower means standing outside `INTERACT_RANGE`, where the board will not open — so
+  the fix is a rig that considers what is **ahead** as well as behind, and it is not built.
+  `world.spawn` still faces the city from outside the north edge with it small on the horizon, which
+  is the separate half three testers across three rounds have called the worst first impression.
+  Two testers noted the world *"is actually the best-looking thing in the build"* once you turn away
+  from the wall, so this is framing rather than rendering. **Mouse-look is not bound at all.**
 
 - **A board's title is a 74-character slug set as display type.** The subject's path is embedded
   inside the question sentence and the sentence belongs to the verb, so pulling the path onto its
@@ -644,7 +679,15 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
+**Run a fifth playtest round**, because round 4's fixes are unmeasured and its instrument was faulty
+— the brief told every tester *"wrong answers cost you nothing"*, a sentence §8.2 makes false, for
+four rounds · then the two structural gaps that round named and nothing addresses: **there is no
+session, only a decrementing counter** (4 of 10, the largest remaining lever on "would you keep
+playing"), and **a wrong answer you did not pick is never explained** (the reveal's rows are
+`picked ∪ truth`, so a perfect score teaches nothing about the other eighteen)
+· **a rig that frames what is ahead**, which is the walk's actual defect now that the collision
+theory is refuted by measurement (`scripts/probe-spawn.ts`) · **bind mouse-look**, which is unbound
+· then **decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
 with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
 repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
 Neither is a session's call · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
