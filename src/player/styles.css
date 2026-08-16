@@ -311,48 +311,50 @@ body {
    underneath from the first frame and the first pointer or key dismisses this,
    because a splash you have to wait out is worse than the silence it replaces. */
 
+/* **A full-frame scrim, and the soft ellipse it replaces is the lesson.**
+   The card lands in the middle of the frame and the middle of the frame is
+   where the map is densest, so the first version — no ground at all — caught
+   the repository's name sitting on top of `src/verbs`. The fix was a radial
+   ellipse behind the text, which is what a *label* needs and not what a title
+   card needs: a gradient that reaches zero has a band where it is at 0.3, and
+   that band is where the collisions moved to rather than where they stopped.
+   **Eight of ten cold playtesters then named this card as the single thing most
+   holding the visual score down** — the change that existed to make the opening
+   look composed had become the top complaint, and the panel's mean visual score
+   fell a full point against the round before it.
+
+   So: cover the frame. A title card is allowed to be a title card, the map
+   fades up behind it (`map-in`), and nothing can collide with anything because
+   nothing else is legible until it lifts. */
 .arrival {
   position: absolute;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   text-align: center;
   pointer-events: none;
   z-index: 5;
-  animation: arrival-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* **A ground of its own**, because the card lands in the middle of the frame
-   and the middle of the frame is where the map is densest. The first version
-   had none, and the arrival screenshot caught the repository's name sitting on
-   top of `src/verbs` with its own second line crossing two file labels — a
-   title card that reads as a rendering collision, in the change that exists to
-   make the opening look composed. Radial and soft-edged so it reads as the map
-   receding rather than as a panel appearing. */
-.arrival::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 200%;
-  height: 320%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
+  /* The falloff is shallow on purpose — 0.97 to 0.94 across the whole frame, not
+     to zero. A gradient that reaches zero is what the ellipse this replaced did,
+     and its mid band at ~0.3 is where the label collisions moved to. At 0.94 the
+     corners still had the legend legible through them, because `.legend-name` is
+     `--text` (#e6edf7) and the brightest thing in the chrome; the map reads as
+     receding, and nothing reads as printed over anything. */
   background: radial-gradient(
-    ellipse at center,
-    rgba(10, 13, 19, 0.92) 0%,
-    rgba(10, 13, 19, 0.82) 38%,
-    rgba(10, 13, 19, 0) 72%
+    ellipse at 50% 46%,
+    rgba(10, 13, 19, 0.97) 0%,
+    rgba(10, 13, 19, 0.96) 34%,
+    rgba(10, 13, 19, 0.94) 100%
   );
-  z-index: -1;
+  animation: arrival-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .arrival.is-gone {
   opacity: 0;
-  transform: translate(-50%, calc(-50% - 10px));
-  transition:
-    opacity 600ms ease-out,
-    transform 600ms ease-out;
+  transition: opacity 600ms ease-out;
 }
 
 .arrival-eyebrow {
@@ -389,15 +391,46 @@ body {
   opacity: 0.9;
 }
 
+/* Opacity only. The card is `inset: 0` now, so it has no centring transform to
+   animate around — the rise moved onto the text, where it was always the thing
+   that read as motion. A `translate(-50%, …)` left here would have shunted the
+   whole scrim half a frame off-screen. */
 @keyframes arrival-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 14px));
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%);
   }
+}
+
+@keyframes arrival-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.arrival > * {
+  animation: arrival-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Each line a beat behind the one above it, which is the whole of the motion
+   design here: two short steps, done before the 3.2 s timer is a third spent. */
+.arrival > *:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.arrival > *:nth-child(3) {
+  animation-delay: 170ms;
+}
+
+.arrival > *:nth-child(4) {
+  animation-delay: 240ms;
 }
 
 /* The canvas comes up with it rather than being there already. Opacity only —
@@ -417,7 +450,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The children too — the rise moved off `.arrival` onto them, and a
+     reduced-motion rule naming only the parent would have left the one
+     animation that actually translates something still running. */
   .arrival,
+  .arrival > *,
   .map.is-arriving {
     animation: none;
   }
@@ -764,6 +801,62 @@ body {
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  /* **Reserve the gutter whether or not it scrolls**, so the rows do not shift
+     sideways when a longer board opens. `stable` is the whole point of the
+     keyword; `auto` would reintroduce the jump. */
+  scrollbar-gutter: stable;
+}
+
+/* **A scrollable list has to look scrollable, and this one had no scrollbar at
+   all** — `grep -c scrollbar styles.css` was **0** against five `overflow-y:
+   auto` regions. On a platform with overlay scrollbars (and in the headless
+   browser the panel played in) that means a 20-candidate board renders as a
+   clipped list with no affordance whatsoever.
+
+   Not a cosmetic gap. A cold playtester *"nearly submitted without knowing 3
+   options existed below the fold"*, and a candidate you never saw is a pick you
+   never made — §8.2 scores recall, so the fold silently costs you the board.
+   Another reported the grade panel as clipped and only found the rest by
+   wheeling on a hunch.
+
+   Styled rather than left to the platform because the default light scrollbar
+   on a dark panel is the other half of the same complaint. */
+.console-choices,
+.console-notes,
+.legend-list,
+.inspector-body,
+.notes-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 140, 170, 0.42) transparent;
+}
+
+.console-choices::-webkit-scrollbar,
+.console-notes::-webkit-scrollbar,
+.legend-list::-webkit-scrollbar,
+.inspector-body::-webkit-scrollbar,
+.notes-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.console-choices::-webkit-scrollbar-thumb,
+.console-notes::-webkit-scrollbar-thumb,
+.legend-list::-webkit-scrollbar-thumb,
+.inspector-body::-webkit-scrollbar-thumb,
+.notes-list::-webkit-scrollbar-thumb {
+  background: rgba(120, 140, 170, 0.42);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+.console-choices::-webkit-scrollbar-thumb:hover,
+.console-notes::-webkit-scrollbar-thumb:hover,
+.legend-list::-webkit-scrollbar-thumb:hover,
+.inspector-body::-webkit-scrollbar-thumb:hover,
+.notes-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 .choice-button {

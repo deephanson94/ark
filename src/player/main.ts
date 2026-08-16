@@ -947,8 +947,18 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * load-bearing file is X"* before either arm has been played is a free hint
    * in both, and an unequal one if it ever fails to render. `?arm=` gets the
    * opening the experiment was designed around, which is the one without it.
+   *
+   * **And not to someone who has been here before.** It said *"you have arrived
+   * at ark"* to a returning player with 61 files surveyed and a field note
+   * already written, which a cold playtester filed as a bug and is one: an
+   * arrival is an event, and replaying it says the session before did not
+   * happen. Read off `progress` rather than off the fog, because the fog's
+   * `surveyed` carries the landmark head start (`deriveFog`'s `base`) and is
+   * therefore non-empty for a player who has done nothing at all — the same
+   * "24 surveyed before I touched anything" two testers queried in the HUD.
    */
-  const arrival = arm === null ? createArrival(scene) : null;
+  const returning = progress.passes.length > 0 || progress.surveyed.length > 0;
+  const arrival = arm === null && !returning ? createArrival(scene) : null;
   root.replaceChildren(
     canvas,
     hud.root,

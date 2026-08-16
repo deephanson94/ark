@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { VerbId, Atlas, Challenge, AtlasId } from '../../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../../src/indexer/build.js';
-import { NO_HISTORY, noteAttempt, suggestNext } from '../../src/player/selector.js';
+import { NO_HISTORY, noteAttempt, showsItsKey, suggestNext } from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -169,11 +169,54 @@ describe('a full playthrough of this repo', () => {
     expect(sameRegion).toBeLessThan(3);
   });
 
-  it('opens on the easiest question and ends having served every one', () => {
+  it('opens on an easy question the map has not already answered, and serves every one', () => {
+    // **This asserted `plainOrder[0]` and that was always more than the rank
+    // promises.** `plainOrder` sorts on `(tier, difficulty, id)`; the real rank
+    // has `sideshow`, `unmetVerb`, `sameVerb`, `progress` and `overlap` above or
+    // around `difficulty`, none of which it models. It passed because those
+    // terms happened to agree at position 0 on this atlas — and went red the
+    // first time one of them disagreed, looking exactly like a selector bug.
+    //
+    // What the rank actually promises about the opening is asserted instead:
+    // the lowest tier present, near the easy end, and **not a board whose whole
+    // answer key the map has already drawn** (`showsItsKey`). The board this
+    // replaced was difficulty 0.03 with a **one-file key entirely at depth 1** —
+    // the map drew the single correct answer and nothing else.
     const order = challenges(playthrough(() => 'pass'));
-    const easiest = plainOrder(atlas.challenges)[0];
-    expect(order[0]?.id).toBe(easiest?.id);
+    const first = order[0];
+    expect(first).toBeDefined();
+    if (first === undefined) return;
+
+    expect(first.tier).toBe(Math.min(...atlas.challenges.map((c) => c.tier)));
+    expect(showsItsKey(first)).toBe(false);
+
+    // Still easy — and the bar comes from the **code's own constant** rather
+    // than from taste. `PROGRESS_BANDS` is 10, so band 0 *is* the easiest tenth
+    // of a verb's boards under the same `(showsKey, difficulty)` order
+    // `withinVerbRank` sorts by, and "the opening is in band 0" is what the rank
+    // actually promises. The first draft of this line said "the gentlest fifth",
+    // which is a number nobody measured — this repo's landmine about a threshold
+    // named for its English, in a test written to replace a stale assertion.
+    const sameVerb = [...atlas.challenges.filter((c) => c.verb === first.verb)].sort(
+      (a, b) => Number(showsItsKey(a)) - Number(showsItsKey(b)) || a.difficulty - b.difficulty,
+    );
+    const band0 = sameVerb.slice(0, Math.max(1, Math.floor(sameVerb.length / 10)));
+    expect(band0.map((c) => c.id)).toContain(first.id);
+
     expect(new Set(order.map((c) => c.id)).size).toBe(atlas.challenges.length);
+  });
+
+  it('serves the boards the map gives away — it demotes them, it does not drop them', () => {
+    // The other half of the rule, and the half a demotion can silently break.
+    // `gate.ts` keeps these boards on purpose ("an easy question, which the
+    // progression needs"), so a playthrough must still reach every one of them.
+    // Measured here: 7 of this repo's 160 boards give their key away, and every
+    // one of them used to be inside the first fifteen served.
+    const order = challenges(playthrough(() => 'pass'));
+    const givenAway = atlas.challenges.filter((c) => showsItsKey(c));
+    expect(givenAway.length).toBeGreaterThan(0);
+    const served = new Set(order.map((c) => c.id));
+    for (const board of givenAway) expect(served.has(board.id)).toBe(true);
   });
 
   it('never repeats a question while an alternative exists', () => {
