@@ -1753,7 +1753,18 @@ async function main(): Promise<number> {
         const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
         const kind = verb === 'blast radius' ? 'imports' : 'history';
         if (!seen.has(kind)) {
-          seen.set(kind, String(await page.evaluate('window.__arkRadius ?? "absent"')));
+          // **Both halves, and the second one is read rather than assumed.**
+          // The decision's depth depends on whether the subject is proved, so a
+          // check that only knows the depth has to guess which rule applies —
+          // and it guessed "unproved", which is a prediction about which board a
+          // re-rolling deck serves. It went red on a commit that added two
+          // scripts, over a full cone ADR-0008 decision 1 grants outright.
+          const drew = String(await page.evaluate('window.__arkRadius ?? "absent"'));
+          const traced = new Set(
+            ((await page.evaluate('window.__arkTraced ?? []')) as number[]) ?? [],
+          );
+          const ref = Number(/^subject (\d+)/.exec(drew)?.[1] ?? NaN);
+          seen.set(kind, `${drew}${traced.has(ref) ? ' (proved)' : ' (unproved)'}`);
         }
         await page.keyboard.press('Escape');
         await page.waitForTimeout(200);
@@ -1772,10 +1783,18 @@ async function main(): Promise<number> {
           what: 'ring',
           detail: `an open Blast Radius board drew no import radius (${onImports}) — ADR-0008 decision 1 draws depth 1 always, and §8.4 calibrates difficulty against exactly that guess`,
         });
-      } else if (!onImports.endsWith('depth 1')) {
+      } else if (onImports.endsWith('(unproved)') && !onImports.includes('depth 1 ')) {
         failures.push({
           what: 'ring',
-          detail: `an open board drew more than depth 1 (${onImports}) — the full cone is earned, not shown`,
+          detail: `an open board on an unproved subject drew more than depth 1 (${onImports}) — the full cone is earned, not shown`,
+        });
+      } else if (onImports.endsWith('(proved)') && !onImports.includes('depth Infinity ')) {
+        // The half nothing checked. A proved subject *must* get its whole cone —
+        // that is the reward the pass buys, and a gate that only ever asserted
+        // "depth 1" would have read a silently withdrawn unlock as a pass.
+        failures.push({
+          what: 'ring',
+          detail: `an open board on a proved subject drew ${onImports} — passing a board unlocks its full cone`,
         });
       }
       const onHistory = seen.get('history');

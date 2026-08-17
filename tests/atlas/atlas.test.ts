@@ -1105,10 +1105,23 @@ describe('the walkable world stands on the real atlas', () => {
       expect(tower.footprint).toBeCloseTo(tower.node.radius * FOOTPRINT_SCALE, 9);
     }
     // What the scalar was chosen for: the fraction of the repo with no
-    // body-width gap to its nearest neighbour. Unscaled it is 88.5% here and
-    // 52.2% on hono, which is a solid block rather than a city. The bar is
-    // loose because ark indexes itself and the layout moves every commit; the
-    // measured value at `1827ff93` is 3.3%.
+    // body-width gap to its nearest neighbour. Unscaled it is 89.8% here and
+    // 60.2% on hono, which is a solid block rather than a city.
+    //
+    // **This bar caught a real regression by going red, and the first reading of
+    // that was wrong.** It was written when ark measured 3.3% against 0.15 — a
+    // 4.5× margin — and ark's reading climbed to **12.4% at an unchanged
+    // scalar** as the repo grew into the same layout bounds, tipping over the
+    // bar on a commit that added one script file. The margin was a timer, which
+    // is this repo's own landmine, and the fix is to close it rather than to
+    // move the bar: `scripts/probe-walkable.ts` shows 0.4 leaving **graphql-js
+    // and prometheus at 17–18% blocked**, so the constant was under-tuned on
+    // three repos this test cannot see. At 0.25 every measured repo is under 5%
+    // and ark is 0.0%, so the margin this line was written with is back.
+    //
+    // It stays loose for the original reason — ark indexes itself and the layout
+    // moves every commit — and the number to watch is in `build.ts`'s header,
+    // measured across five repos rather than this one.
     let blocked = 0;
     for (const a of world.towers) {
       let clearance = Number.POSITIVE_INFINITY;

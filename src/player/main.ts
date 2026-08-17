@@ -1520,6 +1520,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // the verb where the click hint must not appear.
       (globalThis as unknown as { __arkCandidateMarks?: unknown }).__arkCandidateMarks =
         stats.candidatesDrawn;
+      // **The other half of ADR-0008 decision 1**, from the same set the frame
+      // gated on. `__arkRadius` alone says depth 1 or the full cone; it cannot
+      // say which of those is *correct*, because the answer depends on whether
+      // the subject is one the player proved. So a gate reading it alone has to
+      // guess that the board it happened to open is on an unproved subject —
+      // which is a prediction about a deck that re-rolls on every commit, and it
+      // went red on a commit that added two scripts, reporting a full cone the
+      // decision explicitly grants as *"the full cone is earned, not shown"*.
+      (globalThis as unknown as { __arkTraced?: unknown }).__arkTraced = [
+        ...tracedRadius,
+      ].flatMap((id) => {
+        const ref = scene.graph.refById.get(id);
+        return ref === undefined ? [] : [ref];
+      });
       (globalThis as unknown as { __arkCamera?: unknown }).__arkCamera = {
         x: camera.x,
         y: camera.y,

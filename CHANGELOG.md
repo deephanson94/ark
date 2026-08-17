@@ -4918,3 +4918,32 @@ infrastructure at `1c521d3`; the removal was right and the reason it had no
 consumer was that this surface had not been built. The nameplate conflict above is
 the other candidate, and its honest lever is a label *background* rather than a
 pick order — text that occludes what it covers may answer for it.
+
+## 2026-08-17 — the footprint constant had a timer on it, and the ring gate read half a rule
+
+Reproducing CI's merge commit (`origin/master` + branch, which is the tree Actions
+actually builds) reddened an atlas test the branch alone passes: **15.4% of towers
+have no walkable gap**, against a 0.15 bar. Not flake — a rate. `FOOTPRINT_SCALE`
+is a constant and the layout is not, so ark's own reading climbed **3.3% → 12.4%**
+at an unchanged scalar as the repo grew into the same bounds, and one added script
+file tipped it. The margin was a timer, which this repo has a landmine about.
+
+Closed rather than loosened, and the measurement says the constant was wrong on
+more than ark: `scripts/probe-walkable.ts` over five repos shows 0.4 leaving
+**graphql-js at 18.4% and prometheus at 17.2%** — the defect the scalar exists to
+fix, live on two reference repos and invisible because the only test of it indexes
+ark. **0.25** holds every measured repo under 5% (ark 0.0), with its neighbours
+named: 0.3 leaves two of them in double figures, 0.2 buys 3.5 points for buildings
+half today's width. The old value's justification — *"below 0.4 the curve is flat
+on both"* — was true of the two repos it was measured on and of none of the three
+added since.
+
+The re-roll then reddened the ADR-0008 ring gate, which turned out to read **half**
+the decision: it asserted *depth 1* over whatever board it happened to open, and
+the decision says depth 1 for an *unproved* subject and the full cone for a proved
+one. So a full cone the ADR grants outright was reported as a leak. The gate now
+reads `__arkTraced` — published from the same `tracedRadius` the frame gated on —
+and asserts both arms; one run exercises both, and the proved arm kills a mutant
+that never unlocks the cone.
+
+**Next**: unchanged — the proved chain drawn on the map, undirected (ADR-0049 §4.3).

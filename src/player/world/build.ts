@@ -35,10 +35,35 @@
  *
  * A **uniform** scalar fixes it and keeps §9.7 exactly: equal `loc` still gives
  * equal size, greater `loc` still gives greater size, and the ordering the size
- * channel actually claims is untouched. 0.4 is chosen on the measurement rather
- * than by eye, with both its neighbours named — ark reads 14.3% at 0.45 and
- * 3.3% at 0.4, hono 8.2% and 6.1%, and below 0.4 the curve is flat on both
- * (2.2% / 3.3% at 0.35), so this is the knee and not a taste.
+ * channel actually claims is untouched.
+ *
+ * **0.25, and the 0.4 it replaces was a two-repo reading.** That value came with
+ * its neighbours named and a claim that "below 0.4 the curve is flat on both",
+ * which is true of ark and hono and of nothing else. `scripts/probe-walkable.ts`
+ * over five, at `212b988`:
+ *
+ * ```
+ * repo         nodes    1.00  0.40  0.30  0.25  0.20  0.15
+ * ark            274   89.8% 12.4%  2.2%  0.0%  0.0%  0.0%
+ * hono           425   60.2%  8.9%  2.1%  0.5%  0.0%  0.0%
+ * graphql        549   63.4% 18.4% 10.2%  4.7%  1.1%  0.0%
+ * kysely         600   56.8%  7.0%  2.8%  1.3%  1.3%  0.5%
+ * prometheus     501   71.9% 17.2% 10.0%  4.2%  1.2%  0.0%
+ * ```
+ *
+ * At the shipped 0.4, **graphql-js and prometheus stand at 17–18% blocked** —
+ * the defect this scalar exists to fix, live on two of five reference repos and
+ * invisible because the only test of it indexes ark. 0.25 holds every measured
+ * repo under 5%; its neighbours are 0.3, which leaves two of them in double
+ * figures, and 0.2, which buys 3.5 points at the cost of buildings half the
+ * width they are drawn at today — and BASE_HEIGHT's comment is about a street
+ * having *walls*.
+ *
+ * Note how the old number went stale, because it is the reason this constant
+ * needs re-measuring rather than trusting: ark's own reading moved **3.3% →
+ * 12.4%** at an unchanged 0.4, purely because the repo grew from 250-odd nodes
+ * to 274 in the same layout bounds. A footprint constant on a self-indexing repo
+ * has a timer on it, and the atlas test's 0.15 bar was the thing counting down.
  */
 
 import type { NodeRef } from '../../atlas/index.js';
@@ -81,7 +106,7 @@ export const ROAD_WIDTH = 1.1;
  * Ground area per unit of the map's glyph radius. See the header — this is the
  * constant that makes the city walkable without touching what size *means*.
  */
-export const FOOTPRINT_SCALE = 0.4;
+export const FOOTPRINT_SCALE = 0.25;
 
 export interface Tower {
   readonly ref: NodeRef;
