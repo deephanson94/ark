@@ -294,6 +294,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **Ark's own walkable world is mostly void**: two seconds' walk from the spawn leaves the hero
   alone on an empty plane. hono at 425 nodes does not do this, so it is a density floor rather than
   a rendering fault — but the bootstrap repo is the one every session and every playtester sees.
+- **The world's constants are tuned against a moving target, and one of them expired.**
+  `FOOTPRINT_SCALE` is fixed while the layout is not, so as a repo grows into the same bounds its
+  towers weld together: ark's blocked share climbed **3.3% → 12.4%** at an unchanged 0.4, and the
+  atlas test's 0.15 bar — written when the margin was 4.5× — went red on a commit that added one
+  script file. Closed at `16c68e4` by lowering the scalar to **0.25** rather than moving the bar, on
+  `npx tsx scripts/probe-walkable.ts` over five repos, which also showed 0.4 leaving **graphql-js at
+  18.4% and prometheus at 17.2%** — under-tuned on repos the ark-only test cannot see. What is *not*
+  closed is the shape of the problem: `RISE`, `ROAD_WIDTH`, `ARCH_SPAN` and the rest are constants
+  chosen against one or two repos at one moment, and nothing measures any of them across the
+  reference set or over time. This one was caught by a bar it happened to cross.
 
 - **A meaningful share of the history verbs' answer keys is documentation, and on this repo it is
   most of some boards.** A cold playtester's objection is pillar 3's — *teach coupling, not trivia*:
