@@ -209,6 +209,23 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   measured. **The density also runs backwards with zoom**: 3 testers reported more labels at
   `district` (29 of 266 nodes) than at `street` (8 of 59), where the budget is `Infinity` and
   collision rejection is doing all the work — so zooming *in* names fewer files than zooming out.
+- **A name lies across other people's discs, and then it answers for them.** `placeLabels` blocks a
+  new label against the other labels and the chrome and **never against the nodes**, while `pickAt`
+  consults nameplates before discs — so a file whose disc sits under somebody else's name reports
+  that name to the inspector. Measured through the real pointer path by
+  **`npx tsx scripts/probe-nameplate.ts . <repo>`** at `4e39701`, hovering every node's own screen
+  centre: **35 of ark's 273 discs and 33 of hono's 425 name a different file**, 31 and 21 of those to
+  a drawn name rather than to another disc, and **6 and 6 answer nowhere within 20 px in any
+  direction** — no handle at all. All three candidate fixes were built and measured, and each one
+  pays somewhere worse: putting bodies first drops the discs to 4 and 14 but makes **9 of ark's 15
+  drawn names and 5 of hono's 12** point at someone else; making the discs blockers closes it
+  completely (0 by name on both) and takes ark from **15 drawn labels to 2**, which spends the map's
+  scarcest channel to buy its second-scarcest. **It is a rendering conflict, not a pick-order bug**,
+  and the honest lever is probably a label with a *background* — text that occludes what it covers is
+  text that may answer for it. Unfixed on purpose; the probe is what keeps the three numbers
+  checkable. It cost a whole milestone of e2e silence first: the map step surveys the nodes it found,
+  surveying draws their names, and the challenge step then re-used the scan's coordinates — which by
+  then meant different nodes.
 - **The medals are the weakest part of the arc they were built for, and that is measured.** Eleven
   ship on this repo (`src/player/medals.ts`), all derived, none authored — and round 5's panel put
   them last: three of ten called the shelf *"a chore list, not an arc"*, *"~80% medal grid and ~20%

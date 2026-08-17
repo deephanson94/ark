@@ -4883,3 +4883,38 @@ the map, undirected, since passing a board already unlocks the cone it lies in.
 `RevealNote.route` carried exactly that chain and was deleted as dead
 infrastructure at `1c521d3`; the removal was right and the reason it had no
 consumer was that this surface had not been built.
+
+## 2026-08-17 — the e2e was reading a coordinate it had already invalidated
+
+CI's `player smoke test` failed on `4e39701` with *"no node under the cursor grid
+carried a question"*, which reads as the generator being broken and was not. The
+map step surveys every node its grid scan found; surveying a node draws its
+**name**; `pickAt` consults nameplates before discs; a nameplate is a screen box
+that `placeLabels` never checks against the *nodes*. So the scan's coordinates
+stopped meaning the nodes they were recorded for, the challenge step re-used them
+anyway, and every hit resolved to a file with no board. Local-only until now
+because ark indexes itself and CI plays `refs/pull/N/merge`, so the scan lands on
+a different set of discs there — the merge-commit landmine, on a step nobody had
+suspected of predicting anything. The step no longer carries a reading forward:
+it re-scans for a point the map is offering a question at *now*, clicks that, and
+asserts the offer survived the click.
+
+Underneath it is a real product defect, measured rather than assumed and
+deliberately **not** fixed. `npx tsx scripts/probe-nameplate.ts . <repo>` hovers
+every node's own screen centre through the real pointer path: **35 of ark's 273
+discs and 33 of hono's 425 name a different file**, and **6 and 6 answer nowhere
+within 20 px**. All three fixes were built and measured before one was chosen, and
+each pays somewhere worse — bodies-first drops the discs to 4 and 14 and costs **9
+of 15 and 5 of 12 drawn names**; discs-as-blockers closes it outright and takes ark
+from **15 labels to 2**. Two of those measurements were nearly believed while
+wrong: the blocker loop shared the fog's `continue` with the label candidate, so
+silhouettes contributed no blocker — and a silhouette is exactly what was being
+stolen — which printed as *no change at all*, twice, at two blocker sizes.
+
+**Next**: the one round-5 request that *is* legal — keep the proved chain drawn on
+the map, undirected, since passing a board already unlocks the cone it lies in.
+`RevealNote.route` carried exactly that chain and was deleted as dead
+infrastructure at `1c521d3`; the removal was right and the reason it had no
+consumer was that this surface had not been built. The nameplate conflict above is
+the other candidate, and its honest lever is a label *background* rather than a
+pick order — text that occludes what it covers may answer for it.

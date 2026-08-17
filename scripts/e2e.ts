@@ -450,18 +450,61 @@ async function main(): Promise<number> {
       failures.push({ what: 'fog', detail: `${understoodAtStart} understood before answering anything` });
     }
 
-    let opened: { x: number; y: number; path: string } | null = null;
-    for (const entry of hits) {
-      await page.mouse.click(entry.x, entry.y);
-      if ((await page.locator('.inspector-action').count()) === 0) continue;
-      await page.locator('.inspector-action').click();
-      opened = entry;
-      break;
-    }
+    /**
+     * A point on the map whose node offers a question, **found now**.
+     *
+     * This walked `hits` — the coordinates the grid scan recorded — and that is
+     * a prediction about what a coordinate means, which is the same family as
+     * predicting which board the shell will serve. It was wrong for a reason the
+     * step causes itself: the survey block above clicks every hit, surveying a
+     * node draws its **name**, and `pickAt` consults nameplates before discs, so
+     * a label placed over a neighbouring disc changes what that neighbour's
+     * coordinates pick. The hits then resolved to nodes carrying no question and
+     * this reported *"no node under the cursor grid carried a question"* — a
+     * sentence that reads as the generator being broken. It failed only in CI,
+     * because ark indexes itself and CI indexes `refs/pull/N/merge`, so which
+     * discs the scan lands on is a different set there.
+     *
+     * The fix is the same one this file has now applied four times: **read what
+     * is on screen and match it**, never carry an earlier reading forward. The
+     * scan is re-run rather than the hits re-used, so the question it finds is a
+     * question the map is offering at the moment it is clicked.
+     */
+    const findQuestion = async (): Promise<{ x: number; y: number; path: string } | null> => {
+      for (let row = 1; row < 26; row++) {
+        for (let column = 1; column < 40; column++) {
+          const x = box.x + (box.width * column) / 40;
+          const y = box.y + (box.height * row) / 26;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-action').count()) === 0) continue;
+          const path = (await page.locator('.inspector-path').innerText()).trim();
+          return { x, y, path };
+        }
+      }
+      return null;
+    };
 
-    if (opened === null) {
+    const offered = await findQuestion();
+    let opened: { x: number; y: number; path: string } | null = null;
+    if (offered === null) {
       failures.push({ what: 'challenge', detail: 'no node under the cursor grid carried a question' });
     } else {
+      await page.mouse.click(offered.x, offered.y);
+      // The click re-describes whatever is under the pointer, which is the node
+      // the hover just named — but assert it rather than assume it, because the
+      // whole defect above was an assumption of exactly this shape.
+      if ((await page.locator('.inspector-action').count()) === 0) {
+        failures.push({
+          what: 'challenge',
+          detail: `hovering ${offered.path} offered a question and clicking it withdrew the offer`,
+        });
+      } else {
+        await page.locator('.inspector-action').click();
+        opened = offered;
+      }
+    }
+
+    if (opened !== null) {
       await page.waitForSelector('.console-panel', { timeout: 5000 });
       const question = (await page.locator('.console-question').innerText()).trim();
       process.stdout.write(`e2e: challenge → ${question}\n`);

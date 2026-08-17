@@ -419,6 +419,29 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   const pickAt = (local: { x: number; y: number }): SceneNode | null => {
     // **Names first, in both views.** A nameplate is a screen box wherever it
     // was drawn, so this loop is view-agnostic; only the fall-through differs.
+    //
+    // **The order is a live trade, not a settled one, and it is measured.**
+    // `placeLabels` blocks against other labels and the chrome and never against
+    // the *discs*, so a name lies across other people's nodes and one of the two
+    // has to lose every contested pixel. `scripts/probe-nameplate.ts` hovers
+    // both populations through this very function, at `4e39701`:
+    //
+    //   names first (shipped)  35 of ark's 273 discs and 33 of hono's 425 name
+    //                          someone else at dead centre; **6 and 6 answer
+    //                          nowhere within 20px**. 0 of 15 and 0 of 12 names
+    //                          mis-point.
+    //   bodies first           4 and 14 discs, all of them to another disc; but
+    //                          **9 of 15 and 5 of 12 names** mis-point.
+    //
+    // Neither is right and the third option — making the discs blockers so the
+    // overlap cannot happen — closes it completely (0 by name, both repos) and
+    // takes ark from **15 drawn labels to 2**, which pays for the fix out of the
+    // thing five rounds of playtesters said was already scarcest. So it stays as
+    // it reads, the cost is in `README.md`'s Known gaps with these numbers, and
+    // the probe is what stops the next session re-deriving all three from
+    // scratch. Note which way the residual errs: names-first is the arrangement
+    // whose losers are *nodes*, and the e2e's own `pointed at N names` step
+    // guards the other direction — so a flip here would go red there, on purpose.
     const named = pickName(local);
     if (named !== null) return named;
     if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
