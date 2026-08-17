@@ -4808,3 +4808,40 @@ which is two rules constraining one search hiding each other's tests.
 board, the arrival card, the edge opacity, the scrollbars and this — and the
 instrument itself needs the corrected brief, since four rounds told every tester
 *"wrong answers cost you nothing"*, which §8.2 makes false.
+
+## Round 5: the arc exists, it is the map, and the medals are the weakest part of it
+
+Ten personas, corrected brief: **6.75 / 6.40** against round 4's 6.20 / 6.70.
+Visual +0.55, and the arrival card that cost a full point last round was named by
+nobody. Round 4's dominant complaint — *"there is no arc"*, four of ten — is
+closed: all ten describe one now. None of them credits the medals. Every one
+names the map lighting up, which shipped in M3, and four independently asked for
+the same next step: put the scoreboard **on the map**, not in a panel. The honest
+reading is that I treated a missing feeling as a missing feature, built a shelf,
+and the thing people felt was the fog.
+
+What replaced "no arc" was **verb sameness**, five of ten, and it was a bug.
+`suggestNext` chooses partly for verb variety and `challengeFor` then returned the
+node's first unpassed board in *tier* order, so a Companion suggestion opened as
+Blast Radius — 3 of the first 12 boards, including board two, while the new medal
+shelf sat beside it reading "1 of 4 kinds of question answered". The shelf's most
+useful contribution so far was making a pre-existing defect legible.
+
+Four more, all from the panel: the sentence teaching the winning strategy told
+players to hover, which does nothing while a board is open; notes now lead the
+notes panel; the first medal tier was a third of a region and unreachable inside
+the ten minutes the benchmark measures; and the grade card shows precision and
+recall, which a junior could not derive and an academic called the one place the
+product flatters.
+
+**The gate for the guide bug failed three times before it worked**, each time on a
+different landmine from this file's own list — predicting which board the shell
+serves, checking a precondition instead of the condition, and finding its test
+case on a commit subject where the code under test never runs. It is
+`isNodeId`-guarded now and fails loudly when it measures nothing.
+
+**Next**: the map as scoreboard — four testers asked for it and one names the
+mechanism (`RevealNote.route`, deleted as dead infrastructure two days ago, is
+exactly the chain they want drawn). Then the ADR refusing edge direction
+permanently, since it is the top visual ask two rounds running and cannot ever
+ship.

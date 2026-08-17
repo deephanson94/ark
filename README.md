@@ -174,18 +174,23 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
-- **The first ten minutes score 6.2 visual and 6.7 "would you keep playing", against a goal of 8.**
+- **The first ten minutes score 6.75 visual and 6.4 "would you keep playing", against a goal of 8.**
   Ten personas from different technical backgrounds, one fixed build each round, each told only what
-  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Four rounds:
-  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70** (round 4 measured at `454ab43`).
+  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Five rounds:
+  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70 → 6.75 / 6.40** (round 5 measured at
+  `ef196db`).
+  **Round 4's dominant complaint is closed and round 5 replaced it.** Four of ten had said the game
+  had no arc; all ten now describe one, and every one names the same thing — *the map lighting up*,
+  not the medals (*"my knowledge had a shape and a location"*, *"that single moment is the best thing
+  in the product"*, *"that's why I'd have kept clicking"*). What replaced it was **verb sameness**,
+  5 of 10, which was a bug rather than taste and is fixed at `662de0f`.
   Every round closed the defects the previous one named and the complaints changed rather than
   shrank, which is the honest reading of a flat score.
   **Round 4's visual fell a full point and the cause was a change made to raise it**: the arrival
   card, named by 8 of 10 as the single thing holding the score down, printed through a dozen map
-  labels in the opening frame. It is fixed (a full-frame scrim, and it no longer greets a returning
-  player), along with the edges — drawn at an effective 11% opacity, so 3 of 10 read the map as a
-  bubble chart rather than a graph — but **the number those fixes earn has not been measured**, so
-  the row above stands until a fifth round runs.
+  labels in the opening frame. Fixed, along with the edges (an effective 11% opacity, so 3 of 10 read
+  the map as a bubble chart) — and round 5 measured the result: **visual +0.55**, with the highest
+  single visual score in five rounds (8/10) and the arrival card named by nobody.
   **The instrument carried a false sentence for four rounds.** Every brief told the tester *"wrong
   answers cost you nothing"*, which §8.2 makes false and which this repo had already deleted from its
   own prompts — a backend engineer caught it as a contradiction against what the board says. The last
@@ -204,12 +209,33 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   measured. **The density also runs backwards with zoom**: 3 testers reported more labels at
   `district` (29 of 266 nodes) than at `street` (8 of 59), where the budget is `Infinity` and
   collision rejection is doing all the work — so zooming *in* names fewer files than zooming out.
-- ~~**There is no session, only a decrementing counter.**~~ **Medals ship** — eleven on this repo in
-  three families (`src/player/medals.ts`), all derived from the atlas and the proved register, none
-  authored. Territory is one medal per topology region, which is the *"src/player 3/38"* two testers
-  asked for by name with a finish line on it. **Whether it moves the score is unmeasured**, so this
-  row stays until a fifth round runs: the complaint it answers was named by 4 of 10 and the fix has
-  been seen by nobody but the suite.
+- **The medals are the weakest part of the arc they were built for, and that is measured.** Eleven
+  ship on this repo (`src/player/medals.ts`), all derived, none authored — and round 5's panel put
+  them last: three of ten called the shelf *"a chore list, not an arc"*, *"~80% medal grid and ~20%
+  actual notes"*, *"eleven mostly-empty shields dominate the panel above the single earned
+  sentence"*. What all ten *did* name as the arc is **the map lighting up**, which shipped in M3.
+  Four independently asked for the same next step — *"make the map itself the scoreboard"*, *"keep
+  each proved chain drawn"*, *"put the region fraction on the map, not in a list"*. The shelf is
+  fixed where it was broken (notes lead it, the first rung is reachable inside ten minutes, names
+  break at path separators) but **the lesson is that the arc wanted to be spatial and I built a
+  panel**.
+- **A wrong answer you did not pick is still never explained**, and round 5 did not change it: the
+  reveal's rows are `picked ∪ truth`, so a candidate that is neither picked nor in the key gets no
+  line, and ADR-0020's witness — which exists to say *why a wrong answer was offered* — is never
+  shown for it. On a perfect score the best players learn the least.
+- **The most-requested visual change is one that can never ship.** Two rounds running, the top ask
+  is **edge direction** — *"I can see that things are related but never which way, which is the first
+  thing I'd ask of any dependency diagram"*. Walking backwards along drawn arrows scores F1 **1.000
+  exact on 100% of both reference repos' Blast Radius boards**, because ADR-0008's
+  `candidates ∩ dependents = truth` makes a directed graph the answer key by construction. It needs
+  a decision record so it stops being re-proposed as an oversight.
+- **A per-board difficulty "level" is refused; a per-region one is not** (`scripts/probe-band.ts`).
+  Banding on difficulty puts 9/9 of ark's and 16/16 of hono's bottom band above band A for the free
+  ring guess, because `surprise` is defined *against* that ring. The marginal information over what
+  the player already has — the prompt states the key size, the ring is drawn — is **3 boards per
+  repo**, which is the magnitude ADR-0021 measured and ADR-0022 closed. A per-region level adds
+  **0 on both repos** and is the shippable shape, with one caveat: as banded by value it fires on
+  **0 of hono's boards**, so equal-count terciles are needed before anything is built on it.
 - **A wrong answer you did not pick is never explained.** Two of ten, and one of them scored 100% and
   said so: the reveal builds its rows from `correct ∪ missed ∪ spurious`, which is `picked ∪ truth`,
   so a candidate that is neither picked nor in the key gets no line at all — and ADR-0020's witness,
@@ -680,12 +706,17 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Run a fifth playtest round**, because round 4's fixes are unmeasured and its instrument was faulty
-— the brief told every tester *"wrong answers cost you nothing"*, a sentence §8.2 makes false, for
-four rounds. Five changes are now waiting on that measurement: the opening board, the arrival card,
-the edge opacity, the scrollbars and the medal shelf · then the structural gap round 4 named that
-nothing addresses: **a wrong answer you did not pick is never explained** (the reveal's rows are
-`picked ∪ truth`, so a perfect score teaches nothing about the other eighteen)
+**Make the map the scoreboard.** Round 5's five rounds of measurement converge on it: all ten testers
+named the map lighting up as the arc, and four independently asked for the same next step — *"make the
+map itself the scoreboard"*, *"keep each proved chain drawn, labelled with its hop count"*, *"put the
+region fraction on the map, not in a list"*. One of them names the mechanism without knowing it:
+`RevealNote.route` carried exactly that chain and was **deleted as dead infrastructure at `1c521d3`**,
+because nothing drew it. The removal was defensible and the reason it had no consumer was that the
+surface had not been built · then **the ADR refusing edge direction**, which is the top visual ask two
+rounds running and can never ship (F1 1.000 exact on 100% of both repos' boards) — a permanent
+refusal that is re-proposed every round it is not written down · then **a wrong answer you did not
+pick is never explained** (the reveal's rows are `picked ∪ truth`, so a perfect score teaches nothing
+about the other eighteen)
 · **a rig that frames what is ahead**, which is the walk's actual defect now that the collision
 theory is refuted by measurement (`scripts/probe-spawn.ts`) · **bind mouse-look**, which is unbound
 · then **decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
