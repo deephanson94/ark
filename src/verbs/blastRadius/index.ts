@@ -61,11 +61,24 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // named the cause — *"the evidence you need to reason lives on a different
     // screen from the reasoning."*
     //
-    // Phrased as an instrument rather than as a claim about the current frame:
-    // *"hover"* is true whenever a player reads it, where *"the lines you can
-    // see"* would depend on what is selected and would be false the moment it
-    // is not.
-    evidence: `Hover any ${members.one} on the map to see what imports it directly — this question is about what reaches ${words.label(challenge.subject)} beyond that.`,
+    // **It said "hover any file on the map" and that does not work here.** With a
+    // board open, a pointer move over the map highlights the matching *row*
+    // (`main.ts`'s pointermove returns early on `challengePanel.isOpen()`); it
+    // never sets the map's hover, so no ring is drawn for the file under the
+    // cursor. Three of ten cold playtesters reported the line as broken, one
+    // calling it *"dead on arrival"* and *"the entire bridge between 'the map is
+    // pretty' and 'the map is a tool I used to answer the question'"*.
+    //
+    // The instruction was also unnecessary, which is what made it careless: the
+    // subject's own direct importers are drawn the whole time a board is open —
+    // that is ADR-0008 decision 1, restored in ADR-0048 — so the thing the
+    // sentence sent the player hunting for is already on screen. It now says
+    // where to look instead of what to do, which is both true and useful.
+    //
+    // A sentence that tells a player how to win, and cannot be followed at the
+    // moment it appears, is worse than no sentence: two testers failed boards
+    // that the drawn ring alone scores 0.729 on.
+    evidence: `The ${members.many} already ringed on the map import ${words.label(challenge.subject)} directly — this question is about what reaches it beyond them.`,
   };
 }
 

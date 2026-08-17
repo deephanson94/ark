@@ -628,6 +628,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     tracedRadius.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
 
   /**
+   * The board the guide is currently offering, kept in step with its caption.
+   *
+   * Assigned in `refreshGuide` from the same `nextUp()` the caption is written
+   * from, so the two cannot drift — which is the whole defect: a caption saying
+   * *"next is empty.ts"* over an `Enter` that opened something else.
+   */
+  let suggested: Challenge | null = null;
+
+  /**
    * Which question a click on this node opens.
    *
    * The first one the player has not passed, **in tier order**, so a node
@@ -638,6 +647,26 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    */
   const challengeFor = (node: SceneNode | null): Challenge | null => {
     if (node === null) return null;
+    // **The guide's own suggestion wins on the node it sent you to**, and this is
+    // the round-5 defect rather than a nicety. `suggestNext` picks a board partly
+    // for *verb variety* — `unmetVerb` lifts the first board of a kind you have
+    // never met, and `sameVerb` breaks a run — and then this function threw that
+    // away, because it returns the node's first unpassed board in **tier order**
+    // and Blast Radius is tier 3. Measured on this repo: the two disagree on
+    // **3 of the first 12 suggestions, including board two**.
+    //
+    // Six of ten cold playtesters hit it. Three reported the symptom as "both
+    // questions I was served were the same verb" while the medal shelf beside
+    // them read *"1 of 4 kinds of question answered"*; the sharpest report was a
+    // skip that moved the caption to a different file while `Enter` opened the
+    // **old** board — *"two different ask affordances bound to one key"*.
+    //
+    // A direct click keeps tier order: that is the node's own question and
+    // nothing advertised otherwise. Only the node the guide is currently
+    // pointing at honours the suggestion, which is the promise the caption makes.
+    if (suggested !== null && suggested.subject === node.id) {
+      if (!selector.answered.has(answerKey(suggested.verb, suggested.subject))) return suggested;
+    }
     const bucket = challengesById.get(node.id);
     if (bucket === undefined || bucket.length === 0) return null;
     return bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null;
@@ -1228,7 +1257,11 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * Only when the subject *has* a place: Placement's is a commit, which has
    * none, and there is nothing to pan to (ADR-0018).
    */
+  /** What the console has open, for the e2e's caption-vs-board check. */
+  let openChallenge: Challenge | null = null;
+
   function openBoard(challenge: Challenge): void {
+    openChallenge = challenge;
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
     if (node !== undefined) {
@@ -1256,6 +1289,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
 
   function refreshGuide(openQuestions: number): void {
     const upcoming = nextUp();
+    suggested = upcoming;
     const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
     // **What the guide is offering, as the selector's own key.** The e2e used to
     // identify a suggestion by its rendered caption, which names the *subject*
@@ -1265,6 +1299,37 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     // anywhere, so the test needs it from here rather than from a sentence.
     (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey =
       upcoming === null ? null : answerKey(upcoming.verb, upcoming.subject);
+    // What the console actually has open, for the same reason: the caption and
+    // the opened board drifted apart and only a browser can see it.
+    (globalThis as unknown as { __arkOpenKey?: unknown }).__arkOpenKey =
+      openChallenge === null ? null : answerKey(openChallenge.verb, openChallenge.subject);
+    // **Whether this suggestion is a case that could disagree** — the suggested
+    // subject also carries an unanswered board the tier order would have picked
+    // first. Published so the e2e can *gate itself*: without it the check lands
+    // on a subject carrying one board, the two trivially agree, and a mutant
+    // deleting the whole fix passes. That happened on the first run of it.
+    // The **counterfactual**, computed exactly: what would `challengeFor` return
+    // for this subject if it consulted tier order alone? When that differs from
+    // the suggestion, this is a board where the defect was visible.
+    //
+    // The first version asked a weaker question — "does the subject carry another
+    // unanswered board at the same tier or lower?" — which is true on plenty of
+    // subjects where the suggestion *is* the tier-first board, so the two agreed
+    // anyway and a mutant deleting the whole fix passed **twice**. A gate has to
+    // model the disagreement, not a precondition for it.
+    // **A node subject, and that qualifier is the third correction to this one
+    // line.** `challengeFor` is only ever called with a node; a commit subject
+    // has no place on the map (ADR-0018), so the guide opens it directly and the
+    // code under test never runs. Without this the gate found its "rival" on a
+    // Placement board about a commit and a mutant deleting the fix passed a
+    // **third** time — the subject-is-not-a-node landmine, in a gate, after two
+    // other attempts to make that gate honest.
+    (globalThis as unknown as { __arkNextRival?: unknown }).__arkNextRival =
+      upcoming === null || !isNodeId(upcoming.subject)
+        ? false
+        : ((challengesById.get(upcoming.subject) ?? []).find(
+            (other) => !selector.answered.has(answerKey(other.verb, other.subject)),
+          )?.id ?? null) !== upcoming.id;
     guide.update({
       next: upcoming,
       // Only when the deck is empty *because it was refused*. A repo whose

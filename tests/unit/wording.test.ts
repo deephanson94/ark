@@ -233,10 +233,29 @@ describe('the evidence line', () => {
   const words = wordsFor(buildGraph(atlas));
   const board = challengeFor(atlas, { verb: 'blastRadius' });
 
-  it('is present on the verb the import graph grades', () => {
+  it('is present on the verb the import graph grades, and names the subject', () => {
     const evidence = VERBS.blastRadius.prompt(board, words).evidence;
     expect(evidence).toBeDefined();
-    expect(evidence).toContain('imports it directly');
+    // The subject, so the line is about *this* board rather than a generic tip.
+    expect(evidence).toContain(words.label(board.subject));
+  });
+
+  it('does not tell the player to hover, because hovering does nothing here', () => {
+    // **The regression this guards is the sentence that used to be here.** It read
+    // *"Hover any file on the map to see what imports it directly"*, and with a
+    // board open a map hover only highlights the matching row — `main.ts`'s
+    // pointermove returns early on `challengePanel.isOpen()`, so the map's hover
+    // is never set and no ring is drawn for the file under the cursor. Three of
+    // ten cold playtesters reported it as broken, one as *"dead on arrival"*.
+    //
+    // Asserted as an absence rather than a wording, because the defect is the
+    // *instruction*: the subject's importers are already drawn (ADR-0008
+    // decision 1), so this line has somewhere to point and nothing to ask for.
+    // A substring check on the old phrasing is what let it ship — it asserted the
+    // shape of a sentence and never whether it could be followed.
+    const evidence = VERBS.blastRadius.prompt(board, words).evidence ?? '';
+    expect(evidence.toLowerCase()).not.toContain('hover');
+    expect(evidence.toLowerCase()).not.toContain('click');
   });
 
   it('is absent on every verb graded on git', () => {

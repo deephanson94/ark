@@ -1386,6 +1386,78 @@ async function main(): Promise<number> {
         }
       }
 
+      // ---- the guide's caption and the board Enter opens ------------------
+      //
+      // They drifted, and six of ten cold playtesters hit it. `suggestNext`
+      // picks partly for **verb variety**; `challengeFor` returned the node's
+      // first unpassed board in **tier order** and threw that away, so a
+      // Companion suggestion opened as Blast Radius. Measured through the real
+      // selector: 3 of the first 12, including board two. The sharpest report
+      // was a skip that moved the caption while `Enter` opened the old board.
+      //
+      // A unit test cannot see this — `challengeFor` is shell-local and the two
+      // halves only meet in a browser.
+      {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        // `answerKey` joins with a newline, so print it flattened or the log
+        // breaks across two lines and reads as truncated output.
+        const flat = (key: unknown): string => String(key).replace(/\n/g, ' ');
+        let rivals = 0;
+        let checked = 0;
+        // **Skip until a suggestion whose subject carries a rival board**, and
+        // require at least one. The first version of this checked whichever
+        // suggestion happened to be up, landed on a subject carrying one board,
+        // and a mutant deleting the entire fix passed it — this file's own
+        // landmine about never predicting which board the shell serves, in the
+        // gate written to catch that very class of defect.
+        for (let round = 0; round < 10; round += 1) {
+          const rival = await page.evaluate(
+            () => (globalThis as unknown as { __arkNextRival?: unknown }).__arkNextRival,
+          );
+          if (rival !== true) {
+            if ((await page.locator('.guide-skip').count()) === 0) break;
+            await page.locator('.guide-skip').click();
+            await page.waitForTimeout(200);
+            continue;
+          }
+          rivals += 1;
+          await page.locator('.guide-action').click();
+          await page.waitForTimeout(400);
+          const promised = await page.evaluate(
+            () => (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey,
+          );
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(400);
+          const opened = await page.evaluate(
+            () => (globalThis as unknown as { __arkOpenKey?: unknown }).__arkOpenKey,
+          );
+          checked += 1;
+          process.stdout.write(
+            `e2e: guide promised ${flat(promised)}, Enter opened ${flat(opened)}\n`,
+          );
+          if (promised === null || opened === null || promised !== opened) {
+            failures.push({
+              what: 'guide',
+              detail: `caption offered ${flat(promised)} and Enter opened ${flat(opened)}`,
+            });
+          }
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(300);
+          break;
+        }
+        process.stdout.write(`e2e: guide/board agreement checked on ${checked} rival board(s)\n`);
+        if (rivals === 0) {
+          failures.push({
+            what: 'guide',
+            detail:
+              'no suggestion carried a rival board in 10 skips, so the caption-vs-Enter check measured nothing',
+          });
+        }
+        await page.locator('.hud-notes').click();
+        await page.waitForSelector('.notes-panel', { timeout: 5000 });
+      }
+
       // ---- the medal shelf ----------------------------------------------
       // Four of ten cold playtesters said the game had no arc, only a counter
       // going down. This is the surface that answers that, and two of its

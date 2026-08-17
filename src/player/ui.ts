@@ -43,6 +43,29 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * Fill `into` with `path`, breakable **at its separators and nowhere else**.
+ *
+ * A derived region name is often a path — `around src/indexer/build.ts` — and it
+ * is wider than a shelf column, so every CSS answer alone is wrong: `nowrap`
+ * clipped it to `around src/inde…`, `overflow-wrap: anywhere` broke it *inside*
+ * the filename, and `break-word` does the same thing because it also splits a
+ * token that cannot fit a line on its own. Six of ten cold playtesters read
+ * `around src/indexer/build.t` / `s` and filed it; it survived two CSS fixes.
+ *
+ * `<wbr>` is the element for this and it adds **nothing** to `textContent`, so a
+ * test or an assertion reading the name still sees the string the atlas holds —
+ * unlike a zero-width space, which would silently poison every comparison.
+ */
+function breakablePath(into: HTMLElement, path: string): HTMLElement {
+  const parts = path.split('/');
+  parts.forEach((part, at) => {
+    into.append(at === parts.length - 1 ? part : `${part}/`);
+    if (at < parts.length - 1) into.append(document.createElement('wbr'));
+  });
+  return into;
+}
+
 function field(label: string, value: string, title?: string): HTMLElement {
   const row = el('div', 'field');
   const key = el('span', 'field-key', [label]);
@@ -222,6 +245,8 @@ export function createHud(
   onNorth: () => void,
   extra: readonly Node[] = [],
 ): Hud {
+  // Computed once: it is a property of the repository, not of the frame.
+  const answerable = provableNodes(atlas).size;
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
     atlas.repo.head === null
@@ -294,7 +319,19 @@ export function createHud(
       // how the second one survived the first repair. `deckRefused` is latched
       // from the atlas rather than recomputed because — unlike a pass, which
       // can decay — it cannot change without a reindex.
-      quests.textContent = questsLine(source.deckRefused, questionsLeft, ringed);
+      // **The provable denominator, not the node count** — the same one the
+      // legend's tallies and the medal shelf use. `coverage.total` would read
+      // "7 of 271", which is the unreachable-denominator defect this session
+      // already fixed in two other places: most nodes carry no board and can
+      // never be proved, so counting them makes the arc look smaller than it can
+      // ever get. One definition, three readers.
+      quests.textContent = questsLine(
+        source.deckRefused,
+        questionsLeft,
+        ringed,
+        coverage.understood,
+        answerable,
+      );
       detail.textContent = `${level} · ${stats}`;
     },
   };
@@ -735,7 +772,15 @@ export function createNotebook(deckRefused: boolean): Notebook {
   const shelfTitle = el('div', 'medals-title', ['MEDALS']);
   const shelf = el('div', 'medals-shelf');
   const shelfBlock = el('div', 'medals', [shelfTitle, shelf]);
-  const panel = el('div', 'notes-panel', [head, shelfBlock, empty, list]);
+  // **Notes first, shelf second, and that order is a measured correction.** The
+  // shelf shipped above the notes, and three of ten cold playtesters said the
+  // same thing: *"eleven mostly-empty shields dominate the panel above the single
+  // earned sentence, which is the only thing in there with content"*, *"a wall of
+  // empty grey shields is a chore list, not an arc"*, *"~80% medal grid and ~20%
+  // actual notes"*. On arrival every medal is empty and there is exactly one
+  // note, so putting the shelf on top makes the emptiest thing the headline. What
+  // you proved leads; what is next follows it.
+  const panel = el('div', 'notes-panel', [head, empty, list, shelfBlock]);
   const root = el('div', 'notes-scrim', [panel]);
   root.hidden = true;
 
@@ -779,7 +824,7 @@ export function createNotebook(deckRefused: boolean): Notebook {
           art.appendChild(medalSvg(medal));
           const pips = tierPips(medal);
           const text = el('div', 'medal-text', [
-            el('div', 'medal-name', [medal.name]),
+            breakablePath(el('div', 'medal-name'), medal.name),
             el('div', 'medal-claim', [medal.claim]),
           ]);
           if (pips !== null) {

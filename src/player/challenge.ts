@@ -307,6 +307,44 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       el('span', 'score-label', [BAND_LABEL[band] ?? band]),
     ]);
 
+    /**
+     * The two numbers the single one is made of.
+     *
+     * **The blended F1 was the only number on the card, and two cold playtesters
+     * hit that from opposite directions.** A junior developer: *"the prompt says
+     * 'extra picks lower the score' but the score line only ever says '3 of your
+     * 6 picks are right' — I never saw the actual precision/recall rule"*, so the
+     * stated cost of a spare pick was unverifiable. A programming-languages
+     * academic, who is the persona built to catch flattery: *"stop showing a
+     * single blended number — it is the one place a tool that is otherwise
+     * scrupulous about evidence flatters the player"*, after picking 3 right and
+     * 3 wrong on a 6-of-20 board and being told **C · 50% · passed**.
+     *
+     * Both are asking for the same thing, and §8.2 already computes it — the
+     * grade carries `correct`, `missed` and `spurious`, so this is arithmetic on
+     * data the card already holds rather than a new claim about anything.
+     *
+     * Written as the rule *and* this board's values, because the complaint was
+     * not that the numbers were absent but that the **rule** was: a player who
+     * can see `3/6 picked right` beside `3/6 found` can derive why that is 50%
+     * and what a spare pick would have cost.
+     */
+    const picked = grade.correct.length + grade.spurious.length;
+    const key = grade.correct.length + grade.missed.length;
+    const rule =
+      picked === 0
+        ? null
+        : el('div', 'console-rule', [
+            el('span', 'rule-part', [
+              `${grade.correct.length} of your ${picked} ${picked === 1 ? 'pick' : 'picks'} right`,
+            ]),
+            el('span', 'rule-sep', ['·']),
+            el('span', 'rule-part', [`${grade.correct.length} of the ${key} to find`]),
+            el('span', 'rule-sep', ['·']),
+            // Named, so the number above stops being an unexplained verdict.
+            el('span', 'rule-note', ['the score is the balance of the two']),
+          ]);
+
     const done = el('button', 'console-submit', ['Back to the map']);
     done.type = 'button';
     done.addEventListener('click', close);
@@ -315,6 +353,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       header(verb.prompt(challenge, words).title, challenge.difficulty),
       el('h2', 'console-question', [reveal.subject]),
       score,
+      ...(rule === null ? [] : [rule]),
       // `evidence` is assembled from the measured result inside `grade()`, so
       // it cannot drift out of sync with the number above it.
       el('p', 'console-evidence', [grade.evidence]),

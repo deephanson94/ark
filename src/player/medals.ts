@@ -21,8 +21,8 @@
  * *view* of it, re-checked against the live graph at render, so that a claim the
  * repository no longer supports is dropped rather than shown stale. A medal is
  * the same kind of claim and gets the same treatment: nothing here is persisted,
- * and `medalsFor` is a pure function of `(scene, progress, liveness)`. A medal
- * for a file that has since been deleted simply is not there.
+ * and `medalsFor` is a pure function of `(scene, progress, liveness, fog)`. A
+ * medal for a file that has since been deleted simply is not there.
  *
  * **2. Derived, never authored.** Guardrail 2 forbids repo-specific content, so
  * there is no hand-written medal for this repository or any other. A region
@@ -63,15 +63,26 @@ import { livePasses } from './progress.js';
  * have a reachable top tier — the alternative is a bar in absolute files, which
  * is either trivial on one and unreachable on the other.
  *
- * The three values are a **design choice and are labelled as one.** This repo's
- * landmine about thresholds is that a bar chosen for its English is a bar nobody
- * measured, and the honest response here is not to invent a measurement: there
- * is no distribution to read a natural break out of, because the quantity is
- * "how much of this repo has the player finished" and every value in `[0,1]`
- * occurs. A third, two thirds and all of it is the conventional shape of a
- * three-tier collection, and it is chosen for that and nothing else.
+ * **The first rung was a third and that was measured wrong.** Ten cold
+ * playtesters played the ten minutes this project is benchmarked on: three
+ * finished at **0 of 11 medals** and the rest at 1 or 2, all of those the
+ * single-shot craft ones. A third of a region is 12 files where a region holds
+ * 36, and three boards prove about eight — so the graded medals had **no
+ * reachable rung inside the window the whole benchmark measures**. One tester
+ * asked for exactly this in as many words: *"make one medal winnable inside ten
+ * minutes"*. That is the unreachable-bar mistake in its second form: not "can it
+ * ever be reached" but "can it be reached when it matters".
+ *
+ * A tenth is the first rung because it is what an opening session actually
+ * covers — eight files against ark's 36-file `src/player` is 22%, so a tenth
+ * lands inside the first two or three boards rather than after twelve. The other
+ * two are a half and all of it. **These are a design choice and are labelled as
+ * one**: unlike a gate bar there is no distribution to read a natural break out
+ * of, because the quantity is "how much of this repo has the player finished"
+ * and every value in `[0,1]` occurs. What is *not* taste is that the first rung
+ * must fall inside a first session, which is measured above.
  */
-const TIERS = [1 / 3, 2 / 3, 1] as const;
+const TIERS = [0.1, 0.5, 1] as const;
 
 /** Bronze, silver, gold — the index into `TIERS` a medal has reached. */
 export type Tier = 0 | 1 | 2;
@@ -84,10 +95,11 @@ export interface Medal {
   /**
    * What it asserts, in words the player can check against the map.
    *
-   * Present-tense and about *them* — the field notes' distinction between what
-   * was proved and what was merely shown applies here too, and every medal below
-   * is minted from `fog.understood`, which ADR-0047 makes the proved register and
-   * nothing else.
+   * Present-tense and about *them*, and **the register is per family**: the
+   * territory and reach medals are about *participation* and say "answered"; the
+   * craft medals are about knowledge and the keystone says "proved". That split
+   * is `answeredNodes`'s subject and is what keeps a learning player out of a
+   * lockout — see its header.
    */
   readonly claim: string;
   /** How far along, and how far there is to go. `have >= need` is earned. */

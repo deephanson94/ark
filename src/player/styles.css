@@ -1381,9 +1381,9 @@ body {
 
 .medals {
   flex: none;
-  margin-bottom: 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .medals-title {
@@ -1403,9 +1403,12 @@ body {
   gap: 10px 14px;
   /* The shelf grows with the repo, so it scrolls — and says so, per the
      scrollbar rule above. */
-  max-height: 34vh;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  /* **No `max-height`.** It had 34vh, and the shelf then clipped its last row
+     mid-word inside a flex column that would not give it room to scroll — six of
+     ten cold playtesters reported the text cut off, one that the content was
+     *"unreachable at 1440×900"*. The panel already scrolls; a second scroll
+     region inside it was the bug, not the fix. */
+  overflow: visible;
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 140, 170, 0.42) transparent;
 }
@@ -1444,16 +1447,19 @@ body {
   min-width: 0;
 }
 
-/* Two lines, not an ellipsis. A derived region name is often a path — `around
-   src/indexer/build.ts` — and `nowrap` clipped it to `around src/inde…`, which
-   names nothing. The medal's identity is the one string on the shelf that must
-   survive. */
+/* Two lines, not an ellipsis, and **not `anywhere`**. A derived region name is
+   often a path — `around src/indexer/build.ts` — so `nowrap` clipped it to
+   `around src/inde…` which names nothing, and `overflow-wrap: anywhere` then
+   broke it *inside a filename*: six of ten cold playtesters read
+   `around src/indexer/build.t` / `s` and filed it. `break-word` breaks between
+   words and only splits a token that cannot fit on a line of its own. */
 .medal-name {
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.3;
   color: var(--text-dim);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* Earned is the only state that gets full-strength type, so the shelf reads at a
@@ -1477,4 +1483,27 @@ body {
 
 .medal-pips {
   display: block;
+}
+
+/* The two numbers the blended score is made of. A junior playtester could not
+   derive the stated "extra picks lower the score" rule from a single percentage,
+   and an academic called the single number the one place the product flatters —
+   both wanted precision and recall, which §8.2 already computes. */
+.console-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.console-rule .rule-sep {
+  opacity: 0.4;
+}
+
+.console-rule .rule-note {
+  opacity: 0.7;
 }
