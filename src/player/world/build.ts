@@ -40,7 +40,8 @@
  * **0.25, and the 0.4 it replaces was a two-repo reading.** That value came with
  * its neighbours named and a claim that "below 0.4 the curve is flat on both",
  * which is true of ark and hono and of nothing else. `scripts/probe-walkable.ts`
- * over five, at `212b988`:
+ * over six, at `212b988` — the scalar is a multiplier on a fixed layout, so each
+ * column is the same city at a different building width and nothing else moves:
  *
  * ```
  * repo         nodes    1.00  0.40  0.30  0.25  0.20  0.15
@@ -49,15 +50,17 @@
  * graphql        549   63.4% 18.4% 10.2%  4.7%  1.1%  0.0%
  * kysely         600   56.8%  7.0%  2.8%  1.3%  1.3%  0.5%
  * prometheus     501   71.9% 17.2% 10.0%  4.2%  1.2%  0.0%
+ * hugo          1242   64.6%  8.5%  4.1%  2.2%  1.0%  0.0%
  * ```
  *
  * At the shipped 0.4, **graphql-js and prometheus stand at 17–18% blocked** —
- * the defect this scalar exists to fix, live on two of five reference repos and
+ * the defect this scalar exists to fix, live on two of six reference repos and
  * invisible because the only test of it indexes ark. 0.25 holds every measured
- * repo under 5%; its neighbours are 0.3, which leaves two of them in double
- * figures, and 0.2, which buys 3.5 points at the cost of buildings half the
- * width they are drawn at today — and BASE_HEIGHT's comment is about a street
- * having *walls*.
+ * repo under 5%, hugo's 1,242 nodes included — the row that says the choice is
+ * not a small-repo artifact. Its neighbours are 0.3, which leaves two of them in
+ * double figures, and 0.2, which buys 3.5 points at the cost of buildings half
+ * the width they are drawn at today, against BASE_HEIGHT's comment about a
+ * street needing *walls*.
  *
  * Note how the old number went stale, because it is the reason this constant
  * needs re-measuring rather than trusting: ark's own reading moved **3.3% →
