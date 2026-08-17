@@ -204,11 +204,12 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   measured. **The density also runs backwards with zoom**: 3 testers reported more labels at
   `district` (29 of 266 nodes) than at `street` (8 of 59), where the budget is `Infinity` and
   collision rejection is doing all the work — so zooming *in* names fewer files than zooming out.
-- **There is no session, only a decrementing counter.** Four of ten in round 4, independently:
-  *"160 left → 159 left is the entire arc"*, *"a quiz queue, not a curriculum"*, *"no session shape,
-  no ending, no chapter"*. The reward for a pass is a sentence in a modal and a number going down by
-  one. This is now the largest single lever on "would you keep playing" and nothing has been built
-  for it.
+- ~~**There is no session, only a decrementing counter.**~~ **Medals ship** — eleven on this repo in
+  three families (`src/player/medals.ts`), all derived from the atlas and the proved register, none
+  authored. Territory is one medal per topology region, which is the *"src/player 3/38"* two testers
+  asked for by name with a finish line on it. **Whether it moves the score is unmeasured**, so this
+  row stays until a fifth round runs: the complaint it answers was named by 4 of 10 and the fix has
+  been seen by nobody but the suite.
 - **A wrong answer you did not pick is never explained.** Two of ten, and one of them scored 100% and
   said so: the reveal builds its rows from `correct ∪ missed ∪ spurious`, which is `picked ∪ truth`,
   so a candidate that is neither picked nor in the key gets no line at all — and ADR-0020's witness,
@@ -681,9 +682,9 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 **Run a fifth playtest round**, because round 4's fixes are unmeasured and its instrument was faulty
 — the brief told every tester *"wrong answers cost you nothing"*, a sentence §8.2 makes false, for
-four rounds · then the two structural gaps that round named and nothing addresses: **there is no
-session, only a decrementing counter** (4 of 10, the largest remaining lever on "would you keep
-playing"), and **a wrong answer you did not pick is never explained** (the reveal's rows are
+four rounds. Five changes are now waiting on that measurement: the opening board, the arrival card,
+the edge opacity, the scrollbars and the medal shelf · then the structural gap round 4 named that
+nothing addresses: **a wrong answer you did not pick is never explained** (the reveal's rows are
 `picked ∪ truth`, so a perfect score teaches nothing about the other eighteen)
 · **a rig that frames what is ahead**, which is the walk's actual defect now that the collision
 theory is refuted by measurement (`scripts/probe-spawn.ts`) · **bind mouse-look**, which is unbound

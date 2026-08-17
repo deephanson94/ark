@@ -4782,3 +4782,29 @@ cost you nothing"*, a sentence §8.2 makes false and this repo had already delet
 prompts, for four rounds. Then the two structural gaps: there is no session arc, only a decrementing
 counter (4 of 10, the largest remaining lever on "would you keep playing"), and a wrong answer you
 did not pick is never explained, so a perfect score teaches nothing about the other eighteen.
+
+## Medals — the arc four testers said the game did not have
+
+Eleven medals on this repo, three families, every one derived from the atlas and
+the proved register: one per topology region (the *"src/player 3/38"* two testers
+asked for, with a finish line), map-wide reach and a verb-blind "every kind of
+question", and three craft medals — a key that travelled 3+ hops, a board with
+every member found, and the most load-bearing file. Nothing authored, nothing
+stored: `medalsFor` is pure and the fog is handed in, because two surfaces
+computing one population separately is how the Archaeology reveal and its own
+field note came to disagree on 21 of 26 boards.
+
+Three things worth keeping. The save records *which members were picked* and not
+the score, so "you scored 100%" is not derivable and is not offered — the medal
+says **recall**, and a test asserts no claim ever contains "score". An unearned
+medal keeps its full outline and only the fill is earned, because the sub-pass
+badge shipped as a conic gradient that at 0% is a near-black rounded square; the
+e2e asserts outline-count == medal-count and catches a mutant that removes it.
+And the terrain-guard mutant **survived the first suite** — the fixture's only
+terrain region had no provable node, so a second guard excluded it either way,
+which is two rules constraining one search hiding each other's tests.
+
+**Next**: a fifth panel round. Five changes are now waiting on it — the opening
+board, the arrival card, the edge opacity, the scrollbars and this — and the
+instrument itself needs the corrected brief, since four rounds told every tester
+*"wrong answers cost you nothing"*, which §8.2 makes false.
