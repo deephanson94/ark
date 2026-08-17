@@ -27,7 +27,7 @@ import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { legendRows, provedByRegion } from './scene.js';
+import { answerableByRegion, countByRegion, legendRows } from './scene.js';
 import type { TwinClass } from './twins.js';
 
 type Children = readonly (Node | string)[];
@@ -581,22 +581,21 @@ export function createArrival(scene: Scene): ArrivalCard {
 export interface Legend {
   readonly root: HTMLElement;
   /**
-   * Repaint the per-region tallies, and the channel key for the view on
-   * screen. Called wherever the HUD's counts are, from the same `fog`.
+   * Repaint the per-region tallies, and the channel key for the view on screen.
+   *
+   * `counted` is the **answered** population, not `fog.understood`, and the shell
+   * hands the identical set to the medal shelf and to the map's region wash. Three
+   * surfaces, one number: passing the strict register here while the shelf counted
+   * participation put `2/37` beside a medal reading `3/37` on any retried board.
    */
-  update(understood: ReadonlySet<NodeId>, view: 'map' | 'orbit'): void;
+  update(counted: ReadonlySet<NodeId>, view: 'map' | 'orbit'): void;
 }
 
 export function createLegend(scene: Scene): Legend {
-  // The same `provableNodes` the medal shelf uses, so the two surfaces cannot
-  // print different denominators for one population.
-  const provable = provableNodes(scene.atlas);
-  const answerable = new Map<number, number>();
-  for (const node of scene.nodes) {
-    if (!provable.has(node.id)) continue;
-    answerable.set(node.regionIndex, (answerable.get(node.regionIndex) ?? 0) + 1);
-  }
-  const rows = legendRows(scene, answerable);
+  // One helper, three readers: this, the medal shelf and the map's region wash.
+  // Inlined here once and it drifted immediately — the shell needed the same
+  // map for the wash and computed it a second time.
+  const rows = legendRows(scene, answerableByRegion(scene, provableNodes(scene.atlas)));
   const tallies = new Map<number, HTMLElement>();
   const items = rows.map((row) => {
     const swatch = el('span', 'legend-swatch');
@@ -624,12 +623,12 @@ export function createLegend(scene: Scene): Legend {
   ]);
   return {
     root,
-    update(understood, view) {
+    update(counted, view) {
       if (view !== shown) {
         shown = view;
         keyBox.replaceChildren(el('div', 'legend-title', ['what you see']), ...keyRows(view));
       }
-      const proved = provedByRegion(scene, understood);
+      const proved = countByRegion(scene, counted);
       for (const row of rows) {
         const tally = tallies.get(row.index);
         if (tally === undefined) continue;

@@ -52,7 +52,15 @@ import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
+import {
+  DIRECT_ONLY,
+  FULL_RADIUS,
+  answerableByRegion,
+  blastRadius,
+  clearedByRegion,
+  pick,
+  prepare,
+} from './scene.js';
 import type { Twins } from './twins.js';
 import { findTwins, nameableClass } from './twins.js';
 import type { Ties } from './ties.js';
@@ -62,7 +70,7 @@ import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, noteSkipped, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
-import { medalsFor } from './medals.js';
+import { answeredNodes, medalsFor, provableNodes } from './medals.js';
 import {
   createError,
   createGuide,
@@ -313,6 +321,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
   /**
+   * The **answered** population, and the per-region fractions read off it.
+   *
+   * One set, three readers: the legend's tallies, the medal shelf, and the map's
+   * region wash. Passing `fog.understood` to one and the answered set to another
+   * is how two panels came to print `2/37` and `3/37` for the same region on a
+   * retried board — the shape ADR-0019's reveal and its own field note had on 21
+   * of 26 boards, where each surface is right and they disagree.
+   *
+   * Kept beside `fog` and recomputed with it, because the two decay together: a
+   * pass whose subject has left the atlas leaves both.
+   */
+  const answerableByRegionMap = answerableByRegion(scene, provableNodes(scene.atlas));
+  let answeredSet: ReadonlySet<NodeId> = answeredNodes(progress, liveness);
+  let regionProgress: ReadonlyMap<number, number> = clearedByRegion(
+    scene,
+    answeredSet,
+    answerableByRegionMap,
+  );
+  /**
    * What may have its **import** radius drawn — the subjects and members proved
    * through Blast Radius, and nothing else.
    *
@@ -443,6 +470,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     progress = next;
     surveyedIds = new Set(next.surveyed);
     fog = deriveFog(progress, liveness, shore);
+    // Recomputed with the fog, from the same record, so the three surfaces that
+    // read it cannot fall a frame out of step with the map.
+    answeredSet = answeredNodes(progress, liveness);
+    regionProgress = clearedByRegion(scene, answeredSet, answerableByRegionMap);
     tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
     retie();
     saveProgress(store, saveKey, progress);
@@ -1439,6 +1470,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         peaks,
         ties,
         tieFocus,
+      regionProgress,
         board: boardMarks(),
       };
       const stats =
@@ -1495,7 +1527,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         }));
       // The regions filling in, from the same `fog` the HUD's coverage reads —
       // so the panel and the map can never disagree about what is proved.
-      legend.update(fog.understood, orbit === null ? 'map' : 'orbit');
+      legend.update(answeredSet, orbit === null ? 'map' : 'orbit');
       hud.update(
         coverage(fog, scene.nodes.length),
         orbit === null ? stats.level : 'orbit',

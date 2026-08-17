@@ -57,6 +57,35 @@ function stubContext(): CanvasRenderingContext2D {
   }) as unknown as CanvasRenderingContext2D;
 }
 
+/**
+ * A stub that **records** the fill colours it is given.
+ *
+ * The proxy above swallows every style write, which is right for the tests that
+ * only care what got drawn — and it makes a *colour* channel unobservable. The
+ * region wash brightens with how much of a region the player has answered
+ * (`FrameInput.regionProgress`), and without this a mutant ignoring that field
+ * entirely passes every assertion in the file: the same island count is drawn
+ * either way. Count-the-firings, applied to a rendering.
+ */
+function recordingContext(): { context: CanvasRenderingContext2D; fills: string[] } {
+  const fills: string[] = [];
+  const base = stubContext();
+  const context = new Proxy(base, {
+    get: (object, key) => Reflect.get(object, key),
+    set: (object, key, value) => {
+      if (key === 'fillStyle' && typeof value === 'string') fills.push(value);
+      return Reflect.set(object, key, value);
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return { context, fills };
+}
+
+/** The alpha of an `hsla(...)` fill, or null if it is not one. */
+function alphaOf(fill: string): number | null {
+  const match = /hsla\([^)]*,\s*([0-9.]+)\)/.exec(fill);
+  return match === null ? null : Number(match[1]);
+}
+
 const VIEWPORT = { width: 1200, height: 800 };
 
 function frameInput(chrome: FrameInput['chrome']): FrameInput {
@@ -82,6 +111,9 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     peaks: new Set(scene.nodes.map((node) => node.ref)),
     ties: NO_TIES,
     tieFocus: null,
+    // Untouched map: the wash channel is inert, which is what an arriving
+    // player sees and is the baseline the brightening must not change.
+    regionProgress: new Map<number, number>(),
     board: null,
   };
 }
@@ -304,6 +336,7 @@ describe('the renderer uses the ramp it is given', () => {
       tieFocus: null,
       board: null,
       chrome: [],
+      regionProgress: new Map<number, number>(),
     });
     return seen;
   }
@@ -364,6 +397,7 @@ describe('the labels a frame returns', () => {
       tieFocus: null,
       board: null,
       chrome: [],
+      regionProgress: new Map<number, number>(),
     });
     // Non-vacuous: a frame that drew no labels would satisfy any claim about
     // them, and this is the assertion that would have caught the field being
@@ -402,7 +436,7 @@ describe('the labels a frame returns', () => {
       fog: { surveyed: all, understood: new Set() },
       hovered: null, selected: null, radius: null,
       questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
-      board: null, chrome: [],
+      board: null, chrome: [], regionProgress: new Map<number, number>(),
     });
     expect(stats.nameplates.length).toBeGreaterThan(0);
     for (const plate of stats.nameplates) {
@@ -573,5 +607,43 @@ describe('candidate markers are counted apart from the subject’s', () => {
     });
     expect(marks.all).toBe(3);
     expect(marks.candidates).toBe(2);
+  });
+});
+
+
+describe('the region wash is the map\'s scoreboard', () => {
+  // Five rounds of cold playtests asked what gave a sense of progress and the
+  // last ten all answered *the map lighting up*; four then asked for the region
+  // tally to move onto the map. This is that channel, and it is a colour — so it
+  // needs a stub that can see colours, or the assertion is decoration.
+  const cleared = (progress: ReadonlyMap<number, number>): number[] => {
+    const { context, fills } = recordingContext();
+    drawFrame(context, { ...frameInput([]), regionProgress: progress });
+    return fills
+      .map(alphaOf)
+      .filter((alpha): alpha is number => alpha !== null)
+      // The washes are the faintest fills on the frame; the discs and text are
+      // far stronger. Taking the low tail keeps this about the ground.
+      .filter((alpha) => alpha < 0.3)
+      .sort((a, b) => b - a);
+  };
+
+  it('brightens the ground as a region is answered', () => {
+    const untouched = cleared(new Map());
+    const half = cleared(new Map([[0, 0.5]]));
+    const whole = cleared(new Map([[0, 1]]));
+    expect(untouched.length).toBeGreaterThan(0);
+    // The brightest ground fill rises monotonically with the fraction.
+    expect(half[0]).toBeGreaterThan(untouched[0] as number);
+    expect(whole[0]).toBeGreaterThan(half[0] as number);
+  });
+
+  it('leaves an untouched map exactly as it was', () => {
+    // The channel only ever *adds* — guardrail 6's shape applied to a rendering:
+    // nothing a player does can make ground darker than they found it, and an
+    // arriving player sees the frame that shipped before this existed.
+    const none = cleared(new Map());
+    const zero = cleared(new Map([[0, 0]]));
+    expect(zero).toEqual(none);
   });
 });

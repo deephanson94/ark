@@ -266,13 +266,69 @@ export function legendRows(
  * its question"* was therefore false of every member-promoted node, and it
  * shipped for one commit before this function made me read `deriveFog`.
  */
-export function provedByRegion(
+/**
+ * How many of each region's nodes some question can reach.
+ *
+ * The completion denominator, shared by the legend's tallies, the medal shelf and
+ * the map's region wash. `nodeCount` is the wrong number for this and was used by
+ * the legend for a milestone: **all six** of this repo's topology regions have
+ * fewer answerable files than nodes (43 of 59, 8 of 23, 2 of 3, 35 of 42, 29 of
+ * 34, 34 of 44), so a tally against the node count could never read complete.
+ */
+export function answerableByRegion(
   scene: Pick<Scene, 'nodes'>,
-  understood: ReadonlySet<NodeId>,
+  provable: ReadonlySet<NodeId>,
 ): ReadonlyMap<number, number> {
   const counts = new Map<number, number>();
   for (const node of scene.nodes) {
-    if (!understood.has(node.id)) continue;
+    if (!provable.has(node.id)) continue;
+    counts.set(node.regionIndex, (counts.get(node.regionIndex) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * How much of each region is cleared, `0..1` by palette index.
+ *
+ * The channel the map's region wash brightens on — five rounds of playtests said
+ * the arc they felt was the map lighting up, and four asked for the region tally
+ * to move onto it. A region with nothing answerable is absent rather than 0, so a
+ * caller cannot brighten ground that can never be cleared.
+ */
+export function clearedByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  counted: ReadonlySet<NodeId>,
+  answerable: ReadonlyMap<number, number>,
+): ReadonlyMap<number, number> {
+  const done = countByRegion(scene, counted);
+  const out = new Map<number, number>();
+  for (const [index, total] of answerable) {
+    if (total <= 0) continue;
+    out.set(index, Math.min(1, (done.get(index) ?? 0) / total));
+  }
+  return out;
+}
+
+/**
+ * How many of each region's nodes are in `counted`.
+ *
+ * **The set is the caller's choice and that is now load-bearing.** The parameter
+ * was named `understood`, and the shell passed `fog.understood` — the strict
+ * proved register — while the medal shelf counted the *answered* population,
+ * because scoring an arc on the proved register locks a player who fails a
+ * board's first attempt out of it permanently (see `answeredNodes`). Two
+ * surfaces, one population, two numbers: on any retried board the legend read
+ * `2/37` beside a medal reading `3/37`. Both were internally right, which is the
+ * shape that had ADR-0019's reveal disagreeing with its own field note on 21 of
+ * 26 boards. The shell passes one set to all three readers now.
+ */
+export function countByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  counted: ReadonlySet<NodeId>,
+): ReadonlyMap<number, number> {
+  const counts = new Map<number, number>();
+  for (const node of scene.nodes) {
+    if (!counted.has(node.id)) continue;
     counts.set(node.regionIndex, (counts.get(node.regionIndex) ?? 0) + 1);
   }
   return counts;

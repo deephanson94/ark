@@ -54,6 +54,29 @@ export interface FrameInput {
   /** Whose wires draw bright rather than at rest. */
   readonly tieFocus: NodeRef | null;
   /**
+   * How much of each region the player has answered, `0..1` by palette index.
+   *
+   * **The map is the scoreboard, and this is the channel that makes it one.**
+   * Five rounds of cold playtests asked what gave them a sense of progress and
+   * every one of the last ten answered the same way — *the map lighting up*: *"my
+   * knowledge had a shape and a location"*, *"four surfaces changed at once, that
+   * single moment is the best thing in the product"*, *"that's why I'd have kept
+   * clicking"*. None of them credited the medal shelf built for exactly that.
+   * Four then asked for the same next step in their own words, and one named the
+   * mechanism: *"brighten/fill a region proportionally as you clear it — the
+   * legend already computes 3/36, put it on the map, not in a list"*.
+   *
+   * **Colour rather than text, deliberately.** Text collision has been the top
+   * visual complaint in all five rounds, so a third line on every nameplate would
+   * pay for the arc out of the thing already most in deficit. The wash is ground
+   * that is already drawn; this only says how brightly.
+   *
+   * Handed in rather than derived, like everything else here: the fractions come
+   * from the same `provedByRegion` and provable denominator the legend's tallies
+   * and the medal shelf read, so three surfaces cannot disagree about one number.
+   */
+  readonly regionProgress: ReadonlyMap<number, number>;
+  /**
    * Screen rectangles of the DOM panels standing over the canvas.
    *
    * The renderer cannot see them — they are siblings of the canvas, not pixels
@@ -330,9 +353,25 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       // largest region, which is true of the file count and false of the
       // architecture.
       const weight = index === TERRAIN_INDEX ? 0.45 : 1;
+      // **Cleared ground is brighter ground.** Up to 2.2× at a fully answered
+      // region, from the fraction the legend and the shelf already agree on.
+      //
+      // A multiplier on the existing alpha rather than a new layer, so an
+      // untouched map is byte-identical to what shipped and the channel only ever
+      // *adds* — guardrail 6's shape applied to a rendering: nothing a player does
+      // can make a region darker than it started.
+      //
+      // 2.2 is chosen so the top of the range is legible against a neighbour at
+      // zero without becoming a second figure competing with the discs: at 0.07
+      // the shore is 0.154 when complete, still ground rather than a mark.
+      // Terrain carries no questions, so its fraction is 0 and it never brightens
+      // — which is right, and is why this reads as *progress* rather than as
+      // decoration that happens to correlate with size.
+      const cleared = input.regionProgress.get(index) ?? 0;
+      const lit = 1 + 1.2 * Math.max(0, Math.min(1, cleared));
       for (const [pad, alpha] of [
-        [ISLAND_SHELF, 0.05 * weight],
-        [ISLAND_SHORE, 0.07 * weight],
+        [ISLAND_SHELF, 0.05 * weight * lit],
+        [ISLAND_SHORE, 0.07 * weight * lit],
       ] as const) {
         context.beginPath();
         for (const node of members) {

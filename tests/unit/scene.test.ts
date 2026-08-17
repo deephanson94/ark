@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Camera, Viewport } from '../../src/player/camera.js';
 import { NORTH } from '../../src/player/camera.js';
 import type { SceneNode } from '../../src/player/scene.js';
-import { TERRAIN_INDEX, blastRadius, legendRows, pick, prepare, provedByRegion, visibleEdges, visibleNodes } from '../../src/player/scene.js';
+import { TERRAIN_INDEX, answerableByRegion, blastRadius, clearedByRegion, countByRegion, legendRows, pick, prepare, visibleEdges, visibleNodes } from '../../src/player/scene.js';
 import { DISTRICT_SCALE, STREET_SCALE, levelFor, shortLabel, styleFor } from '../../src/player/zoom.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -396,7 +396,7 @@ describe('legendRows', () => {
  * "you proved its question" was false of every member-promoted node, and it
  * shipped for one commit before this function made me read `deriveFog`.
  */
-describe('provedByRegion', () => {
+describe('countByRegion', () => {
   const scene = prepare(
     atlasWith(
       ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
@@ -409,25 +409,67 @@ describe('provedByRegion', () => {
   );
 
   it('counts nothing before anything is proved', () => {
-    expect(provedByRegion(scene, new Set())).toEqual(new Map());
+    expect(countByRegion(scene, new Set())).toEqual(new Map());
   });
 
   it('counts a node into its own region', () => {
     const first = scene.nodes[0];
     if (first === undefined) throw new Error('empty fixture');
-    const counts = provedByRegion(scene, new Set([first.id]));
+    const counts = countByRegion(scene, new Set([first.id]));
     expect(counts.get(first.regionIndex)).toBe(1);
   });
 
   it('adds up to the number proved, however the regions fell', () => {
     const all = new Set(scene.nodes.map((node) => node.id));
-    const counts = provedByRegion(scene, all);
+    const counts = countByRegion(scene, all);
     expect([...counts.values()].reduce((sum, n) => sum + n, 0)).toBe(scene.nodes.length);
   });
 
   it('ignores an id the map does not have', () => {
     // A save carries commit ids and renamed paths; a tally that counted them
     // would climb past the region's own size.
-    expect(provedByRegion(scene, new Set(['c:deadbeef' as never]))).toEqual(new Map());
+    expect(countByRegion(scene, new Set(['c:deadbeef' as never]))).toEqual(new Map());
+  });
+});
+
+describe('how much of a region is cleared', () => {
+  const nodes = [
+    { id: 'n:a', regionIndex: 0 },
+    { id: 'n:b', regionIndex: 0 },
+    { id: 'n:c', regionIndex: 0 },
+    { id: 'n:d', regionIndex: 1 },
+  ] as unknown as SceneNode[];
+  const scene = { nodes };
+
+  it('is a fraction of what a question can reach, not of the region', () => {
+    // `n:c` carries no board, so a region of three with two answerable is
+    // complete at two. Scored against the node count it could never finish —
+    // the unreachable-denominator defect the legend carried for a milestone.
+    const provable = new Set(['n:a', 'n:b', 'n:d']);
+    const answerable = answerableByRegion(scene, provable);
+    expect(answerable.get(0)).toBe(2);
+    const cleared = clearedByRegion(scene, new Set(['n:a', 'n:b']), answerable);
+    expect(cleared.get(0)).toBe(1);
+  });
+
+  it('rises with what the player has answered', () => {
+    const answerable = answerableByRegion(scene, new Set(['n:a', 'n:b', 'n:d']));
+    expect(clearedByRegion(scene, new Set(), answerable).get(0)).toBe(0);
+    expect(clearedByRegion(scene, new Set(['n:a']), answerable).get(0)).toBeCloseTo(0.5, 9);
+  });
+
+  it('omits a region nothing can clear, rather than reporting it at zero', () => {
+    // Brightening ground that can never be cleared would be a promise the deck
+    // cannot keep — and 0 is indistinguishable from "not started", which is the
+    // count-of-zero-has-two-causes landmine.
+    const answerable = answerableByRegion(scene, new Set(['n:a']));
+    expect(answerable.has(1)).toBe(false);
+    expect(clearedByRegion(scene, new Set(['n:a']), answerable).has(1)).toBe(false);
+  });
+
+  it('never exceeds one, so a stale set cannot over-brighten the ground', () => {
+    const answerable = answerableByRegion(scene, new Set(['n:a']));
+    const cleared = clearedByRegion(scene, new Set(['n:a', 'n:b', 'n:c']), answerable);
+    expect(cleared.get(0)).toBe(1);
   });
 });

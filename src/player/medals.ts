@@ -185,7 +185,7 @@ function gradeOf(have: number, achievable: number): { tier: Tier; need: number }
  * craft medals are untouched, and ADR-0047 is not amended. The claims say
  * *answered*, which is what is checked.
  */
-function answeredNodes(progress: Progress, liveness: Liveness): Set<NodeId> {
+export function answeredNodes(progress: Progress, liveness: Liveness): Set<NodeId> {
   const answered = new Set<NodeId>();
   for (const pass of livePasses(progress, liveness)) {
     if (isNodeId(pass.subject)) answered.add(pass.subject);
