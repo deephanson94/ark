@@ -301,9 +301,9 @@ describe('legendRows', () => {
     // six** of this repo's topology regions while the medal shelf printed
     // `n/answerable` for the same numerator — two panels contradicting each
     // other about one population, falsifiable by a player with one glance.
-    const regions: SceneRegion[] = [
-      { id: 'a', label: 'a', index: 0, x: 0, y: 0, nodeCount: 10, kind: 'topology' },
-      { id: 'b', label: 'b', index: 1, x: 0, y: 0, nodeCount: 4, kind: 'terrain' },
+    const regions = [
+      { id: 'a', label: 'a', index: 0, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
+      { id: 'b', label: 'b', index: 1, x: 0, y: 0, nodeCount: 4, kind: 'terrain' as const },
     ];
     const rows = legendRows({ regions }, new Map([[0, 6]]));
     const a = rows.find((row) => row.label === 'a');
