@@ -19,6 +19,9 @@ import type { Arm, View } from './experiment.js';
 import { controlsFor } from './experiment.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
+import type { Medal } from './medals.js';
+import { earnedCount } from './medals.js';
+import { medalSvg, tierPips } from './medalArt.js';
 import { VERBS, wordsFor } from '../verbs/index.js';
 import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
@@ -683,8 +686,13 @@ export interface Notebook {
   readonly toggle: HTMLElement;
   isOpen(): boolean;
   close(): void;
-  /** Re-render from the current record. Notes are derived, never cached. */
-  update(notes: readonly FieldNote[]): void;
+  /**
+   * Re-render from the current record. Notes and medals are both **derived,
+   * never cached** — a medal is the same kind of claim a note is, and ADR-0011
+   * requires every restored claim to be re-checked against the live graph rather
+   * than replayed from storage.
+   */
+  update(notes: readonly FieldNote[], medals: readonly Medal[]): void;
 }
 
 /**
@@ -711,7 +719,15 @@ export function createNotebook(deckRefused: boolean): Notebook {
   const close = el('button', 'console-close', ['✕']);
   close.type = 'button';
   const head = el('div', 'notes-head', [heading, close]);
-  const panel = el('div', 'notes-panel', [head, empty, list]);
+  // The shelf sits **above** the notes, and that is the point of it: four of ten
+  // cold playtesters said the game had no arc, only a counter going down. A note
+  // is a fact you proved; a medal is how far through the repository those facts
+  // have got you. The two belong on one surface because they are the same
+  // register — proved, never merely shown.
+  const shelfTitle = el('div', 'medals-title', ['MEDALS']);
+  const shelf = el('div', 'medals-shelf');
+  const shelfBlock = el('div', 'medals', [shelfTitle, shelf]);
+  const panel = el('div', 'notes-panel', [head, shelfBlock, empty, list]);
   const root = el('div', 'notes-scrim', [panel]);
   root.hidden = true;
 
@@ -737,8 +753,33 @@ export function createNotebook(deckRefused: boolean): Notebook {
     toggle,
     isOpen: () => open,
     close: () => setOpen(false),
-    update(notes) {
-      toggle.textContent = notes.length === 0 ? 'field notes' : `field notes (${notes.length})`;
+    update(notes, medals) {
+      const won = earnedCount(medals);
+      // Both counts on the button, because the medal count is the one that only
+      // ever goes up and is therefore the one worth glancing at.
+      toggle.textContent =
+        notes.length === 0 && won === 0
+          ? 'field notes'
+          : `field notes (${notes.length}) · ${won}/${medals.length} medals`;
+      shelfTitle.textContent = `MEDALS — ${won} OF ${medals.length}`;
+      shelf.replaceChildren(
+        ...medals.map((medal) => {
+          const art = el('div', 'medal-frame');
+          art.appendChild(medalSvg(medal));
+          const pips = tierPips(medal);
+          const text = el('div', 'medal-text', [
+            el('div', 'medal-name', [medal.name]),
+            el('div', 'medal-claim', [medal.claim]),
+          ]);
+          if (pips !== null) {
+            const row = el('div', 'medal-pip-row');
+            row.appendChild(pips);
+            text.appendChild(row);
+          }
+          const item = el('div', medal.earned ? 'medal is-earned' : 'medal', [art, text]);
+          return item;
+        }),
+      );
       empty.hidden = notes.length > 0;
       const items = notes.map((note) => {
         const { claim, revealed } = noteProse(note);

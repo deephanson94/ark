@@ -62,6 +62,7 @@ import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, noteSkipped, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
+import { medalsFor } from './medals.js';
 import {
   createError,
   createGuide,
@@ -714,7 +715,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // stopped supporting (ADR-0011 decision 3).
   const notebook = createNotebook(mapCoverage.deckRefused);
   const refreshNotes = (): void => {
-    notebook.update(fieldNotes(scene.graph, progress, liveness));
+    // **The same `fog` the map is drawing**, handed to the medals rather than
+    // re-derived inside them. Two surfaces computing one population separately is
+    // how the Archaeology reveal and its own field note came to disagree on 21 of
+    // 26 boards, each internally consistent and each with passing tests.
+    notebook.update(
+      fieldNotes(scene.graph, progress, liveness),
+      medalsFor(scene, progress, liveness, fog),
+    );
   };
   notebook.toggle.addEventListener('click', refreshNotes);
 

@@ -1366,3 +1366,115 @@ body {
   background: rgba(140, 165, 200, 0.08);
   color: var(--text);
 }
+
+/* ---- medals -------------------------------------------------------------
+   Four of ten cold playtesters said the game had no arc, only a counter going
+   `160 left` → `159 left`. This is the shelf that answers that, and it lives on
+   the field-notes panel because a medal and a note are the same register: both
+   are things you *proved*, never things you were shown.
+
+   **An unearned medal is the common case in the frame the panel scores**, so it
+   has to look deliberate rather than broken. The art keeps its full outline and
+   only the fill is earned (see `medalArt.ts`) — the sub-pass badge shipped as a
+   conic gradient that at 0% was a near-black rounded square, which is the
+   missing-asset defect reproduced inside the fix for it. */
+
+.medals {
+  flex: none;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.medals-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+/* Auto-fill rather than a fixed column count: a repo with two topology regions
+   and one with fourteen both get a shelf that fits, and the panel is a fixed
+   620px so the count cannot be derived from the medal list. */
+.medals-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 10px 14px;
+  /* The shelf grows with the repo, so it scrolls — and says so, per the
+     scrollbar rule above. */
+  max-height: 34vh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 140, 170, 0.42) transparent;
+}
+
+.medals-shelf::-webkit-scrollbar {
+  width: 10px;
+}
+
+.medals-shelf::-webkit-scrollbar-thumb {
+  background: rgba(120, 140, 170, 0.42);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+.medal {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.medal-frame {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  /* No background. A plate behind an empty medal is the blob this file's header
+     is about — the outline is the whole visual. */
+}
+
+.medal-art {
+  display: block;
+}
+
+.medal-text {
+  min-width: 0;
+}
+
+/* Two lines, not an ellipsis. A derived region name is often a path — `around
+   src/indexer/build.ts` — and `nowrap` clipped it to `around src/inde…`, which
+   names nothing. The medal's identity is the one string on the shelf that must
+   survive. */
+.medal-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Earned is the only state that gets full-strength type, so the shelf reads at a
+   glance rather than needing to be parsed medal by medal. */
+.medal.is-earned .medal-name {
+  color: var(--text);
+}
+
+.medal-claim {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  opacity: 0.82;
+}
+
+.medal-pip-row {
+  margin-top: 5px;
+}
+
+.medal-pips {
+  display: block;
+}

@@ -1385,6 +1385,50 @@ async function main(): Promise<number> {
           }
         }
       }
+
+      // ---- the medal shelf ----------------------------------------------
+      // Four of ten cold playtesters said the game had no arc, only a counter
+      // going down. This is the surface that answers that, and two of its
+      // properties are invisible to a unit test.
+      //
+      // **An unearned medal must still draw its outline.** The sub-pass badge
+      // shipped as a conic gradient that at 0% was a near-black rounded square —
+      // the missing-visual defect reproduced inside the fix for it — and an
+      // unearned medal is the *common* case in the first ten minutes. So: every
+      // medal has an outline path, whatever its state.
+      const shelf = await page.locator('.medal').count();
+      if (shelf === 0) {
+        failures.push({ what: 'medals', detail: 'the shelf drew no medals at all' });
+      }
+      const outlines = await page.evaluate(
+        () => document.querySelectorAll('.medal-art path[fill="none"]').length,
+      );
+      if (outlines !== shelf) {
+        failures.push({
+          what: 'medals',
+          detail: `${outlines} outlines over ${shelf} medals — an unearned medal is drawing nothing`,
+        });
+      }
+      // And a pass has to have *moved* something, or the shelf is decoration.
+      const won = await page.locator('.medal.is-earned').count();
+      const filled = await page.evaluate(
+        () => document.querySelectorAll('.medal-art path[clip-path]').length,
+      );
+      process.stdout.write(`e2e: medals → ${shelf} on the shelf, ${won} earned, ${filled} part-filled\n`);
+      if (filled === 0) {
+        failures.push({
+          what: 'medals',
+          detail: 'a board was passed and no medal shows any progress at all',
+        });
+      }
+      // The shelf and the toggle must agree — two surfaces, one population.
+      const toggleText = (await page.locator('.hud-notes').innerText()).trim();
+      if (!toggleText.includes(`${won}/${shelf} medals`)) {
+        failures.push({
+          what: 'medals',
+          detail: `toggle says "${toggleText}" and the shelf holds ${won} of ${shelf}`,
+        });
+      }
       await page.screenshot({ path: join(SHOT_DIR, 'field-notes.png') });
       await page.keyboard.press('Escape');
       await page.waitForSelector('.notes-scrim', { state: 'hidden', timeout: 5000 });
