@@ -4845,3 +4845,41 @@ mechanism (`RevealNote.route`, deleted as dead infrastructure two days ago, is
 exactly the chain they want drawn). Then the ADR refusing edge direction
 permanently, since it is the top visual ask two rounds running and cannot ever
 ship.
+
+## The map is the scoreboard, and the refusal everyone keeps asking for is written down
+
+Two things, both straight out of round 5's evidence.
+
+**Cleared ground is brighter ground.** All ten testers named the map lighting up as
+the arc they felt; four then asked for the region tally to move onto it, one naming
+the mechanism exactly. The region wash now brightens with how much of that region
+is answered, up to 2.2× at complete — **colour rather than text**, because text
+collision has been the top visual complaint in all five rounds and a third line on
+every nameplate would pay for the arc out of the account already most overdrawn. A
+multiplier on the existing alpha, so an untouched map is byte-identical and the
+channel only ever adds.
+
+Two things that fix needed. `draw.test.ts`'s stub swallows every style write, so a
+mutant ignoring the new field passed the whole file — there is a recording stub
+now, because a colour channel nothing can see is a colour channel nobody has
+tested. And fixing the medal lockout had moved the arc onto the *answered*
+population while the legend still counted *proved*, so on a retried board the
+legend read `2/37` beside a medal reading `3/37`: Fable's finding 2 reintroduced by
+the fix for its finding 1. One set, three readers now, and `provedByRegion` is
+`countByRegion` because the caller chooses what it counts.
+
+**ADR-0049: edge direction can never be drawn.** The top visual ask two rounds
+running, refused, and now recorded — walking backwards along drawn arrows scores
+F1 1.000 exact on all 40 of ark's and all 54 of hono's Blast Radius boards, because
+ADR-0008's invariant makes a directed graph the answer key by construction. None of
+the four escalations reaches it. The document exists because the refusal had been
+correctly re-derived twice by sessions with no record of the previous one, and each
+derivation is a chance to get it wrong toward shipping. Its own first draft put a
+fabricated board count in the table, which is the argument for the ADR made against
+the ADR.
+
+**Next**: the one round-5 request that *is* legal — keep the proved chain drawn on
+the map, undirected, since passing a board already unlocks the cone it lies in.
+`RevealNote.route` carried exactly that chain and was deleted as dead
+infrastructure at `1c521d3`; the removal was right and the reason it had no
+consumer was that this surface had not been built.
