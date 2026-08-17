@@ -223,12 +223,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   reveal's rows are `picked ∪ truth`, so a candidate that is neither picked nor in the key gets no
   line, and ADR-0020's witness — which exists to say *why a wrong answer was offered* — is never
   shown for it. On a perfect score the best players learn the least.
-- **The most-requested visual change is one that can never ship.** Two rounds running, the top ask
-  is **edge direction** — *"I can see that things are related but never which way, which is the first
-  thing I'd ask of any dependency diagram"*. Walking backwards along drawn arrows scores F1 **1.000
-  exact on 100% of both reference repos' Blast Radius boards**, because ADR-0008's
-  `candidates ∩ dependents = truth` makes a directed graph the answer key by construction. It needs
-  a decision record so it stops being re-proposed as an oversight.
+- ~~**The most-requested visual change is one that can never ship.**~~ **Written down**
+  ([ADR-0049](./docs/decisions/0049-edge-direction-is-the-answer-key-and-can-never-be-drawn.md)),
+  which is what it needed: the top ask two rounds running is **edge direction**, and walking
+  backwards along drawn arrows scores F1 **1.000 exact on all 40 of ark's and all 54 of hono's Blast
+  Radius boards** (`npx tsx scripts/probe-direction.ts`, measured at `66f13d7`) — ADR-0008's
+  `candidates ∩ dependents = truth` makes a directed graph the answer key by construction, so none of
+  the four escalations this project has for a disclosure reaches it. The ADR is **permanent, with no
+  revisit condition**, and carries the list of what the player can have instead. It exists because the
+  refusal was correctly re-derived twice by sessions with no record of the previous one, and each
+  derivation is a chance to get it wrong in the direction of shipping.
 - **A per-board difficulty "level" is refused; a per-region one is not** (`scripts/probe-band.ts`).
   Banding on difficulty puts 9/9 of ark's and 16/16 of hono's bottom band above band A for the free
   ring guess, because `surprise` is defined *against* that ring. The marginal information over what
