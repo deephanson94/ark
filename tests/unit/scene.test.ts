@@ -296,6 +296,25 @@ describe('cost at scale', () => {
 });
 
 describe('legendRows', () => {
+  it('takes its completion denominator from what a question can reach', () => {
+    // The legend printed `n/nodeCount`, so `is-done` was unreachable for **all
+    // six** of this repo's topology regions while the medal shelf printed
+    // `n/answerable` for the same numerator — two panels contradicting each
+    // other about one population, falsifiable by a player with one glance.
+    const regions: SceneRegion[] = [
+      { id: 'a', label: 'a', index: 0, x: 0, y: 0, nodeCount: 10, kind: 'topology' },
+      { id: 'b', label: 'b', index: 1, x: 0, y: 0, nodeCount: 4, kind: 'terrain' },
+    ];
+    const rows = legendRows({ regions }, new Map([[0, 6]]));
+    const a = rows.find((row) => row.label === 'a');
+    expect(a?.answerable).toBe(6);
+    // The row's own text still describes the region's size, which is a
+    // different question from how much of it is completable.
+    expect(a?.text).toBe('a (10)');
+    // Terrain carries no questions, so nothing there is completable.
+    expect(rows.find((row) => row.label === 'terrain')?.answerable).toBe(0);
+  });
+
   /**
    * `scene.regions` is atlas order, which is sorted by **id** — alphabetical,
    * and therefore unrelated to size. The legend clips, so before ADR-0041

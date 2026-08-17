@@ -26,6 +26,7 @@
  * Pure, so the sentence can be asserted without a browser.
  */
 
+import type { NodeId } from '../atlas/index.js';
 import type { Scene } from './scene.js';
 import { byteCompare } from '../atlas/index.js';
 
@@ -37,6 +38,17 @@ export interface Arrival {
   readonly edges: number;
   /** The most load-bearing file's short label, or `null` on a map with no edges. */
   readonly landmark: string | null;
+  /**
+   * Its id.
+   *
+   * Carried because a caller that has only the label has to find the node by it,
+   * and a label is **not unique by construction** — `scene.ts` shortens to a
+   * basename, or `dir/basename` on a collision, so `a/x/index.ts` and
+   * `b/x/index.ts` can both render `x/index.ts` and `.find` takes the first.
+   * That is this repo's `.first()` landmine wearing a different key, and the id
+   * costs one line.
+   */
+  readonly landmarkId: NodeId | null;
 }
 
 export function arrivalOf(scene: Scene): Arrival {
@@ -49,7 +61,7 @@ export function arrivalOf(scene: Scene): Arrival {
   // it" means; in-degree is the direct ring and would name a barrel over the
   // thing the barrel re-exports. Ties break on the direct count and then on the
   // label, so two machines showing the same repo show the same sentence.
-  let landmark: { label: string; elevation: number; dependents: number } | null = null;
+  let landmark: { id: NodeId; label: string; elevation: number; dependents: number } | null = null;
   for (const node of scene.nodes) {
     if (node.elevation <= 0) continue;
     const better =
@@ -60,7 +72,12 @@ export function arrivalOf(scene: Scene): Arrival {
         node.dependentCount === landmark.dependents &&
         byteCompare(node.label, landmark.label) < 0);
     if (better) {
-      landmark = { label: node.label, elevation: node.elevation, dependents: node.dependentCount };
+      landmark = {
+        id: node.id,
+        label: node.label,
+        elevation: node.elevation,
+        dependents: node.dependentCount,
+      };
     }
   }
 
@@ -70,6 +87,7 @@ export function arrivalOf(scene: Scene): Arrival {
     regions,
     edges: scene.edges.length,
     landmark: landmark === null ? null : landmark.label,
+    landmarkId: landmark === null ? null : landmark.id,
   };
 }
 

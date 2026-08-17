@@ -49,6 +49,7 @@
 
 import type { Atlas, Challenge, NodeId, VerbId } from '../atlas/index.js';
 import { byteCompare, isNodeId } from '../atlas/index.js';
+import { dependents } from '../atlas/graph.js';
 import type { Scene } from './scene.js';
 import { arrivalOf } from './arrival.js';
 import type { Fog } from './fog.js';
@@ -141,6 +142,48 @@ function gradeOf(have: number, achievable: number): { tier: Tier; need: number }
  * internally consistent, each with passing tests, contradicting each other. One
  * fog, two readers.
  */
+/**
+ * Files reached by a **passing answer**, in either register.
+ *
+ * ## Why this exists, and why the arc is not scored on `understood`
+ *
+ * ADR-0047 mints `proved` only on a board's *first* graded submission
+ * (`applyGrade`: `first = !gradedKeys(...).has(key)`), so a player who fails a
+ * board once can never move its subject into `fog.understood` in that save. That
+ * is right for the epistemics — §9's whole point is that a note claims only what
+ * was proved, and a board that has already explained itself cannot prove
+ * anything — and it was safe while nothing visible depended on the conversion.
+ * ADR-0047 §4 says exactly that: *"the only thing a retry cannot do is convert
+ * shown into proved"*.
+ *
+ * **The first version of this shelf hung the arc on it anyway, and that is a
+ * lockout.** Measured on this repo, **69 of 187 provable nodes are carried by
+ * exactly one board**, so region gold and Cartographer gold required first-try
+ * success on every single-carrier board. A cold player's wrong first answers are
+ * the learning loop working as designed — *"wrong picks teach"* — and the shelf
+ * would have answered them with a finish line they could never reach again,
+ * displaying "34 of 35, forever". Guardrail 6 forbids a lockout, and *"a
+ * permanently empty trophy is the same feeling with a frame around it"* is this
+ * module's own sentence, written about the static case while it shipped the
+ * dynamic one.
+ *
+ * So the two surfaces take the two populations. **The arc is about
+ * participation** and counts a passing answer however many attempts it took;
+ * **the epistemics stay strict** — `fog.understood`, the field notes and the
+ * craft medals are untouched, and ADR-0047 is not amended. The claims say
+ * *answered*, which is what is checked.
+ */
+function answeredNodes(progress: Progress, liveness: Liveness): Set<NodeId> {
+  const answered = new Set<NodeId>();
+  for (const pass of livePasses(progress, liveness)) {
+    if (isNodeId(pass.subject)) answered.add(pass.subject);
+    for (const member of [...pass.proved, ...pass.shown]) {
+      if (isNodeId(member)) answered.add(member);
+    }
+  }
+  return answered;
+}
+
 export function medalsFor(
   scene: Scene,
   progress: Progress,
@@ -149,6 +192,14 @@ export function medalsFor(
 ): Medal[] {
   const provable = provableNodes(scene.atlas);
   const medals: Medal[] = [];
+  // **A refused deck gets no shelf at all** (ADR-0025). Cartographer would
+  // otherwise render "0 of 0 provable files proved" with a `need` of 1 — an
+  // impossible goal over a repository that was never asked a question. The
+  // guide and the HUD were both bitten by this exact extreme and both
+  // special-case it; this is the same landmine, one panel over: a count of zero
+  // has more than one cause.
+  if (provable.size === 0) return medals;
+  const answered = answeredNodes(progress, liveness);
 
   // ---- territory: one medal per region ------------------------------------
   //
@@ -169,7 +220,7 @@ export function medalsFor(
     // one. Risk #4 is that fog reads as the tool hiding things; a permanently
     // empty trophy is the same feeling with a frame around it.
     if (achievable === 0) continue;
-    const have = members.filter((node) => fog.understood.has(node.id)).length;
+    const have = members.filter((node) => answered.has(node.id)).length;
     const { tier, need } = gradeOf(have, achievable);
     medals.push({
       id: `region:${region.id}`,
@@ -181,7 +232,7 @@ export function medalsFor(
       claim:
         have >= achievable
           ? `all ${achievable} — every file a question can reach`
-          : `${have} of ${achievable} files proved`,
+          : `${have} of ${achievable} files answered`,
       have,
       need,
       tier,
@@ -193,17 +244,17 @@ export function medalsFor(
   medals.sort((a, b) => byteCompare(a.id, b.id));
 
   // ---- reach: how much of the whole map ------------------------------------
-  const understoodProvable = [...fog.understood].filter((id) => provable.has(id)).length;
-  const reach = gradeOf(understoodProvable, provable.size);
+  const answeredProvable = [...answered].filter((id) => provable.has(id)).length;
+  const reach = gradeOf(answeredProvable, provable.size);
   medals.push({
     id: 'reach:coverage',
     name: 'Cartographer',
-    claim: `${understoodProvable} of ${provable.size} provable files proved`,
-    have: understoodProvable,
+    claim: `${answeredProvable} of ${provable.size} answerable files answered`,
+    have: answeredProvable,
     need: reach.need,
     tier: reach.tier,
     tiers: TIERS.length,
-    earned: understoodProvable >= reach.need,
+    earned: answeredProvable >= reach.need,
     shelf: 'reach',
   });
 
@@ -215,9 +266,11 @@ export function medalsFor(
   // three kinds (ADR-0028) and gets a medal asking for three.
   const kinds = new Set<VerbId>(scene.atlas.challenges.map((challenge) => challenge.verb));
   const met = new Set<VerbId>();
-  for (const pass of livePasses(progress, liveness)) {
-    if (pass.proved.length > 0) met.add(pass.verb);
-  }
+  // **Either register.** The claim says *answered*, and a player who failed a
+  // Companion board once and then passed it has answered Companion — reading
+  // `proved` alone told them they had not, a sentence they could check against
+  // their own play and find false.
+  for (const pass of livePasses(progress, liveness)) met.add(pass.verb);
   medals.push({
     id: 'reach:kinds',
     name: 'Every kind of question',
@@ -248,26 +301,48 @@ export function medalsFor(
   const deep = new Set<string>();
   const swept = new Set<string>();
   for (const pass of livePasses(progress, liveness)) {
-    if (pass.proved.length === 0) continue;
+    // **Either register**, for the same reason `kinds` uses both: the claim is
+    // about what you found, and a retry that found every member found them.
+    // Reading `proved` alone printed "0 boards with every member found" directly
+    // under a reveal that had just said you found all of them.
+    const found = [...pass.proved, ...pass.shown];
+    if (found.length === 0) continue;
     const key = `${pass.verb}\n${pass.subject}`;
     const board = byKey.get(key);
     if (board === undefined) continue;
-    if (board.evidence.kind === 'importGraph' && board.evidence.depth >= 3) deep.add(key);
-    // **Full recall, and the name says recall.** `Pass` does not record a score,
-    // so precision is not recoverable from the save and "you scored 100%" is a
-    // claim this file cannot make. Finding every member of the key is a claim it
-    // can, and the two are different: a player who ticked the whole board also
-    // found every member.
-    const found = new Set(pass.proved);
-    if (board.truth.every((id) => found.has(id))) swept.add(key);
+
+    // **The hop the player actually reached, not the board's own depth.**
+    // `evidence.depth` is a property of the *board* — the furthest hop in its
+    // key — so checking it earned "Past the obvious" for a pass that found only
+    // direct-ring members, and the first unit test enshrined exactly that. The
+    // name and the claim are assertions about what the player did, so the check
+    // has to be too. Measured on this repo the gap could not fire today (0 of 27
+    // deep boards are passable on shallow recall alone), but that is an accident
+    // of one repo's distractor mix, and this project has a landmine about a
+    // heuristic measured on one mix being backwards on another.
+    const subjectRef = scene.graph.refById.get(pass.subject);
+    if (subjectRef !== undefined) {
+      const hops = dependents(scene.graph, subjectRef, Number.POSITIVE_INFINITY);
+      for (const member of found) {
+        const ref = scene.graph.refById.get(member);
+        if (ref === undefined) continue;
+        if ((hops.get(ref) ?? 0) >= 3) {
+          deep.add(key);
+          break;
+        }
+      }
+    }
+
+    const gotten = new Set(found);
+    if (board.truth.every((id) => gotten.has(id))) swept.add(key);
   }
   medals.push({
     id: 'craft:deep',
     name: 'Past the obvious',
     claim:
       deep.size === 0
-        ? 'prove one whose radius travels 3+ hops'
-        : `${deep.size} proved whose radius travelled 3+ hops`,
+        ? 'reach a file 3+ hops out from its subject'
+        : `${deep.size} ${deep.size === 1 ? 'board' : 'boards'} where you reached 3+ hops out`,
     have: deep.size,
     need: 1,
     tier: 0,
@@ -295,12 +370,14 @@ export function medalsFor(
   // file it is. Two surfaces describing one population is the defect ADR's
   // Archaeology reveal and field note had on 21 of 26 boards.
   const landmark = arrivalOf(scene);
-  const landmarkNode =
-    landmark.landmark === null
-      ? undefined
-      : scene.nodes.find((node) => node.label === landmark.landmark);
-  if (landmarkNode !== undefined && provable.has(landmarkNode.id)) {
-    const done = fog.understood.has(landmarkNode.id);
+  // By **id**, not by label: a label is a basename and is not unique by
+  // construction, so `.find` on it is the `.first()` landmine with a different
+  // key. `arrivalOf` carries the id for exactly this caller.
+  const landmarkId = landmark.landmarkId;
+  if (landmarkId !== null && provable.has(landmarkId)) {
+    // The keystone is a **craft** medal, so it keeps the strict register: this
+    // one is a claim about knowledge rather than about participation.
+    const done = fog.understood.has(landmarkId);
     medals.push({
       id: 'craft:landmark',
       name: 'The keystone',

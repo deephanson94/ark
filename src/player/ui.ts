@@ -20,7 +20,7 @@ import { controlsFor } from './experiment.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
 import type { Medal } from './medals.js';
-import { earnedCount } from './medals.js';
+import { earnedCount, provableNodes } from './medals.js';
 import { medalSvg, tierPips } from './medalArt.js';
 import { VERBS, wordsFor } from '../verbs/index.js';
 import { northDegrees } from './camera.js';
@@ -551,7 +551,15 @@ export interface Legend {
 }
 
 export function createLegend(scene: Scene): Legend {
-  const rows = legendRows(scene);
+  // The same `provableNodes` the medal shelf uses, so the two surfaces cannot
+  // print different denominators for one population.
+  const provable = provableNodes(scene.atlas);
+  const answerable = new Map<number, number>();
+  for (const node of scene.nodes) {
+    if (!provable.has(node.id)) continue;
+    answerable.set(node.regionIndex, (answerable.get(node.regionIndex) ?? 0) + 1);
+  }
+  const rows = legendRows(scene, answerable);
   const tallies = new Map<number, HTMLElement>();
   const items = rows.map((row) => {
     const swatch = el('span', 'legend-swatch');
@@ -592,8 +600,8 @@ export function createLegend(scene: Scene): Legend {
         // Silent at zero: a column of `0/46` on arrival is a scoreboard of
         // failure, and guardrail 6's spirit is that nothing shames a player who
         // has not started. It appears with the first thing they prove.
-        tally.textContent = n === 0 ? '' : `${n}/${row.nodeCount}`;
-        tally.classList.toggle('is-done', n > 0 && n >= row.nodeCount);
+        tally.textContent = n === 0 ? '' : `${n}/${row.answerable}`;
+        tally.classList.toggle('is-done', n > 0 && n >= row.answerable);
       }
     },
   };
@@ -755,8 +763,11 @@ export function createNotebook(deckRefused: boolean): Notebook {
     close: () => setOpen(false),
     update(notes, medals) {
       const won = earnedCount(medals);
-      // Both counts on the button, because the medal count is the one that only
-      // ever goes up and is therefore the one worth glancing at.
+      // Both counts on the button. The first draft of this comment said the
+      // medal count "only ever goes up", which is false across a reindex and the
+      // suite proves it — a completed region whose question no longer exists
+      // yields no medal at all (ADR-0011 decision 3, and a unit test asserts it).
+      // Monotone within a session; not a property of the number.
       toggle.textContent =
         notes.length === 0 && won === 0
           ? 'field notes'

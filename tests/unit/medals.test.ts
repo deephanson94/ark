@@ -18,7 +18,14 @@ import { describe, expect, it } from 'vitest';
 import type { Challenge, NodeId } from '../../src/atlas/index.js';
 import { validateAtlas } from '../../src/atlas/index.js';
 import { prepare } from '../../src/player/scene.js';
-import { deriveFog, EMPTY_PROGRESS, UNCHECKED, recordPass } from '../../src/player/progress.js';
+import {
+  applyGrade,
+  deriveFog,
+  EMPTY_PROGRESS,
+  UNCHECKED,
+  recordPass,
+} from '../../src/player/progress.js';
+import { VERBS } from '../../src/verbs/index.js';
 import { earnedCount, medalsFor, provableNodes } from '../../src/player/medals.js';
 import { fillFraction } from '../../src/player/medalArt.js';
 import { atlasWith, witnessFor } from '../fixtures/atlas.js';
@@ -35,6 +42,12 @@ const PATHS = [
   // board as a legitimately wrong answer without violating ADR-0008's
   // `candidates ∩ dependents = truth`.
   'src/core/base.ts',
+  // Extends the chain so a **genuine** 3-hop dependent exists: leaf → deep →
+  // util → hub. The first fixture declared `evidence.depth: 3` on a board whose
+  // deepest member was 2 hops out, and the medal believed the declaration — the
+  // same shape as a Companion fixture carrying importGraph evidence. Now the
+  // graph has to agree.
+  'src/core/leaf.ts',
   'src/ui/panel.ts',
   'src/ui/view.ts',
   // **A provable pair inside a region marked terrain**, which is what isolates
@@ -53,6 +66,7 @@ const LINKS: (readonly [string, string])[] = [
   ['src/core/util.ts', 'src/core/hub.ts'],
   ['src/core/deep.ts', 'src/core/util.ts'],
   ['src/core/hub.ts', 'src/core/base.ts'],
+  ['src/core/leaf.ts', 'src/core/deep.ts'],
   ['src/ui/view.ts', 'src/ui/panel.ts'],
   ['src/legacy/dep.ts', 'src/legacy/old.ts'],
 ];
@@ -122,8 +136,10 @@ const atlas = validateAtlas({
     })),
   // Sorted by id, like the regions and for the same reason.
   challenges: [
-    board('src/core/hub.ts', ['src/core/util.ts', 'src/core/deep.ts'], 3),
-    board('src/core/util.ts', ['src/core/deep.ts'], 1),
+    // ADR-0008's invariant: `candidates ∩ dependents(subject, ∞) = truth`, and
+    // every path is a candidate here, so each key is the subject's whole cone.
+    board('src/core/hub.ts', ['src/core/util.ts', 'src/core/deep.ts', 'src/core/leaf.ts'], 3),
+    board('src/core/util.ts', ['src/core/deep.ts', 'src/core/leaf.ts'], 2),
     board('src/ui/panel.ts', ['src/ui/view.ts'], 1),
     board('src/legacy/old.ts', ['src/legacy/dep.ts'], 1),
   ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
@@ -223,7 +239,7 @@ describe('a region medal', () => {
     expect(core?.earned).toBe(false);
     // The claim is short and the *name* carries the region, so the assertion is
     // about the count rather than the label.
-    expect(core?.claim).toMatch(/^0 of \d+ files proved$/);
+    expect(core?.claim).toMatch(/^0 of \d+ files answered$/);
   });
 
   it('never names a terrain region', () => {
@@ -238,11 +254,16 @@ describe('a region medal', () => {
 });
 
 describe('the craft medals reward what the product claims to teach', () => {
-  it('is earned by a board whose key travelled three hops, and not by a shallow one', () => {
-    const shallow = pass(EMPTY_PROGRESS, 'src/ui/panel.ts', ['src/ui/view.ts']);
-    expect(medalsOf(shallow).find((m) => m.id === 'craft:deep')?.earned).toBe(false);
-    const deep = pass(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/util.ts']);
-    expect(medalsOf(deep).find((m) => m.id === 'craft:deep')?.earned).toBe(true);
+  it('checks the hop the player reached, not the depth the board declares', () => {
+    // **The board's `evidence.depth` is not the claim.** "Past the obvious" is a
+    // sentence about what the player did, so proving only the direct ring of a
+    // deep board must not earn it — the first version checked the board and this
+    // exact fixture earned the medal on a 1-hop member.
+    const ring = pass(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/util.ts']);
+    expect(medalsOf(ring).find((m) => m.id === 'craft:deep')?.earned).toBe(false);
+    // `leaf` is three hops from `hub`: leaf → deep → util → hub.
+    const far = pass(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/leaf.ts']);
+    expect(medalsOf(far).find((m) => m.id === 'craft:deep')?.earned).toBe(true);
   });
 
   it('claims full recall only when every member was found', () => {
@@ -254,6 +275,7 @@ describe('the craft medals reward what the product claims to teach', () => {
     const whole = pass(EMPTY_PROGRESS, 'src/core/hub.ts', [
       'src/core/util.ts',
       'src/core/deep.ts',
+      'src/core/leaf.ts',
     ]);
     expect(medalsOf(whole).find((m) => m.id === 'craft:complete')?.earned).toBe(true);
   });
@@ -262,10 +284,25 @@ describe('the craft medals reward what the product claims to teach', () => {
     const whole = pass(EMPTY_PROGRESS, 'src/core/hub.ts', [
       'src/core/util.ts',
       'src/core/deep.ts',
+      'src/core/leaf.ts',
     ]);
     for (const medal of medalsOf(whole)) {
       expect(medal.claim).not.toMatch(/100%|\bscore/i);
     }
+  });
+});
+
+describe('a repository with no deck gets no shelf', () => {
+  it('offers no medal at all when ADR-0025 refused the questions', () => {
+    // *"A count of zero has more than one cause, and the panel that reads it
+    // merges them."* On a refused deck every territory medal correctly vanishes
+    // (nothing achievable), but Cartographer rendered "0 of 0 provable files"
+    // with a `need` of 1 and "Every kind of question" rendered "0 of 0 kinds" —
+    // impossible goals over a repository that was never asked a question. The
+    // guide and the HUD were both bitten by this exact extreme and both
+    // special-case it; the shelf did not.
+    const refused = prepare({ ...atlas, challenges: [] });
+    expect(medalsFor(refused, EMPTY_PROGRESS, UNCHECKED, fogOf(EMPTY_PROGRESS))).toEqual([]);
   });
 });
 
@@ -305,12 +342,87 @@ describe('the shelf is a view, not a record', () => {
 });
 
 describe('a wrong answer never takes a medal away', () => {
+  /**
+   * **Through `applyGrade`, with a real failing grade.** The rest of this file
+   * writes the `proved` register directly, which is exactly the population a
+   * cold player is *not* in: ADR-0047 mints `proved` only on a board's first
+   * submission, so a player who fails once and then passes is in the `shown`
+   * register forever. The first version of this suite never constructed that
+   * player, and the guardrail-6 property was held by a comment.
+   */
+  const playBoard = (
+    progress: typeof EMPTY_PROGRESS,
+    subject: string,
+    picked: readonly string[],
+  ): typeof EMPTY_PROGRESS => {
+    const board = atlas.challenges.find((c) => c.subject === idOf(subject));
+    if (board === undefined) throw new Error(`no board for ${subject}`);
+    const answer = { picked: picked.map(idOf) };
+    return applyGrade(progress, board, VERBS.blastRadius.grade(board, answer)).progress;
+  };
+
+  it('still fills the arc after a board was failed first — no lockout', () => {
+    // The defect this replaced: region and map medals were scored on
+    // `fog.understood`, which a failed first attempt closes off **permanently**
+    // for that subject. Measured on the real atlas, 69 of 187 provable nodes are
+    // carried by exactly one board, so gold required first-try success on every
+    // one of them — a finish line a learning player locks themselves out of, by
+    // learning. Guardrail 6 forbids a lockout.
+    const wrong = playBoard(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/base.ts']);
+    // The failure recorded no pass at all, so nothing is claimed yet...
+    expect(earnedCount(medalsOf(wrong))).toBe(0);
+    // ...and the retry, which can only ever mint `shown`, still moves the arc.
+    const then = playBoard(wrong, 'src/core/hub.ts', [
+      'src/core/util.ts',
+      'src/core/deep.ts',
+      'src/core/leaf.ts',
+    ]);
+    const core = medalsOf(then).find((m) => m.name === 'src/core');
+    expect(core?.have).toBeGreaterThan(0);
+    const map = medalsOf(then).find((m) => m.id === 'reach:coverage');
+    expect(map?.have).toBeGreaterThan(0);
+    // And the strict register is untouched: nothing was *proved*, so the
+    // epistemics still say so. Two populations, two surfaces.
+    expect(fogOf(then).understood.size).toBe(0);
+  });
+
+  it('counts a retried board as a kind of question answered', () => {
+    const wrong = playBoard(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/base.ts']);
+    const then = playBoard(wrong, 'src/core/hub.ts', [
+      'src/core/util.ts',
+      'src/core/deep.ts',
+      'src/core/leaf.ts',
+    ]);
+    const kinds = medalsOf(then).find((m) => m.id === 'reach:kinds');
+    expect(kinds?.have).toBe(1);
+  });
+
+  it('credits a retry that found every member, because the claim is about finding', () => {
+    // *"N boards with every member found"* read the strict register, so a player
+    // whose retry found all of them saw "0 boards with every member found"
+    // directly under a reveal that had just told them they found all of them.
+    // A sentence the player can check against the screen beside it, and false.
+    const wrong = playBoard(EMPTY_PROGRESS, 'src/core/hub.ts', ['src/core/base.ts']);
+    const then = playBoard(wrong, 'src/core/hub.ts', [
+      'src/core/util.ts',
+      'src/core/deep.ts',
+      'src/core/leaf.ts',
+    ]);
+    expect(medalsOf(then).find((m) => m.id === 'craft:complete')?.earned).toBe(true);
+    // The deep medal is the same claim shape and takes the same register.
+    expect(medalsOf(then).find((m) => m.id === 'craft:deep')?.earned).toBe(true);
+    // The keystone says *proved*, so it keeps the strict register — the two
+    // registers are a deliberate split, not an oversight.
+    expect(fogOf(then).understood.size).toBe(0);
+  });
+
   it('cannot lose an earned medal by attempting another board', () => {
     // Guardrail 6, as a property rather than as a comment. Passes only ever
     // accumulate, so this asserts the *monotonicity* a collection promises.
     let progress = pass(EMPTY_PROGRESS, 'src/core/hub.ts', [
       'src/core/util.ts',
       'src/core/deep.ts',
+      'src/core/leaf.ts',
     ]);
     const before = earnedCount(medalsOf(progress));
     expect(before).toBeGreaterThan(0);

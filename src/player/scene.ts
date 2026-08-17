@@ -166,6 +166,8 @@ export interface LegendRow {
   readonly index: number;
   readonly label: string;
   readonly nodeCount: number;
+  /** Files in this region some question can reach — the completion denominator. */
+  readonly answerable: number;
   readonly kind: RegionKind;
   /**
    * The row exactly as it is printed.
@@ -199,14 +201,33 @@ export interface LegendRow {
  *    a neighbourhood: hugo's 1,003-file `docs` lump at the top would be true,
  *    useless, and would push every real region off the panel.
  */
-export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] {
+/**
+ * `answerable` counts the region's files **some question can reach**, which is
+ * the only honest denominator for a completion tally — and it is not
+ * `nodeCount`. The legend printed `n/nodeCount`, so its `is-done` state was
+ * unreachable for **all six** of this repo's topology regions (43 of 59, 8 of
+ * 23, 2 of 3, 35 of 42, 29 of 34, 34 of 44), while the medal shelf printed
+ * `n/answerable` for the same numerator — two panels stating contradictory
+ * tallies of one population, which is the defect ADR-0019's reveal and its own
+ * field note had on 21 of 26 boards. One denominator, both surfaces.
+ *
+ * Defaulted to `nodeCount` only where a caller has no atlas to derive it from
+ * (a fixture); the shell always passes it.
+ */
+export function legendRows(
+  scene: Pick<Scene, 'regions'>,
+  answerable: ReadonlyMap<number, number> = new Map(),
+): readonly LegendRow[] {
   const rows: LegendRow[] = scene.regions
     .filter((region) => region.kind !== 'terrain')
     .map((region) => ({
       index: region.index,
       label: region.label,
       nodeCount: region.nodeCount,
+      answerable: answerable.get(region.index) ?? region.nodeCount,
       kind: region.kind,
+      // The **text** keeps the node count: it describes the region's size, which
+      // is a different question from how much of it can be answered.
       text: `${region.label} (${region.nodeCount})`,
     }))
     .sort((a, b) => b.nodeCount - a.nodeCount || a.index - b.index);
@@ -218,6 +239,10 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
       index: TERRAIN_INDEX,
       label: 'terrain',
       nodeCount,
+      // Terrain carries no questions, so its tally denominator is 0 and its
+      // tally never renders — which is right: ADR-0010 says a terrain lump is
+      // not a neighbourhood and nothing there is completable.
+      answerable: 0,
       kind: 'terrain',
       text:
         terrain.length === 1
