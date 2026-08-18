@@ -367,6 +367,18 @@ export interface InspectorView {
    * render the difference, and the difference is the fact being withheld.
    */
   readonly twins: TwinClass | null;
+  /**
+   * Where this node stands on a route the player proved, or `null`.
+   *
+   * The second half of round 5's *"keep each proved chain drawn, labelled with
+   * its hop count"* — the ink ships on the map, and the number is here rather
+   * than beside every glyph because **79 of ark's 279 nodes carry one at a full
+   * clear** (120 of hono's 425, 140 of kysely's 600), and a map already spending
+   * a label budget on names does not have room for a second number on a quarter
+   * of it. `chains.ts` measures the distance over drawn links only, so this
+   * number never counts a hop the gate withheld.
+   */
+  readonly route: { readonly distance: number; readonly to: string } | null;
 }
 
 export interface Inspector {
@@ -386,7 +398,7 @@ export function createInspector(
 
   return {
     root,
-    show({ node, radius, understood, challenge, answered, twins }) {
+    show({ node, radius, understood, challenge, answered, twins, route }) {
       body.replaceChildren();
       empty.style.display = node === null ? 'block' : 'none';
       if (node === null) return;
@@ -478,6 +490,19 @@ export function createInspector(
             ]),
           );
         }
+      }
+
+      if (route !== null) {
+        // In the **revealed** register beside the twin line, not among the
+        // graph facts above: this is a fact about what *you* have proved, not
+        // about the repository, and the two are the distinction NORTH-STAR §9
+        // calls the whole product.
+        body.append(
+          field(
+            'proved route',
+            `${route.distance} hop${route.distance === 1 ? '' : 's'} to ${route.to}`,
+          ),
+        );
       }
 
       if (atlasNode.originPath !== atlasNode.path) {

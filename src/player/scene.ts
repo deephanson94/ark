@@ -224,7 +224,14 @@ export function legendRows(
       index: region.index,
       label: region.label,
       nodeCount: region.nodeCount,
-      answerable: answerable.get(region.index) ?? region.nodeCount,
+      // **0, not `nodeCount`, when the map has no entry.** A region with nothing
+      // provable would otherwise claim a denominator of its whole size — a bar
+      // no player can ever reach, which is exactly what `medals.ts`'s `gradeOf`
+      // guards against one panel over. `src/indexer` on this repo has 3 files
+      // and 0 provable ones, so it read `0/3` forever. It is invisible today
+      // only because the tally hides while the numerator is 0, and "wrong but
+      // currently unrenderable" is how a defect survives a milestone.
+      answerable: answerable.get(region.index) ?? 0,
       kind: region.kind,
       // The **text** keeps the node count: it describes the region's size, which
       // is a different question from how much of it can be answered.
@@ -239,10 +246,25 @@ export function legendRows(
       index: TERRAIN_INDEX,
       label: 'terrain',
       nodeCount,
-      // Terrain carries no questions, so its tally denominator is 0 and its
-      // tally never renders — which is right: ADR-0010 says a terrain lump is
-      // not a neighbourhood and nothing there is completable.
-      answerable: 0,
+      // **Terrain carries questions, and this said it did not.** The claim was
+      // *"terrain carries no questions, so its denominator is 0 and its tally
+      // never renders"* — the first clause is false and the third does not
+      // follow from it. A terrain node has no import edges, so Blast Radius
+      // cannot reach it; the three history verbs can and do, which is the whole
+      // reason Companion exists (`README`: it *"reaches the edgeless files the
+      // import graph structurally cannot"*). Measured on this repo, **40 of 66
+      // terrain files are provable**, and a half-clear proved 8 of them — which
+      // the tally rendered as **`8/0`**, because it only hides at a numerator of
+      // zero. ADR-0010 says a terrain lump is not a *neighbourhood*; it does not
+      // say the files in it cannot be learned, and summing here is the same act
+      // as summing `nodeCount` directly above.
+      // **One lookup, where `nodeCount` above is a sum.** Every terrain region
+      // carries `index === TERRAIN_INDEX` (that is the whole point of the
+      // constant), and `answerableByRegion` keys off `node.regionIndex` — so the
+      // four areas share one bucket and summing over them counts it four times:
+      // the first version of this line read `8/160` over a terrain of 66 files.
+      // `nodeCount` is different because `region.nodeCount` really is per-area.
+      answerable: answerable.get(TERRAIN_INDEX) ?? 0,
       kind: 'terrain',
       text:
         terrain.length === 1

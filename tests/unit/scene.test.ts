@@ -311,8 +311,50 @@ describe('legendRows', () => {
     // The row's own text still describes the region's size, which is a
     // different question from how much of it is completable.
     expect(a?.text).toBe('a (10)');
-    // Terrain carries no questions, so nothing there is completable.
+    // Nothing answerable in the terrain bucket **of this map**, which is a fact
+    // about the fixture. This assertion used to carry the comment *"terrain
+    // carries no questions, so nothing there is completable"* — right value,
+    // false reason, and the reason is what the next test below measures.
     expect(rows.find((row) => row.label === 'terrain')?.answerable).toBe(0);
+  });
+
+  it('gives terrain the questions it really carries', () => {
+    // **Terrain carries questions.** A terrain node has no import edges, so
+    // Blast Radius cannot reach it — and the three history verbs can, which is
+    // the reason Companion exists. On this repo 40 of 66 terrain files are
+    // provable, and a half-clear proved 8; the legend rendered that as `8/0`,
+    // because the tally only hides at a numerator of zero.
+    const regions = [
+      { id: 'a', label: 'a', index: 0, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
+      // Both terrain areas carry `TERRAIN_INDEX`, exactly as `prepare()` sets
+      // them — that is what makes the sum below wrong.
+      { id: 'b', label: 'b', index: TERRAIN_INDEX, x: 0, y: 0, nodeCount: 4, kind: 'terrain' as const },
+      { id: 'c', label: 'c', index: TERRAIN_INDEX, x: 0, y: 0, nodeCount: 6, kind: 'terrain' as const },
+    ];
+    const rows = legendRows({ regions }, new Map([[0, 6], [TERRAIN_INDEX, 7]]));
+    const terrain = rows.find((row) => row.label === 'terrain');
+    // **7, not 14.** Every terrain area shares one bucket, so summing the
+    // lookup over the areas counts it once per area — the first fix for the
+    // `n/0` bug read `8/160` over a terrain of 66 files. `nodeCount` is summed
+    // because `region.nodeCount` really is per-area, and the two lines sitting
+    // beside each other is what makes the difference easy to miss.
+    expect(terrain?.answerable).toBe(7);
+    expect(terrain?.nodeCount).toBe(10);
+  });
+
+  it('gives a region with nothing provable a denominator of 0, not its size', () => {
+    // `?? region.nodeCount` claimed that a region no question reaches is
+    // entirely answerable — a bar no player can ever clear, which is what
+    // `medals.ts`'s `gradeOf` guards against one panel over. `src/indexer` on
+    // this repo has 3 files and 0 provable ones and read `0/3` forever; it was
+    // invisible only because the tally hides while the numerator is 0.
+    const regions = [
+      { id: 'a', label: 'a', index: 0, x: 0, y: 0, nodeCount: 10, kind: 'topology' as const },
+      { id: 'b', label: 'b', index: 1, x: 0, y: 0, nodeCount: 3, kind: 'topology' as const },
+    ];
+    const rows = legendRows({ regions }, new Map([[0, 6]]));
+    expect(rows.find((row) => row.label === 'b')?.answerable).toBe(0);
+    expect(rows.find((row) => row.label === 'b')?.nodeCount).toBe(3);
   });
 
   /**

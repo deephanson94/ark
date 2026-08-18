@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Atlas, Challenge, NodeId, NodeRef, VerbId } from '../../src/atlas/index.js';
 import { buildGraph, nodeAt } from '../../src/atlas/index.js';
-import { NO_CHAINS, chainsProvedBy } from '../../src/player/chains.js';
+import { NO_CHAINS, chainsAt, chainsProvedBy } from '../../src/player/chains.js';
 import { channelOf } from '../../src/verbs/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
@@ -33,12 +33,19 @@ const FILES = [
   'src/far.ts',
   'src/other.ts',
   'src/lone.ts',
+  // Imports **two** subjects, so it stands one hop from each and the tie-break
+  // has to choose. Without it the ascending-ref rule is unobservable: every
+  // other node in this fixture is nearer to one subject than to the other, and
+  // a mutant reversing the sort passed all sixteen assertions.
+  'src/fork.ts',
 ];
 const LINKS: readonly (readonly [string, string])[] = [
   ['src/mid.ts', 'src/hub.ts'],
   ['src/leaf.ts', 'src/mid.ts'],
   ['src/far.ts', 'src/leaf.ts'],
   ['src/other.ts', 'src/hub.ts'],
+  ['src/fork.ts', 'src/hub.ts'],
+  ['src/fork.ts', 'src/mid.ts'],
 ];
 
 const atlas: Atlas = atlasWith(FILES, LINKS);
@@ -197,4 +204,84 @@ describe('chainsProvedBy', () => {
       expect(chainsProvedBy(graph, [])).toEqual(NO_CHAINS);
     });
   });
+
+describe('the hop count', () => {
+  const hopsByPath = (chains: ReturnType<typeof chainsProvedBy>): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const [ref, hop] of chains.hops) {
+      out[nodeAt(graph, ref).path] = `${hop.distance} to ${nodeAt(graph, hop.to).path}`;
+    }
+    return out;
+  };
+
+  it('counts the hops from each node on a route to the subject it ends at', () => {
+    const chains = chainsProvedBy(graph, [board('src/hub.ts', ['src/far.ts'])]);
+    expect(hopsByPath(chains)).toEqual({
+      'src/mid.ts': '1 to src/hub.ts',
+      'src/leaf.ts': '2 to src/hub.ts',
+      'src/far.ts': '3 to src/hub.ts',
+    });
+  });
+
+  it('gives the subject itself no hop count, because it is the destination', () => {
+    const chains = chainsProvedBy(graph, [board('src/hub.ts', ['src/far.ts'])]);
+    expect(chains.hops.has(refOf('src/hub.ts'))).toBe(false);
+  });
+
+  it('never counts a hop the gate withheld', () => {
+    // **The trap this field exists to avoid.** With `mid` open, `leaf → mid` is
+    // not drawn — so `leaf` and `far` are cut off from `hub` on screen. A count
+    // taken from the original route would say "leaf is 2 hops from hub", which
+    // states exactly the fact the gate withheld: that leaf reaches hub *through
+    // mid*. Distance along drawn links cannot say it, because every hop it
+    // counts is visible.
+    const chains = chainsProvedBy(
+      graph,
+      [board('src/hub.ts', ['src/far.ts'])],
+      new Set([refOf('src/mid.ts')]),
+    );
+    expect(chains.hops.has(refOf('src/leaf.ts'))).toBe(false);
+    expect(chains.hops.has(refOf('src/far.ts'))).toBe(false);
+    // And the surviving half still carries its own number.
+    expect(hopsByPath(chains)).toEqual({ 'src/mid.ts': '1 to src/hub.ts' });
+  });
+
+  it('takes the nearer subject when a node stands on two routes', () => {
+    const chains = chainsProvedBy(graph, [
+      board('src/hub.ts', ['src/far.ts']),
+      board('src/mid.ts', ['src/far.ts']),
+    ]);
+    // `far` is 2 hops from `mid` and 3 from `hub`.
+    expect(hopsByPath(chains)['src/far.ts']).toBe('2 to src/mid.ts');
+  });
+
+
+  it('breaks a tie between two equally near subjects by ascending ref', () => {
+    // `fork` imports both `hub` and `mid`, so it is one hop from each. Which
+    // one it is *labelled* with must be a property of the repo, not of the order
+    // the player answered the boards in — a session-dependent label would make
+    // the same map read differently on two machines.
+    const chains = chainsProvedBy(graph, [
+      board('src/hub.ts', ['src/fork.ts']),
+      board('src/mid.ts', ['src/fork.ts']),
+    ]);
+    const hop = chains.hops.get(refOf('src/fork.ts'));
+    expect(hop?.distance).toBe(1);
+    expect(hop?.to).toBe(Math.min(refOf('src/hub.ts'), refOf('src/mid.ts')));
+
+    // And answering them the other way round must not move it.
+    const swapped = chainsProvedBy(graph, [
+      board('src/mid.ts', ['src/fork.ts']),
+      board('src/hub.ts', ['src/fork.ts']),
+    ]);
+    expect(swapped.hops.get(refOf('src/fork.ts'))).toEqual(hop);
+  });
+  it('indexes links by both ends, so pointing at either brightens the run', () => {
+    const chains = chainsProvedBy(graph, [board('src/hub.ts', ['src/far.ts'])]);
+    // `leaf` is the head of one link and the tail of another.
+    expect(chainsAt(chains, refOf('src/leaf.ts')).length).toBe(2);
+    expect(chainsAt(chains, refOf('src/lone.ts'))).toEqual([]);
+    expect(chainsAt(chains, null)).toEqual([]);
+  });
+});
 });

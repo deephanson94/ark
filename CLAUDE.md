@@ -1105,6 +1105,25 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   claim it certifies holds by a rounding error. Note which instrument found it: not the six-repo probe
   (which reported a clean `0 wrong district`) but a unit fixture and a second metric.
 
+- **A denominator of zero and a denominator nobody set are the same rendered row, and the comment
+  next to it will tell you the population is empty.** The legend's terrain row hard-coded
+  `answerable: 0` under the sentence *"terrain carries no questions, so its tally never renders"*.
+  The first clause is false — a terrain node has no import edges, so Blast Radius cannot reach it,
+  and the **three history verbs can**, which is the reason Companion exists; **40 of this repo's 66
+  terrain files are provable**. The third clause does not follow from the first either: the tally
+  hides at a numerator of zero, not a denominator of zero, so a half-clear rendered **`8/0`**. Its
+  neighbour was the same error pointed the other way — `answerable.get(index) ?? region.nodeCount`
+  told a region no question reaches that *all* of it was answerable (`src/indexer`, 3 files, 0
+  provable, `0/3` forever), invisible only because the numerator never leaves zero. **And the fix
+  introduced a third**: terrain's answerable summed the lookup across the four terrain *areas*, which
+  all share `TERRAIN_INDEX` by construction, so one bucket was counted four times and the row read
+  **`8/160` over a terrain of 66 files** — one line below a `nodeCount` that is summed correctly,
+  because `region.nodeCount` really is per-area. Nothing in the suite moved through any of it: the
+  one test touching `answerable` asserted `0` for terrain with the comment giving the false reason,
+  and passed for the fixture's reason instead. **When two adjacent lines aggregate over the same
+  list, ask whether they aggregate over the same key** — and treat a comment asserting a population
+  is empty as a measurement someone owes you.
+
 ---
 
 ## Subagents and parallelism

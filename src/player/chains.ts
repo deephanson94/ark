@@ -70,9 +70,29 @@ export interface ChainLink {
   readonly to: NodeRef;
 }
 
+/** How far a node stands from a proved subject, **along links that are drawn**. */
+export interface ChainHop {
+  readonly distance: number;
+  /** The proved subject the route ends at. */
+  readonly to: NodeRef;
+}
+
 export interface Chains {
   /** Every link the map may draw, sorted for a stable draw order. */
   readonly links: readonly ChainLink[];
+  /** Links by endpoint, so brightening one node's routes costs a lookup. */
+  readonly byNode: ReadonlyMap<NodeRef, readonly ChainLink[]>;
+  /**
+   * The hop count round 5 asked for, per node.
+   *
+   * **Measured over the drawn links and never over the original route**, which
+   * is the trap this field exists to avoid: a chain the gate broke in the middle
+   * still *has* a length, and printing it would state that the far end reaches
+   * the subject across the very hop that was withheld — the leak restated as a
+   * number. Distance along drawn links cannot do that, because every hop it
+   * counts is on screen. A node beyond a break simply has no entry.
+   */
+  readonly hops: ReadonlyMap<NodeRef, ChainHop>;
   /**
    * Links the gate refused, so a session can price the rule rather than assume
    * it. Not rendered — this is an instrument, and a layer whose cost nobody
@@ -81,7 +101,50 @@ export interface Chains {
   readonly withheld: number;
 }
 
-export const NO_CHAINS: Chains = { links: [], withheld: 0 };
+export const NO_CHAINS: Chains = {
+  links: [],
+  byNode: new Map(),
+  hops: new Map(),
+  withheld: 0,
+};
+
+/** Every node's hop count to the nearest proved subject, over `links` only. */
+function hopsOver(
+  links: readonly ChainLink[],
+  subjects: ReadonlySet<NodeRef>,
+): Map<NodeRef, ChainHop> {
+  const inbound = new Map<NodeRef, NodeRef[]>();
+  for (const link of links) {
+    const list = inbound.get(link.to);
+    if (list === undefined) inbound.set(link.to, [link.from]);
+    else list.push(link.from);
+  }
+  const hops = new Map<NodeRef, ChainHop>();
+  // Ascending ref at every step, so two subjects equidistant from one node
+  // always resolve the same way. A frontier walked in insertion order would
+  // make the label depend on the order boards were answered in, which is a
+  // property of the session rather than of the repo.
+  let frontier = [...subjects].sort((a, b) => a - b);
+  for (const subject of frontier) hops.set(subject, { distance: 0, to: subject });
+  let distance = 0;
+  while (frontier.length > 0) {
+    distance += 1;
+    const next: NodeRef[] = [];
+    for (const at of frontier) {
+      const target = hops.get(at)?.to;
+      if (target === undefined) continue;
+      for (const from of (inbound.get(at) ?? []).slice().sort((a, b) => a - b)) {
+        if (hops.has(from)) continue;
+        hops.set(from, { distance, to: target });
+        next.push(from);
+      }
+    }
+    frontier = next.sort((a, b) => a - b);
+  }
+  // A subject is not "0 hops from itself" to a reader; it is the destination.
+  for (const subject of subjects) hops.delete(subject);
+  return hops;
+}
 
 /**
  * The chains the player has earned, minus the ones the gate refuses.
@@ -103,6 +166,7 @@ export function chainsProvedBy(
   openSubjects: ReadonlySet<NodeRef> = new Set(),
 ): Chains {
   const seen = new Map<string, ChainLink>();
+  const subjects = new Set<NodeRef>();
   let withheld = 0;
 
   for (const challenge of answered) {
@@ -111,6 +175,7 @@ export function chainsProvedBy(
     if (channelOf(challenge.verb) !== 'importRadius') continue;
     const subject = graph.refById.get(challenge.subject);
     if (subject === undefined) continue;
+    subjects.add(subject);
     const routes = dependentRoutes(graph, subject);
     for (const id of challenge.truth) {
       if (!isNodeId(id)) continue;
@@ -130,5 +195,18 @@ export function chainsProvedBy(
   }
 
   const links = [...seen.values()].sort((a, b) => a.from - b.from || a.to - b.to);
-  return { links, withheld };
+  const byNode = new Map<NodeRef, ChainLink[]>();
+  for (const link of links) {
+    for (const end of [link.from, link.to]) {
+      const list = byNode.get(end);
+      if (list === undefined) byNode.set(end, [link]);
+      else list.push(link);
+    }
+  }
+  return { links, byNode, hops: hopsOver(links, subjects), withheld };
+}
+
+/** The links touching one node, or none. Mirrors `tiesAt`. */
+export function chainsAt(chains: Chains, ref: NodeRef | null): readonly ChainLink[] {
+  return ref === null ? [] : (chains.byNode.get(ref) ?? []);
 }

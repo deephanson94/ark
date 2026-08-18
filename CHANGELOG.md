@@ -5004,3 +5004,44 @@ it holds is a rule nobody has priced. Six mutants of `chains.ts` die against `te
 **Next**: the hop-count label, which is the second half of the same quotation and the only part of it
 still missing. It carries no new disclosure — the cone is already unlocked for a subject whose board is
 answered — so ADR-0049 §7.6 records it as scope rather than as a refusal.
+
+## The hop count, and two legend fractions that could not be right
+
+Round 5's *"keep each proved chain drawn, **labelled with its hop count**"* is finished. The count is
+in the inspector rather than beside every glyph — **79 of ark's 279 nodes carry one at a full clear**
+(120 of hono's 425, 140 of kysely's 600), and a map already spending a label budget on names has no
+room for a number on a quarter of it. Pointing at a node brightens the routes through it, which costs
+no disclosure because every one of those links is already stroked.
+
+**The count is measured over the drawn links and never over the original route.** A chain the gate
+broke in the middle still has a length, and printing it would say the far end reaches the subject
+across the hop that was withheld — ADR-0049 §7.3's leak restated as a number, which is exactly the
+shape that looks too small to be a disclosure. A unit test plants that mutant and kills it.
+
+Two smaller things fell out. The focus value the co-change wires used was **one layer's private
+state** — filtered on `ties.byNode.has(…)` — and a second gated layer wanting the same thing would
+have made it two variables assigned at six sites apiece. It is one `focus` now, and each layer's
+`…At` already answers `[]` for a node it has nothing for, so the filter was never load-bearing.
+
+And the e2e caught the instrument, not the product: `__arkHopAt` published a disc's centre, and
+pointing there named **someone else**, because `pickAt` takes names before bodies and
+`probe-nameplate.ts` measures 35 of this repo's 273 discs answering to another node at dead centre.
+That trade is deliberate and documented twenty lines above the code that ignored it. The published
+point now round-trips through `pickAt` and skips anything under a panel.
+
+**The legend was rendering fractions that cannot be true, and a screenshot found them.** The terrain
+row hard-coded `answerable: 0` under the sentence *"terrain carries no questions"* — false: a terrain
+node has no import edges so Blast Radius cannot reach it, and the three history verbs can, which is
+the reason Companion exists. **40 of this repo's 66 terrain files are provable**, and a half-clear
+proved 8, which rendered as **`8/0`** because the tally hides at a numerator of zero rather than a
+denominator of zero. Its neighbour was the same error reversed: `?? region.nodeCount` told a region
+no question reaches that all of it was answerable (`src/indexer`, 3 files, 0 provable, `0/3`
+forever). **And the first fix introduced a third** — summing the lookup across the four terrain
+*areas*, which all share `TERRAIN_INDEX` by construction, so one bucket was counted four times and
+the row read **`8/160` over a terrain of 66 files**, one line below a `nodeCount` that is summed
+correctly because `region.nodeCount` really is per-area. Nothing in the suite moved through any of
+it: the one test touching `answerable` asserted `0` for terrain with the false reason in its comment
+and passed for the fixture's reason instead. Three mutants now die there.
+
+**Next**: a wrong answer you did not pick is never explained — the reveal's rows are `picked ∪ truth`,
+so a perfect score teaches nothing about the other eighteen candidates.

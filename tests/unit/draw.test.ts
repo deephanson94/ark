@@ -112,7 +112,7 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     peaks: new Set(scene.nodes.map((node) => node.ref)),
     ties: NO_TIES,
   chains: NO_CHAINS,
-    tieFocus: null,
+    focus: null,
     // Untouched map: the wash channel is inert, which is what an arriving
     // player sees and is the baseline the brightening must not change.
     regionProgress: new Map<number, number>(),
@@ -336,7 +336,7 @@ describe('the renderer uses the ramp it is given', () => {
       peaks: new Set(),
       ties: NO_TIES,
   chains: NO_CHAINS,
-      tieFocus: null,
+      focus: null,
       board: null,
       chrome: [],
       regionProgress: new Map<number, number>(),
@@ -398,7 +398,7 @@ describe('the labels a frame returns', () => {
       peaks: new Set(),
       ties: NO_TIES,
   chains: NO_CHAINS,
-      tieFocus: null,
+      focus: null,
       board: null,
       chrome: [],
       regionProgress: new Map<number, number>(),
@@ -440,7 +440,7 @@ describe('the labels a frame returns', () => {
       fog: { surveyed: all, understood: new Set() },
       hovered: null, selected: null, radius: null,
       questions: new Set(), peaks: new Set(), ties: NO_TIES,
-  chains: NO_CHAINS, tieFocus: null,
+  chains: NO_CHAINS, focus: null,
       board: null, chrome: [], regionProgress: new Map<number, number>(),
     });
     expect(stats.nameplates.length).toBeGreaterThan(0);

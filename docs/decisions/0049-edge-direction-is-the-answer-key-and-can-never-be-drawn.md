@@ -238,10 +238,20 @@ permission, which is the safe direction; nothing here reopens the refusal, and
 §5.4 still holds — if ADR-0008's invariant ever changes, this document is void
 rather than out of date.
 
-### 7.6 What is still not built
+### 7.6 The hop count, and the trap in it
 
 The round-5 request was *"keep each proved chain drawn, **labelled with its hop
-count**"*. The ink ships; the label does not. A hop count is not a direction and
-carries no new disclosure — the cone is already unlocked for a subject whose
-board is answered — so this is scope, not a refusal, and it is written down here
-rather than left for a reader to infer from a feature that half matches a quote.
+count**"*. Both halves ship. The count is in the **inspector** rather than beside
+every glyph, because 79 of ark's 279 nodes carry one at a full clear (120 of
+hono's 425, 140 of kysely's 600) and a map already spending a label budget on
+names has no room for a number on a quarter of it. Pointing at a node brightens
+the routes through it, which costs no disclosure — every one of those links is
+already stroked.
+
+**The count is measured over the drawn links and never over the original
+route**, and that distinction is the whole of its safety. A chain the gate broke
+in the middle still *has* a length; printing it would say the far end reaches
+the subject across the very hop that was withheld — §7.3's leak restated as a
+number, and a number is exactly the shape that looks too small to be a
+disclosure. Distance along drawn links cannot say it, because every hop it
+counts is on screen: a node beyond a break simply has no entry.
