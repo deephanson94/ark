@@ -347,7 +347,10 @@ describe('grading and wording', () => {
     const graph = buildGraph(atlas);
     const grade = companion.grade(challenge, { picked: [...challenge.truth] });
     const reveal = companion.reveal(atlas, graph, challenge, grade);
-    expect(reveal.notes.length).toBe(challenge.truth.length);
+    // **Every candidate, not just the key** (ADR-0050). The claims below then
+    // run over the rows a player was right to skip as well, which is where a
+    // history-graded verb leaking import evidence would most easily hide.
+    expect(reveal.notes.length).toBe(challenge.candidates.length);
     for (const note of reveal.notes) {
       expect(note.note).toContain('commit');
       // A co-change pair is not a path through anything, and an import route

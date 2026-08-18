@@ -1813,6 +1813,106 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- proved chains reach a pixel -------------------------------------
+    //
+    // ADR-0049 §4.3's layer, on the same terms as the wires step above and for
+    // the same reason: `chains.ts` is gated, and simulating the gate in node
+    // proves the *arithmetic*, not that a stroke happened. `chainsDrawn` is
+    // counted at the point of `stroke()` and published in the HUD, so a number
+    // above zero here is a claim about ink.
+    //
+    // **Gated on a Blast Radius pass having actually happened**, rather than
+    // asserted unconditionally: ark indexes itself, so which boards this script
+    // reaches moves with every commit, and an assertion that assumes one is the
+    // landmine this file has paid for three times. `__arkTraced` is the register
+    // the layer reads, so it is the honest precondition.
+    {
+      await drawn(page);
+      const traced = ((await page.evaluate('window.__arkTraced ?? []')) as string[]) ?? [];
+      await page.waitForFunction(
+        () => /(\d+) chains/.test(document.querySelector('.hud-detail')?.textContent ?? ''),
+        undefined,
+        { timeout: 5000 },
+      );
+      const chains = Number(
+        /(\d+) chains/.exec(await page.locator('.hud-detail').innerText())?.[1] ?? '-1',
+      );
+      process.stdout.write(
+        `e2e: proved chains → ${chains} links, over ${traced.length} proved subjects\n`,
+      );
+      if (chains < 0) {
+        failures.push({ what: 'chains', detail: 'the HUD never reported a chain count' });
+      } else if (traced.length > 0 && chains === 0) {
+        failures.push({
+          what: 'chains',
+          detail: `${traced.length} Blast Radius subjects are proved and the map drew no chain — the layer is dead`,
+        });
+      } else if (traced.length === 0 && chains > 0) {
+        // The other direction, which is the leak rather than the dead layer:
+        // ink for a route nobody has proved.
+        failures.push({
+          what: 'chains',
+          detail: `the map drew ${chains} chain links with no proved subject at all`,
+        });
+      }
+
+      // **The hop count, in the DOM.** The ink is counted off the renderer
+      // above; this is the other half of round 5's quotation — *"labelled with
+      // its hop count"* — and it lives in the inspector rather than beside 79 of
+      // this repo's 279 glyphs. `__arkHopAt` publishes one node's screen point
+      // because a browser cannot find a disc on a canvas, the same problem
+      // `__arkNameplates` solves for names; the node is chosen by lowest ref so
+      // this step points at the same one every run rather than predicting which.
+      // Fit first: `at` is a *pointable* member of the population, and a map
+      // zoomed into a corner can legitimately have none on screen. Fitting is
+      // not a workaround for that — it is the state this assertion is about.
+      await page.keyboard.press('f');
+      await drawn(page);
+      const hop = (await page.evaluate('window.__arkHopAt ?? null')) as
+        | { total: number; at: { path: string; hops: number; x: number; y: number } | null }
+        | null;
+      const hopAt = hop?.at ?? null;
+      if (chains > 0 && (hop?.total ?? 0) === 0) {
+        failures.push({
+          what: 'chains',
+          detail: `${chains} chain links are drawn and no node carries a hop count — every link's tail stands one hop from a subject, so this cannot be empty`,
+        });
+      } else if (chains > 0 && hopAt === null) {
+        failures.push({
+          what: 'chains',
+          detail: `${hop?.total ?? 0} nodes carry a hop count and not one of them is pointable on a fitted map`,
+        });
+      } else if (hopAt !== null) {
+        const box = await page.locator('canvas.map').boundingBox();
+        await page.mouse.move((box?.x ?? 0) + hopAt.x, (box?.y ?? 0) + hopAt.y);
+        const named = (await page.locator('.inspector-path').innerText()).trim();
+        const shown = (await page.locator('.inspector').innerText()).replace(/\s+/g, ' ');
+        process.stdout.write(
+          `e2e: hop label → ${hop?.total ?? 0} nodes on a proved route, pointed at ${hopAt.path} (${hopAt.hops} hops)\n`,
+        );
+        if (named !== hopAt.path) {
+          failures.push({
+            what: 'chains',
+            detail: `pointed at ${hopAt.path} and the inspector named ${named}`,
+          });
+        } else if (!shown.includes('proved route')) {
+          failures.push({
+            what: 'chains',
+            detail: `${hopAt.path} stands ${hopAt.hops} hops along a proved route and the inspector does not say so`,
+          });
+        } else if (!shown.includes(`${hopAt.hops} hop`)) {
+          // The number itself, not merely the field: a label that renders the
+          // wrong count is the failure this whole field exists to avoid, since
+          // a count taken from the ungated route would state a withheld hop.
+          failures.push({
+            what: 'chains',
+            detail: `the inspector shows a "proved route" that is not ${hopAt.hops} hops: ${shown}`,
+          });
+        }
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'chains.png') });
+    }
+
     // ---- the panel only promises inputs the board actually has -----------
     //
     // "Tick a row here, or click its marker on the map" is verb-blind copy, and

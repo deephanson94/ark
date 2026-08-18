@@ -24,6 +24,8 @@ import { projectAll } from './orbit.js';
 import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
 import type { Tie, Ties } from './ties.js';
 import { tieWidth, tiesAt } from './ties.js';
+import type { ChainLink, Chains } from './chains.js';
+import { chainsAt } from './chains.js';
 import { TERRAIN_INDEX, visibleEdges, visibleNodes } from './scene.js';
 import { levelFor, styleFor } from './zoom.js';
 
@@ -51,8 +53,14 @@ export interface FrameInput {
    * actually know which verb is asking.
    */
   readonly ties: Ties;
+  /**
+   * Proved import routes the player has earned the right to see (`chains.ts`),
+   * already past that module's gate. Same contract as `ties`: this module draws
+   * what it is given and never decides who may see what.
+   */
+  readonly chains: Chains;
   /** Whose wires draw bright rather than at rest. */
-  readonly tieFocus: NodeRef | null;
+  readonly focus: NodeRef | null;
   /**
    * How much of each region the player has answered, `0..1` by palette index.
    *
@@ -129,6 +137,12 @@ export interface FrameStats {
    * on a real repo rather than to assert it in a fixture.
    */
   readonly tiesDrawn: number;
+  /**
+   * Chain links actually stroked this frame. Counted for the reason
+   * `tiesDrawn` is: this layer is gated, and a gated layer has to be measured
+   * by what survives rather than by what it emits.
+   */
+  readonly chainsDrawn: number;
   /**
    * Board markers actually drawn. Measured, like `peaksDrawn` and `tiesDrawn`,
    * because a marking layer that never fires is the defect it was built to fix
@@ -278,7 +292,7 @@ function stamp(
 const TIE_BOW = 0.16;
 
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
-  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, tieFocus, board } =
+  const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, chains, focus, board } =
     input;
   const level = levelFor(camera.scale);
   const style = styleFor(level);
@@ -414,6 +428,51 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   context.setLineDash([]);
   context.globalAlpha = 1;
 
+  // ---- proved chains ----------------------------------------------------
+  //
+  // The routes the player has proved, drawn over the import lines they lie on
+  // rather than beside them: a chain *is* a run of import edges, so bowing it
+  // away from them — the way a history wire is bowed — would say it was a
+  // different relation. Thicker and mint, at full alpha, because this is the
+  // one layer on the map that is entirely earned.
+  //
+  // Drawn at every zoom level for the same reason the wires are: there are at
+  // most a few hundred, they are the scoreboard, and the long ones are what
+  // territory zoom exists to show.
+  //
+  // Gated in `chains.ts` and never here (ADR-0049, ADR-0020). `input.chains`
+  // has already been through the rule; this loop draws what it is handed.
+  //
+  // Pointing at a node brightens the routes through it, which is what makes the
+  // inspector's hop count readable: the number says *how far* and the brightened
+  // run says *which way round*. Brightening costs no disclosure — every one of
+  // these links is already stroked — so the gate stays where it is.
+  let chainsDrawn = 0;
+  const litChains = new Set<ChainLink>(chainsAt(chains, focus));
+  context.lineCap = 'round';
+  const stroke = (link: ChainLink, lit: boolean): void => {
+    const from = scene.nodes[link.from];
+    const to = scene.nodes[link.to];
+    if (from === undefined || to === undefined) return;
+    const a = project(from);
+    const b = project(to);
+    context.lineWidth = lit ? 3 : 2;
+    context.globalAlpha = lit ? 1 : 0.72;
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    context.lineTo(b.x, b.y);
+    context.stroke();
+    chainsDrawn += 1;
+  };
+  context.strokeStyle = INK.chain;
+  // Rest first, lit over the top, so a brightened run is never half-hidden by a
+  // neighbour drawn after it.
+  for (const link of chains.links) if (!litChains.has(link)) stroke(link, false);
+  for (const link of chains.links) if (litChains.has(link)) stroke(link, true);
+  context.lineCap = 'butt';
+  context.lineWidth = 1;
+  context.globalAlpha = 1;
+
   // ---- history wires ----------------------------------------------------
   //
   // The co-change relation, drawn as shallow arcs so it separates from the
@@ -430,7 +489,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // `a < b` in every `Tie`, so the bow direction is a property of the pair and
   // a wire does not flip sides between frames.
   let tiesDrawn = 0;
-  const focused = tiesAt(ties, tieFocus);
+  const focused = tiesAt(ties, focus);
   const bright = new Set(focused);
   const arc = (tie: Tie, colour: string): void => {
     const from = scene.nodes[tie.a];
@@ -776,6 +835,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     level,
     peaksDrawn,
     tiesDrawn,
+    chainsDrawn,
     boardDrawn,
     candidatesDrawn,
     islandsDrawn,
@@ -1017,6 +1077,13 @@ export function drawOrbitFrame(
     // footprint, because it is not standing in for one.
     nameplates: placed,
     tiesDrawn: 0,
+    // **The orbit draws no proved chains, and the reason is not "not wired
+    // yet".** A chain is a run of *import* links and the orbit does draw those,
+    // as stalks — so highlighting them here is a real design question about a
+    // projection where a link's two ends sit at different heights and the run
+    // reads as a staircase rather than a route. Zero because it draws none,
+    // stated rather than left for a reader to infer from a missing field.
+    chainsDrawn: 0,
     labelsDrawn: placed.length,
     level,
     // **Named peaks**, not "peaks I looped past". The flat map draws summit

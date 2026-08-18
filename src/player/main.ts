@@ -65,6 +65,8 @@ import type { Twins } from './twins.js';
 import { findTwins, nameableClass } from './twins.js';
 import type { Ties } from './ties.js';
 import { NO_TIES, tiesNamedBy } from './ties.js';
+import type { Chains } from './chains.js';
+import { NO_CHAINS, chainsProvedBy } from './chains.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
@@ -378,21 +380,44 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * rule that lived twice.
    */
   let ties: Ties = NO_TIES;
-  let tieFocus: NodeRef | null = null;
+  let focus: NodeRef | null = null;
+  let chains: Chains = NO_CHAINS;
 
-  const retie = (): void => {
+  /**
+   * Rebuild both **earned** map layers — the history wires and the proved
+   * chains — from the record.
+   *
+   * One function and one pass, because the two are the same shape: a channel
+   * (`Verb.channel`), the boards on it whose answer the player has seen, and
+   * the boards on it still open, which is what each layer's gate is written
+   * against. Two functions would be two places to remember to call, and this
+   * file's own comment above records that every one of ADR-0014's leaks was a
+   * rule that lived twice.
+   *
+   * The gates themselves are **not** here. `tiesNamedBy` and `chainsProvedBy`
+   * each own theirs, for the same reason `draw.ts` owns none: a module that
+   * decides who may see what has to be the one that knows what is being asked.
+   */
+  const relayer = (): void => {
     const answered = answeredKeys(progress, liveness);
-    const passed: Challenge[] = [];
-    const openBoards = new Set<NodeRef>();
+    const namedTies: Challenge[] = [];
+    const openTies = new Set<NodeRef>();
+    const provedChains: Challenge[] = [];
+    const openChains = new Set<NodeRef>();
     for (const bucket of challengesById.values()) {
       for (const challenge of bucket) {
-        if (channelOf(challenge.verb) !== 'coChangeTies') continue;
+        const channel = channelOf(challenge.verb);
+        if (channel !== 'coChangeTies' && channel !== 'importRadius') continue;
         const ref = scene.graph.refById.get(challenge.subject);
-        if (answered.has(answerKey(challenge.verb, challenge.subject))) passed.push(challenge);
-        else if (ref !== undefined) openBoards.add(ref);
+        const seen = answered.has(answerKey(challenge.verb, challenge.subject));
+        const [shown, open] =
+          channel === 'coChangeTies' ? [namedTies, openTies] : [provedChains, openChains];
+        if (seen) shown.push(challenge);
+        else if (ref !== undefined) open.add(ref);
       }
     }
-    ties = tiesNamedBy(scene.atlas, scene.graph, passed, openBoards);
+    ties = tiesNamedBy(scene.atlas, scene.graph, namedTies, openTies);
+    chains = chainsProvedBy(scene.graph, provedChains, openChains);
   };
 
   /**
@@ -498,7 +523,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     answeredSet = answeredNodes(progress, liveness);
     regionProgress = clearedByRegion(scene, answeredSet, answerableByRegionMap);
     tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
-    retie();
+    relayer();
     saveProgress(store, saveKey, progress);
   };
 
@@ -618,7 +643,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selector = { ...selector, attempts, metVerbs };
   }
   // Wires a restored save has already earned, before the first frame.
-  retie();
+  relayer();
 
   /**
    * Twin classes, computed once at load.
@@ -675,8 +700,17 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * built; asking a second question here would be a second place for the rule
    * to live, and every one of ADR-0014's leaks was a rule that lived twice.
    */
-  const focusFor = (node: SceneNode | null): NodeRef | null =>
-    node !== null && ties.byNode.has(node.ref) ? node.ref : null;
+  /**
+   * What the player is pointing at, for **every** earned layer to read.
+   *
+   * One value rather than one per layer. It used to filter on
+   * `ties.byNode.has(…)`, which made it the co-change layer's private state —
+   * and the moment a second gated layer wanted the same thing that would have
+   * been two variables assigned at six sites apiece, which is how a rule comes
+   * to live twice. `tiesAt` and `chainsAt` each answer `[]` for a node they
+   * have nothing for, so the filter was never load-bearing.
+   */
+  const focusFor = (node: SceneNode | null): NodeRef | null => node?.ref ?? null;
 
   const depthFor = (node: SceneNode): number =>
     tracedRadius.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
@@ -767,6 +801,20 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // guardrail 6 forbids punishing a wrong answer. And it is the whole
       // class: a per-row guard would make the absence of this line point at the
       // member whose board is still open.
+      // The hop count, resolved to a name here because the inspector is handed
+      // facts and never a graph. `chains.hops` is measured over drawn links
+      // only, so a broken chain simply has no entry rather than a number that
+      // counts a withheld hop.
+      route:
+        node === null
+          ? null
+          : (() => {
+              const hop = chains.hops.get(node.ref);
+              const target = hop === undefined ? undefined : scene.nodes[hop.to];
+              return hop === undefined || target === undefined
+                ? null
+                : { distance: hop.distance, to: target.label };
+            })(),
       twins:
         node === null
           ? null
@@ -924,7 +972,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
             ref,
             reveal.unlocks === 'importRadius' ? FULL_RADIUS : depthFor(node),
           );
-          tieFocus = focusFor(node);
+          focus = focusFor(node);
         }
       }
       turnPending = true;
@@ -1004,7 +1052,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     // unlabelled dot is arriving nowhere.
     camera = centreOn(camera, node, DISTRICT_SCALE);
     radius = blastRadius(scene, node.ref, depthFor(node));
-    tieFocus = focusFor(node);
+    focus = focusFor(node);
     describe(node);
     invalidate();
   }, () => {
@@ -1492,7 +1540,8 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         questions: unanswered,
         peaks,
         ties,
-        tieFocus,
+      chains,
+        focus,
       regionProgress,
         board: boardMarks(),
       };
@@ -1562,6 +1611,62 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           x: plate.left + plate.width / 2,
           y: plate.top + plate.height / 2,
         }));
+      // **One node standing on a proved route, in screen coordinates.** The
+      // inspector's hop count is DOM, but reaching it needs a pointer on a
+      // specific disc, and a browser test cannot find one on a canvas — the
+      // same problem `__arkNameplates` solves for names, and a name is not
+      // available here because only a fraction of nodes are labelled at any
+      // zoom. Lowest ref, so the suite points at the same node every run.
+      // `total` is always the population; `at` is a *pointable* member of it,
+      // which is a different question and can legitimately be `null` on a map
+      // zoomed so far in that every one of them is off screen. Reporting one
+      // number for both would make "nothing is pointable" and "nothing carries
+      // a hop" the same reading, which is this repo's count-of-zero landmine.
+      (globalThis as unknown as { __arkHopAt?: unknown }).__arkHopAt = {
+        total: chains.hops.size,
+        at: (() => {
+        // **Flat map only**, for the reason `pivotOn` gives thirteen hundred
+        // lines up: in the orbit a node's disc is drawn at its column's *top*,
+        // so `worldToScreen` names a point where nothing is drawn. Publishing
+        // one anyway would hand the suite a coordinate that hit-tests to the
+        // wrong node — this file's oldest scar, arriving in a new function.
+        if (orbit !== null || world.isActive()) return null;
+        // **A point that round-trips through `pickAt`, not merely a disc's
+        // centre.** The first version published the lowest-ref hop node's
+        // centre and the e2e caught it naming someone else — because names are
+        // picked before bodies, and `probe-nameplate.ts` measures 35 of this
+        // repo's 273 discs answering to another node at dead centre. That trade
+        // is deliberate and documented twenty lines above; an instrument that
+        // ignores it hands the suite a coordinate the product will not honour.
+        // A point under a panel is no good either: the pointer event never
+        // reaches the canvas, so the inspector keeps whatever it was showing.
+        for (const ref of [...chains.hops.keys()].sort((a, b) => a - b)) {
+          const node = scene.nodes[ref];
+          if (node === undefined) continue;
+          const at = worldToScreen(camera, viewport, node);
+          if (at.x < 8 || at.y < 8 || at.x > viewport.width - 8 || at.y > viewport.height - 8) continue;
+          if (
+            chrome.some(
+              (box) =>
+                at.x >= box.left &&
+                at.x <= box.left + box.width &&
+                at.y >= box.top &&
+                at.y <= box.top + box.height,
+            )
+          ) {
+            continue;
+          }
+          if (pickAt(at) !== node) continue;
+          return {
+            path: node.path,
+            hops: chains.hops.get(ref)?.distance ?? 0,
+            x: at.x,
+            y: at.y,
+          };
+        }
+        return null;
+      })(),
+      };
       // The regions filling in, from the same `fog` the HUD's coverage reads —
       // so the panel and the map can never disagree about what is proved.
       legend.update(answeredSet, orbit === null ? 'map' : 'orbit');
@@ -1575,7 +1680,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // two claims, so it is the one more likely to be quietly false: a gate
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
+        // `chains` joins them for the third time and the same reason: it is the
+        // newest gated layer, its gate is what makes ADR-0049 §4.3 legal at all,
+        // and a gate that never opens draws a layer nobody sees.
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.chainsDrawn} chains · ${stats.boardDrawn} marks`,
         openQuestions,
         unanswered.size,
         camera.bearing,
@@ -1665,11 +1773,11 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     // Hovering previews the question — "change this, what imports it?" — at the
     // depth `depthFor` allows, which for anything unproven is one hop.
     radius = found === null ? null : blastRadius(scene, found.ref, depthFor(found));
-    tieFocus = focusFor(found);
+    focus = focusFor(found);
     if (found !== null) describe(found);
     else if (selected !== null) {
       radius = blastRadius(scene, selected.ref, depthFor(selected));
-      tieFocus = focusFor(selected);
+      focus = focusFor(selected);
       describe(selected);
     } else describe(null);
     canvas.style.cursor = found === null ? 'grab' : 'pointer';
@@ -1697,10 +1805,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     if (found !== null) {
       remember(recordSurvey(progress, [found.id]));
       radius = blastRadius(scene, found.ref, depthFor(found));
-      tieFocus = focusFor(found);
+      focus = focusFor(found);
     } else {
       radius = null;
-      tieFocus = null;
+      focus = null;
     }
     describe(found);
     invalidate();

@@ -4947,3 +4947,145 @@ and asserts both arms; one run exercises both, and the proved arm kills a mutant
 that never unlocks the cone.
 
 **Next**: unchanged — the proved chain drawn on the map, undirected (ADR-0049 §4.3).
+
+## The map is the scoreboard, part two: the proved chain, and the permission that was wrong
+
+`src/player/chains.ts` draws every hop of the route from a file you proved to the subject you proved
+it about — round 5's *"keep each proved chain drawn"*, the one of that round's four map requests
+ADR-0049 permits, and the last item this repo's Next line had been carrying.
+
+**The permission it was built on does not hold, and the measurement was the point.** ADR-0049
+decision 3 required *"re-measure against band A first, and state what the counterfactual holds
+fixed"*; `scripts/probe-chain.ts` is that, and it refutes §4.3's reason. The argument was *"adds no
+node and no edge the map is not already drawing"* — true about nodes and edges, **false about
+direction**, which decisions 1 and 2 of the same document refuse permanently. A route drawn from a
+member to the subject, with the subject marked as the subject, states which way every edge on it
+points however undirected the ink is; decision 2 already calls a hover-scoped arrow *"the same leak
+paid for in instalments"*, and a chain is a run of arrows. The soft spot was the consolation prize —
+§4 is what the document offers a player after a refusal, so it reads as generosity rather than as a
+claim, and nothing in it had been measured.
+
+Precision is 1.000 in every row by ADR-0008's invariant, so these are pure recall — the map handing
+over an answer key with no wrong picks. Half the deck answered: **5 of ark's 40 boards at band A or
+better, 8 of hono's 54, 6 of kysely's 75**; every board but the one scored: 9 / 14 / 9, with 5 / 11 / 8
+recovered *exactly*. Gated: **0, 0, 0**.
+
+The gate is one rule — a link `u → v` is drawn only where `v` carries no unanswered Blast Radius
+board — and it closes the leak **by construction**: every walk out of an open board must take an edge
+whose head is that board. That is why the column reads 0 rather than "under the bar", and why it needs
+no re-measure when a deck changes shape. It gates on the head node, so it is a property of the subject
+and never of a row (ADR-0020), and the absence it creates says nothing the question ring does not
+already say.
+
+Two instrument corrections, both in the direction that flatters: the probe now **self-gates at both
+extremes** (0.000 with no edge directed, 1.000 with every edge directed, reproducing ADR-0049 §2's
+table to the digit), because the middle rows are worth nothing without a plant proving the detector
+fires. And survival was first measured with **one** board open, where it reads 99% on all three repos
+— the bound, not a session; with half the deck open it is **72.8 / 81.8 / 93.0%**. That is ADR-0016's
+count-what-survives-the-gate defect, reproduced in the same commit as the comment quoting it.
+
+The ink is violet and that was derived rather than chosen. The palette comment claims a *fourth*
+family, which is a claim the pixels have to support: the first version was mint, which sits **34° from
+the teal question ring** — the smallest separation on the map, in the one pair a player must tell apart
+while a board is open. The three line inks sit at 12°, 40° and 180°; the largest gap runs 180° → 12°
+and its midpoint is 276°, which is 96° from its nearest neighbour. Same rule as any other threshold
+here: put it in the largest gap and name both neighbours.
+
+On this repo a full clear draws **138 links over 860 edges**, a half-clear 74, a tenth 23 — measured
+on the real renderer by `scripts/shot-chains.ts`, which grades real boards through `applyGrade` and
+injects the save, because `test:e2e` proves one board and its shot shows two links. The e2e gains a
+liveness step on the HUD's new `chains` count, gated on `__arkTraced` rather than on a prediction
+about which board the shell will serve.
+
+`tests/atlas/atlas.test.ts` asserts three things on the real deck: the layer fires, no in-edge of an
+open board is drawn, **and the ungated version leaks** — because a gate measured only on the arm where
+it holds is a rule nobody has priced. Six mutants of `chains.ts` die against `tests/unit/chains.test.ts`.
+
+**Next**: the hop-count label, which is the second half of the same quotation and the only part of it
+still missing. It carries no new disclosure — the cone is already unlocked for a subject whose board is
+answered — so ADR-0049 §7.6 records it as scope rather than as a refusal.
+
+## The hop count, and two legend fractions that could not be right
+
+Round 5's *"keep each proved chain drawn, **labelled with its hop count**"* is finished. The count is
+in the inspector rather than beside every glyph — **79 of ark's 279 nodes carry one at a full clear**
+(120 of hono's 425, 140 of kysely's 600), and a map already spending a label budget on names has no
+room for a number on a quarter of it. Pointing at a node brightens the routes through it, which costs
+no disclosure because every one of those links is already stroked.
+
+**The count is measured over the drawn links and never over the original route.** A chain the gate
+broke in the middle still has a length, and printing it would say the far end reaches the subject
+across the hop that was withheld — ADR-0049 §7.3's leak restated as a number, which is exactly the
+shape that looks too small to be a disclosure. A unit test plants that mutant and kills it.
+
+Two smaller things fell out. The focus value the co-change wires used was **one layer's private
+state** — filtered on `ties.byNode.has(…)` — and a second gated layer wanting the same thing would
+have made it two variables assigned at six sites apiece. It is one `focus` now, and each layer's
+`…At` already answers `[]` for a node it has nothing for, so the filter was never load-bearing.
+
+And the e2e caught the instrument, not the product: `__arkHopAt` published a disc's centre, and
+pointing there named **someone else**, because `pickAt` takes names before bodies and
+`probe-nameplate.ts` measures 35 of this repo's 273 discs answering to another node at dead centre.
+That trade is deliberate and documented twenty lines above the code that ignored it. The published
+point now round-trips through `pickAt` and skips anything under a panel.
+
+**The legend was rendering fractions that cannot be true, and a screenshot found them.** The terrain
+row hard-coded `answerable: 0` under the sentence *"terrain carries no questions"* — false: a terrain
+node has no import edges so Blast Radius cannot reach it, and the three history verbs can, which is
+the reason Companion exists. **40 of this repo's 66 terrain files are provable**, and a half-clear
+proved 8, which rendered as **`8/0`** because the tally hides at a numerator of zero rather than a
+denominator of zero. Its neighbour was the same error reversed: `?? region.nodeCount` told a region
+no question reaches that all of it was answerable (`src/indexer`, 3 files, 0 provable, `0/3`
+forever). **And the first fix introduced a third** — summing the lookup across the four terrain
+*areas*, which all share `TERRAIN_INDEX` by construction, so one bucket was counted four times and
+the row read **`8/160` over a terrain of 66 files**, one line below a `nodeCount` that is summed
+correctly because `region.nodeCount` really is per-area. Nothing in the suite moved through any of
+it: the one test touching `answerable` asserted `0` for terrain with the false reason in its comment
+and passed for the fixture's reason instead. Three mutants now die there.
+
+**Next**: a wrong answer you did not pick is never explained — the reveal's rows are `picked ∪ truth`,
+so a perfect score teaches nothing about the other eighteen candidates.
+
+## A wrong answer you did not pick is explained, but never labelled
+
+Every reveal built its rows from `Grade`'s three sets, whose union is
+`truth ∪ picked` — so a player who answered **perfectly** was told nothing at all about the
+candidates they were right to skip. Measured at `19b571a`: **2,411 wrong-answer slots on ark and 3,474
+on hono, 77.5% and 78.4% of them carrying a reason ADR-0020 records in the atlas** and nobody ever
+heard. The one way to see them was to tick everything, which is the select-all farm — so the best
+answer and the worst answer were the two that learned least. A fourth `NoteKind`, `avoided`
+([ADR-0050](./docs/decisions/0050-a-wrong-answer-you-did-not-pick-is-explained-but-never-labelled.md)).
+
+**The witness is withheld from those rows, and that is measured rather than cautious.** ADR-0020
+withholds a class *as a class* because a per-row guard makes the absence say which class it was. The
+count that rule implies and nobody had taken is *how many classes are silent per verb*: **three of the
+four have exactly one, on both repos**, so a witness on every row would name it by complement. Scored
+in §8.2's units, Companion's silent `structural` rows read as picks on the same subject's Blast Radius
+board reach **0.857 against a 0.78 bar on hono** and 0.500 on ark — it fires on the second repo and not
+the bootstrap, which is the rule this project keeps paying for.
+
+The sentence is safe where the label is not, and that was checked rather than assumed: the purest note
+shape mapping onto a silent class is **89%**, and what it states is a **depth-1 import edge ADR-0008
+decision 1 already draws on the map**. `whyNot`'s deep arm does state an undrawn cone edge — an atom of
+the candidate's *own* key — and scored as a guess it reaches **0.667 / 0.667 / 0.500** with **0 boards
+beating band A** on three repos. The change also raises no ceiling: select-all already produced every
+one of these rows, so it levels a floor and removes the reason to farm.
+
+**Grouped by sentence, because a row each is longer without being richer.** The count that decided it
+is distinct sentences rather than rows: archaeology averages 15.6 such rows carrying **2.2** distinct
+sentences and blastRadius 3.3, against companion's 10.1 and placement's 11.9 — so grouping collapses
+two verbs to two or three blocks and is a near no-op on the other two, which is asserted as the correct
+outcome rather than treated as a missed optimisation. The rule is a pure function in a new
+`src/player/reveal.ts`, because `challenge.ts` is a DOM builder with **no unit tests at all** and
+anything in it carrying a rule belongs where a rule can be checked.
+
+One defect was caught by the type system only because the enum was widened deliberately: the console's
+mark was a two-armed conditional with `'✗'` as its fall-through, so an `avoided` row — a wrong answer
+the player was **right** to skip — would have been marked as a mistake on every board. It is a `switch`
+with no default now, so the next kind is a compile error. Three unit suites went red for the right
+reason (they asserted `notes.length === truth.length`) and their content claims — *a history-graded
+verb shows no import evidence* — now run over the avoided rows too, which is where such a leak would
+most easily hide.
+
+**Next**: a rig that frames what is ahead. `scripts/probe-spawn.ts` refuted the collision theory (0 of
+227 on ark, 0 of 381 on hono), so the walk's real defect is the framing.

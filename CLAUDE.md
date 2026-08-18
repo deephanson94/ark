@@ -1105,6 +1105,25 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   claim it certifies holds by a rounding error. Note which instrument found it: not the six-repo probe
   (which reported a clean `0 wrong district`) but a unit fixture and a second metric.
 
+- **A denominator of zero and a denominator nobody set are the same rendered row, and the comment
+  next to it will tell you the population is empty.** The legend's terrain row hard-coded
+  `answerable: 0` under the sentence *"terrain carries no questions, so its tally never renders"*.
+  The first clause is false — a terrain node has no import edges, so Blast Radius cannot reach it,
+  and the **three history verbs can**, which is the reason Companion exists; **40 of this repo's 66
+  terrain files are provable**. The third clause does not follow from the first either: the tally
+  hides at a numerator of zero, not a denominator of zero, so a half-clear rendered **`8/0`**. Its
+  neighbour was the same error pointed the other way — `answerable.get(index) ?? region.nodeCount`
+  told a region no question reaches that *all* of it was answerable (`src/indexer`, 3 files, 0
+  provable, `0/3` forever), invisible only because the numerator never leaves zero. **And the fix
+  introduced a third**: terrain's answerable summed the lookup across the four terrain *areas*, which
+  all share `TERRAIN_INDEX` by construction, so one bucket was counted four times and the row read
+  **`8/160` over a terrain of 66 files** — one line below a `nodeCount` that is summed correctly,
+  because `region.nodeCount` really is per-area. Nothing in the suite moved through any of it: the
+  one test touching `answerable` asserted `0` for terrain with the comment giving the false reason,
+  and passed for the fixture's reason instead. **When two adjacent lines aggregate over the same
+  list, ask whether they aggregate over the same key** — and treat a comment asserting a population
+  is empty as a measurement someone owes you.
+
 ---
 
 ## Subagents and parallelism
@@ -1171,6 +1190,9 @@ npm run budget             # print measured budgets, fail over ceiling
 npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
                            #   a real dependent as a wrong answer. The only check here that can see a
                            #   *missing* edge; gates itself on a plant and fails if the detector is inert.
+npx tsx scripts/shot-chains.ts [fraction …]  # photograph the proved-chain layer partway through a
+                           #   playthrough. `test:e2e` proves one board, so its shot shows two links —
+                           #   this grades real boards through `applyGrade` and injects the save.
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
                            #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
@@ -1444,9 +1466,12 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. **128 KiB of JS** (112 before the district arches, 95 before the walkable world), zero runtime
+sentence. **152 KiB of JS** (148 before the reveal accounted for every candidate, 128 before the proved
+chains, 112 before the district arches, 95 before the walkable world), zero runtime
 dependencies, first paint **168 ms** measured by `test:e2e`. `npm run index` produces a valid
-**398.0 KiB** atlas in **634 ms** (measured at `8448fd1`).
+**440.2 KiB** atlas (measured after `19b571a`; this line read 398.0 KiB from `8448fd1` for four
+commits, which is the drift the paragraph below is about — and ark indexes itself, so it drifts again
+on the next commit).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.

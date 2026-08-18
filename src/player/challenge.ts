@@ -22,9 +22,10 @@
 
 import type { AtlasId, Challenge } from '../atlas/index.js';
 import { isNodeId } from '../atlas/index.js';
-import type { Grade, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
+import type { Grade, NoteKind, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
 import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
+import { groupAvoided } from './reveal.js';
 import { el } from './ui.js';
 
 const BAND_LABEL: Readonly<Record<string, string>> = {
@@ -396,9 +397,34 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     );
   }
 
+  /**
+   * One glyph per `NoteKind`, as a switch with **no default**.
+   *
+   * A `Record` lookup would have done — except `noUncheckedIndexedAccess` makes
+   * it `string | undefined`, so it needs a `?? '…'`, which is the default arm
+   * this exists to remove wearing a different hat. A switch that returns from
+   * every arm makes the next kind a **compile error** rather than a silent
+   * fall-through, which is what the previous version got wrong.
+   */
+  const markFor = (kind: NoteKind): string => {
+    switch (kind) {
+      case 'correct':
+        return '✓';
+      case 'missed':
+        return '↯';
+      case 'spurious':
+        return '✗';
+      // A tick you did not have to make.
+      case 'avoided':
+        return '·';
+    }
+  };
+
   function notes(items: readonly RevealNote[]): HTMLElement {
     const list = el('ul', 'console-notes');
-    for (const note of items) {
+    const graded = items.filter((note) => note.kind !== 'avoided');
+    const avoided = items.filter((note) => note.kind === 'avoided');
+    for (const note of graded) {
       const text = el('span', 'note-text', [
         el('span', 'note-path', [note.label]),
         el('span', 'note-why', [note.note]),
@@ -412,12 +438,43 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       }
       list.append(
         el('li', `note note-${note.kind}`, [
-          el('span', 'note-mark', [
-            note.kind === 'correct' ? '✓' : note.kind === 'missed' ? '↯' : '✗',
-          ]),
+          // **One arm per kind, not a default.** This was a two-armed
+          // conditional with `'✗'` as the fall-through, so ADR-0050's `avoided`
+          // rows — wrong answers the player was **right** to skip — would have
+          // been marked as mistakes, silently, on every board. A default arm is
+          // a prediction about an enum nobody controls, and this file's
+          // neighbour in `scripts/e2e.ts` has a landmine about the same shape.
+          el('span', 'note-mark', [markFor(note.kind)]),
           text,
         ]),
       );
+    }
+
+    // **The rows you were right to skip, grouped by what they say.** One heading
+    // and then one block per distinct sentence — because a sentence per row
+    // makes the panel eight times longer and, on two of the four verbs, says two
+    // things: Archaeology averages 15.6 such rows carrying **2.2** distinct
+    // sentences and Blast Radius 3.3, against Companion's 10.1 and Placement's
+    // 11.9 (`scripts/probe-silent.ts`). The heading's sentence is the console's
+    // own — a claim about the *board* rather than about what any verb asked —
+    // which is why it does not belong on the `Verb` contract.
+    if (avoided.length > 0) {
+      list.append(
+        el('li', 'note-aside', [
+          `the other ${avoided.length} — wrong, and you left ${avoided.length === 1 ? 'it' : 'them'} alone`,
+        ]),
+      );
+      for (const group of groupAvoided(avoided)) {
+        list.append(
+          el('li', 'note note-avoided', [
+            el('span', 'note-mark', [markFor('avoided')]),
+            el('span', 'note-text', [
+              el('span', 'note-why', [group.note]),
+              ...group.members.map((member) => el('span', 'note-path', [member.label])),
+            ]),
+          ]),
+        );
+      }
     }
     return list;
   }

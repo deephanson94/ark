@@ -19,11 +19,14 @@
 import type { Atlas, Challenge, Graph, NodeId, NodeRef } from '../../atlas/index.js';
 import { byteCompare, commitAt, idOf, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
+import { avoidedOf } from '../reveal.js';
 import { textSubject } from '../gate.js';
 import { nameTokens } from '../paths.js';
 import { commitLabel, counted, memberNoun } from '../members.js';
 
-const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
+// `avoided` last: the lesson is what you missed, and 16 rows you were right to
+// skip must not sit above it (ADR-0050).
+const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2, avoided: 3 };
 
 /**
  * The negative witness: why the generator put this wrong answer here.
@@ -134,7 +137,13 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
       id,
       label: path,
       kind,
-      witness: WITNESS[witnesses.get(id) ?? ''] ?? null,
+      // **No witness on a row the player did not pick** (ADR-0050 §3). Three of
+      // the four verbs have exactly **one** silent class, so a witness on every
+      // row would name that class by complement — measured, the complement of
+      // Companion's withheld `structural` scores **0.857 against a 0.78 bar** on
+      // one of hono's Blast Radius boards. It fires on hono and not on ark,
+      // which is why the bootstrap repo could not have decided this.
+      witness: kind === 'avoided' ? null : (WITNESS[witnesses.get(id) ?? ''] ?? null),
       // **No import evidence in a history-graded note.** A chain of files did not
       // produce this answer, so naming one would show the player evidence that did
       // not. The rule used to live on a `route: []` beside this field; it moved here
@@ -148,6 +157,9 @@ export function revealOf(_atlas: Atlas, graph: Graph, challenge: Challenge, grad
   for (const id of grade.missed) add(id, 'missed');
   for (const id of grade.spurious) add(id, 'spurious');
   for (const id of grade.correct) add(id, 'correct');
+  // Every remaining candidate: the wrong answers the player was right to skip.
+  // Their `witness` is suppressed in `add` — ADR-0050 §3 measures why.
+  for (const id of avoidedOf(challenge, grade)) add(id, 'avoided');
 
   notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || byteCompare(a.label, b.label));
 

@@ -19,6 +19,7 @@ import { drawFrame, regionLines } from '../../src/player/draw.js';
 import { INK, regionKnown, regionSilhouette, regionWash } from '../../src/player/palette.js';
 import type { FrameInput } from '../../src/player/draw.js';
 import { NORTH, worldToScreen } from '../../src/player/camera.js';
+import { NO_CHAINS } from '../../src/player/chains.js';
 import { NO_TIES } from '../../src/player/ties.js';
 import { TERRAIN_INDEX, prepare } from '../../src/player/scene.js';
 import { atlasWith } from '../fixtures/atlas.js';
@@ -110,7 +111,8 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     questions: new Set(),
     peaks: new Set(scene.nodes.map((node) => node.ref)),
     ties: NO_TIES,
-    tieFocus: null,
+  chains: NO_CHAINS,
+    focus: null,
     // Untouched map: the wash channel is inert, which is what an arriving
     // player sees and is the baseline the brightening must not change.
     regionProgress: new Map<number, number>(),
@@ -333,7 +335,8 @@ describe('the renderer uses the ramp it is given', () => {
       questions: new Set(),
       peaks: new Set(),
       ties: NO_TIES,
-      tieFocus: null,
+  chains: NO_CHAINS,
+      focus: null,
       board: null,
       chrome: [],
       regionProgress: new Map<number, number>(),
@@ -394,7 +397,8 @@ describe('the labels a frame returns', () => {
       questions: new Set(),
       peaks: new Set(),
       ties: NO_TIES,
-      tieFocus: null,
+  chains: NO_CHAINS,
+      focus: null,
       board: null,
       chrome: [],
       regionProgress: new Map<number, number>(),
@@ -435,7 +439,8 @@ describe('the labels a frame returns', () => {
       scene, camera, viewport: VIEWPORT,
       fog: { surveyed: all, understood: new Set() },
       hovered: null, selected: null, radius: null,
-      questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
+      questions: new Set(), peaks: new Set(), ties: NO_TIES,
+  chains: NO_CHAINS, focus: null,
       board: null, chrome: [], regionProgress: new Map<number, number>(),
     });
     expect(stats.nameplates.length).toBeGreaterThan(0);

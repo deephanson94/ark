@@ -41,11 +41,14 @@
 import type { Atlas, AtlasId, Challenge, Graph, NodeRef } from '../../atlas/index.js';
 import { byteCompare, commitAt, commitIdFor, nodeAt, readWitness } from '../../atlas/index.js';
 import type { Grade, NoteKind, Reveal, RevealNote } from '../types.js';
+import { avoidedOf } from '../reveal.js';
 import { commitLabel } from '../members.js';
 import { nameTokens } from '../paths.js';
 import { messageWords } from './corpus.js';
 
-const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2 };
+// `avoided` last: the lesson is what you missed, and 16 rows you were right to
+// skip must not sit above it (ADR-0050).
+const ORDER: Readonly<Record<NoteKind, number>> = { missed: 0, spurious: 1, correct: 2, avoided: 3 };
 
 /**
  * The negative witness: why the generator put this wrong answer here.
@@ -199,7 +202,12 @@ export function revealOf(
       id,
       label: commitLabel(commit),
       kind,
-      witness: witnessFor(id),
+      // **No witness on a row the player did not pick** (ADR-0050 §3). This verb
+      // builds its witness through `witnessFor`'s set-size guards rather than a
+      // plain map lookup, so the suppression the other three got by editing one
+      // expression had to be written here by hand — which is exactly the shape
+      // of defect this file's header warns about, four reveals deep.
+      witness: kind === 'avoided' ? null : witnessFor(id),
       // **No import evidence in a history-graded note.** A chain of files did not
       // produce this answer, so naming one would show the player evidence that did
       // not. The rule used to live on a `route: []` beside this field; it moved here
@@ -221,6 +229,9 @@ export function revealOf(
   for (const id of grade.missed) add(id, 'missed');
   for (const id of grade.spurious) add(id, 'spurious');
   for (const id of grade.correct) add(id, 'correct');
+  // Every remaining candidate: the wrong answers the player was right to skip.
+  // Their `witness` is suppressed in `add` — ADR-0050 §3 measures why.
+  for (const id of avoidedOf(challenge, grade)) add(id, 'avoided');
 
   notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || byteCompare(a.label, b.label));
 
