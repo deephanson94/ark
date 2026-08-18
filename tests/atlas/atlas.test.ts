@@ -1313,6 +1313,49 @@ describe('proved chains on this repo (ADR-0049)', () => {
   });
 });
 
+/**
+ * **ADR-0050 on the real deck.** The reveal accounts for every candidate, and
+ * no row the player left alone states the strategy that put it there.
+ *
+ * The second half is the measured one: three of the four verbs have exactly one
+ * silent class, so a witness on every row would name that class by complement —
+ * scored at **0.857 against a 0.78 bar** on one of hono's Blast Radius boards.
+ * A fixture cannot see that, because it has one board and one strategy mix.
+ */
+describe('every wrong answer is accounted for (ADR-0050)', () => {
+  it('gives each candidate a row, and no unpicked row a strategy', () => {
+    const graph = buildGraph(atlas);
+    let boards = 0;
+    let avoided = 0;
+    let spokenOnPicked = 0;
+    for (const challenge of atlas.challenges) {
+      const verb = VERBS[challenge.verb as keyof typeof VERBS];
+      if (verb === undefined) continue;
+      boards += 1;
+      // A perfect answer — the case the old reveal told nothing at all.
+      const grade = verb.grade(challenge, { picked: [...challenge.truth] });
+      const reveal = verb.reveal(atlas, graph, challenge, grade);
+      expect(new Set(reveal.notes.map((note) => note.id))).toEqual(new Set(challenge.candidates));
+      for (const note of reveal.notes) {
+        if (note.kind !== 'avoided') continue;
+        avoided += 1;
+        expect(note.witness).toBeNull();
+        // A row that appears and says nothing is a longer panel and no lesson.
+        expect(note.note.length).toBeGreaterThan(0);
+      }
+      // The control: picked-and-wrong rows still carry theirs, or the rule
+      // above would be satisfied by a reveal that has stopped witnessing at all.
+      const all = verb.grade(challenge, { picked: [...challenge.candidates] });
+      for (const note of verb.reveal(atlas, graph, challenge, all).notes) {
+        if (note.kind === 'spurious' && note.witness !== null) spokenOnPicked += 1;
+      }
+    }
+    expect(boards).toBeGreaterThan(10);
+    expect(avoided).toBeGreaterThan(100);
+    expect(spokenOnPicked).toBeGreaterThan(100);
+  });
+});
+
 describe('the direct ring is part of the answer', () => {
   it('overlaps the key on most boards, which is why the map may not draw it', () => {
     const graph = buildGraph(atlas);

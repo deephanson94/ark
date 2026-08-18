@@ -104,7 +104,7 @@ function noteFor(
   };
   const grade = gradeSet(challenge, { picked: picked.map((p) => idFor(atlas, p)) }, BLAST_PHRASING);
   const reveal = revealOf(atlas, buildGraph(atlas), challenge, grade);
-  return { grade, reveal, note: reveal.notes.find((entry) => entry.label === path) };
+  return { grade, reveal, challenge, note: reveal.notes.find((entry) => entry.label === path) };
 }
 
 describe('revealOf', () => {
@@ -202,13 +202,69 @@ describe('revealOf', () => {
     expect(reveal.subject).toBe('src/a/subject.ts');
   });
 
-  it('orders missed first, then spurious, then correct', () => {
+  it('orders missed first, then spurious, then correct, then avoided', () => {
     const { reveal } = noteFor(
       fixture(),
       ['src/a/direct.ts', 'src/a/sibling.ts'],
       'src/a/direct.ts',
     );
-    expect(reveal.notes.map((entry) => entry.kind)).toEqual(['missed', 'spurious', 'correct']);
+    const kinds = reveal.notes.map((entry) => entry.kind);
+    // The lesson is what you missed, so the rows you were right to skip sort
+    // last however many of them there are (ADR-0050).
+    expect(kinds.slice(0, 3)).toEqual(['missed', 'spurious', 'correct']);
+    expect(new Set(kinds.slice(3))).toEqual(new Set(['avoided']));
+  });
+
+  it('explains every wrong answer, including the ones you did not pick', () => {
+    // The reveal's rows used to be `truth ∪ picked`, so a **perfect** answer was
+    // told nothing about the candidates it was right to skip. Measured on this
+    // repo's own deck that is 2,411 wrong-answer slots, 1,869 of them carrying a
+    // recorded reason nobody ever heard (ADR-0050).
+    // A **perfect** answer: the two real dependents and nothing else.
+    const { reveal, challenge } = noteFor(
+      fixture(),
+      ['src/a/direct.ts', 'src/b/distant.ts'],
+      'src/a/direct.ts',
+    );
+    expect(reveal.notes.map((entry) => entry.id).sort()).toEqual([...challenge.candidates].sort());
+    const avoided = reveal.notes.filter((entry) => entry.kind === 'avoided');
+    expect(avoided.length).toBe(challenge.candidates.length - challenge.truth.length);
+    expect(avoided.length).toBeGreaterThan(0);
+    // And each one says *why* it is not in the answer, rather than merely
+    // appearing: a row with no sentence is a longer panel and no lesson.
+    for (const note of avoided) expect(note.note.length).toBeGreaterThan(0);
+  });
+
+  it('never states the strategy behind a row the player did not pick', () => {
+    // Three of the four verbs have exactly **one** silent class, so a witness on
+    // every row would name that class by complement. Measured, the complement of
+    // Companion's withheld `structural` scores 0.857 against a 0.78 bar on one
+    // of hono's Blast Radius boards — on hono and not on ark, which is why the
+    // bootstrap repo could not have decided it. ADR-0050 §3.
+    const atlas = fixture();
+    // **A spoken class, on purpose.** `noteFor`'s default strategy is `distant`,
+    // which is padding and silent by design — so without this the control arm
+    // below ("a picked row still carries its witness") passes vacuously against
+    // a reveal that states nothing for any row at all.
+    const spoken = { 'src/a/sibling.ts': 'treeSibling' };
+    const { reveal } = noteFor(atlas, PATHS.slice(1), 'src/a/direct.ts', spoken);
+    // Picked-and-wrong rows keep their witness, so this is a rule about the
+    // *pick* and not about the class — which is what makes it leak-free.
+    const spurious = reveal.notes.filter((entry) => entry.kind === 'spurious');
+    expect(spurious.some((entry) => entry.witness !== null)).toBe(true);
+
+    const { reveal: clean } = noteFor(
+      atlas,
+      ['src/a/direct.ts', 'src/b/distant.ts'],
+      'src/a/direct.ts',
+      spoken,
+    );
+    // The same row, same class, same board — spoken when picked and silent when
+    // not, which is what makes this a rule about the pick rather than the class.
+    expect(clean.notes.find((entry) => entry.label === 'src/a/sibling.ts')?.kind).toBe('avoided');
+    for (const note of clean.notes.filter((entry) => entry.kind === 'avoided')) {
+      expect(note.witness).toBeNull();
+    }
   });
 
   it('says "directly" for a one-hop dependent, without inventing a route', () => {

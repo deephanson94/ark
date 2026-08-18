@@ -5045,3 +5045,47 @@ and passed for the fixture's reason instead. Three mutants now die there.
 
 **Next**: a wrong answer you did not pick is never explained — the reveal's rows are `picked ∪ truth`,
 so a perfect score teaches nothing about the other eighteen candidates.
+
+## A wrong answer you did not pick is explained, but never labelled
+
+Every reveal built its rows from `Grade`'s three sets, whose union is
+`truth ∪ picked` — so a player who answered **perfectly** was told nothing at all about the
+candidates they were right to skip. Measured at `19b571a`: **2,411 wrong-answer slots on ark and 3,474
+on hono, 77.5% and 78.4% of them carrying a reason ADR-0020 records in the atlas** and nobody ever
+heard. The one way to see them was to tick everything, which is the select-all farm — so the best
+answer and the worst answer were the two that learned least. A fourth `NoteKind`, `avoided`
+([ADR-0050](./docs/decisions/0050-a-wrong-answer-you-did-not-pick-is-explained-but-never-labelled.md)).
+
+**The witness is withheld from those rows, and that is measured rather than cautious.** ADR-0020
+withholds a class *as a class* because a per-row guard makes the absence say which class it was. The
+count that rule implies and nobody had taken is *how many classes are silent per verb*: **three of the
+four have exactly one, on both repos**, so a witness on every row would name it by complement. Scored
+in §8.2's units, Companion's silent `structural` rows read as picks on the same subject's Blast Radius
+board reach **0.857 against a 0.78 bar on hono** and 0.500 on ark — it fires on the second repo and not
+the bootstrap, which is the rule this project keeps paying for.
+
+The sentence is safe where the label is not, and that was checked rather than assumed: the purest note
+shape mapping onto a silent class is **89%**, and what it states is a **depth-1 import edge ADR-0008
+decision 1 already draws on the map**. `whyNot`'s deep arm does state an undrawn cone edge — an atom of
+the candidate's *own* key — and scored as a guess it reaches **0.667 / 0.667 / 0.500** with **0 boards
+beating band A** on three repos. The change also raises no ceiling: select-all already produced every
+one of these rows, so it levels a floor and removes the reason to farm.
+
+**Grouped by sentence, because a row each is longer without being richer.** The count that decided it
+is distinct sentences rather than rows: archaeology averages 15.6 such rows carrying **2.2** distinct
+sentences and blastRadius 3.3, against companion's 10.1 and placement's 11.9 — so grouping collapses
+two verbs to two or three blocks and is a near no-op on the other two, which is asserted as the correct
+outcome rather than treated as a missed optimisation. The rule is a pure function in a new
+`src/player/reveal.ts`, because `challenge.ts` is a DOM builder with **no unit tests at all** and
+anything in it carrying a rule belongs where a rule can be checked.
+
+One defect was caught by the type system only because the enum was widened deliberately: the console's
+mark was a two-armed conditional with `'✗'` as its fall-through, so an `avoided` row — a wrong answer
+the player was **right** to skip — would have been marked as a mistake on every board. It is a `switch`
+with no default now, so the next kind is a compile error. Three unit suites went red for the right
+reason (they asserted `notes.length === truth.length`) and their content claims — *a history-graded
+verb shows no import evidence* — now run over the avoided rows too, which is where such a leak would
+most easily hide.
+
+**Next**: a rig that frames what is ahead. `scripts/probe-spawn.ts` refuted the collision theory (0 of
+227 on ark, 0 of 381 on hono), so the walk's real defect is the framing.

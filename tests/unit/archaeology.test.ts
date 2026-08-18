@@ -507,7 +507,9 @@ describe('the reveal', () => {
 
   it('names the subject file and every pick', () => {
     expect(reveal.subject).toBe('src/core/engine.ts');
-    expect(reveal.notes).toHaveLength(challenge.truth.length);
+    // Every candidate since ADR-0050 — a wrong answer you did not pick is
+    // explained too, so the panel accounts for the whole board.
+    expect(reveal.notes).toHaveLength(challenge.candidates.length);
   });
 
   it('never names another file a commit touched — that is Placement’s key', () => {

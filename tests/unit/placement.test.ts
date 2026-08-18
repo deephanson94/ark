@@ -643,7 +643,9 @@ describe('a commit subject is a place the map does not have', () => {
     expect(reveal.subject).toContain(PLAIN.sha);
     expect(reveal.subject).toContain(PLAIN.subject);
     expect(reveal.unlocks).toBe('nothing');
-    expect(reveal.notes).toHaveLength(challenge.truth.length);
+    // Every candidate since ADR-0050, so the no-import-evidence assertions
+    // below cover the avoided rows too.
+    expect(reveal.notes).toHaveLength(challenge.candidates.length);
     // No import evidence for a commit-graded answer — see companion.test.ts for
     // why this is asserted on the prose rather than on a field nothing drew.
     for (const note of reveal.notes) {

@@ -252,7 +252,15 @@ export interface Words {
   readonly repo: Noun;
 }
 
-export type NoteKind = 'correct' | 'missed' | 'spurious';
+/**
+ * What a reveal row is, from the player's side.
+ *
+ * `avoided` is a wrong answer they did **not** pick — right, and until ADR-0050
+ * unrendered, because every reveal built its rows from `Grade`'s three sets and
+ * their union is `truth ∪ picked`. It is listed last here and sorted last in
+ * every verb, so the lesson (what you missed) stays at the top.
+ */
+export type NoteKind = 'correct' | 'missed' | 'spurious' | 'avoided';
 
 /** One line of the reveal: a pick, and the measured reason it was right or wrong. */
 export interface RevealNote {
