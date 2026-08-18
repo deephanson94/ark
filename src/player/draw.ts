@@ -54,6 +54,29 @@ export interface FrameInput {
   /** Whose wires draw bright rather than at rest. */
   readonly tieFocus: NodeRef | null;
   /**
+   * How much of each region the player has answered, `0..1` by palette index.
+   *
+   * **The map is the scoreboard, and this is the channel that makes it one.**
+   * Five rounds of cold playtests asked what gave them a sense of progress and
+   * every one of the last ten answered the same way — *the map lighting up*: *"my
+   * knowledge had a shape and a location"*, *"four surfaces changed at once, that
+   * single moment is the best thing in the product"*, *"that's why I'd have kept
+   * clicking"*. None of them credited the medal shelf built for exactly that.
+   * Four then asked for the same next step in their own words, and one named the
+   * mechanism: *"brighten/fill a region proportionally as you clear it — the
+   * legend already computes 3/36, put it on the map, not in a list"*.
+   *
+   * **Colour rather than text, deliberately.** Text collision has been the top
+   * visual complaint in all five rounds, so a third line on every nameplate would
+   * pay for the arc out of the thing already most in deficit. The wash is ground
+   * that is already drawn; this only says how brightly.
+   *
+   * Handed in rather than derived, like everything else here: the fractions come
+   * from the same `provedByRegion` and provable denominator the legend's tallies
+   * and the medal shelf read, so three surfaces cannot disagree about one number.
+   */
+  readonly regionProgress: ReadonlyMap<number, number>;
+  /**
    * Screen rectangles of the DOM panels standing over the canvas.
    *
    * The renderer cannot see them — they are siblings of the canvas, not pixels
@@ -112,6 +135,17 @@ export interface FrameStats {
    * wearing a comment that says otherwise.
    */
   readonly boardDrawn: number;
+  /**
+   * How many of those were **candidates** — the markers a click can answer with.
+   *
+   * Split out because merging them made a gate wrong: an Archaeology board's
+   * subject is a file and its candidates are commits, so it draws exactly one
+   * marker and **none of them is an input**. A check that read `boardDrawn`
+   * concluded the panel should offer click-to-answer on a board where clicking
+   * answers nothing. Two different claims — *something is marked* and *something
+   * can be clicked* — that happened to coincide on three verbs out of four.
+   */
+  readonly candidatesDrawn: number;
   /**
    * Regions whose landmass was filled this frame.
    *
@@ -319,9 +353,25 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       // largest region, which is true of the file count and false of the
       // architecture.
       const weight = index === TERRAIN_INDEX ? 0.45 : 1;
+      // **Cleared ground is brighter ground.** Up to 2.2× at a fully answered
+      // region, from the fraction the legend and the shelf already agree on.
+      //
+      // A multiplier on the existing alpha rather than a new layer, so an
+      // untouched map is byte-identical to what shipped and the channel only ever
+      // *adds* — guardrail 6's shape applied to a rendering: nothing a player does
+      // can make a region darker than it started.
+      //
+      // 2.2 is chosen so the top of the range is legible against a neighbour at
+      // zero without becoming a second figure competing with the discs: at 0.07
+      // the shore is 0.154 when complete, still ground rather than a mark.
+      // Terrain carries no questions, so its fraction is 0 and it never brightens
+      // — which is right, and is why this reads as *progress* rather than as
+      // decoration that happens to correlate with size.
+      const cleared = input.regionProgress.get(index) ?? 0;
+      const lit = 1 + 1.2 * Math.max(0, Math.min(1, cleared));
       for (const [pad, alpha] of [
-        [ISLAND_SHELF, 0.05 * weight],
-        [ISLAND_SHORE, 0.07 * weight],
+        [ISLAND_SHELF, 0.05 * weight * lit],
+        [ISLAND_SHORE, 0.07 * weight * lit],
       ] as const) {
         context.beginPath();
         for (const node of members) {
@@ -627,7 +677,12 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     }
     const placed = place(candidates, {
       lineHeight: 14,
-      padding: 3,
+      // **6, not 3.** Five testers across two rounds reported names "colliding"
+      // at district zoom on a frame where `placeLabels` had refused every
+      // overlap — 3px of padding either side leaves two haloed 12px labels
+      // three pixels apart, which is touching to a reader even though no box
+      // intersects. The collision pass was right and the gap was the complaint.
+      padding: 6,
       budget: style.nodeLabelBudget,
       width: viewport.width,
       height: viewport.height,
@@ -654,13 +709,26 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   // Nothing here draws an **edge** — the relation between the subject and its
   // candidates *is* the answer, and it stays where ADR-0008 put it.
   let boardDrawn = 0;
+  let candidatesDrawn = 0;
   if (board !== null) {
+    // **Culled, and it was not.** `nodes` here is the *visible* set for the
+    // flat map but the marks are drawn from it without re-checking the box a
+    // marker occupies, which reaches `side + lineWidth` beyond the disc — so a
+    // candidate just off the top edge drew a rounded rectangle clipped by the
+    // viewport and lying across the HUD. A frontend engineer on the panel
+    // reported it as "a stray white artifact overlapping the header", which is
+    // exactly what it looks like when you do not know what it is.
+    const inFrame = (x: number, y: number, reach: number): boolean =>
+      x + reach >= 0 && x - reach <= viewport.width && y + reach >= 0 && y - reach <= viewport.height;
     for (const node of nodes) {
       const isSubject = board.subject === node.ref;
       const isCandidate = board.candidates.has(node.ref);
       if (!isSubject && !isCandidate) continue;
       const point = project(node);
       const drawn = Math.max(1.4, node.radius * camera.scale * style.nodeScale);
+      // The widest thing this block draws: the subject's outer ring at +9, or a
+      // candidate's box corner. Both are inside `drawn + 12`.
+      if (!inFrame(point.x, point.y, drawn + 12)) continue;
       context.setLineDash([]);
       if (isSubject) {
         // The thing the question is about, findable at a glance across a map of
@@ -681,8 +749,14 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
       const side = Math.max(7, drawn + 5);
       context.lineWidth = focused ? 2.4 : 1.4;
       context.strokeStyle = ticked ? INK.picked : INK.candidate;
+      // **A tick box, rounded.** The square is the right encoding — it mirrors
+      // the panel's checkboxes and must not read as another ring, since the
+      // deck already draws two — but sharp corners among 260 discs read as a
+      // rendering fault rather than as a control, which is how a cold
+      // playtester described it. A radius of a third of the side keeps it
+      // unmistakably a box and stops it looking like stray geometry.
       context.beginPath();
-      context.rect(point.x - side, point.y - side, side * 2, side * 2);
+      context.roundRect(point.x - side, point.y - side, side * 2, side * 2, side * 0.34);
       context.stroke();
       if (ticked) {
         context.fillStyle = INK.picked;
@@ -691,6 +765,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
         context.globalAlpha = 1;
       }
       boardDrawn++;
+      candidatesDrawn++;
     }
   }
   context.restore();
@@ -702,6 +777,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
     peaksDrawn,
     tiesDrawn,
     boardDrawn,
+    candidatesDrawn,
     islandsDrawn,
     nameplates,
   };
@@ -956,5 +1032,6 @@ export function drawOrbitFrame(
     // where nothing is drawn, which is this file's oldest scar. Marking columns
     // is a design question of its own and this is not it.
     boardDrawn: 0,
+    candidatesDrawn: 0,
   };
 }

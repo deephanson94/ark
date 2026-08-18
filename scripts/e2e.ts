@@ -450,18 +450,61 @@ async function main(): Promise<number> {
       failures.push({ what: 'fog', detail: `${understoodAtStart} understood before answering anything` });
     }
 
-    let opened: { x: number; y: number; path: string } | null = null;
-    for (const entry of hits) {
-      await page.mouse.click(entry.x, entry.y);
-      if ((await page.locator('.inspector-action').count()) === 0) continue;
-      await page.locator('.inspector-action').click();
-      opened = entry;
-      break;
-    }
+    /**
+     * A point on the map whose node offers a question, **found now**.
+     *
+     * This walked `hits` — the coordinates the grid scan recorded — and that is
+     * a prediction about what a coordinate means, which is the same family as
+     * predicting which board the shell will serve. It was wrong for a reason the
+     * step causes itself: the survey block above clicks every hit, surveying a
+     * node draws its **name**, and `pickAt` consults nameplates before discs, so
+     * a label placed over a neighbouring disc changes what that neighbour's
+     * coordinates pick. The hits then resolved to nodes carrying no question and
+     * this reported *"no node under the cursor grid carried a question"* — a
+     * sentence that reads as the generator being broken. It failed only in CI,
+     * because ark indexes itself and CI indexes `refs/pull/N/merge`, so which
+     * discs the scan lands on is a different set there.
+     *
+     * The fix is the same one this file has now applied four times: **read what
+     * is on screen and match it**, never carry an earlier reading forward. The
+     * scan is re-run rather than the hits re-used, so the question it finds is a
+     * question the map is offering at the moment it is clicked.
+     */
+    const findQuestion = async (): Promise<{ x: number; y: number; path: string } | null> => {
+      for (let row = 1; row < 26; row++) {
+        for (let column = 1; column < 40; column++) {
+          const x = box.x + (box.width * column) / 40;
+          const y = box.y + (box.height * row) / 26;
+          await page.mouse.move(x, y);
+          if ((await page.locator('.inspector-action').count()) === 0) continue;
+          const path = (await page.locator('.inspector-path').innerText()).trim();
+          return { x, y, path };
+        }
+      }
+      return null;
+    };
 
-    if (opened === null) {
+    const offered = await findQuestion();
+    let opened: { x: number; y: number; path: string } | null = null;
+    if (offered === null) {
       failures.push({ what: 'challenge', detail: 'no node under the cursor grid carried a question' });
     } else {
+      await page.mouse.click(offered.x, offered.y);
+      // The click re-describes whatever is under the pointer, which is the node
+      // the hover just named — but assert it rather than assume it, because the
+      // whole defect above was an assumption of exactly this shape.
+      if ((await page.locator('.inspector-action').count()) === 0) {
+        failures.push({
+          what: 'challenge',
+          detail: `hovering ${offered.path} offered a question and clicking it withdrew the offer`,
+        });
+      } else {
+        await page.locator('.inspector-action').click();
+        opened = offered;
+      }
+    }
+
+    if (opened !== null) {
       await page.waitForSelector('.console-panel', { timeout: 5000 });
       const question = (await page.locator('.console-question').innerText()).trim();
       process.stdout.write(`e2e: challenge → ${question}\n`);
@@ -1268,15 +1311,27 @@ async function main(): Promise<number> {
           // witness. The bar is gone (ADR-0047) and the shape is kept anyway,
           // because it is the honest near-miss this step is about and it leaves
           // exactly one spurious row to explain.
+          // **Rendered text on both sides.** `commitLabel` separates its date,
+          // sha and subject with *two* spaces and `innerText` collapses them to
+          // one, so a commit row can never equal the string the verb built.
+          // This file's own landmine says exactly that, about a step four
+          // hundred lines up; this site kept the raw comparison and was
+          // invisible for as long as the deck happened to land on a
+          // file-candidate verb. Adding one script to this repo re-rolled the
+          // deck onto Archaeology and it went red — ark indexes itself, so
+          // "which board this step plays" is not a constant.
           const wanted = new Set(
-            [...witnessBoard.truth].map((id) => labelById.get(id) ?? '').filter((l) => l !== ''),
+            [...witnessBoard.truth]
+              .map((id) => rendered(labelById.get(id) ?? ''))
+              .filter((l) => l !== ''),
           );
+          const spokenLabel = rendered(spoken.label);
           const count = await page.locator('.choice-button').count();
           let picked = false;
           for (let i = 0; i < count; i++) {
             const button = page.locator('.choice-button').nth(i);
-            const label = (await button.innerText()).trim();
-            if (label === spoken.label) {
+            const label = rendered(await button.innerText());
+            if (label === spokenLabel) {
               await button.click();
               picked = true;
             } else if (wanted.has(label)) {
@@ -1373,6 +1428,122 @@ async function main(): Promise<number> {
           }
         }
       }
+
+      // ---- the guide's caption and the board Enter opens ------------------
+      //
+      // They drifted, and six of ten cold playtesters hit it. `suggestNext`
+      // picks partly for **verb variety**; `challengeFor` returned the node's
+      // first unpassed board in **tier order** and threw that away, so a
+      // Companion suggestion opened as Blast Radius. Measured through the real
+      // selector: 3 of the first 12, including board two. The sharpest report
+      // was a skip that moved the caption while `Enter` opened the old board.
+      //
+      // A unit test cannot see this — `challengeFor` is shell-local and the two
+      // halves only meet in a browser.
+      {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        // `answerKey` joins with a newline, so print it flattened or the log
+        // breaks across two lines and reads as truncated output.
+        const flat = (key: unknown): string => String(key).replace(/\n/g, ' ');
+        let rivals = 0;
+        let checked = 0;
+        // **Skip until a suggestion whose subject carries a rival board**, and
+        // require at least one. The first version of this checked whichever
+        // suggestion happened to be up, landed on a subject carrying one board,
+        // and a mutant deleting the entire fix passed it — this file's own
+        // landmine about never predicting which board the shell serves, in the
+        // gate written to catch that very class of defect.
+        for (let round = 0; round < 10; round += 1) {
+          const rival = await page.evaluate(
+            () => (globalThis as unknown as { __arkNextRival?: unknown }).__arkNextRival,
+          );
+          if (rival !== true) {
+            if ((await page.locator('.guide-skip').count()) === 0) break;
+            await page.locator('.guide-skip').click();
+            await page.waitForTimeout(200);
+            continue;
+          }
+          rivals += 1;
+          await page.locator('.guide-action').click();
+          await page.waitForTimeout(400);
+          const promised = await page.evaluate(
+            () => (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey,
+          );
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(400);
+          const opened = await page.evaluate(
+            () => (globalThis as unknown as { __arkOpenKey?: unknown }).__arkOpenKey,
+          );
+          checked += 1;
+          process.stdout.write(
+            `e2e: guide promised ${flat(promised)}, Enter opened ${flat(opened)}\n`,
+          );
+          if (promised === null || opened === null || promised !== opened) {
+            failures.push({
+              what: 'guide',
+              detail: `caption offered ${flat(promised)} and Enter opened ${flat(opened)}`,
+            });
+          }
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(300);
+          break;
+        }
+        process.stdout.write(`e2e: guide/board agreement checked on ${checked} rival board(s)\n`);
+        if (rivals === 0) {
+          failures.push({
+            what: 'guide',
+            detail:
+              'no suggestion carried a rival board in 10 skips, so the caption-vs-Enter check measured nothing',
+          });
+        }
+        await page.locator('.hud-notes').click();
+        await page.waitForSelector('.notes-panel', { timeout: 5000 });
+      }
+
+      // ---- the medal shelf ----------------------------------------------
+      // Four of ten cold playtesters said the game had no arc, only a counter
+      // going down. This is the surface that answers that, and two of its
+      // properties are invisible to a unit test.
+      //
+      // **An unearned medal must still draw its outline.** The sub-pass badge
+      // shipped as a conic gradient that at 0% was a near-black rounded square —
+      // the missing-visual defect reproduced inside the fix for it — and an
+      // unearned medal is the *common* case in the first ten minutes. So: every
+      // medal has an outline path, whatever its state.
+      const shelf = await page.locator('.medal').count();
+      if (shelf === 0) {
+        failures.push({ what: 'medals', detail: 'the shelf drew no medals at all' });
+      }
+      const outlines = await page.evaluate(
+        () => document.querySelectorAll('.medal-art path[fill="none"]').length,
+      );
+      if (outlines !== shelf) {
+        failures.push({
+          what: 'medals',
+          detail: `${outlines} outlines over ${shelf} medals — an unearned medal is drawing nothing`,
+        });
+      }
+      // And a pass has to have *moved* something, or the shelf is decoration.
+      const won = await page.locator('.medal.is-earned').count();
+      const filled = await page.evaluate(
+        () => document.querySelectorAll('.medal-art path[clip-path]').length,
+      );
+      process.stdout.write(`e2e: medals → ${shelf} on the shelf, ${won} earned, ${filled} part-filled\n`);
+      if (filled === 0) {
+        failures.push({
+          what: 'medals',
+          detail: 'a board was passed and no medal shows any progress at all',
+        });
+      }
+      // The shelf and the toggle must agree — two surfaces, one population.
+      const toggleText = (await page.locator('.hud-notes').innerText()).trim();
+      if (!toggleText.includes(`${won}/${shelf} medals`)) {
+        failures.push({
+          what: 'medals',
+          detail: `toggle says "${toggleText}" and the shelf holds ${won} of ${shelf}`,
+        });
+      }
       await page.screenshot({ path: join(SHOT_DIR, 'field-notes.png') });
       await page.keyboard.press('Escape');
       await page.waitForSelector('.notes-scrim', { state: 'hidden', timeout: 5000 });
@@ -1390,7 +1561,14 @@ async function main(): Promise<number> {
     if (legendRowText.length === 0) {
       failures.push({ what: 'legend', detail: 'the legend drew no rows at all' });
     }
-    const legendCounts = legendRowText.map((row) => Number(/\((\d+)[^)]*\)\s*$/.exec(row)?.[1] ?? '-1'));
+    // **`rendered`, because a row is now two spans and a tally.** The region
+    // name and its per-region proved count are separate elements, so
+    // `innerText` puts a newline between them and an anchored `$` no longer
+    // matches — the rendered-text landmine, met from the layout side rather
+    // than from the whitespace side.
+    const legendCounts = legendRowText.map((row) =>
+      Number(/\((\d+)[^)]*\)/.exec(rendered(row))?.[1] ?? '-1'),
+    );
     if (legendCounts.some((n) => n < 0)) {
       failures.push({ what: 'legend', detail: `a row printed no count: ${legendRowText.join(' | ')}` });
     }
@@ -1545,43 +1723,154 @@ async function main(): Promise<number> {
       if (marked !== null) {
         failures.push({ what: 'ring', detail: 'stale ink probe left on the page' });
       }
-      // Open a board, then compare the frame against the same camera with the
-      // board closed. The subject's ring is the only thing that differs.
+      // **The rule ADR-0008 decision 1 states, both halves of it.** Depth 1 is
+      // drawn *"for every node, always — in free roam and while a challenge is
+      // open alike"*, and the **full** cone only for a subject in
+      // `fog.understood`. The decision's Rejected list names *"suppress
+      // everything while a challenge is open"* explicitly.
+      //
+      // This gate has now asserted three different rules in three commits — off
+      // for every board, off for import-graded boards, and the ADR's — which is
+      // what happens when a gate is written from the code instead of from the
+      // decision. It reads the decision now: with a board open, whatever its
+      // verb, the channel is live and bounded at depth 1 for an unproved
+      // subject.
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        path: string;
+        x: number;
+        y: number;
+      }[];
+      const seen = new Map<string, string>();
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        if (seen.size >= 2) break;
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(110);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        await drawn(page);
+        // `innerText` is rendered text and the CSS uppercases this element.
+        const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
+        const kind = verb === 'blast radius' ? 'imports' : 'history';
+        if (!seen.has(kind)) {
+          // **Both halves, and the second one is read rather than assumed.**
+          // The decision's depth depends on whether the subject is proved, so a
+          // check that only knows the depth has to guess which rule applies —
+          // and it guessed "unproved", which is a prediction about which board a
+          // re-rolling deck serves. It went red on a commit that added two
+          // scripts, over a full cone ADR-0008 decision 1 grants outright.
+          const drew = String(await page.evaluate('window.__arkRadius ?? "absent"'));
+          const traced = new Set(
+            ((await page.evaluate('window.__arkTraced ?? []')) as number[]) ?? [],
+          );
+          const ref = Number(/^subject (\d+)/.exec(drew)?.[1] ?? NaN);
+          seen.set(kind, `${drew}${traced.has(ref) ? ' (proved)' : ' (unproved)'}`);
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+      }
+      await drawn(page);
+      const closed = String(await page.evaluate('window.__arkRadius ?? "absent"'));
+      process.stdout.write(
+        `e2e: radius — import board ${seen.get('imports') ?? 'not reached'}, ` +
+          `history board ${seen.get('history') ?? 'not reached'}, closed ${closed}\n`,
+      );
+      const onImports = seen.get('imports');
+      if (onImports === undefined) {
+        failures.push({ what: 'ring', detail: 'no import-graded board was reached, so nothing was measured' });
+      } else if (!onImports.startsWith('subject ')) {
+        failures.push({
+          what: 'ring',
+          detail: `an open Blast Radius board drew no import radius (${onImports}) — ADR-0008 decision 1 draws depth 1 always, and §8.4 calibrates difficulty against exactly that guess`,
+        });
+      } else if (onImports.endsWith('(unproved)') && !onImports.includes('depth 1 ')) {
+        failures.push({
+          what: 'ring',
+          detail: `an open board on an unproved subject drew more than depth 1 (${onImports}) — the full cone is earned, not shown`,
+        });
+      } else if (onImports.endsWith('(proved)') && !onImports.includes('depth Infinity ')) {
+        // The half nothing checked. A proved subject *must* get its whole cone —
+        // that is the reward the pass buys, and a gate that only ever asserted
+        // "depth 1" would have read a silently withdrawn unlock as a pass.
+        failures.push({
+          what: 'ring',
+          detail: `an open board on a proved subject drew ${onImports} — passing a board unlocks its full cone`,
+        });
+      }
+      const onHistory = seen.get('history');
+      if (onHistory !== undefined && !onHistory.startsWith('subject ')) {
+        failures.push({
+          what: 'ring',
+          detail: `a history board drew no import radius (${onHistory}) — the rule must not depend on which board is open`,
+        });
+      }
+      // The control: without it a dead radius channel reads as a pass.
+      if (closed === 'none') {
+        failures.push({
+          what: 'ring',
+          detail: 'no import radius with the board closed either, so the assertions above prove nothing',
+        });
+      }
+    }
+
+    // ---- the panel only promises inputs the board actually has -----------
+    //
+    // "Tick a row here, or click its marker on the map" is verb-blind copy, and
+    // whether it is **true** depends on what a candidate is: Archaeology's are
+    // commits, which have nowhere to stand (ADR-0018), so on that board there is
+    // no marker to click. A screenshot caught it; no test would have, because
+    // both the sentence and the board are individually correct.
+    //
+    // Read off the panel rather than predicted: open boards until both kinds
+    // have been seen, and assert the sentence is present exactly where the map
+    // marked something.
+    {
       await page.keyboard.press('f');
       await page.waitForTimeout(220);
-      const openBoard = await page.locator('.console-panel').isVisible();
-      if (!openBoard) {
-        await page.locator('.guide-action').click();
-        await page.waitForTimeout(350);
-        await page.keyboard.press('Enter');
+      const plates = (await page.evaluate('window.__arkNameplates ?? []')) as {
+        x: number;
+        y: number;
+      }[];
+      let checked = 0;
+      for (const plate of Array.isArray(plates) ? plates : []) {
+        if (checked >= 4) break;
+        await page.mouse.click(plate.x, plate.y);
+        await page.waitForTimeout(110);
+        if ((await page.locator('.inspector-action').count()) === 0) continue;
+        await page.locator('.inspector-action').click();
+        await page.waitForSelector('.choice-button', { timeout: 5000 });
+        await drawn(page);
+        const verb = rendered(await page.locator('.console-verb').innerText()).toLowerCase();
+        const says = (await page.locator('.console-how').count()) > 0;
+        // **Candidate markers, not marks.** The HUD's `marks` counts the
+        // subject's ring too, and an Archaeology board marks its subject — a
+        // file — while none of its candidates, which are commits, has a place.
+        // Reading the merged number made this gate demand a click hint on the
+        // one board where clicking answers nothing; CI caught it, on a rule I
+        // had written the same day to stop a sentence being false.
+        const marks = Number(await page.evaluate('window.__arkCandidateMarks ?? 0'));
+        checked += 1;
+        process.stdout.write(
+          `e2e: ${verb} → ${marks} candidate marks, click hint ${says ? 'shown' : 'absent'}\n`,
+        );
+        if (marks > 0 && !says) {
+          failures.push({
+            what: 'inputs',
+            detail: `${verb} marked ${marks} clickable candidates and did not say they can be clicked`,
+          });
+        }
+        if (marks === 0 && says) {
+          failures.push({
+            what: 'inputs',
+            detail: `${verb} marked no clickable candidate and told the player to click a marker`,
+          });
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(180);
       }
-      await page.waitForSelector('.choice-button', { timeout: 5000 });
-      await drawn(page);
-      const withBoard = await page.evaluate('window.__arkRadius ?? "absent"');
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(300);
-      await drawn(page);
-      const withoutBoard = await page.evaluate('window.__arkRadius ?? "absent"');
-      if (withBoard !== 'none') {
-        failures.push({
-          what: 'ring',
-          detail: `an open board drew an import radius (${String(withBoard)}) — that is the answer key`,
-        });
+      if (checked === 0) {
+        failures.push({ what: 'inputs', detail: 'no board was opened, so nothing was measured' });
       }
-      // **The control, and it was only printed.** If the radius channel died
-      // outright both reads would say `none` and this gate would stay green
-      // forever, asserting a suppression of nothing — the never-fires shape. A
-      // selected, passed node draws its cone with the board closed, and that is
-      // the thing whose absence must be noticed.
-      if (withoutBoard === 'none') {
-        failures.push({
-          what: 'ring',
-          detail: 'no import radius with the board closed either, so the suppression above proves nothing',
-        });
-      }
-      process.stdout.write(
-        `e2e: radius with a board open → ${String(withBoard)}, closed → ${String(withoutBoard)}\n`,
-      );
     }
 
     // ---- a skipped verb counts as met ------------------------------------
@@ -1607,8 +1896,20 @@ async function main(): Promise<number> {
     {
       await page.keyboard.press('f');
       await page.waitForTimeout(200);
+      // **The selector's own key, not the rendered caption.** The caption reads
+      // "N left · next is X" and X is the *subject*; the key the selector
+      // de-duplicates on is `(verb, subject)`. So two boards asking different
+      // questions about one file render one caption, and this step scored a
+      // correct pair as a re-offer — `11 distinct of 12` on a run where the
+      // selector had done nothing wrong. Same family as this file's other
+      // three: identify the thing by what identifies it, never by a sentence
+      // that happens to mention it.
       const suggestion = async (): Promise<string> =>
-        (await page.locator('.guide-caption').innerText()).trim();
+        String(
+          await page.evaluate(
+            () => (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey,
+          ),
+        );
       const seen: string[] = [];
       for (let i = 0; i < 12; i += 1) {
         if ((await page.locator('.guide-skip').count()) === 0) break;
@@ -2481,6 +2782,19 @@ async function main(): Promise<number> {
         }
         const asked = (await seededPage.locator('.console-question').innerText()).trim();
         process.stdout.write(`e2e: archaeology → ${asked}\n`);
+        // **The negative arm of the click-hint rule, here because this is the
+        // only step that reaches this verb.** Archaeology's candidates are
+        // commits and a commit has nowhere to stand (ADR-0018), so there is no
+        // marker to click and the panel must not say there is. The sweep four
+        // hundred lines up covers the positive arm and never reaches this verb,
+        // which would have left half that gate asserting nothing — the
+        // uncovered-arm landmine, in a gate written to catch a false sentence.
+        if ((await seededPage.locator('.console-how').count()) > 0) {
+          failures.push({
+            what: 'inputs',
+            detail: 'an archaeology board told the player to click a marker; its candidates are commits',
+          });
+        }
         const subjectPath = pathById.get(target.subject) ?? '';
         if (!asked.includes(subjectPath)) {
           failures.push({
@@ -2723,8 +3037,22 @@ async function main(): Promise<number> {
         }
         await exploitPage.keyboard.press('Escape');
         await exploitPage.waitForTimeout(200);
+        // **Only the `understood` number, and comparing the whole line was
+        // wrong.** Ticking twenty rows *shows* you twenty things, and a shown
+        // member promotes to `surveyed` by design — ADR-0047 in as many words,
+        // *"which is exactly what it is: you were shown it"*. So `surveyed`
+        // legitimately moves, by as much as twenty, and by **nothing at all**
+        // when the board's members are commits, which have no square on the
+        // map. That is verb-dependent, this step does not choose its board, and
+        // the string comparison passed here and failed on CI for exactly that
+        // reason. What the farm must not move is knowledge.
+        const countOf = (line: string): string =>
+          /(\d+) understood/.exec(line)?.[1] ?? 'missing';
         const understoodAfter = await exploitPage.locator('.hud-counts').innerText();
-        if (understoodAfter !== understoodBefore) {
+        process.stdout.write(
+          `e2e: farm counts → ${rendered(understoodBefore)} → ${rendered(understoodAfter)}\n`,
+        );
+        if (countOf(understoodAfter) !== countOf(understoodBefore)) {
           failures.push({
             what: 'select-all',
             detail: `the farm moved the understood count: ${understoodBefore} → ${understoodAfter}`,

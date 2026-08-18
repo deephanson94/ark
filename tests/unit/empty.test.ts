@@ -57,6 +57,28 @@ describe('the HUD question count — the same fork one panel over', () => {
     expect(questsLine(false, 1, 1)).toBe('1 question ringed on the map');
     expect(questsLine(false, 36, 0)).toBe('36 left · 0 ringed on the map');
   });
+
+  it('leads with what the player has, once it knows how much there is', () => {
+    // This line is the largest type in the HUD and it read `160 left · 84 ringed`
+    // — a backlog. Three of ten cold playtesters named it as the thing arguing
+    // against the arc they could otherwise feel, one asking for exactly this:
+    // *"make the headline read the thing that actually moved"*.
+    expect(questsLine(false, 160, 84, 0, 187)).toBe('0 of 187 proved · 160 left');
+    expect(questsLine(false, 158, 84, 7, 187)).toBe('7 of 187 proved · 158 left');
+  });
+
+  it('is byte-identical to the old line when no provable count is given', () => {
+    // The new pair is additive. A caller that cannot supply it — a fixture, or
+    // any surface without the atlas — must read exactly what shipped before,
+    // rather than a half-built sentence.
+    expect(questsLine(false, 36, 0, 0, 0)).toBe('36 left · 0 ringed on the map');
+    expect(questsLine(false, 5, 5, 3, 0)).toBe('5 questions ringed on the map');
+  });
+
+  it('still forks on the two states that are not a count', () => {
+    expect(questsLine(true, 0, 0, 0, 187)).toBe('no questions for this repo');
+    expect(questsLine(false, 0, 0, 187, 187)).toBe('every question answered');
+  });
 });
 
 describe('the field notes with nothing in them', () => {

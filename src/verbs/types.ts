@@ -123,6 +123,22 @@ export interface Prompt {
    * owns all of it.
    */
   readonly action: string;
+  /**
+   * What the map is showing you *for this question*, or absent when it is
+   * showing you nothing about it.
+   *
+   * Verb-owned, and optional for the reason that makes it worth having: only
+   * Blast Radius is graded on the channel the map draws. ADR-0008 decision 1
+   * gives every node's direct importers away on purpose, and §8.4 calibrates
+   * `surprise` against exactly that guess — so for that verb the map holds the
+   * baseline the question measures departure from, and saying so is telling the
+   * player where to look rather than telling them an answer.
+   *
+   * The three verbs graded on git leave it undefined. A shared sentence here
+   * would have been the class-label failure again: true of one verb, printed
+   * over four.
+   */
+  readonly evidence?: string;
 }
 
 /**

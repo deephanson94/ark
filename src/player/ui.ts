@@ -11,19 +11,23 @@
  * inferred — if the panel says 14 dependents, a graph query said 14.
  */
 
-import type { Atlas, AtlasNode, Challenge } from '../atlas/index.js';
+import type { Atlas, AtlasNode, Challenge, NodeId } from '../atlas/index.js';
 import { coverageBadge, coverageSentence, sourceCoverage } from '../atlas/index.js';
+import { arrivalLines, arrivalOf } from './arrival.js';
 import { guideExhausted, notesEmpty, questsLine } from './empty.js';
 import type { Arm, View } from './experiment.js';
 import { controlsFor } from './experiment.js';
 import type { FieldNote } from './notes.js';
 import { noteProse } from './notes.js';
+import type { Medal } from './medals.js';
+import { earnedCount, provableNodes } from './medals.js';
+import { medalSvg, tierPips } from './medalArt.js';
 import { VERBS, wordsFor } from '../verbs/index.js';
 import { northDegrees } from './camera.js';
 import type { Coverage } from './fog.js';
 import { regionColor } from './palette.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { legendRows } from './scene.js';
+import { answerableByRegion, countByRegion, legendRows } from './scene.js';
 import type { TwinClass } from './twins.js';
 
 type Children = readonly (Node | string)[];
@@ -37,6 +41,29 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   if (className !== undefined) node.className = className;
   for (const child of children) node.append(child);
   return node;
+}
+
+/**
+ * Fill `into` with `path`, breakable **at its separators and nowhere else**.
+ *
+ * A derived region name is often a path — `around src/indexer/build.ts` — and it
+ * is wider than a shelf column, so every CSS answer alone is wrong: `nowrap`
+ * clipped it to `around src/inde…`, `overflow-wrap: anywhere` broke it *inside*
+ * the filename, and `break-word` does the same thing because it also splits a
+ * token that cannot fit a line on its own. Six of ten cold playtesters read
+ * `around src/indexer/build.t` / `s` and filed it; it survived two CSS fixes.
+ *
+ * `<wbr>` is the element for this and it adds **nothing** to `textContent`, so a
+ * test or an assertion reading the name still sees the string the atlas holds —
+ * unlike a zero-width space, which would silently poison every comparison.
+ */
+function breakablePath(into: HTMLElement, path: string): HTMLElement {
+  const parts = path.split('/');
+  parts.forEach((part, at) => {
+    into.append(at === parts.length - 1 ? part : `${part}/`);
+    if (at < parts.length - 1) into.append(document.createElement('wbr'));
+  });
+  return into;
 }
 
 function field(label: string, value: string, title?: string): HTMLElement {
@@ -218,6 +245,8 @@ export function createHud(
   onNorth: () => void,
   extra: readonly Node[] = [],
 ): Hud {
+  // Computed once: it is a property of the repository, not of the frame.
+  const answerable = provableNodes(atlas).size;
   const title = el('div', 'hud-title', [atlas.repo.name]);
   const head = el('div', 'hud-sub', [
     atlas.repo.head === null
@@ -290,7 +319,19 @@ export function createHud(
       // how the second one survived the first repair. `deckRefused` is latched
       // from the atlas rather than recomputed because — unlike a pass, which
       // can decay — it cannot change without a reindex.
-      quests.textContent = questsLine(source.deckRefused, questionsLeft, ringed);
+      // **The provable denominator, not the node count** — the same one the
+      // legend's tallies and the medal shelf use. `coverage.total` would read
+      // "7 of 271", which is the unreachable-denominator defect this session
+      // already fixed in two other places: most nodes carry no board and can
+      // never be proved, so counting them makes the arc look smaller than it can
+      // ever get. One definition, three readers.
+      quests.textContent = questsLine(
+        source.deckRefused,
+        questionsLeft,
+        ringed,
+        coverage.understood,
+        answerable,
+      );
       detail.textContent = `${level} · ${stats}`;
     },
   };
@@ -362,7 +403,24 @@ export function createInspector(
 
       body.append(
         el('h2', 'inspector-path', [atlasNode.path]),
-        field('region', region?.label ?? atlasNode.region),
+        // **"clusters with", not "region", and the word was the whole defect.**
+        // A region is a *derived* cluster — pillar 4, geography is topology — but
+        // it is *named* after a directory when one holds at least half of it
+        // (`NAMEABLE_SHARE`), so the panel printed `src/indexer/layout.ts` beside
+        // `region: scripts` and four cold playtesters read it as the tool
+        // claiming the file lives in `scripts/`. One filed it as "regions are
+        // mislabelled", one as "the region field lies", and a third said it cost
+        // more trust than anything else they saw — while explicitly granting the
+        // clustering was probably honest. It was: `layout.ts` really does cluster
+        // with the scripts, because the scripts import it.
+        //
+        // Nothing about the analysis was wrong and nothing about it changed. A
+        // locational noun beside a directory-shaped value asserts a location;
+        // this asserts the relation the number actually comes from. It is
+        // `CLAUDE.md`'s class-label landmine arriving in a single word — the
+        // label was right every time and the gloss was a separate claim nobody
+        // had checked.
+        field('clusters with', region?.label ?? atlasNode.region),
         field('lines', String(atlasNode.loc)),
         field('imports', String(dependencies)),
         // "imported by", not "depended on by": the second reads as transitive,
@@ -481,17 +539,143 @@ export function createError(message: string): HTMLElement {
 }
 
 /** Renders `legendRows`, which is where the ordering rules and their reasons live. */
-export function createLegend(scene: Scene): HTMLElement {
-  const items = legendRows(scene).map((row) => {
+/**
+ * The arrival card: the repository introducing itself, then getting out of the
+ * way.
+ *
+ * A `<div>` that fades and is removed, rather than a mode: the map is live and
+ * clickable underneath from the first frame, and the first pointer or key
+ * dismisses it. A splash you have to wait out would be worse than the silence
+ * it replaces.
+ */
+export interface ArrivalCard {
+  readonly root: HTMLElement;
+  dismiss(): void;
+}
+
+export function createArrival(scene: Scene): ArrivalCard {
+  const arrival = arrivalOf(scene);
+  const lines = arrivalLines(arrival).map((line, i) =>
+    el('div', i === 0 ? 'arrival-counts' : 'arrival-landmark', [line]),
+  );
+  const root = el('div', 'arrival', [
+    el('div', 'arrival-eyebrow', ['you have arrived at']),
+    el('div', 'arrival-name', [arrival.name]),
+    ...lines,
+  ]);
+  let gone = false;
+  return {
+    root,
+    dismiss() {
+      if (gone) return;
+      gone = true;
+      root.classList.add('is-gone');
+      // Removed rather than left at zero opacity: an invisible element over the
+      // canvas is the pointer-events contradiction this stylesheet has three
+      // comments about.
+      window.setTimeout(() => root.remove(), 700);
+    },
+  };
+}
+
+export interface Legend {
+  readonly root: HTMLElement;
+  /**
+   * Repaint the per-region tallies, and the channel key for the view on screen.
+   *
+   * `counted` is the **answered** population, not `fog.understood`, and the shell
+   * hands the identical set to the medal shelf and to the map's region wash. Three
+   * surfaces, one number: passing the strict register here while the shelf counted
+   * participation put `2/37` beside a medal reading `3/37` on any retried board.
+   */
+  update(counted: ReadonlySet<NodeId>, view: 'map' | 'orbit'): void;
+}
+
+export function createLegend(scene: Scene): Legend {
+  // One helper, three readers: this, the medal shelf and the map's region wash.
+  // Inlined here once and it drifted immediately — the shell needed the same
+  // map for the wash and computed it a second time.
+  const rows = legendRows(scene, answerableByRegion(scene, provableNodes(scene.atlas)));
+  const tallies = new Map<number, HTMLElement>();
+  const items = rows.map((row) => {
     const swatch = el('span', 'legend-swatch');
     // Straight from the same function the canvas uses — a legend that computes
     // its own colours is a legend that will eventually disagree with the map.
     swatch.style.background = regionColor(row.index, 1);
-    return el('li', 'legend-item', [swatch, row.text]);
+    // **Something to fill in.** Three of ten cold playtesters said the loop had
+    // nothing to build toward — *"no sense of building toward something, a
+    // completed region"* — while the one structure the map already has is
+    // regions. This is the same derived number the fog draws, per region, so a
+    // player can watch a neighbourhood come in and can decide to finish one.
+    const tally = el('span', 'legend-tally');
+    tallies.set(row.index, tally);
+    return el('li', 'legend-item', [swatch, el('span', 'legend-name', [row.text]), tally]);
   });
-  return el('div', 'legend', [
+  const keyBox = el('div', 'legend-key', [
+    el('div', 'legend-title', ['what you see']),
+    ...keyRows('map'),
+  ]);
+  let shown: 'map' | 'orbit' = 'map';
+  const root = el('div', 'legend', [
     el('div', 'legend-title', ['regions']),
     el('ul', 'legend-list', items),
+    keyBox,
+  ]);
+  return {
+    root,
+    update(counted, view) {
+      if (view !== shown) {
+        shown = view;
+        keyBox.replaceChildren(el('div', 'legend-title', ['what you see']), ...keyRows(view));
+      }
+      const proved = countByRegion(scene, counted);
+      for (const row of rows) {
+        const tally = tallies.get(row.index);
+        if (tally === undefined) continue;
+        const n = proved.get(row.index) ?? 0;
+        // Silent at zero: a column of `0/46` on arrival is a scoreboard of
+        // failure, and guardrail 6's spirit is that nothing shames a player who
+        // has not started. It appears with the first thing they prove.
+        tally.textContent = n === 0 ? '' : `${n}/${row.answerable}`;
+        tally.classList.toggle('is-done', n > 0 && n >= row.answerable);
+      }
+    },
+  };
+}
+
+/**
+ * What a disc's size, ring and brightness mean — **in the view you are in**.
+ *
+ * Four of ten cold playtesters could not read the map's own encodings, and one
+ * of them then found the sharper version of the same gap: the key does not
+ * change when the view does, so the orbit adds a whole channel — height — and
+ * names it nowhere. *"A chart-literate viewer is staring at building heights
+ * with no key at all."* The map has spent five milestones being careful that
+ * every channel is derived and true, and never once said what any of them was.
+ *
+ * Repo-agnostic (guardrail 2): these are the renderer's channels, not this
+ * repository's facts. Ordered with the view's own channel first, because that
+ * is the one a reader has just met.
+ */
+function keyRows(view: 'map' | 'orbit'): readonly HTMLElement[] {
+  const shared = [
+    row('size', 'lines of code'),
+    row('ring', 'has a question you have not answered'),
+    row('dim', 'not surveyed yet'),
+    row('bright', 'you proved something about it'),
+  ];
+  if (view === 'orbit') {
+    // Height is ADR-0013's elevation: each layer is twice as depended-upon, so
+    // "how many" would be a claim the channel does not make.
+    return [row('height', 'how much leans on it, through any chain'), ...shared];
+  }
+  return [...shared, row('box', 'on the question that is open')];
+}
+
+function row(mark: string, meaning: string): HTMLElement {
+  return el('div', 'legend-key-row', [
+    el('span', 'legend-key-mark', [mark]),
+    el('span', 'legend-key-what', [meaning]),
   ]);
 }
 
@@ -546,8 +730,13 @@ export interface Notebook {
   readonly toggle: HTMLElement;
   isOpen(): boolean;
   close(): void;
-  /** Re-render from the current record. Notes are derived, never cached. */
-  update(notes: readonly FieldNote[]): void;
+  /**
+   * Re-render from the current record. Notes and medals are both **derived,
+   * never cached** — a medal is the same kind of claim a note is, and ADR-0011
+   * requires every restored claim to be re-checked against the live graph rather
+   * than replayed from storage.
+   */
+  update(notes: readonly FieldNote[], medals: readonly Medal[]): void;
 }
 
 /**
@@ -574,7 +763,23 @@ export function createNotebook(deckRefused: boolean): Notebook {
   const close = el('button', 'console-close', ['✕']);
   close.type = 'button';
   const head = el('div', 'notes-head', [heading, close]);
-  const panel = el('div', 'notes-panel', [head, empty, list]);
+  // The shelf sits **above** the notes, and that is the point of it: four of ten
+  // cold playtesters said the game had no arc, only a counter going down. A note
+  // is a fact you proved; a medal is how far through the repository those facts
+  // have got you. The two belong on one surface because they are the same
+  // register — proved, never merely shown.
+  const shelfTitle = el('div', 'medals-title', ['MEDALS']);
+  const shelf = el('div', 'medals-shelf');
+  const shelfBlock = el('div', 'medals', [shelfTitle, shelf]);
+  // **Notes first, shelf second, and that order is a measured correction.** The
+  // shelf shipped above the notes, and three of ten cold playtesters said the
+  // same thing: *"eleven mostly-empty shields dominate the panel above the single
+  // earned sentence, which is the only thing in there with content"*, *"a wall of
+  // empty grey shields is a chore list, not an arc"*, *"~80% medal grid and ~20%
+  // actual notes"*. On arrival every medal is empty and there is exactly one
+  // note, so putting the shelf on top makes the emptiest thing the headline. What
+  // you proved leads; what is next follows it.
+  const panel = el('div', 'notes-panel', [head, empty, list, shelfBlock]);
   const root = el('div', 'notes-scrim', [panel]);
   root.hidden = true;
 
@@ -600,8 +805,36 @@ export function createNotebook(deckRefused: boolean): Notebook {
     toggle,
     isOpen: () => open,
     close: () => setOpen(false),
-    update(notes) {
-      toggle.textContent = notes.length === 0 ? 'field notes' : `field notes (${notes.length})`;
+    update(notes, medals) {
+      const won = earnedCount(medals);
+      // Both counts on the button. The first draft of this comment said the
+      // medal count "only ever goes up", which is false across a reindex and the
+      // suite proves it — a completed region whose question no longer exists
+      // yields no medal at all (ADR-0011 decision 3, and a unit test asserts it).
+      // Monotone within a session; not a property of the number.
+      toggle.textContent =
+        notes.length === 0 && won === 0
+          ? 'field notes'
+          : `field notes (${notes.length}) · ${won}/${medals.length} medals`;
+      shelfTitle.textContent = `MEDALS — ${won} OF ${medals.length}`;
+      shelf.replaceChildren(
+        ...medals.map((medal) => {
+          const art = el('div', 'medal-frame');
+          art.appendChild(medalSvg(medal));
+          const pips = tierPips(medal);
+          const text = el('div', 'medal-text', [
+            breakablePath(el('div', 'medal-name'), medal.name),
+            el('div', 'medal-claim', [medal.claim]),
+          ]);
+          if (pips !== null) {
+            const row = el('div', 'medal-pip-row');
+            row.appendChild(pips);
+            text.appendChild(row);
+          }
+          const item = el('div', medal.earned ? 'medal is-earned' : 'medal', [art, text]);
+          return item;
+        }),
+      );
       empty.hidden = notes.length > 0;
       const items = notes.map((note) => {
         const { claim, revealed } = noteProse(note);

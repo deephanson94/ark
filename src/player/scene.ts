@@ -166,6 +166,8 @@ export interface LegendRow {
   readonly index: number;
   readonly label: string;
   readonly nodeCount: number;
+  /** Files in this region some question can reach — the completion denominator. */
+  readonly answerable: number;
   readonly kind: RegionKind;
   /**
    * The row exactly as it is printed.
@@ -199,14 +201,33 @@ export interface LegendRow {
  *    a neighbourhood: hugo's 1,003-file `docs` lump at the top would be true,
  *    useless, and would push every real region off the panel.
  */
-export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] {
+/**
+ * `answerable` counts the region's files **some question can reach**, which is
+ * the only honest denominator for a completion tally — and it is not
+ * `nodeCount`. The legend printed `n/nodeCount`, so its `is-done` state was
+ * unreachable for **all six** of this repo's topology regions (43 of 59, 8 of
+ * 23, 2 of 3, 35 of 42, 29 of 34, 34 of 44), while the medal shelf printed
+ * `n/answerable` for the same numerator — two panels stating contradictory
+ * tallies of one population, which is the defect ADR-0019's reveal and its own
+ * field note had on 21 of 26 boards. One denominator, both surfaces.
+ *
+ * Defaulted to `nodeCount` only where a caller has no atlas to derive it from
+ * (a fixture); the shell always passes it.
+ */
+export function legendRows(
+  scene: Pick<Scene, 'regions'>,
+  answerable: ReadonlyMap<number, number> = new Map(),
+): readonly LegendRow[] {
   const rows: LegendRow[] = scene.regions
     .filter((region) => region.kind !== 'terrain')
     .map((region) => ({
       index: region.index,
       label: region.label,
       nodeCount: region.nodeCount,
+      answerable: answerable.get(region.index) ?? region.nodeCount,
       kind: region.kind,
+      // The **text** keeps the node count: it describes the region's size, which
+      // is a different question from how much of it can be answered.
       text: `${region.label} (${region.nodeCount})`,
     }))
     .sort((a, b) => b.nodeCount - a.nodeCount || a.index - b.index);
@@ -218,6 +239,10 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
       index: TERRAIN_INDEX,
       label: 'terrain',
       nodeCount,
+      // Terrain carries no questions, so its tally denominator is 0 and its
+      // tally never renders — which is right: ADR-0010 says a terrain lump is
+      // not a neighbourhood and nothing there is completable.
+      answerable: 0,
       kind: 'terrain',
       text:
         terrain.length === 1
@@ -226,6 +251,87 @@ export function legendRows(scene: Pick<Scene, 'regions'>): readonly LegendRow[] 
     });
   }
   return rows;
+}
+
+/**
+ * How many of each region's files the player has proved something about.
+ *
+ * Indexed the same way the palette is, so `TERRAIN_INDEX` collects every
+ * terrain area into one bucket exactly as the legend's own row does.
+ *
+ * **Reads `understood`, and the legend's wording had to be corrected to match
+ * it.** That set is *"you proved you knew something about it, by being graded"*
+ * — which includes a file you picked correctly in **someone else's** question,
+ * not only a file whose own board you passed. A legend row saying *"you proved
+ * its question"* was therefore false of every member-promoted node, and it
+ * shipped for one commit before this function made me read `deriveFog`.
+ */
+/**
+ * How many of each region's nodes some question can reach.
+ *
+ * The completion denominator, shared by the legend's tallies, the medal shelf and
+ * the map's region wash. `nodeCount` is the wrong number for this and was used by
+ * the legend for a milestone: **all six** of this repo's topology regions have
+ * fewer answerable files than nodes (43 of 59, 8 of 23, 2 of 3, 35 of 42, 29 of
+ * 34, 34 of 44), so a tally against the node count could never read complete.
+ */
+export function answerableByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  provable: ReadonlySet<NodeId>,
+): ReadonlyMap<number, number> {
+  const counts = new Map<number, number>();
+  for (const node of scene.nodes) {
+    if (!provable.has(node.id)) continue;
+    counts.set(node.regionIndex, (counts.get(node.regionIndex) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * How much of each region is cleared, `0..1` by palette index.
+ *
+ * The channel the map's region wash brightens on — five rounds of playtests said
+ * the arc they felt was the map lighting up, and four asked for the region tally
+ * to move onto it. A region with nothing answerable is absent rather than 0, so a
+ * caller cannot brighten ground that can never be cleared.
+ */
+export function clearedByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  counted: ReadonlySet<NodeId>,
+  answerable: ReadonlyMap<number, number>,
+): ReadonlyMap<number, number> {
+  const done = countByRegion(scene, counted);
+  const out = new Map<number, number>();
+  for (const [index, total] of answerable) {
+    if (total <= 0) continue;
+    out.set(index, Math.min(1, (done.get(index) ?? 0) / total));
+  }
+  return out;
+}
+
+/**
+ * How many of each region's nodes are in `counted`.
+ *
+ * **The set is the caller's choice and that is now load-bearing.** The parameter
+ * was named `understood`, and the shell passed `fog.understood` — the strict
+ * proved register — while the medal shelf counted the *answered* population,
+ * because scoring an arc on the proved register locks a player who fails a
+ * board's first attempt out of it permanently (see `answeredNodes`). Two
+ * surfaces, one population, two numbers: on any retried board the legend read
+ * `2/37` beside a medal reading `3/37`. Both were internally right, which is the
+ * shape that had ADR-0019's reveal disagreeing with its own field note on 21 of
+ * 26 boards. The shell passes one set to all three readers now.
+ */
+export function countByRegion(
+  scene: Pick<Scene, 'nodes'>,
+  counted: ReadonlySet<NodeId>,
+): ReadonlyMap<number, number> {
+  const counts = new Map<number, number>();
+  for (const node of scene.nodes) {
+    if (!counted.has(node.id)) continue;
+    counts.set(node.regionIndex, (counts.get(node.regionIndex) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /**

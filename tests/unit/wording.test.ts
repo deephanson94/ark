@@ -212,3 +212,60 @@ describe('a commit that shares one word does not “name” the file', () => {
     expect(noteFor('c')).toContain('A log of subjects is not a log of files');
   });
 });
+
+/**
+ * Where the answer comes from, said by the verb that is graded on it.
+ *
+ * Six cold testers reported the board as a checkbox list over a map that told
+ * them nothing, and one named the cause: *"the evidence you need to reason
+ * lives on a different screen from the reasoning."* Half of that was a real
+ * defect — the import channel was switched off while a board was open, against
+ * ADR-0008 decision 1, restored by ADR-0048 — and the other half is that
+ * nothing ever said the map answers this question at all.
+ *
+ * The claim worth holding is the **seam**: only the verb graded on imports may
+ * say the map shows evidence. The three graded on git must stay silent, because
+ * a shared sentence here is the class-label failure this repo has paid for
+ * repeatedly — true of one verb, printed over four.
+ */
+describe('the evidence line', () => {
+  const atlas = fixture();
+  const words = wordsFor(buildGraph(atlas));
+  const board = challengeFor(atlas, { verb: 'blastRadius' });
+
+  it('is present on the verb the import graph grades, and names the subject', () => {
+    const evidence = VERBS.blastRadius.prompt(board, words).evidence;
+    expect(evidence).toBeDefined();
+    // The subject, so the line is about *this* board rather than a generic tip.
+    expect(evidence).toContain(words.label(board.subject));
+  });
+
+  it('does not tell the player to hover, because hovering does nothing here', () => {
+    // **The regression this guards is the sentence that used to be here.** It read
+    // *"Hover any file on the map to see what imports it directly"*, and with a
+    // board open a map hover only highlights the matching row — `main.ts`'s
+    // pointermove returns early on `challengePanel.isOpen()`, so the map's hover
+    // is never set and no ring is drawn for the file under the cursor. Three of
+    // ten cold playtesters reported it as broken, one as *"dead on arrival"*.
+    //
+    // Asserted as an absence rather than a wording, because the defect is the
+    // *instruction*: the subject's importers are already drawn (ADR-0008
+    // decision 1), so this line has somewhere to point and nothing to ask for.
+    // A substring check on the old phrasing is what let it ship — it asserted the
+    // shape of a sentence and never whether it could be followed.
+    const evidence = VERBS.blastRadius.prompt(board, words).evidence ?? '';
+    expect(evidence.toLowerCase()).not.toContain('hover');
+    expect(evidence.toLowerCase()).not.toContain('click');
+  });
+
+  it('is absent on every verb graded on git', () => {
+    // The seam: a shared sentence here would be the class-label failure this
+    // repo has paid for repeatedly — true of one verb, printed over four.
+    for (const verb of ['companion', 'placement', 'archaeology'] as const) {
+      expect(
+        VERBS[verb].prompt(challengeFor(atlas, { verb }) as never, words).evidence,
+        `${verb} claims the map shows evidence for it`,
+      ).toBeUndefined();
+    }
+  });
+});

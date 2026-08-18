@@ -16,7 +16,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { VerbId, Challenge, NodeId } from '../../src/atlas/index.js';
-import { NO_HISTORY, isSideshow, noteAttempt, noteSkip, noteSkipped, suggestNext } from '../../src/player/selector.js';
+import {
+  NO_HISTORY,
+  isSideshow,
+  noteAttempt,
+  noteSkip,
+  noteSkipped,
+  showsItsKey,
+  suggestNext,
+} from '../../src/player/selector.js';
 import { answerKey } from '../../src/player/progress.js';
 import { witnessFor } from '../fixtures/atlas.js';
 
@@ -28,6 +36,13 @@ interface Spec {
   readonly truth: readonly number[];
   readonly difficulty?: number;
   readonly tier?: 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+   * The measured furthest hop in the answer key. Defaults to 1, which is what
+   * every fixture in this file was before `showsItsKey` existed — and therefore
+   * a value at which that term cannot discriminate, so no test here was holding
+   * it up. A test wanting the term to fire has to build the asymmetry itself.
+   */
+  readonly depth?: number;
 }
 
 function challenge(spec: Spec): Challenge {
@@ -44,13 +59,28 @@ function challenge(spec: Spec): Challenge {
       [...spec.truth, 90, 91, 92, 93, 94, 95, 96, 97, 98].map(id).sort(),
       [...spec.truth].map(id),
     ),
-    evidence: { kind: 'importGraph', depth: 1 },
+    evidence: { kind: 'importGraph', depth: spec.depth ?? 1 },
   };
 }
 
-/** The same, in a second verb — the two decks' difficulty scales differ. */
+/**
+ * The same, in a second verb — the two decks' difficulty scales differ.
+ *
+ * **Its evidence is `coChange`, and that is not cosmetic.** This spread the
+ * Blast Radius fixture and kept its `importGraph` evidence, so every "Companion"
+ * board in this file carried the wrong verb's evidence entirely. Nothing read it
+ * until `showsItsKey` did, and then the fixture asserted that a history board
+ * gives away an import key — a claim about a relation it has no edges in. A
+ * fixture that lies about a field is invisible for exactly as long as nothing
+ * reads that field.
+ */
 function other(spec: Spec): Challenge {
-  return { ...challenge(spec), id: `comp-${spec.name}`, verb: 'companion' };
+  return {
+    ...challenge(spec),
+    id: `comp-${spec.name}`,
+    verb: 'companion',
+    evidence: { kind: 'coChange', minCount: 2, wideLimit: 40, atMost: 1 },
+  };
 }
 
 /** Regions by subject number; anything unlisted is its own region. */
@@ -829,5 +859,61 @@ describe('noteSkipped', () => {
     expect(next.attempts).toBe(base.attempts);
     expect(next.answered).toBe(base.answered);
     expect(next.previous).toBe(base.previous);
+  });
+});
+
+describe('a board whose key the map already shows', () => {
+  // ADR-0008 decision 1 draws every node's direct importers, always. Where a
+  // board's whole key sits at depth 1, ticking what the map has drawn scores
+  // 1.000 — so the board is answerable without reasoning about structure, which
+  // is pillar 3's stated violation condition. Nothing here refuses such a board;
+  // the deck keeps every one of them. They just stop being what a player meets
+  // first, because `surprise` is §8.4's `w₃` term and a board with none sorts to
+  // the front of an ascending rank by construction.
+  it('is offered after one whose key runs deeper, at equal difficulty', () => {
+    // **The names make the id tiebreak adversarial**, exactly as the overlap
+    // block above does and for the same reason: the give-away board sorts first
+    // by id, so if the rule is deleted the fallback chain reaches `id` and picks
+    // it. The first draft of this test named them `shallow`/`deep`, where `deep`
+    // wins alphabetically anyway — and the mutant with the whole sort term
+    // removed passed all 42 assertions.
+    const deck = [
+      challenge({ name: 'a-shallow', subject: 1, truth: [2, 3], difficulty: 0.5, depth: 1 }),
+      challenge({ name: 'z-deep', subject: 4, truth: [5, 6], difficulty: 0.5, depth: 2 }),
+    ];
+    expect(suggestNext(deck, () => null, NO_HISTORY)?.id).toBe('blast-z-deep');
+  });
+
+  it('still loses to a genuinely easier board — it demotes, it does not refuse', () => {
+    // The term sits *below* `progress` and `difficulty` in nothing: it sits
+    // above them, so it can outrank difficulty. That is the point — but it must
+    // not reorder a deck where nothing gives itself away, and it must never
+    // remove a board. Here every board is a give-away, so the term is inert and
+    // the ordinary ascending progression decides.
+    const deck = [
+      challenge({ name: 'harder', subject: 1, truth: [2, 3], difficulty: 0.9, depth: 1 }),
+      challenge({ name: 'easier', subject: 4, truth: [5, 6], difficulty: 0.2, depth: 1 }),
+    ];
+    expect(suggestNext(deck, () => null, NO_HISTORY)?.id).toBe('blast-easier');
+  });
+
+  it('is still served once the boards that do not give themselves away are gone', () => {
+    // Demotion-only. A player who clears the deeper boards must still be offered
+    // the shallow ones — they are the easy rung of the progression, not a defect
+    // (`gate.ts`: "an easy question, which the progression needs").
+    const deck = [
+      challenge({ name: 'a-shallow', subject: 1, truth: [2, 3], difficulty: 0.5, depth: 1 }),
+      challenge({ name: 'z-deep', subject: 4, truth: [5, 6], difficulty: 0.5, depth: 2 }),
+    ];
+    const answered = new Set([answerKey('blastRadius', id(4))]);
+    expect(suggestNext(deck, () => null, { ...NO_HISTORY, answered })?.id).toBe('blast-a-shallow');
+  });
+
+  // A history verb has no import depth at all, and reading `evidence.depth` off
+  // one is the shape error this repo has a landmine about. `showsItsKey` is
+  // false for it rather than throwing or defaulting to "gives itself away".
+  it('is never true of a board graded on history', () => {
+    const co = other({ name: 'co', subject: 7, truth: [8, 9], difficulty: 0.5 });
+    expect(showsItsKey(co)).toBe(false);
   });
 });

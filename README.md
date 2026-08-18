@@ -174,6 +174,111 @@ edges, and every district carries its name on an arch in its own colour, ADR-003
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
+- **The first ten minutes score 6.75 visual and 6.4 "would you keep playing", against a goal of 8.**
+  Ten personas from different technical backgrounds, one fixed build each round, each told only what
+  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Five rounds:
+  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70 → 6.75 / 6.40** (round 5 measured at
+  `ef196db`).
+  **Round 4's dominant complaint is closed and round 5 replaced it.** Four of ten had said the game
+  had no arc; all ten now describe one, and every one names the same thing — *the map lighting up*,
+  not the medals (*"my knowledge had a shape and a location"*, *"that single moment is the best thing
+  in the product"*, *"that's why I'd have kept clicking"*). What replaced it was **verb sameness**,
+  5 of 10, which was a bug rather than taste and is fixed at `662de0f`.
+  Every round closed the defects the previous one named and the complaints changed rather than
+  shrank, which is the honest reading of a flat score.
+  **Round 4's visual fell a full point and the cause was a change made to raise it**: the arrival
+  card, named by 8 of 10 as the single thing holding the score down, printed through a dozen map
+  labels in the opening frame. Fixed, along with the edges (an effective 11% opacity, so 3 of 10 read
+  the map as a bubble chart) — and round 5 measured the result: **visual +0.55**, with the highest
+  single visual score in five rounds (8/10) and the arrival card named by nobody.
+  **The instrument carried a false sentence for four rounds.** Every brief told the tester *"wrong
+  answers cost you nothing"*, which §8.2 makes false and which this repo had already deleted from its
+  own prompts — a backend engineer caught it as a contradiction against what the board says. The last
+  four personas of round 4 got a corrected brief; the first six did not, so that round is not a clean
+  single sample either.
+- **Answering is a checkbox list, and the map is a picture of it** — 6 of 10 testers in the third
+  round, from four different backgrounds. The map already boxes every candidate when a board opens
+  and a click on one already ticks it; what is missing is that nothing says so, so nobody uses it.
+  *"The one moment that matters most is the least spatial part of the experience."* This is the
+  single most-requested change in the panel and the one that would make NORTH-STAR §9's
+  spatial-memory claim true of the **interaction** rather than only of the picture.
+- **Label crowding at the arrival zoom** — 6 of 10 in the third round and **10 of 10 in the fourth**,
+  on the one frame everyone sees first. Dodging and a wider gap (ADR-pending, `labels.ts`) took
+  district names from 19 to 29 and stopped every box overlap, but the densest region still reads as
+  stacked text to a newcomer. A rank cut at fit zoom is the obvious lever and it has never been
+  measured. **The density also runs backwards with zoom**: 3 testers reported more labels at
+  `district` (29 of 266 nodes) than at `street` (8 of 59), where the budget is `Infinity` and
+  collision rejection is doing all the work — so zooming *in* names fewer files than zooming out.
+- **A name lies across other people's discs, and then it answers for them.** `placeLabels` blocks a
+  new label against the other labels and the chrome and **never against the nodes**, while `pickAt`
+  consults nameplates before discs — so a file whose disc sits under somebody else's name reports
+  that name to the inspector. Measured through the real pointer path by
+  **`npx tsx scripts/probe-nameplate.ts . <repo>`** at `4e39701`, hovering every node's own screen
+  centre: **35 of ark's 273 discs and 33 of hono's 425 name a different file**, 31 and 21 of those to
+  a drawn name rather than to another disc, and **6 and 6 answer nowhere within 20 px in any
+  direction** — no handle at all. All three candidate fixes were built and measured, and each one
+  pays somewhere worse: putting bodies first drops the discs to 4 and 14 but makes **9 of ark's 15
+  drawn names and 5 of hono's 12** point at someone else; making the discs blockers closes it
+  completely (0 by name on both) and takes ark from **15 drawn labels to 2**, which spends the map's
+  scarcest channel to buy its second-scarcest. **It is a rendering conflict, not a pick-order bug**,
+  and the honest lever is probably a label with a *background* — text that occludes what it covers is
+  text that may answer for it. Unfixed on purpose; the probe is what keeps the three numbers
+  checkable. It cost a whole milestone of e2e silence first: the map step surveys the nodes it found,
+  surveying draws their names, and the challenge step then re-used the scan's coordinates — which by
+  then meant different nodes.
+- **The medals are the weakest part of the arc they were built for, and that is measured.** Eleven
+  ship on this repo (`src/player/medals.ts`), all derived, none authored — and round 5's panel put
+  them last: three of ten called the shelf *"a chore list, not an arc"*, *"~80% medal grid and ~20%
+  actual notes"*, *"eleven mostly-empty shields dominate the panel above the single earned
+  sentence"*. What all ten *did* name as the arc is **the map lighting up**, which shipped in M3.
+  Four independently asked for the same next step — *"make the map itself the scoreboard"*, *"keep
+  each proved chain drawn"*, *"put the region fraction on the map, not in a list"*. The shelf is
+  fixed where it was broken (notes lead it, the first rung is reachable inside ten minutes, names
+  break at path separators) but **the lesson is that the arc wanted to be spatial and I built a
+  panel**.
+- **A wrong answer you did not pick is still never explained**, and round 5 did not change it: the
+  reveal's rows are `picked ∪ truth`, so a candidate that is neither picked nor in the key gets no
+  line, and ADR-0020's witness — which exists to say *why a wrong answer was offered* — is never
+  shown for it. On a perfect score the best players learn the least.
+- ~~**The most-requested visual change is one that can never ship.**~~ **Written down**
+  ([ADR-0049](./docs/decisions/0049-edge-direction-is-the-answer-key-and-can-never-be-drawn.md)),
+  which is what it needed: the top ask two rounds running is **edge direction**, and walking
+  backwards along drawn arrows scores F1 **1.000 exact on all 40 of ark's and all 54 of hono's Blast
+  Radius boards** (`npx tsx scripts/probe-direction.ts`, measured at `66f13d7`) — ADR-0008's
+  `candidates ∩ dependents = truth` makes a directed graph the answer key by construction, so none of
+  the four escalations this project has for a disclosure reaches it. The ADR is **permanent, with no
+  revisit condition**, and carries the list of what the player can have instead. It exists because the
+  refusal was correctly re-derived twice by sessions with no record of the previous one, and each
+  derivation is a chance to get it wrong in the direction of shipping.
+- **A per-board difficulty "level" is refused; a per-region one is not** (`scripts/probe-band.ts`).
+  Banding on difficulty puts 9/9 of ark's and 16/16 of hono's bottom band above band A for the free
+  ring guess, because `surprise` is defined *against* that ring. The marginal information over what
+  the player already has — the prompt states the key size, the ring is drawn — is **3 boards per
+  repo**, which is the magnitude ADR-0021 measured and ADR-0022 closed. A per-region level adds
+  **0 on both repos** and is the shippable shape, with one caveat: as banded by value it fires on
+  **0 of hono's boards**, so equal-count terciles are needed before anything is built on it.
+- **A wrong answer you did not pick is never explained.** Two of ten, and one of them scored 100% and
+  said so: the reveal builds its rows from `correct ∪ missed ∪ spurious`, which is `picked ∪ truth`,
+  so a candidate that is neither picked nor in the key gets no line at all — and ADR-0020's witness,
+  which exists precisely to say *why a wrong answer was offered*, is never shown for it. On a perfect
+  score the best players therefore learn the least. The prompt's *"every answer is explained"* is
+  read by a player as a claim about the twenty rows on screen, and under that reading it is false.
+- **The walk's first frame is a wall, and it is the target's own height.** Seven of ten testers in
+  round 4 named the walk, three as *the* thing dragging their score, all describing one image: a flat
+  untextured wall filling the frame, no horizon, "spawned inside a building". **It is not a
+  collision** — `npx tsx scripts/probe-spawn.ts` reports **0 of ark's 227 and 0 of hono's 381 real
+  spawn positions** putting the eye inside any tower, agreeing with `probe-eye`'s 1 in 11,880 over
+  the walkable grid. You are stood at the foot of the building you were sent to, facing it, and a
+  challenge subject is by ADR-0013 tall: a sixty-unit tower subtends ~98% of the vertical field of
+  view from the rig's resting position. Spawns where the target fills ≥90% of frame height are
+  **3.5% on ark and 3.9% on hono** at `e86573b`, worst case 119%. The standoff cannot fix it —
+  framing a tall tower means standing outside `INTERACT_RANGE`, where the board will not open — so
+  the fix is a rig that considers what is **ahead** as well as behind, and it is not built.
+  `world.spawn` still faces the city from outside the north edge with it small on the horizon, which
+  is the separate half three testers across three rounds have called the worst first impression.
+  Two testers noted the world *"is actually the best-looking thing in the build"* once you turn away
+  from the wall, so this is framing rather than rendering. **Mouse-look is not bound at all.**
+
 - **A board's title is a 74-character slug set as display type.** The subject's path is embedded
   inside the question sentence and the sentence belongs to the verb, so pulling the path onto its
   own monospace line is a change to `Verb.prompt`, not to the panel — and putting the sentence
@@ -189,6 +294,16 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 - **Ark's own walkable world is mostly void**: two seconds' walk from the spawn leaves the hero
   alone on an empty plane. hono at 425 nodes does not do this, so it is a density floor rather than
   a rendering fault — but the bootstrap repo is the one every session and every playtester sees.
+- **The world's constants are tuned against a moving target, and one of them expired.**
+  `FOOTPRINT_SCALE` is fixed while the layout is not, so as a repo grows into the same bounds its
+  towers weld together: ark's blocked share climbed **3.3% → 12.4%** at an unchanged 0.4, and the
+  atlas test's 0.15 bar — written when the margin was 4.5× — went red on a commit that added one
+  script file. Closed at `16c68e4` by lowering the scalar to **0.25** rather than moving the bar, on
+  `npx tsx scripts/probe-walkable.ts` over five repos, which also showed 0.4 leaving **graphql-js at
+  18.4% and prometheus at 17.2%** — under-tuned on repos the ark-only test cannot see. What is *not*
+  closed is the shape of the problem: `RISE`, `ROAD_WIDTH`, `ARCH_SPAN` and the rest are constants
+  chosen against one or two repos at one moment, and nothing measures any of them across the
+  reference set or over time. This one was caught by a bar it happened to cross.
 
 - **A meaningful share of the history verbs' answer keys is documentation, and on this repo it is
   most of some boards.** A cold playtester's objection is pillar 3's — *teach coupling, not trivia*:
@@ -622,7 +737,22 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
+**Draw the proved chain on the map, undirected.** Round 5's four independent requests for *"make the
+map itself the scoreboard"* split into two halves, and **the region half shipped** at `66f13d7`:
+cleared ground is brighter ground, so *"put the region fraction on the map, not in a list"* is done.
+What is left is the other half — *"keep each proved chain drawn, labelled with its hop count"* — which
+is the **one** of those asks [ADR-0049](./docs/decisions/0049-edge-direction-is-the-answer-key-and-can-never-be-drawn.md)
+§4.3 permits, because passing a board already unlocks the cone the chain lies inside, so it adds no
+node and no edge the map is not drawing. One tester named the mechanism without knowing it:
+`RevealNote.route` carried exactly that chain and was **deleted as dead infrastructure at `1c521d3`**,
+because nothing drew it. The removal was defensible and the reason it had no consumer was that the
+surface had not been built. Whoever builds it re-measures against band A first and states what the
+counterfactual holds fixed (ADR-0049 decision 3) · then **a wrong answer you did not
+pick is never explained** (the reveal's rows are `picked ∪ truth`, so a perfect score teaches nothing
+about the other eighteen)
+· **a rig that frames what is ahead**, which is the walk's actual defect now that the collision
+theory is refuted by measurement (`scripts/probe-spawn.ts`) · **bind mouse-look**, which is unbound
+· then **decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
 with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
 repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
 Neither is a session's call · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,

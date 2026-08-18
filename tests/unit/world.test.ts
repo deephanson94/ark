@@ -27,7 +27,14 @@ import type { RegionKind } from '../../src/atlas/index.js';
 import { HERO_RADIUS, WALK_SPEED, step, wrapAngle } from '../../src/player/world/hero.js';
 import { DEFAULT_ORBIT, project as projectOrbit } from '../../src/player/orbit.js';
 import { horizonY } from '../../src/player/world/render.js';
-import { EYE_PITCH as RIG_PITCH, createWorldMode } from '../../src/player/world/index.js';
+import {
+  EYE_PITCH as RIG_PITCH,
+  INTERACT_RANGE,
+  createWorldMode,
+  rigFor,
+  spawnFacing,
+} from '../../src/player/world/index.js';
+import type { World } from '../../src/player/world/build.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 const VIEW: Viewport = { width: 800, height: 600 };
@@ -723,5 +730,135 @@ describe('the mode holds its own state', () => {
     expect(Math.abs(hero?.y ?? 0)).toBeLessThan(span + 1000);
     const world = buildWorld(scene);
     expect(hero?.y ?? 0).toBeLessThanOrEqual(world.bounds.maxY + 71);
+  });
+});
+
+/**
+ * The rig: how far back the eye stands, how high, and where it looks.
+ *
+ * Six of ten cold playtesters named the walk as the thing dragging their score,
+ * three as *the* thing, all describing one frame — a flat wall filling the
+ * screen with no hero in it. `artifacts/world-leg2.png` was that frame and is
+ * now a legible city block. Measured on the walkable ground of two repos, the
+ * eye stands inside a building on **1 of 11,880 positions on ark and 1 of
+ * 12,408 on hono**, against 232 and 70 before (`scripts/probe-eye.ts`).
+ *
+ * The pure function is exported so the probe and these tests measure the
+ * shipped rule rather than a copy of it.
+ */
+describe('rigFor', () => {
+  const tower = (x: number, y: number, footprint: number, height: number): Tower => ({
+    ref: 0 as never,
+    node: { x, y, radius: footprint / FOOTPRINT_SCALE } as never,
+    footprint,
+    height,
+  });
+  const worldOf = (towers: Tower[]): World =>
+    ({ towers, byRef: new Map(), roads: [], arches: [], chronicle: null, spawn: null, bounds: null }) as never;
+  // Forward is −Y at facing 0, so behind the hero is +Y.
+  const AT = { x: 0, y: 0, facing: 0 };
+
+  it('extends fully over open ground', () => {
+    const rig = rigFor(worldOf([]), AT);
+    expect(rig.distance).toBeCloseTo(46, 6);
+    expect(rig.height).toBeCloseTo(33, 6);
+  });
+
+  it('climbs over a tall building directly behind, rather than burrowing into it', () => {
+    const rig = rigFor(worldOf([tower(0, 20, 6, 90)]), AT);
+    // Above the roof, not inside it — the whole defect in one assertion.
+    expect(rig.height).toBeGreaterThan(90);
+    // And it does not answer by collapsing onto the hero, which is what the
+    // first attempt did and what `EYE_MIN_DISTANCE`'s comment always said.
+    expect(rig.distance).toBeGreaterThanOrEqual(18);
+  });
+
+  it('ignores a building the boom already clears', () => {
+    // At 20 units along a 46-unit boom the eye is 14.3 high; a 6-unit shed is
+    // under it. The 2D test pulled in for this, which is most of a dense
+    // quarter's worth of spurious pull-ins.
+    const rig = rigFor(worldOf([tower(0, 20, 6, 6)]), AT);
+    expect(rig.distance).toBeCloseTo(46, 6);
+    expect(rig.height).toBeCloseTo(33, 6);
+  });
+
+  it('ignores a building that is not behind the hero', () => {
+    expect(rigFor(worldOf([tower(0, -20, 6, 90)]), AT).distance).toBeCloseTo(46, 6);
+  });
+
+  it('caps the climb', () => {
+    const rig = rigFor(worldOf([tower(0, 20, 6, 100000)]), AT);
+    expect(rig.height).toBeCloseTo(99, 6);
+  });
+
+  it('looks further down the higher it stands', () => {
+    const open = rigFor(worldOf([]), AT);
+    const climbed = rigFor(worldOf([tower(0, 20, 6, 90)]), AT);
+    expect(climbed.pitch).toBeLessThan(open.pitch);
+  });
+
+  it('sees a corner the inscribed circle misses', () => {
+    // A square of half-width `f` reaches `f·√2` at its corner, so the boom can
+    // pass outside the inscribed circle and through geometry that is drawn
+    // solid. The offset is chosen to sit *between* the two radii: 11 is more
+    // than 8 + 1.4 clearance and less than 8·√2 + 1.4.
+    //
+    // The first fixture put the tower 1.1 units off the boom, which both radii
+    // hit, so the mutant restoring the inscribed circle survived it — a test
+    // for a widening that any width would pass.
+    const rig = rigFor(worldOf([tower(11, 20, 8, 90)]), AT);
+    expect(rig.height).toBeGreaterThan(90);
+  });
+});
+
+describe('where `g` stands you', () => {
+  const scene = prepare(
+    atlasWith(
+      ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/core/hub.ts', 'docs/readme.md'],
+      [
+        ['src/a.ts', 'src/core/hub.ts'],
+        ['src/b.ts', 'src/core/hub.ts'],
+        ['src/c.ts', 'src/b.ts'],
+      ],
+    ),
+  );
+  const world = buildWorld(scene);
+
+  // **The standoff and the interact gate are one decision and nothing checked
+  // it.** `spawnFacing` stands you off by `radius + HERO_RADIUS + n`, and
+  // `focus()` will only open a board within `INTERACT_RANGE` of the tower — so
+  // raising `n` to get the building out of the camera's face can silently put
+  // the player out of reach of the thing they were sent to. Worse, the two
+  // quantities are measured against *different* geometries: the standoff off
+  // the scene node's glyph `radius`, the gate off the tower's ground
+  // `footprint`, which CLAUDE.md has a landmine about being different numbers
+  // wearing one name.
+  it('stands you close enough to open the board you were sent to', () => {
+    for (const node of scene.nodes) {
+      const tower = world.byRef.get(node.ref);
+      if (tower === undefined) continue;
+      const hero = spawnFacing(world, node);
+      const gap = Math.hypot(hero.x - tower.node.x, hero.y - tower.node.y) - tower.footprint;
+      expect(gap).toBeLessThanOrEqual(INTERACT_RANGE);
+    }
+  });
+
+  it('faces the building it stood you at', () => {
+    for (const node of scene.nodes) {
+      const hero = spawnFacing(world, node);
+      // `yaw` 0 faces −Y, and the hero is placed at +Y of the target, so the
+      // target is dead ahead. A spawn facing away is the shore's own defect and
+      // must not arrive here too.
+      // Forward is `(sin, -cos)`. The first draft of this used `(-sin, cos)`,
+      // which is `rigFor`'s **back** vector — the basis the camera booms along,
+      // not the one the hero faces — and reported dot -1 on a spawn that faces
+      // its target correctly.
+      const ahead = { x: Math.sin(hero.facing), y: -Math.cos(hero.facing) };
+      const toTarget = { x: node.x - hero.x, y: node.y - hero.y };
+      const length = Math.hypot(toTarget.x, toTarget.y);
+      if (length === 0) continue;
+      const dot = (ahead.x * toTarget.x + ahead.y * toTarget.y) / length;
+      expect(dot).toBeGreaterThan(0.9);
+    }
   });
 });

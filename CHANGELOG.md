@@ -4645,3 +4645,305 @@ a sub-pass grade badge that renders as an empty box (3 of 10 read it as a
 missing asset), no legend for what size and colour and fog encode (4 of 10), and
 a loop that never changes shape (6 of 10 on continue).
 
+## Five rounds against a number, and the number says the next work is structural
+
+The goal became measurable: *the first ten minutes, visually and "do I want to keep
+playing", at 8/10 across ten coding-literate agents from different backgrounds.*
+Ten personas, one fixed build per round, each with its own browser, each told
+only what a new player is told, each scoring off screenshots it actually looked
+at.
+
+**7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80.**
+
+Every round closed what the previous one named. The camera stopped standing
+inside buildings (1 of 11,880 walkable positions on ark, from 232). The map said
+what it encodes, in a key that follows the view. A sub-pass grade became a dial
+instead of a dot three testers read as a missing asset. The reveal said why the
+notebook stayed empty. The repository introduced itself. Regions began filling
+in. The import channel came back for the two verbs it is not an answer key for.
+
+And the score barely moved, which is the finding. The complaints **changed** each
+round rather than shrinking, and the two that now dominate are structural:
+
+**Answering is a checkbox list and the map is a picture of it** — 6 of 10 in the
+third round, from four backgrounds. The map already boxes every candidate and a
+click already ticks it; nothing says so, so nobody uses it. *"The one moment that
+matters most is the least spatial part of the experience."*
+
+**Label crowding at the arrival zoom** — 6 of 10, on the frame everyone sees
+first. Dodging and a wider gap took district names from 19 to 29 with no box
+overlapping any other, and the densest region still reads as stacked text.
+
+Both are in Known gaps with their vote counts. Neither is a polish item, which is
+why five rounds of polish did not move the number.
+
+**Six of my own instruments were wrong before they were right**, all green when
+wrong: a camera repair that put the eye in the hero's shins (exactly what the
+guard it removed was for); a badge fix that reproduced the missing-asset defect
+inside itself; a camera gate that reported `345.9 units of pan kept` beside `261
+of 261 nodes in frame`; a cull test that scrolled 90,000 units to where the count
+is zero either way; an eye probe that sampled deliberately-clear standing spots;
+and a farm gate that compared a whole HUD line, so it passed here and failed on
+CI because `surveyed` legitimately moves when a board's members are files and not
+when they are commits.
+
+**Next**: make the map the way you answer. It is the most-requested change, it is
+already half-built, and it is the only one of these that changes what the player
+*does* rather than what they look at.
+
+## The free hint was the difficulty model, and I had taken it away
+
+A Fable consult on *why players stop* found a live divergence between the code
+and a decision of record, and the divergence was mine, from this session.
+
+ADR-0008 decision 1 draws every node's direct importers **"for every node,
+always — in free roam and while a challenge is open alike"**, says *"no modal
+special-casing and no per-subject suppression"*, and lists *"suppress everything
+while a challenge is open"* under **Rejected**. A cold playtester used a
+subject's ring as a lookup, it was measured at 37 of ark's 40 boards, and I
+switched the channel off while a board was open — then narrowed that to
+import-graded boards, under a comment citing decision 1 as its authority **on the
+line that nulled it**.
+
+Decision 1 had already rejected exactly this, and was right twice. It fixes
+nothing (close the board, hover, reopen — a speed bump, not a gate). And it
+disables the difficulty model: §8.4 defines `surprise` against the naive
+direct-neighbour guess, so a player who cannot see direct neighbours cannot form
+the baseline difficulty is calibrated against. `gate.ts` says the same in
+writing, declining to score that guess because *"a question that strategy passes
+is an easy question, which the progression needs."* Three cold rounds reporting
+*"my first three boards scored zero"* is that arithmetic, felt.
+
+Measured (`scripts/probe-depth1.ts`, ADR-0048), scored with `scoreSet` rather
+than precision: the guess scores **0.985 / 1.000 / 0.611 / 0.800 over the first
+fifteen boards the shipped selector serves** and **0.531 / 0.561 / 0.293 / 0.467
+deck-wide** on ark, hono, kysely and graphql-js. That two-column shape *is* the
+difficulty curve — it wins the opening, which is what an opening is for, and
+loses most of the deck. The suppression converted the designed-winnable boards
+into unwinnable ones and left the hard ones as hard as ever.
+
+Restored as written. The full cone stays gated on `subjectsPassed`; ADR-0016's
+wire gate is untouched, because a co-change wire *is* Companion's answer relation
+where this is the baseline Blast Radius measures departure from — that analogy
+is where the borrowing failed.
+
+**The e2e gate had asserted three different rules in three commits**, each
+written from whatever the code did rather than from the decision, which is how a
+gate ends up certifying a divergence. It reads ADR-0008 now and asserts both
+halves; nulling the channel and unbounding the depth each turn it red.
+
+**Next**: the same review argues the checkbox complaint is a proxy — the map
+already boxes every candidate and clicking one already ticks it, and six testers
+failed to find it *even by accident*, because nobody probes a map that shows
+nothing during a board. With the hint restored the map has something to say
+again, so the affordance is worth naming in a sentence and re-measuring. And a
+premise worth checking before the next five rounds: these personas score largely
+off screenshots, and a still cannot register feel — which may be why five rounds
+of real fixes read as flat.
+
+
+## Round 4 of the playtest panel, and two regressions it found in my own work
+
+Ten personas, one build, same protocol: **6.20 visual / 6.70 continue** against 7.20 / 6.80. The
+visual score fell a full point and the cause was the change made to raise it — the arrival card,
+named by 8 of 10 as the single thing holding the score down, printing through a dozen map labels in
+the frame everyone sees first. It has a full-frame scrim now and no longer greets a returning player
+with "you have arrived" over files they already surveyed.
+
+The sharper finding is one I had already measured and read backwards. Last round's probe said the
+depth-1 guess scores ~1.0 on the boards the selector serves first, and I reported that as evidence
+the opening was *winnable* with ADR-0008's hint restored. It is equally evidence the opening was
+**free**: 7 of ark's 7 and 6 of hono's 6 opening Blast Radius boards were beaten by ticking what the
+map had already drawn, 5 and 6 of them exactly, against 11 of 40 and 18 of 54 deck-wide. All 7 of
+ark's give-away boards — 4.4% of a 160-board deck — sat inside the first fifteen served, and the very
+first was a one-file key entirely at depth 1. A cold playtester put it better than the number did:
+*"it does not flatter in the reveal, it flatters in the selection."* `showsItsKey` folds into
+`withinVerbRank`, measured at three heights because as a rank term it compares Blast Radius against
+Companion rather than board against board. Exact solves in the opening go 5/6/1/2 → 0 on all four
+repos; Blast Radius's share of the first fifteen goes up.
+
+Also: edges were drawn at an effective 11% opacity, so three testers read the map as a bubble chart
+rather than a graph (0.44 now, chosen by rendering three values and looking at them; still
+undirected, because directed arrows reconstruct Blast Radius's key exactly). `region:` printed a
+locational noun beside a derived cluster and four testers read it as a lie. Five `overflow-y: auto`
+regions had no scrollbar at all, and one tester nearly submitted a board without seeing three
+candidates below the fold.
+
+**The walk's bad first frame is diagnosed and not fixed, and the diagnosis is the useful part.** It
+is not a collision: `scripts/probe-spawn.ts` finds 0 of ark's 227 and 0 of hono's 381 real spawn
+positions with the eye inside a tower. You are stood at the foot of the building you were sent to and
+a challenge subject is tall, so it subtends ~98% of the vertical field of view. No standoff reaches
+that — framing a tall tower means standing outside `INTERACT_RANGE`. What the standoff work did fix
+is a bug the measurement uncovered: it was computed off the glyph radius while the interact gate uses
+the ground footprint, and a unit test caught a spawn 14.12 from a tower with a range of 14.
+
+**Next**: run a fifth round — round 4's fixes are unmeasured, and its brief carried *"wrong answers
+cost you nothing"*, a sentence §8.2 makes false and this repo had already deleted from its own
+prompts, for four rounds. Then the two structural gaps: there is no session arc, only a decrementing
+counter (4 of 10, the largest remaining lever on "would you keep playing"), and a wrong answer you
+did not pick is never explained, so a perfect score teaches nothing about the other eighteen.
+
+## Medals — the arc four testers said the game did not have
+
+Eleven medals on this repo, three families, every one derived from the atlas and
+the proved register: one per topology region (the *"src/player 3/38"* two testers
+asked for, with a finish line), map-wide reach and a verb-blind "every kind of
+question", and three craft medals — a key that travelled 3+ hops, a board with
+every member found, and the most load-bearing file. Nothing authored, nothing
+stored: `medalsFor` is pure and the fog is handed in, because two surfaces
+computing one population separately is how the Archaeology reveal and its own
+field note came to disagree on 21 of 26 boards.
+
+Three things worth keeping. The save records *which members were picked* and not
+the score, so "you scored 100%" is not derivable and is not offered — the medal
+says **recall**, and a test asserts no claim ever contains "score". An unearned
+medal keeps its full outline and only the fill is earned, because the sub-pass
+badge shipped as a conic gradient that at 0% is a near-black rounded square; the
+e2e asserts outline-count == medal-count and catches a mutant that removes it.
+And the terrain-guard mutant **survived the first suite** — the fixture's only
+terrain region had no provable node, so a second guard excluded it either way,
+which is two rules constraining one search hiding each other's tests.
+
+**Next**: a fifth panel round. Five changes are now waiting on it — the opening
+board, the arrival card, the edge opacity, the scrollbars and this — and the
+instrument itself needs the corrected brief, since four rounds told every tester
+*"wrong answers cost you nothing"*, which §8.2 makes false.
+
+## Round 5: the arc exists, it is the map, and the medals are the weakest part of it
+
+Ten personas, corrected brief: **6.75 / 6.40** against round 4's 6.20 / 6.70.
+Visual +0.55, and the arrival card that cost a full point last round was named by
+nobody. Round 4's dominant complaint — *"there is no arc"*, four of ten — is
+closed: all ten describe one now. None of them credits the medals. Every one
+names the map lighting up, which shipped in M3, and four independently asked for
+the same next step: put the scoreboard **on the map**, not in a panel. The honest
+reading is that I treated a missing feeling as a missing feature, built a shelf,
+and the thing people felt was the fog.
+
+What replaced "no arc" was **verb sameness**, five of ten, and it was a bug.
+`suggestNext` chooses partly for verb variety and `challengeFor` then returned the
+node's first unpassed board in *tier* order, so a Companion suggestion opened as
+Blast Radius — 3 of the first 12 boards, including board two, while the new medal
+shelf sat beside it reading "1 of 4 kinds of question answered". The shelf's most
+useful contribution so far was making a pre-existing defect legible.
+
+Four more, all from the panel: the sentence teaching the winning strategy told
+players to hover, which does nothing while a board is open; notes now lead the
+notes panel; the first medal tier was a third of a region and unreachable inside
+the ten minutes the benchmark measures; and the grade card shows precision and
+recall, which a junior could not derive and an academic called the one place the
+product flatters.
+
+**The gate for the guide bug failed three times before it worked**, each time on a
+different landmine from this file's own list — predicting which board the shell
+serves, checking a precondition instead of the condition, and finding its test
+case on a commit subject where the code under test never runs. It is
+`isNodeId`-guarded now and fails loudly when it measures nothing.
+
+**Next**: the map as scoreboard — four testers asked for it and one names the
+mechanism (`RevealNote.route`, deleted as dead infrastructure two days ago, is
+exactly the chain they want drawn). Then the ADR refusing edge direction
+permanently, since it is the top visual ask two rounds running and cannot ever
+ship.
+
+## The map is the scoreboard, and the refusal everyone keeps asking for is written down
+
+Two things, both straight out of round 5's evidence.
+
+**Cleared ground is brighter ground.** All ten testers named the map lighting up as
+the arc they felt; four then asked for the region tally to move onto it, one naming
+the mechanism exactly. The region wash now brightens with how much of that region
+is answered, up to 2.2× at complete — **colour rather than text**, because text
+collision has been the top visual complaint in all five rounds and a third line on
+every nameplate would pay for the arc out of the account already most overdrawn. A
+multiplier on the existing alpha, so an untouched map is byte-identical and the
+channel only ever adds.
+
+Two things that fix needed. `draw.test.ts`'s stub swallows every style write, so a
+mutant ignoring the new field passed the whole file — there is a recording stub
+now, because a colour channel nothing can see is a colour channel nobody has
+tested. And fixing the medal lockout had moved the arc onto the *answered*
+population while the legend still counted *proved*, so on a retried board the
+legend read `2/37` beside a medal reading `3/37`: Fable's finding 2 reintroduced by
+the fix for its finding 1. One set, three readers now, and `provedByRegion` is
+`countByRegion` because the caller chooses what it counts.
+
+**ADR-0049: edge direction can never be drawn.** The top visual ask two rounds
+running, refused, and now recorded — walking backwards along drawn arrows scores
+F1 1.000 exact on all 40 of ark's and all 54 of hono's Blast Radius boards, because
+ADR-0008's invariant makes a directed graph the answer key by construction. None of
+the four escalations reaches it. The document exists because the refusal had been
+correctly re-derived twice by sessions with no record of the previous one, and each
+derivation is a chance to get it wrong toward shipping. Its own first draft put a
+fabricated board count in the table, which is the argument for the ADR made against
+the ADR.
+
+**Next**: the one round-5 request that *is* legal — keep the proved chain drawn on
+the map, undirected, since passing a board already unlocks the cone it lies in.
+`RevealNote.route` carried exactly that chain and was deleted as dead
+infrastructure at `1c521d3`; the removal was right and the reason it had no
+consumer was that this surface had not been built.
+
+## 2026-08-17 — the e2e was reading a coordinate it had already invalidated
+
+CI's `player smoke test` failed on `4e39701` with *"no node under the cursor grid
+carried a question"*, which reads as the generator being broken and was not. The
+map step surveys every node its grid scan found; surveying a node draws its
+**name**; `pickAt` consults nameplates before discs; a nameplate is a screen box
+that `placeLabels` never checks against the *nodes*. So the scan's coordinates
+stopped meaning the nodes they were recorded for, the challenge step re-used them
+anyway, and every hit resolved to a file with no board. Local-only until now
+because ark indexes itself and CI plays `refs/pull/N/merge`, so the scan lands on
+a different set of discs there — the merge-commit landmine, on a step nobody had
+suspected of predicting anything. The step no longer carries a reading forward:
+it re-scans for a point the map is offering a question at *now*, clicks that, and
+asserts the offer survived the click.
+
+Underneath it is a real product defect, measured rather than assumed and
+deliberately **not** fixed. `npx tsx scripts/probe-nameplate.ts . <repo>` hovers
+every node's own screen centre through the real pointer path: **35 of ark's 273
+discs and 33 of hono's 425 name a different file**, and **6 and 6 answer nowhere
+within 20 px**. All three fixes were built and measured before one was chosen, and
+each pays somewhere worse — bodies-first drops the discs to 4 and 14 and costs **9
+of 15 and 5 of 12 drawn names**; discs-as-blockers closes it outright and takes ark
+from **15 labels to 2**. Two of those measurements were nearly believed while
+wrong: the blocker loop shared the fog's `continue` with the label candidate, so
+silhouettes contributed no blocker — and a silhouette is exactly what was being
+stolen — which printed as *no change at all*, twice, at two blocker sizes.
+
+**Next**: the one round-5 request that *is* legal — keep the proved chain drawn on
+the map, undirected, since passing a board already unlocks the cone it lies in.
+`RevealNote.route` carried exactly that chain and was deleted as dead
+infrastructure at `1c521d3`; the removal was right and the reason it had no
+consumer was that this surface had not been built. The nameplate conflict above is
+the other candidate, and its honest lever is a label *background* rather than a
+pick order — text that occludes what it covers may answer for it.
+
+## 2026-08-17 — the footprint constant had a timer on it, and the ring gate read half a rule
+
+Reproducing CI's merge commit (`origin/master` + branch, which is the tree Actions
+actually builds) reddened an atlas test the branch alone passes: **15.4% of towers
+have no walkable gap**, against a 0.15 bar. Not flake — a rate. `FOOTPRINT_SCALE`
+is a constant and the layout is not, so ark's own reading climbed **3.3% → 12.4%**
+at an unchanged scalar as the repo grew into the same bounds, and one added script
+file tipped it. The margin was a timer, which this repo has a landmine about.
+
+Closed rather than loosened, and the measurement says the constant was wrong on
+more than ark: `scripts/probe-walkable.ts` over five repos shows 0.4 leaving
+**graphql-js at 18.4% and prometheus at 17.2%** — the defect the scalar exists to
+fix, live on two reference repos and invisible because the only test of it indexes
+ark. **0.25** holds every measured repo under 5% (ark 0.0), with its neighbours
+named: 0.3 leaves two of them in double figures, 0.2 buys 3.5 points for buildings
+half today's width. The old value's justification — *"below 0.4 the curve is flat
+on both"* — was true of the two repos it was measured on and of none of the three
+added since.
+
+The re-roll then reddened the ADR-0008 ring gate, which turned out to read **half**
+the decision: it asserted *depth 1* over whatever board it happened to open, and
+the decision says depth 1 for an *unproved* subject and the full cone for a proved
+one. So a full cone the ADR grants outright was reported as a leak. The gate now
+reads `__arkTraced` — published from the same `tracedRadius` the frame gated on —
+and asserts both arms; one run exercises both, and the proved arm kills a mutant
+that never unlocks the cone.
+
+**Next**: unchanged — the proved chain drawn on the map, undirected (ADR-0049 §4.3).

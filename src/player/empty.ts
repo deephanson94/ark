@@ -47,12 +47,49 @@ export function guideExhausted(refusal: string | null): EmptyState {
  * (ADR-0018), and the short form is kept for the case where they agree, which
  * is most of a session.
  */
-export function questsLine(deckRefused: boolean, questionsLeft: number, ringed: number): string {
+export function questsLine(
+  deckRefused: boolean,
+  questionsLeft: number,
+  ringed: number,
+  /**
+   * What the player has actually proved, and how much of the map can be proved
+   * at all — the two numbers that *move* when they answer something.
+   */
+  proved = 0,
+  provable = 0,
+): string {
   if (deckRefused) return 'no questions for this repo';
   if (questionsLeft === 0) return 'every question answered';
+  // **What you have, before what is left.** This line is the largest type in the
+  // HUD and it read `160 left · 84 ringed on the map` — a backlog. Three of ten
+  // cold playtesters named that specifically as the thing arguing against the
+  // arc they could otherwise feel: *"the arc I could feel in the map is
+  // contradicted by the one number the HUD puts in the largest type"*, *"after
+  // three boards the headline still read 158 left"*, and one asked for exactly
+  // this — *"make the headline read the thing that actually moved"*.
+  //
+  // Both halves stay, because the remaining count is genuinely useful and
+  // removing it would trade one incomplete sentence for another. The order is
+  // the change: a session opens at `0 of 187 proved` and every pass moves the
+  // first number, where before the first number a player read was a number that
+  // only ever crept down by one.
   const plural = questionsLeft === 1 ? '' : 's';
-  if (ringed === questionsLeft) return `${questionsLeft} question${plural} ringed on the map`;
-  return `${questionsLeft} left · ${ringed} ringed on the map`;
+  // **The old two forms, unchanged.** The fork between them is not cosmetic: a
+  // Placement subject is a commit and carries no ring, so a deck of only those
+  // would read "36 questions ringed on the map" over a map with none — a sentence
+  // about the map counted off the deck. That is why the short form exists and why
+  // it is conditional.
+  const left =
+    ringed === questionsLeft
+      ? `${questionsLeft} question${plural} ringed on the map`
+      : `${questionsLeft} left · ${ringed} ringed on the map`;
+  // Without the new pair, byte-identical to what shipped — so a caller that has
+  // no provable count (a test, a fixture) reads exactly the old line.
+  if (provable === 0) return left;
+  // With it, what you have comes first and the remainder keeps its own wording.
+  // Short form only, because the panel is 296px and this line is already the
+  // largest type in it: a third clause pushed it onto two lines once before.
+  return `${proved} of ${provable} proved · ${questionsLeft} left`;
 }
 
 /**

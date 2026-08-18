@@ -37,6 +37,7 @@ function stubContext(): CanvasRenderingContext2D {
     arc: noop,
     ellipse: noop,
     rect: noop,
+    roundRect: noop,
     fill: noop,
     stroke: noop,
     fillRect: noop,
@@ -54,6 +55,35 @@ function stubContext(): CanvasRenderingContext2D {
     get: (object, key) => Reflect.get(object, key) ?? undefined,
     set: () => true,
   }) as unknown as CanvasRenderingContext2D;
+}
+
+/**
+ * A stub that **records** the fill colours it is given.
+ *
+ * The proxy above swallows every style write, which is right for the tests that
+ * only care what got drawn — and it makes a *colour* channel unobservable. The
+ * region wash brightens with how much of a region the player has answered
+ * (`FrameInput.regionProgress`), and without this a mutant ignoring that field
+ * entirely passes every assertion in the file: the same island count is drawn
+ * either way. Count-the-firings, applied to a rendering.
+ */
+function recordingContext(): { context: CanvasRenderingContext2D; fills: string[] } {
+  const fills: string[] = [];
+  const base = stubContext();
+  const context = new Proxy(base, {
+    get: (object, key) => Reflect.get(object, key),
+    set: (object, key, value) => {
+      if (key === 'fillStyle' && typeof value === 'string') fills.push(value);
+      return Reflect.set(object, key, value);
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return { context, fills };
+}
+
+/** The alpha of an `hsla(...)` fill, or null if it is not one. */
+function alphaOf(fill: string): number | null {
+  const match = /hsla\([^)]*,\s*([0-9.]+)\)/.exec(fill);
+  return match === null ? null : Number(match[1]);
 }
 
 const VIEWPORT = { width: 1200, height: 800 };
@@ -81,6 +111,9 @@ function frameInput(chrome: FrameInput['chrome']): FrameInput {
     peaks: new Set(scene.nodes.map((node) => node.ref)),
     ties: NO_TIES,
     tieFocus: null,
+    // Untouched map: the wash channel is inert, which is what an arriving
+    // player sees and is the baseline the brightening must not change.
+    regionProgress: new Map<number, number>(),
     board: null,
   };
 }
@@ -265,7 +298,7 @@ describe('the renderer uses the ramp it is given', () => {
     const target = {
       measureText: (text: string) => ({ width: text.length * 7 }),
       save: noop, restore: noop, beginPath: noop, closePath: noop, moveTo: noop,
-      lineTo: noop, arc: noop, ellipse: noop, rect: noop, fill: noop, stroke: noop,
+      lineTo: noop, arc: noop, ellipse: noop, rect: noop, roundRect: noop, fill: noop, stroke: noop,
       fillRect: noop, fillText: noop, strokeText: noop, setLineDash: noop,
       quadraticCurveTo: noop, bezierCurveTo: noop,
       createLinearGradient: () => ({ addColorStop: noop }),
@@ -303,6 +336,7 @@ describe('the renderer uses the ramp it is given', () => {
       tieFocus: null,
       board: null,
       chrome: [],
+      regionProgress: new Map<number, number>(),
     });
     return seen;
   }
@@ -363,6 +397,7 @@ describe('the labels a frame returns', () => {
       tieFocus: null,
       board: null,
       chrome: [],
+      regionProgress: new Map<number, number>(),
     });
     // Non-vacuous: a frame that drew no labels would satisfy any claim about
     // them, and this is the assertion that would have caught the field being
@@ -401,7 +436,7 @@ describe('the labels a frame returns', () => {
       fog: { surveyed: all, understood: new Set() },
       hovered: null, selected: null, radius: null,
       questions: new Set(), peaks: new Set(), ties: NO_TIES, tieFocus: null,
-      board: null, chrome: [],
+      board: null, chrome: [], regionProgress: new Map<number, number>(),
     });
     expect(stats.nameplates.length).toBeGreaterThan(0);
     for (const plate of stats.nameplates) {
@@ -498,5 +533,117 @@ describe('a nameplate is drawn where the frame says it is', () => {
         expect(call.y, `"${plate.text}" y`).toBeLessThanOrEqual(plate.top + plate.height);
       }
     }
+  });
+});
+
+/**
+ * A board marker for a node off the edge of the screen.
+ *
+ * The mark block iterated the visible set without re-checking the box a marker
+ * occupies, which reaches past the disc — so a candidate just outside the frame
+ * drew a rounded rectangle clipped by the viewport and lying across the HUD. A
+ * frontend engineer on the panel reported it as "a stray white artifact
+ * overlapping the header", which is what it looks like if you do not know what
+ * it is.
+ */
+describe('board markers stay inside the frame', () => {
+  it('marks a candidate on screen and not one in the cull’s margin', () => {
+    // **Inside the margin, not far away.** The first version scrolled 90,000
+    // units off, where `visibleNodes` returns nothing and the count is zero
+    // with or without the fix — a test that could not fail, for a defect about
+    // a node that is *nearly* on screen. `drawFrame` culls at the viewport plus
+    // **120px**, so the marks block sees nodes up to 120px outside the frame and
+    // drew a box for every one of them. The camera here puts the fixture just
+    // inside that band.
+    const atlas = atlasWith(['src/a.ts', 'src/b.ts', 'src/c.ts'], [['src/b.ts', 'src/a.ts']]);
+    const scene = prepare(atlas);
+    const base = frameInput([]);
+    const board = { subject: null, candidates: new Set([0, 1, 2]), picked: new Set<number>(), hovered: null };
+    const centred = drawFrame(stubContext(), { ...base, scene, board });
+    expect(centred.boardDrawn).toBeGreaterThan(0);
+
+    // Push the whole fixture past the right edge by a little over half the
+    // viewport, so every node lands in the 120px margin rather than in frame.
+    const off = { ...base.camera, x: base.camera.x + VIEWPORT.width / 2 + 60 };
+    const margin = drawFrame(stubContext(), { ...base, scene, board, camera: off });
+    const seen = drawFrame(stubContext(), { ...base, scene, camera: off }).nodesDrawn;
+    expect(seen, 'the cull must still hand the marks block these nodes').toBeGreaterThan(0);
+    expect(margin.boardDrawn).toBe(0);
+  });
+});
+
+/**
+ * A marked subject is not a clickable answer.
+ *
+ * `boardDrawn` counts every marker the board layer draws, including the
+ * subject's ring. Archaeology's subject is a **file** and its candidates are
+ * **commits**, so that board draws exactly one marker and none of it is an
+ * input — and a gate that read the merged number concluded the panel should
+ * offer click-to-answer on the one board where clicking answers nothing. CI
+ * caught it; locally the sweep never reached that verb.
+ */
+describe('candidate markers are counted apart from the subject’s', () => {
+  const [subject, one, two] = [0, 1, 2];
+
+  function marksOf(board: FrameInput['board']): { all: number; candidates: number } {
+    const stats = drawFrame(stubContext(), { ...frameInput([]), board });
+    return { all: stats.boardDrawn, candidates: stats.candidatesDrawn };
+  }
+
+  it('counts a subject-only board as marked and not as clickable', () => {
+    // The shape of every Archaeology board: a placed subject, no placed
+    // candidate.
+    const marks = marksOf({ subject, candidates: new Set(), picked: new Set(), hovered: null });
+    expect(marks.all).toBe(1);
+    expect(marks.candidates).toBe(0);
+  });
+
+  it('counts candidates when the board has them', () => {
+    const marks = marksOf({
+      subject,
+      candidates: new Set([one, two]),
+      picked: new Set([one]),
+      hovered: null,
+    });
+    expect(marks.all).toBe(3);
+    expect(marks.candidates).toBe(2);
+  });
+});
+
+
+describe('the region wash is the map\'s scoreboard', () => {
+  // Five rounds of cold playtests asked what gave a sense of progress and the
+  // last ten all answered *the map lighting up*; four then asked for the region
+  // tally to move onto the map. This is that channel, and it is a colour — so it
+  // needs a stub that can see colours, or the assertion is decoration.
+  const cleared = (progress: ReadonlyMap<number, number>): number[] => {
+    const { context, fills } = recordingContext();
+    drawFrame(context, { ...frameInput([]), regionProgress: progress });
+    return fills
+      .map(alphaOf)
+      .filter((alpha): alpha is number => alpha !== null)
+      // The washes are the faintest fills on the frame; the discs and text are
+      // far stronger. Taking the low tail keeps this about the ground.
+      .filter((alpha) => alpha < 0.3)
+      .sort((a, b) => b - a);
+  };
+
+  it('brightens the ground as a region is answered', () => {
+    const untouched = cleared(new Map());
+    const half = cleared(new Map([[0, 0.5]]));
+    const whole = cleared(new Map([[0, 1]]));
+    expect(untouched.length).toBeGreaterThan(0);
+    // The brightest ground fill rises monotonically with the fraction.
+    expect(half[0]).toBeGreaterThan(untouched[0] as number);
+    expect(whole[0]).toBeGreaterThan(half[0] as number);
+  });
+
+  it('leaves an untouched map exactly as it was', () => {
+    // The channel only ever *adds* — guardrail 6's shape applied to a rendering:
+    // nothing a player does can make ground darker than they found it, and an
+    // arriving player sees the frame that shipped before this existed.
+    const none = cleared(new Map());
+    const zero = cleared(new Map([[0, 0]]));
+    expect(zero).toEqual(none);
   });
 });

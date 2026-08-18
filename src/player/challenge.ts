@@ -21,8 +21,9 @@
  */
 
 import type { AtlasId, Challenge } from '../atlas/index.js';
+import { isNodeId } from '../atlas/index.js';
 import type { Grade, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
-import { VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
+import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
 import { el } from './ui.js';
 
@@ -245,6 +246,30 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       header(prompt.title, challenge.difficulty),
       el('h2', 'console-question', [prompt.question]),
       el('p', 'console-instruction', [prompt.instruction]),
+      // **Two sentences about where the answer comes from and how to give it.**
+      //
+      // The first is the verb's, present only where the map is showing
+      // something this question is graded on — three of four verbs leave it
+      // undefined, and a shared one would be the class-label failure again.
+      //
+      // The second is the console's, and it is verb-blind because it is about
+      // the *panel* rather than the question: a click on a marked node ticks it
+      // (`main.ts`'s pointerup hands the pick to `toggle`). Six cold testers
+      // asked for exactly this input and **none of them found it**, including
+      // by accident — the mechanism has shipped for milestones with nothing
+      // anywhere saying so.
+      ...(prompt.evidence === undefined
+        ? []
+        : [el('p', 'console-evidence-hint', [prompt.evidence])]),
+      // **Only where the rows have markers to click.** Archaeology's candidates
+      // are commits and a commit has nowhere to stand (ADR-0018), so on that
+      // board this sentence is simply false — which a screenshot showed and no
+      // test would have, because it is verb-blind copy that happens to depend
+      // on what a candidate *is*. Discriminated by id prefix, not by verb: the
+      // console still does not know what any verb asks.
+      ...(challenge.candidates.some(isNodeId)
+        ? [el('p', 'console-how', ['Tick a row here, or click its marker on the map — either answers.'])]
+        : []),
       list,
       el('div', 'console-footer', [tally, submit]),
     );
@@ -264,11 +289,61 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     const band = bandFor(grade.score);
     const verb = VERBS[challenge.verb];
 
+    // **A sub-pass grade needs a mark of its own, not an empty one.** The chip
+    // drew `·` below band C, and three cold playtesters read it as a missing
+    // asset rather than as "no letter down here" — one of them said so in those
+    // words. It carries how far the answer reached toward the pass mark
+    // instead: a fact the player can check against the percentage beside it,
+    // and non-punitive, which guardrail 6 requires. Above the mark the letter
+    // is the mark and the ring is off.
+    const chip = el('span', 'score-band', [band === 'incomplete' ? '' : band]);
+    if (band === 'incomplete') {
+      chip.style.setProperty('--reach', `${Math.min(1, grade.score / PASS_THRESHOLD) * 100}%`);
+      chip.title = `${Math.round((grade.score / PASS_THRESHOLD) * 100)}% of the way to a pass`;
+    }
     const score = el('div', `console-score band-${band}`, [
-      el('span', 'score-band', [band === 'incomplete' ? '·' : band]),
+      chip,
       el('span', 'score-value', [`${Math.round(grade.score * 100)}%`]),
       el('span', 'score-label', [BAND_LABEL[band] ?? band]),
     ]);
+
+    /**
+     * The two numbers the single one is made of.
+     *
+     * **The blended F1 was the only number on the card, and two cold playtesters
+     * hit that from opposite directions.** A junior developer: *"the prompt says
+     * 'extra picks lower the score' but the score line only ever says '3 of your
+     * 6 picks are right' — I never saw the actual precision/recall rule"*, so the
+     * stated cost of a spare pick was unverifiable. A programming-languages
+     * academic, who is the persona built to catch flattery: *"stop showing a
+     * single blended number — it is the one place a tool that is otherwise
+     * scrupulous about evidence flatters the player"*, after picking 3 right and
+     * 3 wrong on a 6-of-20 board and being told **C · 50% · passed**.
+     *
+     * Both are asking for the same thing, and §8.2 already computes it — the
+     * grade carries `correct`, `missed` and `spurious`, so this is arithmetic on
+     * data the card already holds rather than a new claim about anything.
+     *
+     * Written as the rule *and* this board's values, because the complaint was
+     * not that the numbers were absent but that the **rule** was: a player who
+     * can see `3/6 picked right` beside `3/6 found` can derive why that is 50%
+     * and what a spare pick would have cost.
+     */
+    const picked = grade.correct.length + grade.spurious.length;
+    const key = grade.correct.length + grade.missed.length;
+    const rule =
+      picked === 0
+        ? null
+        : el('div', 'console-rule', [
+            el('span', 'rule-part', [
+              `${grade.correct.length} of your ${picked} ${picked === 1 ? 'pick' : 'picks'} right`,
+            ]),
+            el('span', 'rule-sep', ['·']),
+            el('span', 'rule-part', [`${grade.correct.length} of the ${key} to find`]),
+            el('span', 'rule-sep', ['·']),
+            // Named, so the number above stops being an unexplained verdict.
+            el('span', 'rule-note', ['the score is the balance of the two']),
+          ]);
 
     const done = el('button', 'console-submit', ['Back to the map']);
     done.type = 'button';
@@ -278,6 +353,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       header(verb.prompt(challenge, words).title, challenge.difficulty),
       el('h2', 'console-question', [reveal.subject]),
       score,
+      ...(rule === null ? [] : [rule]),
       // `evidence` is assembled from the measured result inside `grade()`, so
       // it cannot drift out of sync with the number above it.
       el('p', 'console-evidence', [grade.evidence]),
@@ -296,6 +372,23 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
             el('p', 'console-register', [
               'Recorded as shown rather than proved — this board had already ' +
                 'explained itself. The first answer is the one that counts as knowledge.',
+            ]),
+          ]
+        : []),
+      // **Why the notebook stayed empty**, which nothing said. Two cold
+      // playtesters answered several boards, watched `0 understood` and
+      // *"Nothing here yet"* the whole time, and reported the codex as simply
+      // not working; a third asked for "a one-line hint like *notes appear once
+      // you pass*". The threshold was invisible, so its consequence read as a
+      // defect. About the grading contract rather than about the question, so
+      // the console still knows nothing of verbs — and it does not shame the
+      // answer, which guardrail 6 forbids.
+      ...(register === null
+        ? [
+            el('p', 'console-register', [
+              `Below the pass mark of ${Math.round(PASS_THRESHOLD * 100)}%, so this ` +
+                'is not written to your field notes yet and the question stays on the ' +
+                'map. Nothing is lost — come back to it whenever you like.',
             ]),
           ]
         : []),

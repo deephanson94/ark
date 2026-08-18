@@ -161,7 +161,12 @@ export function controlsFor(arm: Arm | null, view: View): readonly Control[] {
         ? { keys: 'o', brief: 'map', what: 'Back to the flat map.' }
         : { keys: 'o', brief: 'orbit', what: 'Stand the map up and turn it. Height is how much depends on a file.' },
       view === 'world'
-        ? { keys: 'g', brief: 'map', what: 'Back to the flat map.' }
+        // **"the map you came from", because that is what it does.** `leaveWorld`
+        // restores the view the world was entered from, so `g` out of the world
+        // lands in the *orbit* if that is where you pressed it — a playtester
+        // pressed it expecting the flat map and reported the card as wrong. The
+        // behaviour is right (a view you chose is yours); the sentence was not.
+        ? { keys: 'g', brief: 'map', what: 'Back to the map you came from.' }
         : { keys: 'g', brief: 'walk', what: 'Walk the city. Roads are imports; buildings are files.' },
     );
   }

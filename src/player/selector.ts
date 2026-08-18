@@ -323,7 +323,26 @@ function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const [, challenges] of byVerb) {
     const sorted = [...challenges].sort(
-      (a, b) => a.difficulty - b.difficulty || byteCompare(a.id, b.id),
+      (a, b) =>
+        // **Ahead of difficulty, and inside the per-verb loop on purpose.** See
+        // `showsItsKey`: a board whose whole key sits at depth 1 is answerable
+        // by ticking what ADR-0008 has already drawn, and because `surprise` is
+        // §8.4's `w₃` term such a board has the lowest difficulty its shape
+        // allows. So Blast Radius's band 0 — the boards a newcomer meets — was
+        // *entirely* give-away boards, and the opening asked nothing.
+        //
+        // It has to be here rather than a term in `rankLess`, and that was
+        // measured at three heights before it was believed. `showsItsKey` is
+        // false for every history board by construction (a co-change key has no
+        // import depth), so as a rank term it does not compare give-away boards
+        // against surprising ones — it compares **Blast Radius against
+        // Companion**, and pulled a starved verb's hard board into the first
+        // four. Above `progress` it overrode ADR-0040's interleave outright;
+        // below `difficulty` it was inert to the digit. Folded in here it cannot
+        // reach across verbs at all, because a band is normalised within a verb.
+        Number(showsItsKey(a)) - Number(showsItsKey(b)) ||
+        a.difficulty - b.difficulty ||
+        byteCompare(a.id, b.id),
     );
     let at = 0;
     while (at < sorted.length) {
@@ -337,9 +356,19 @@ function withinVerbRank(deck: readonly Challenge[]): Map<string, number> {
       // including the overlap term this banding exists to protect — would go
       // unreachable between them. Rounding here removes the dependency instead
       // of documenting it.
-      const difficulty = round2((sorted[at] as Challenge).difficulty);
+      const head = sorted[at] as Challenge;
+      const difficulty = round2(head.difficulty);
+      // **Both halves of the sort key, or the grouping undoes it.** Grouping on
+      // rounded difficulty alone puts a give-away board and a surprising one of
+      // equal difficulty in the same band with the same `progress`, which is the
+      // one place the ordering above was supposed to separate them.
+      const shows = showsItsKey(head);
       let end = at;
-      while (end < sorted.length && round2((sorted[end] as Challenge).difficulty) === difficulty) {
+      while (
+        end < sorted.length &&
+        round2((sorted[end] as Challenge).difficulty) === difficulty &&
+        showsItsKey(sorted[end] as Challenge) === shows
+      ) {
         end++;
       }
       // `at` is the number of boards strictly easier than this one, so it is at
@@ -419,6 +448,50 @@ const SIDESHOW =
  */
 export function isSideshow(path: string | null): boolean {
   return path !== null && SIDESHOW.test(path);
+}
+
+/**
+ * Whether the map is already showing this board's whole answer key.
+ *
+ * ADR-0008 decision 1 draws a node's **direct importers** for every node,
+ * always, and §8.4 prices exactly that guess as `surprise`. Both are right and
+ * neither is in question here. What follows from them is arithmetic: the
+ * generator's invariant is `candidates ∩ dependents(subject, ∞) = truth` and
+ * direct importers are a subset of the dependents, so ticking every candidate
+ * the map has drawn scores **1.000 exactly when every truth member sits at
+ * depth 1**. `evidence.depth` is that measured furthest hop, so this needs no
+ * graph and no set arithmetic — it is a property of the challenge.
+ *
+ * **This is not a claim that such a board is bad.** `gate.ts` declines to score
+ * `directImporters` and says why: *"a question that strategy passes is an easy
+ * question, which the progression needs — not a broken one."* That still holds,
+ * and nothing here refuses a board or shortens a deck — deciding what a verb
+ * refuses is not the selector's call to make.
+ *
+ * What was broken is *where they land*. Surprise is the `w₃` term of §8.4, so a
+ * board with none has the lowest difficulty its shape allows, and the rank sorts
+ * ascending — which gathers every give-away board at the **front**. Measured on
+ * the boards the shipped selector serves first, the depth-1 guess beat band A on
+ * **7 of ark's 7 opening Blast Radius boards (5 exact) and 6 of 6 on hono (all
+ * six exact)**, against 11 of 40 and 18 of 54 deck-wide. Pillar 3's violation
+ * condition is *"a challenge can be answered by `Ctrl+F` rather than by
+ * reasoning about structure"*, and the front door was meeting it.
+ *
+ * Read by `withinVerbRank` and **nowhere else**, which is the placement rather
+ * than an implementation detail: as a term in `rankLess` this compares Blast
+ * Radius against Companion instead of comparing boards, because it is false for
+ * every history board by construction. The comment there has the three measured
+ * heights. Exact solves in the opening go **5/6/1/2 → 0 on all four repos**, and
+ * Blast Radius's share of the first fifteen goes *up* — 7→7, 6→8, 6→7, 6→7 — so
+ * what moved is which of its boards you meet, not how many.
+ *
+ * A cold playtester read the mechanism straight off the screen — the inspector
+ * says `imported by 2`, the board's key is those 2, and the reveal admits *"the
+ * furthest is 1 hop away"*. Their verdict is the sentence to keep: **it does not
+ * flatter in the reveal, it flatters in the selection.**
+ */
+export function showsItsKey(challenge: Challenge): boolean {
+  return challenge.evidence.kind === 'importGraph' && challenge.evidence.depth <= 1;
 }
 
 interface Rank {

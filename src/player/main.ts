@@ -52,7 +52,15 @@ import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
 import type { Radius, Scene, SceneNode } from './scene.js';
-import { DIRECT_ONLY, FULL_RADIUS, blastRadius, pick, prepare } from './scene.js';
+import {
+  DIRECT_ONLY,
+  FULL_RADIUS,
+  answerableByRegion,
+  blastRadius,
+  clearedByRegion,
+  pick,
+  prepare,
+} from './scene.js';
 import type { Twins } from './twins.js';
 import { findTwins, nameableClass } from './twins.js';
 import type { Ties } from './ties.js';
@@ -62,18 +70,29 @@ import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
 import { NO_HISTORY, noteAttempt, noteSkipped, suggestNext } from './selector.js';
 import { fieldNotes } from './notes.js';
+import { answeredNodes, medalsFor, provableNodes } from './medals.js';
 import {
   createError,
   createGuide,
   createHud,
   createInspector,
   createHelp,
+  createArrival,
   createLegend,
   createNotebook,
 } from './ui.js';
 import { DISTRICT_SCALE } from './zoom.js';
 
 const ATLAS_URL = 'atlas.json';
+/**
+ * How long the arrival card stays before it withdraws on its own.
+ *
+ * Two short lines at reading speed, and every playtest that complained about
+ * the opening complained about *nothing happening* rather than about waiting —
+ * so this is the shortest interval that is still an event.
+ */
+const ARRIVAL_MS = 3200;
+
 /** Pointer movement below this is a click, not a drag. */
 const DRAG_THRESHOLD = 4;
 /**
@@ -302,6 +321,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   let progress: Progress = loadProgress(store, saveKey);
   let fog: Fog = deriveFog(progress, liveness, shore);
   /**
+   * The **answered** population, and the per-region fractions read off it.
+   *
+   * One set, three readers: the legend's tallies, the medal shelf, and the map's
+   * region wash. Passing `fog.understood` to one and the answered set to another
+   * is how two panels came to print `2/37` and `3/37` for the same region on a
+   * retried board — the shape ADR-0019's reveal and its own field note had on 21
+   * of 26 boards, where each surface is right and they disagree.
+   *
+   * Kept beside `fog` and recomputed with it, because the two decay together: a
+   * pass whose subject has left the atlas leaves both.
+   */
+  const answerableByRegionMap = answerableByRegion(scene, provableNodes(scene.atlas));
+  let answeredSet: ReadonlySet<NodeId> = answeredNodes(progress, liveness);
+  let regionProgress: ReadonlyMap<number, number> = clearedByRegion(
+    scene,
+    answeredSet,
+    answerableByRegionMap,
+  );
+  /**
    * What may have its **import** radius drawn — the subjects and members proved
    * through Blast Radius, and nothing else.
    *
@@ -381,6 +419,29 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   const pickAt = (local: { x: number; y: number }): SceneNode | null => {
     // **Names first, in both views.** A nameplate is a screen box wherever it
     // was drawn, so this loop is view-agnostic; only the fall-through differs.
+    //
+    // **The order is a live trade, not a settled one, and it is measured.**
+    // `placeLabels` blocks against other labels and the chrome and never against
+    // the *discs*, so a name lies across other people's nodes and one of the two
+    // has to lose every contested pixel. `scripts/probe-nameplate.ts` hovers
+    // both populations through this very function, at `4e39701`:
+    //
+    //   names first (shipped)  35 of ark's 273 discs and 33 of hono's 425 name
+    //                          someone else at dead centre; **6 and 6 answer
+    //                          nowhere within 20px**. 0 of 15 and 0 of 12 names
+    //                          mis-point.
+    //   bodies first           4 and 14 discs, all of them to another disc; but
+    //                          **9 of 15 and 5 of 12 names** mis-point.
+    //
+    // Neither is right and the third option — making the discs blockers so the
+    // overlap cannot happen — closes it completely (0 by name, both repos) and
+    // takes ark from **15 drawn labels to 2**, which pays for the fix out of the
+    // thing five rounds of playtesters said was already scarcest. So it stays as
+    // it reads, the cost is in `README.md`'s Known gaps with these numbers, and
+    // the probe is what stops the next session re-deriving all three from
+    // scratch. Note which way the residual errs: names-first is the arrangement
+    // whose losers are *nodes*, and the e2e's own `pointed at N names` step
+    // guards the other direction — so a flip here would go red there, on purpose.
     const named = pickName(local);
     if (named !== null) return named;
     if (orbit !== null) return pickColumn(scene.nodes, camera, viewport, orbit, local);
@@ -432,6 +493,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     progress = next;
     surveyedIds = new Set(next.surveyed);
     fog = deriveFog(progress, liveness, shore);
+    // Recomputed with the fog, from the same record, so the three surfaces that
+    // read it cannot fall a frame out of step with the map.
+    answeredSet = answeredNodes(progress, liveness);
+    regionProgress = clearedByRegion(scene, answeredSet, answerableByRegionMap);
     tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
     retie();
     saveProgress(store, saveKey, progress);
@@ -617,6 +682,15 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     tracedRadius.has(node.id) ? FULL_RADIUS : DIRECT_ONLY;
 
   /**
+   * The board the guide is currently offering, kept in step with its caption.
+   *
+   * Assigned in `refreshGuide` from the same `nextUp()` the caption is written
+   * from, so the two cannot drift — which is the whole defect: a caption saying
+   * *"next is empty.ts"* over an `Enter` that opened something else.
+   */
+  let suggested: Challenge | null = null;
+
+  /**
    * Which question a click on this node opens.
    *
    * The first one the player has not passed, **in tier order**, so a node
@@ -627,6 +701,26 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    */
   const challengeFor = (node: SceneNode | null): Challenge | null => {
     if (node === null) return null;
+    // **The guide's own suggestion wins on the node it sent you to**, and this is
+    // the round-5 defect rather than a nicety. `suggestNext` picks a board partly
+    // for *verb variety* — `unmetVerb` lifts the first board of a kind you have
+    // never met, and `sameVerb` breaks a run — and then this function threw that
+    // away, because it returns the node's first unpassed board in **tier order**
+    // and Blast Radius is tier 3. Measured on this repo: the two disagree on
+    // **3 of the first 12 suggestions, including board two**.
+    //
+    // Six of ten cold playtesters hit it. Three reported the symptom as "both
+    // questions I was served were the same verb" while the medal shelf beside
+    // them read *"1 of 4 kinds of question answered"*; the sharpest report was a
+    // skip that moved the caption to a different file while `Enter` opened the
+    // **old** board — *"two different ask affordances bound to one key"*.
+    //
+    // A direct click keeps tier order: that is the node's own question and
+    // nothing advertised otherwise. Only the node the guide is currently
+    // pointing at honours the suggestion, which is the promise the caption makes.
+    if (suggested !== null && suggested.subject === node.id) {
+      if (!selector.answered.has(answerKey(suggested.verb, suggested.subject))) return suggested;
+    }
     const bucket = challengesById.get(node.id);
     if (bucket === undefined || bucket.length === 0) return null;
     return bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null;
@@ -704,7 +798,14 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // stopped supporting (ADR-0011 decision 3).
   const notebook = createNotebook(mapCoverage.deckRefused);
   const refreshNotes = (): void => {
-    notebook.update(fieldNotes(scene.graph, progress, liveness));
+    // **The same `fog` the map is drawing**, handed to the medals rather than
+    // re-derived inside them. Two surfaces computing one population separately is
+    // how the Archaeology reveal and its own field note came to disagree on 21 of
+    // 26 boards, each internally consistent and each with passing tests.
+    notebook.update(
+      fieldNotes(scene.graph, progress, liveness),
+      medalsFor(scene, progress, liveness, fog),
+    );
   };
   notebook.toggle.addEventListener('click', refreshNotes);
 
@@ -929,16 +1030,50 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
 
   const legend = createLegend(scene);
   const help = createHelp();
+  /**
+   * **The repository introduces itself, for about three seconds.**
+   *
+   * Not in an arm. `docs/experiments/0001` is between-subjects and its whole
+   * point is that the two arms differ in one thing; a card that says *"the most
+   * load-bearing file is X"* before either arm has been played is a free hint
+   * in both, and an unequal one if it ever fails to render. `?arm=` gets the
+   * opening the experiment was designed around, which is the one without it.
+   *
+   * **And not to someone who has been here before.** It said *"you have arrived
+   * at ark"* to a returning player with 61 files surveyed and a field note
+   * already written, which a cold playtester filed as a bug and is one: an
+   * arrival is an event, and replaying it says the session before did not
+   * happen. Read off `progress` rather than off the fog, because the fog's
+   * `surveyed` carries the landmark head start (`deriveFog`'s `base`) and is
+   * therefore non-empty for a player who has done nothing at all — the same
+   * "24 surveyed before I touched anything" two testers queried in the HUD.
+   */
+  const returning = progress.passes.length > 0 || progress.surveyed.length > 0;
+  const arrival = arm === null && !returning ? createArrival(scene) : null;
   root.replaceChildren(
     canvas,
     hud.root,
-    legend,
+    legend.root,
     inspector.root,
     guide.root,
     notebook.root,
     help.root,
     challengePanel.root,
+    ...(arrival === null ? [] : [arrival.root]),
   );
+  if (arrival !== null) {
+    canvas.classList.add('is-arriving');
+    // Long enough to read two short lines, and gone on the first sign of a
+    // player — an opening you have to sit through is worse than no opening.
+    const leave = (): void => {
+      arrival.dismiss();
+      window.clearTimeout(timer);
+    };
+    const timer = window.setTimeout(leave, ARRIVAL_MS);
+    for (const event of ['pointerdown', 'keydown', 'wheel'] as const) {
+      window.addEventListener(event, leave, { once: true, passive: true });
+    }
+  }
 
   /** Which of the three views is on screen, for the arm-aware control list. */
   const viewNow = (): View => (world.isActive() ? 'world' : orbit === null ? 'map' : 'orbit');
@@ -958,7 +1093,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   // The console's *panel*, never its scrim: the scrim is `inset: 0` and would
   // block every label on the canvas. See `Console.panel` for what it was
   // costing while it was missing from this list.
-  const panels = [hud.root, legend, inspector.root, guide.root, challengePanel.panel];
+  const panels = [hud.root, legend.root, inspector.root, guide.root, challengePanel.panel];
   function measureChrome(): void {
     const host = root.getBoundingClientRect();
     chrome = panels
@@ -1176,7 +1311,11 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * Only when the subject *has* a place: Placement's is a commit, which has
    * none, and there is nothing to pan to (ADR-0018).
    */
+  /** What the console has open, for the e2e's caption-vs-board check. */
+  let openChallenge: Challenge | null = null;
+
   function openBoard(challenge: Challenge): void {
+    openChallenge = challenge;
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
     if (node !== undefined) {
@@ -1204,7 +1343,47 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
 
   function refreshGuide(openQuestions: number): void {
     const upcoming = nextUp();
+    suggested = upcoming;
     const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
+    // **What the guide is offering, as the selector's own key.** The e2e used to
+    // identify a suggestion by its rendered caption, which names the *subject*
+    // and not the verb — so two boards asking different questions about one file
+    // read as the same suggestion and a correct pair scored as a repeat. The key
+    // is `(verb, subject)` everywhere else in the player and it is not on screen
+    // anywhere, so the test needs it from here rather than from a sentence.
+    (globalThis as unknown as { __arkNextKey?: unknown }).__arkNextKey =
+      upcoming === null ? null : answerKey(upcoming.verb, upcoming.subject);
+    // What the console actually has open, for the same reason: the caption and
+    // the opened board drifted apart and only a browser can see it.
+    (globalThis as unknown as { __arkOpenKey?: unknown }).__arkOpenKey =
+      openChallenge === null ? null : answerKey(openChallenge.verb, openChallenge.subject);
+    // **Whether this suggestion is a case that could disagree** — the suggested
+    // subject also carries an unanswered board the tier order would have picked
+    // first. Published so the e2e can *gate itself*: without it the check lands
+    // on a subject carrying one board, the two trivially agree, and a mutant
+    // deleting the whole fix passes. That happened on the first run of it.
+    // The **counterfactual**, computed exactly: what would `challengeFor` return
+    // for this subject if it consulted tier order alone? When that differs from
+    // the suggestion, this is a board where the defect was visible.
+    //
+    // The first version asked a weaker question — "does the subject carry another
+    // unanswered board at the same tier or lower?" — which is true on plenty of
+    // subjects where the suggestion *is* the tier-first board, so the two agreed
+    // anyway and a mutant deleting the whole fix passed **twice**. A gate has to
+    // model the disagreement, not a precondition for it.
+    // **A node subject, and that qualifier is the third correction to this one
+    // line.** `challengeFor` is only ever called with a node; a commit subject
+    // has no place on the map (ADR-0018), so the guide opens it directly and the
+    // code under test never runs. Without this the gate found its "rival" on a
+    // Placement board about a commit and a mutant deleting the fix passed a
+    // **third** time — the subject-is-not-a-node landmine, in a gate, after two
+    // other attempts to make that gate honest.
+    (globalThis as unknown as { __arkNextRival?: unknown }).__arkNextRival =
+      upcoming === null || !isNodeId(upcoming.subject)
+        ? false
+        : ((challengesById.get(upcoming.subject) ?? []).find(
+            (other) => !selector.answered.has(answerKey(other.verb, other.subject)),
+          )?.id ?? null) !== upcoming.id;
     guide.update({
       next: upcoming,
       // Only when the deck is empty *because it was refused*. A repo whose
@@ -1270,38 +1449,51 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         fog,
         hovered,
         selected,
-        // **No import radius while a board is open, and this is a pillar-3
-        // fix rather than a tidy-up.**
+        // **Depth 1 is drawn on every board, which is ADR-0008 decision 1 as
+        // written** — and this line spent two sessions contradicting the
+        // decision it cited.
         //
-        // ADR-0008 decision 1 gives every node its *direct importers* for free
-        // on the canvas, and the arrival tip promises exactly that — "hover to
-        // see what imports it — the rest of the radius is earned". A Blast
-        // Radius key is a sample of the **transitive** dependent set, which
-        // contains the direct one. Each decision is right alone; together,
-        // opening a board on `S` drew a gold line from `S` to some of its own
-        // answers.
+        // A cold playtester used a subject's ring as a lookup and it was
+        // measured (37 of ark's 40 Blast Radius boards drew at least one key
+        // member), so the channel was switched off while a board was open, then
+        // narrowed to import-graded boards. No ADR was written, and the comment
+        // that shipped with it named decision 1 as its authority on the line
+        // that nulled it.
         //
-        // Measured by `npx tsx scripts/probe-ring.ts`: **37 of ark's 40 Blast
-        // Radius boards (92.5%) drew at least one key member, 81 of 216 members
-        // in all** — and 94.4% of hono's boards, 95.7% of graphql-js's. A cold
-        // playtester found it at street zoom and proved the lines belonged to
-        // the subject by deselecting with the camera untouched. That is the
-        // `Ctrl+F` failure pillar 3 exists to prevent, on nearly every board of
-        // the verb the roadmap calls the kill point.
+        // Decision 1 had already reasoned about exactly this and **rejected**
+        // it, in sentences that are still right: *"no modal special-casing and
+        // no per-subject suppression: the rule must not depend on whether a
+        // challenge is open, because the leak happens at the moment of choosing
+        // the subject"*; *"depth 1 is not a leak — those edges are already drawn
+        // on the canvas"*; and *"suppress everything while a challenge is open —
+        // fixes nothing at the moment of choosing"*. Which is true: close the
+        // board, hover, reopen. It was a speed bump, not a gate.
         //
-        // The rule is ADR-0016's, which settled the identical question for
-        // history wires: *ink on the map is a lookup where text in a closed
-        // panel is a memory test*. So the whole channel is off while a board is
-        // open — not just the subject's ring, because the containment argument
-        // `depthFor` documents (if D imports S then `dependents(D) ⊆
-        // dependents(S)`) makes a hovered candidate's importers key members too.
-        // One rule; every leak in ADR-0014 was a rule that lived twice.
-        radius: challengePanel.isOpen() ? null : radius,
+        // The cost was not a speed bump. §8.4 defines `surprise` against the
+        // naive direct-neighbour guess, so a player who cannot see direct
+        // neighbours cannot form the baseline difficulty is calibrated against —
+        // and `gate.ts` declines to score that guess for the same reason, in
+        // writing: *"a question that strategy passes is an easy question, which
+        // the progression needs."* Measured by `scripts/probe-depth1.ts`, it
+        // scores **0.985 / 1.000 / 0.611 / 0.800 over the first fifteen boards
+        // the shipped selector serves** and **0.531 / 0.561 / 0.293 / 0.467
+        // deck-wide** (ark, hono, kysely, graphql-js). That is the difficulty
+        // curve: it wins the opening, which is what an opening is *for*, and
+        // loses most of the deck. Taking it away made the boards designed to be
+        // winnable unwinnable — three cold rounds of "my first three boards
+        // scored zero".
+        //
+        // What stays gated is what decision 1 actually gates: the **full** cone,
+        // on `subjectsPassed`. ADR-0016's wire gate is untouched — a co-change
+        // wire *is* Companion's answer relation, where this is the baseline
+        // Blast Radius measures departure from.
+        radius,
         chrome,
         questions: unanswered,
         peaks,
         ties,
         tieFocus,
+      regionProgress,
         board: boardMarks(),
       };
       const stats =
@@ -1312,11 +1504,36 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // The leak this guards is ink on a canvas, so a browser test needs the
       // renderer's own answer rather than a pixel heuristic: `none` means no
       // import radius was handed to the frame at all.
+      // The depth too, because the rule ADR-0008 decision 1 states has two
+      // halves — depth 1 always, the full cone only for a proved subject — and
+      // a gate that reads only "is there a radius" cannot tell them apart.
       (globalThis as unknown as { __arkRadius?: unknown }).__arkRadius =
-        frameInput.radius === null ? 'none' : `subject ${frameInput.radius.subject}`;
+        frameInput.radius === null
+          ? 'none'
+          : `subject ${frameInput.radius.subject} depth ${frameInput.radius.maxDepth}`;
       // The view, for the e2e's composition gate. A board pans the map and
       // gives the pan back on close; a canvas hash cannot tell that from the
       // turn that follows it, and the camera is the thing the rule is about.
+      // How many *candidate* markers this frame drew, as against how many marks
+      // in total. An Archaeology board marks its subject — a file — and none of
+      // its candidates, which are commits, so the two numbers differ on exactly
+      // the verb where the click hint must not appear.
+      (globalThis as unknown as { __arkCandidateMarks?: unknown }).__arkCandidateMarks =
+        stats.candidatesDrawn;
+      // **The other half of ADR-0008 decision 1**, from the same set the frame
+      // gated on. `__arkRadius` alone says depth 1 or the full cone; it cannot
+      // say which of those is *correct*, because the answer depends on whether
+      // the subject is one the player proved. So a gate reading it alone has to
+      // guess that the board it happened to open is on an unproved subject —
+      // which is a prediction about a deck that re-rolls on every commit, and it
+      // went red on a commit that added two scripts, reporting a full cone the
+      // decision explicitly grants as *"the full cone is earned, not shown"*.
+      (globalThis as unknown as { __arkTraced?: unknown }).__arkTraced = [
+        ...tracedRadius,
+      ].flatMap((id) => {
+        const ref = scene.graph.refById.get(id);
+        return ref === undefined ? [] : [ref];
+      });
       (globalThis as unknown as { __arkCamera?: unknown }).__arkCamera = {
         x: camera.x,
         y: camera.y,
@@ -1345,6 +1562,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           x: plate.left + plate.width / 2,
           y: plate.top + plate.height / 2,
         }));
+      // The regions filling in, from the same `fog` the HUD's coverage reads —
+      // so the panel and the map can never disagree about what is proved.
+      legend.update(answeredSet, orbit === null ? 'map' : 'orbit');
       hud.update(
         coverage(fog, scene.nodes.length),
         orbit === null ? stats.level : 'orbit',
@@ -1527,7 +1747,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * second place for the two views to disagree about what a node is — and this
    * repo's landmine about a rule living twice has been paid for four times.
    */
-  const mapOnlyPanels = [legend, inspector.root];
+  const mapOnlyPanels = [legend.root, inspector.root];
 
   function enterWorld(): void {
     landTurn();

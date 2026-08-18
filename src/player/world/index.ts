@@ -41,16 +41,72 @@ import { drawWorldFrame } from './render.js';
  * inside as legibility allows, which is a compromise and is named as one.
  */
 const EYE_DISTANCE = 46;
+/** The rig's full extension, for `scripts/probe-eye.ts` and the tests. */
+export const EYE_DISTANCE_FULL = EYE_DISTANCE;
 /** Never closer than this, or the body fills the screen in a tight alley. */
 const EYE_MIN_DISTANCE = 18;
+/**
+ * How far above `EYE_HEIGHT` the eye may climb to clear a roof.
+ *
+ * A bound rather than a free climb: ark's tallest file stands at roughly sixty
+ * and hono's taller, so an uncapped rule would answer one awkward neighbour by
+ * going to orbit. Three times the resting height is a rooftop view of a dense
+ * quarter, which is legible; ten times is the flat map with extra steps.
+ */
+const EYE_CLIMB_CAP = 3;
+/**
+ * How much of the dead-on angle the eye actually takes.
+ *
+ * Looking exactly at the hero's feet puts the horizon off the top of the frame
+ * and shows nothing of where you are walking. Slightly shallower keeps the
+ * ground ahead in view, which is the whole reason to be down here.
+ */
+const EYE_PITCH_SOFTEN = 0.86;
 /** How far clear of a wall the eye keeps. */
 const EYE_CLEARANCE = 1.4;
 const EYE_HEIGHT = 33;
+/** The eye's height at full extension; it scales down with the boom. */
+export const EYE_HEIGHT_AT_FULL = EYE_HEIGHT;
 export const EYE_PITCH = -0.52;
 const FOV = 1.05;
+/** The vertical field of view, for `scripts/probe-spawn.ts` and the tests. */
+export const FOV_VERTICAL = FOV;
 
 /** How close you must be to a tower's edge for its board to be openable. */
 export const INTERACT_RANGE = 14;
+/**
+ * How far clear of the target's footprint `g` stands you.
+ *
+ * **Was 7, and 7 is why the walk was the worst-rated surface in the product.**
+ * Seven of ten cold playtesters named it, three as *the* thing dragging their
+ * score, all describing the same first frame: a flat untextured wall filling
+ * 1440×900, no horizon, no sky. The diagnosis that looked obvious — the camera
+ * resolving inside a building — is **wrong, and measured wrong**:
+ * `scripts/probe-spawn.ts` reports 0 of ark's 227 and 0 of hono's 381 real spawn
+ * positions putting the eye inside any tower.
+ *
+ * What actually happens is framing. You are stood in front of the target facing
+ * it, and a target is a *challenge subject*, which by ADR-0013 means tall — so
+ * the arithmetic is that a 60-unit tower seen from the rig's resting position
+ * subtends about 98% of the vertical field of view. The wall is the building you
+ * were sent to, seen from its foot.
+ *
+ * **This does not fix that, and saying so is the point of the paragraph.**
+ * Spawns where the target fills ≥90% of frame height go 3.1% → 3.5% on ark and
+ * 4.2% → 3.9% on hono — inside the noise, in opposite directions, worst case
+ * still 119%. The binding variable is eye *height* against the target's, and no
+ * standoff reaches it from down here: at the rig's resting position you would
+ * have to stand outside `INTERACT_RANGE` to frame a sixty-unit tower, which
+ * would stand the player where they cannot open the board they came for. The
+ * real fix is a rig that considers what is **ahead** as well as what is behind,
+ * and it is not built. `scripts/probe-spawn.ts` is the instrument for it.
+ *
+ * What this *did* fix is a different bug the same measurement uncovered: the
+ * standoff was computed off the glyph radius and the gate off the footprint, so
+ * a unit test found a spawn 14.12 from a tower with a range of 14 — stood at the
+ * building you were sent to, unable to open it.
+ */
+const SPAWN_STANDOFF = 11;
 /**
  * How close counts as having looked at a building.
  *
@@ -161,9 +217,122 @@ export interface WorldMode {
  * A spawn *inside* a tower is resolved by the collision push on the first frame,
  * which reads as being shoved rather than as arriving.
  */
-function standingClearOf(at: SceneNode): Hero {
-  const clearance = at.radius + HERO_RADIUS + 7;
-  return { x: at.x, y: at.y + clearance, facing: 0 };
+/**
+ * Where `g` stands you when you enter on a particular building.
+ *
+ * Exported so `scripts/probe-spawn.ts` and the unit tests measure the **shipped**
+ * rule rather than a copy of it — a re-implemented probe agrees with the code by
+ * sharing whatever the code got wrong, which is how `probe-eye.ts` came to
+ * report a healthy number about a population the product never uses.
+ */
+export function spawnFacing(world: World, at: SceneNode): Hero {
+  // **Off the tower's ground `footprint`, not the scene node's glyph `radius`.**
+  // Those are different numbers wearing one name — CLAUDE.md's landmine about
+  // reusing a measurement in a new dimension — and the standoff and the interact
+  // gate were reading one each. `focus()` opens a board within `INTERACT_RANGE`
+  // of the **footprint**, so a standoff computed off the glyph drifts against
+  // the gate by however much the two differ, and a unit test caught it landing
+  // at 14.12 against a range of 14: stood at the building you were sent to, and
+  // unable to open it.
+  //
+  // Measured off the footprint the gap is exactly `HERO_RADIUS + STANDOFF`, so
+  // the relationship to the gate is arithmetic rather than hopeful.
+  const tower = world.byRef.get(at.ref);
+  const footprint = tower === undefined ? at.radius : tower.footprint;
+  // Two rules pulling opposite ways, and measuring them is the only reason this
+  // is not one or the other. Standing off the **glyph radius** frames better by
+  // accident — radius scales with lines of code, so it happens to back you away
+  // from exactly the big buildings, which are the tall ones. Standing off the
+  // **footprint** is the only thing the gate below agrees with. Swapping to the
+  // footprint alone made framing *worse* on ark (3.1% → 9.7% of spawns with the
+  // target filling the frame), and raising the standoff to the gate's ceiling
+  // did not recover it (8.4%).
+  //
+  // So: back off as far as framing wants, and never past what the gate allows.
+  const want = Math.max(at.radius, footprint) + HERO_RADIUS + SPAWN_STANDOFF;
+  const limit = footprint + INTERACT_RANGE;
+  return { x: at.x, y: at.y + Math.min(want, limit), facing: 0 };
+}
+
+/**
+ * Where the eye stands behind the hero: how far back, and how high.
+ *
+ * Pure and exported so `scripts/probe-eye.ts` and the unit tests measure the
+ * *shipped* rule rather than a copy of it — a re-implemented probe agrees with
+ * the code by sharing whatever the code got wrong.
+ *
+ * ## The frame this exists to stop
+ *
+ * Six of ten cold playtesters named the walk as the thing dragging their score
+ * and three named it as *the* thing, all describing one image: a flat wall
+ * filling most of the screen, no hero visible, a black wedge where the near
+ * plane cuts the geometry. The rig had a pull-in for exactly that, and three
+ * things defeated it:
+ *
+ *  - **The floor sat above the obstruction.** `Math.max(18, hit)` put the eye
+ *    back inside any building found within 18 units, which in a dense quarter
+ *    is all of them — and dense quarters are where every interesting file is.
+ *  - **The test was 2D**, so a one-storey file pulled the camera in exactly as
+ *    hard as a tower the boom could not clear.
+ *  - **A tower is drawn as a square and was tested as its inscribed circle**, so
+ *    the eye could sit in a corner that is drawn solid. `√2` is the corner
+ *    reach — the glyph-radius-is-not-a-ground-area landmine one level down.
+ *
+ * ## Why it rises rather than shortens
+ *
+ * The obvious repair is to let the boom shorten as far as it likes. Built and
+ * photographed: at five units the eye is inside the figure's legs looking up,
+ * which is worse than the wall and is **precisely what the 18 was written to
+ * prevent** — its comment says *"or the body fills the screen in a tight
+ * alley"*. Removing a guard without pricing what it was guarding is this
+ * repo's own landmine, and it took one screenshot to collect.
+ *
+ * So the boom keeps a usable length and the eye **climbs over** what it cannot
+ * see past, which is what a third-person rig does in a tight space. Pitch is
+ * derived from the geometry rather than fixed, because a camera that rises
+ * without looking further down loses the hero off the bottom of the frame — the
+ * same defect from the other end.
+ */
+export interface Rig {
+  readonly distance: number;
+  readonly height: number;
+  readonly pitch: number;
+}
+
+export function rigFor(world: World, at: Hero): Rig {
+  const back = { x: -Math.sin(at.facing), y: Math.cos(at.facing) };
+  let distance = EYE_DISTANCE;
+  let clear = 0;
+  for (const tower of near(world, at.x, at.y, EYE_DISTANCE + EYE_CLEARANCE)) {
+    // Where the boom enters this tower's square, if it does.
+    const ox = at.x - tower.node.x;
+    const oy = at.y - tower.node.y;
+    const radius = tower.footprint * Math.SQRT2 + EYE_CLEARANCE;
+    const b = ox * back.x + oy * back.y;
+    const c = ox * ox + oy * oy - radius * radius;
+    if (c < 0) continue; // the hero is already inside it; the boom cannot help
+    const discriminant = b * b - c;
+    if (discriminant <= 0) continue;
+    const hit = -b - Math.sqrt(discriminant);
+    if (hit <= 0 || hit >= EYE_DISTANCE) continue;
+    // The boom rises linearly to `EYE_HEIGHT`, so at `hit` it is this high. A
+    // building under that is already cleared and must not pull anything in.
+    if (tower.height <= (EYE_HEIGHT * hit) / EYE_DISTANCE) continue;
+    if (hit < distance) distance = hit;
+    clear = Math.max(clear, tower.height + EYE_CLEARANCE);
+  }
+  // Back off no further than the alley allows, and never into the figure.
+  distance = Math.max(EYE_MIN_DISTANCE, distance);
+  // At full extension this is exactly `EYE_HEIGHT`; shortened, it keeps the
+  // rig's proportions; obstructed, it clears the roof. Capped, or a single tall
+  // neighbour would put the eye in the stratosphere.
+  const height = Math.min(
+    EYE_HEIGHT * EYE_CLIMB_CAP,
+    Math.max((EYE_HEIGHT * distance) / EYE_DISTANCE, clear),
+  );
+  // Look at the hero's feet, softened so the ground ahead stays in frame. A
+  // fixed pitch and a climbing eye is how you lose the hero off the bottom.
+  return { distance, height, pitch: -Math.atan2(height, distance) * EYE_PITCH_SOFTEN };
 }
 
 export function createWorldMode(): WorldMode {
@@ -217,26 +386,11 @@ export function createWorldMode(): WorldMode {
   };
 
   const eyeOf = (at: Hero): Eye => {
-    const back = { x: -Math.sin(at.facing), y: Math.cos(at.facing) };
-    let distance = EYE_DISTANCE;
-    if (world !== null) {
-      // `near` already widens by each tower's own footprint, so the boom's
-      // length is the whole reach.
-      for (const tower of near(world, at.x, at.y, EYE_DISTANCE + EYE_CLEARANCE)) {
-        // Where the boom enters this tower's circle, if it does.
-        const ox = at.x - tower.node.x;
-        const oy = at.y - tower.node.y;
-        const radius = tower.footprint + EYE_CLEARANCE;
-        const b = ox * back.x + oy * back.y;
-        const c = ox * ox + oy * oy - radius * radius;
-        if (c < 0) continue; // the hero is already inside it; the boom cannot help
-        const discriminant = b * b - c;
-        if (discriminant <= 0) continue;
-        const hit = -b - Math.sqrt(discriminant);
-        if (hit > 0 && hit < distance) distance = hit;
-      }
-    }
-    return follow(at, Math.max(EYE_MIN_DISTANCE, distance), EYE_HEIGHT, EYE_PITCH, FOV);
+    const rig =
+      world === null
+        ? { distance: EYE_DISTANCE, height: EYE_HEIGHT, pitch: EYE_PITCH }
+        : rigFor(world, at);
+    return follow(at, rig.distance, rig.height, rig.pitch, FOV);
   };
 
   const focusOf = (
@@ -276,7 +430,7 @@ export function createWorldMode(): WorldMode {
       // would be resolved by the collision push on the first frame, which reads
       // as being shoved.
       if (at !== null) {
-        hero = standingClearOf(at);
+        hero = spawnFacing(world, at);
       } else {
         hero = { x: world.spawn.x, y: world.spawn.y, facing: world.spawn.facing };
       }
@@ -290,7 +444,7 @@ export function createWorldMode(): WorldMode {
       // "stand clear of the tower" is one edit away from a spawn inside a
       // footprint, which the collision push resolves on the first frame and
       // reads as being shoved.
-      hero = standingClearOf(at);
+      hero = spawnFacing(world, at);
       lastMs = null;
       held.clear();
       return true;
