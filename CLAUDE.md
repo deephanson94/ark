@@ -1171,6 +1171,9 @@ npm run budget             # print measured budgets, fail over ceiling
 npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
                            #   a real dependent as a wrong answer. The only check here that can see a
                            #   *missing* edge; gates itself on a plant and fails if the detector is inert.
+npx tsx scripts/shot-chains.ts [fraction …]  # photograph the proved-chain layer partway through a
+                           #   playthrough. `test:e2e` proves one board, so its shot shows two links —
+                           #   this grades real boards through `applyGrade` and injects the save.
 npm run raster             # slow — frame time at 2,000 nodes in a real browser (ADR-0009 P3).
                            #   Has never been pointed at the walkable world (ADR-0033 §9).
 npm run test:e2e           # slow — ask first. Screenshots land in artifacts/ — look at them.
@@ -1444,9 +1447,11 @@ rather than a disclosure rule, because ink on the map is a lookup where text in 
 memory test. **Progress survives a
 reload**, keyed on the repo's root commit, and a **"Where next?" panel** walks you through the deck.
 **Field notes** record what you proved — never what you were shown, and the *verb* writes the
-sentence. **128 KiB of JS** (112 before the district arches, 95 before the walkable world), zero runtime
+sentence. **148 KiB of JS at `bc3f039`** (128 before the proved chains, 112 before the district arches, 95 before
+the walkable world), zero runtime
 dependencies, first paint **168 ms** measured by `test:e2e`. `npm run index` produces a valid
-**398.0 KiB** atlas in **634 ms** (measured at `8448fd1`).
+**435.7 KiB** atlas in **789 ms** (measured at `bc3f039`; this line read 398.0 KiB / 634 ms from `8448fd1`
+for four commits, which is the drift the paragraph below is about).
 **Every number in this section is a measurement of one commit and ark indexes itself**, so they all
 drift — the two above were stale by 16 KiB and 9 challenges before anyone noticed. Re-measure rather
 than quote.

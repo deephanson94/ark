@@ -26,9 +26,10 @@ import {
   validateAtlas,
 } from '../../src/atlas/index.js';
 import { TOOL, buildIndex, indexOptions } from '../../src/indexer/build.js';
-import { VERBS, isGameable, scoreSet, wordsFor } from '../../src/verbs/index.js';
+import { VERBS, channelOf, isGameable, scoreSet, wordsFor } from '../../src/verbs/index.js';
 import { prepare } from '../../src/player/scene.js';
 import { findTwins, nameableClass } from '../../src/player/twins.js';
+import { chainsProvedBy } from '../../src/player/chains.js';
 import { FOOTPRINT_SCALE, buildWorld } from '../../src/player/world/build.js';
 import { HERO_RADIUS } from '../../src/player/world/hero.js';
 import { indexCoChange } from '../../src/verbs/companion/index.js';
@@ -1226,6 +1227,92 @@ describe('twin classes on this repo', () => {
  * to draw beside an open board. If this ever measures zero, the leak has moved
  * rather than closed — check the generator before deleting the test.
  */
+/**
+ * **ADR-0049's permission, held to the measurement it was granted on.**
+ *
+ * §4.3 permits the proved chain because it *"adds no node and no edge the map is
+ * not already drawing"* — true about nodes and edges, false about **direction**,
+ * which decisions 1 and 2 of the same document refuse permanently. So the gate
+ * in `chains.ts` is what makes the layer legal, and this is its canary on the
+ * real deck rather than on a fixture.
+ *
+ * Three assertions, and the third is what stops the first two being decoration:
+ * the layer must **fire**, the gate must leave no in-edge of an open board
+ * drawn, and the *ungated* version must actually leak — because a gate measured
+ * only on the arm where it holds is a rule nobody has priced.
+ */
+describe('proved chains on this repo (ADR-0049)', () => {
+  // Built per test rather than in the describe body: `atlas` is filled by a
+  // `beforeAll`, so a describe-body read runs against an empty one.
+  const load = () => {
+    const graph = buildGraph(atlas);
+    const boards = atlas.challenges.filter(
+      (challenge) => channelOf(challenge.verb) === 'importRadius' && isNodeId(challenge.subject),
+    );
+    return { graph, boards, refOfSubject: (c: (typeof boards)[number]) => graph.refById.get(c.subject) };
+  };
+
+  it('draws something on a half-cleared deck, or it is not a layer', () => {
+    const { graph, boards, refOfSubject } = load();
+    const answered = boards.slice(0, Math.floor(boards.length / 2));
+    const open = new Set<number>();
+    for (const board of boards.slice(Math.floor(boards.length / 2))) {
+      const ref = refOfSubject(board);
+      if (ref !== undefined) open.add(ref);
+    }
+    const { links, withheld } = chainsProvedBy(graph, answered, open);
+    expect(boards.length).toBeGreaterThan(10);
+    expect(links.length).toBeGreaterThan(0);
+    // And the gate has to be doing something at this point in a session, or the
+    // rows below are measuring an arm nothing reaches.
+    expect(withheld).toBeGreaterThan(0);
+  });
+
+  it('leaves no in-edge of a still-open board drawn', () => {
+    const { graph, boards, refOfSubject } = load();
+    // Every walk out of an open board must take an edge whose head is that
+    // board, so this is the whole of `probe-chain.ts`'s gated column.
+    for (const target of boards) {
+      const answered = boards.filter((board) => board.id !== target.id);
+      const ref = refOfSubject(target);
+      if (ref === undefined) continue;
+      const { links } = chainsProvedBy(graph, answered, new Set([ref]));
+      for (const link of links) expect(link.to).not.toBe(ref);
+    }
+  });
+
+  it('would leak without the gate, which is why there is one', () => {
+    const { graph, boards, refOfSubject } = load();
+    // The counterfactual holds the atlas, the deck and every key fixed and
+    // varies **only** whether the gate runs. Precision is 1.000 by ADR-0008's
+    // invariant — everything the walk reaches is in `truth` — so this is pure
+    // recall: the map handing over an answer key with no wrong picks.
+    let beatBandA = 0;
+    for (const target of boards) {
+      const answered = boards.filter((board) => board.id !== target.id);
+      const subject = refOfSubject(target);
+      if (subject === undefined) continue;
+      const { links } = chainsProvedBy(graph, answered);
+      const known = new Set(links.map((link) => `${link.from}>${link.to}`));
+      const seen = new Set<number>();
+      const stack = [subject];
+      while (stack.length > 0) {
+        const at = stack.pop() as number;
+        for (const edge of graph.in[at] ?? []) {
+          if (seen.has(edge.from) || !known.has(`${edge.from}>${at}`)) continue;
+          seen.add(edge.from);
+          stack.push(edge.from);
+        }
+      }
+      const picked = target.candidates.filter(
+        (id) => isNodeId(id) && seen.has(graph.refById.get(id) ?? -1),
+      );
+      if (scoreSet(picked, target.truth.filter(isNodeId)).score >= 0.78) beatBandA += 1;
+    }
+    expect(beatBandA).toBeGreaterThan(0);
+  });
+});
+
 describe('the direct ring is part of the answer', () => {
   it('overlaps the key on most boards, which is why the map may not draw it', () => {
     const graph = buildGraph(atlas);

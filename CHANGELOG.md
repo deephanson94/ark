@@ -4947,3 +4947,60 @@ and asserts both arms; one run exercises both, and the proved arm kills a mutant
 that never unlocks the cone.
 
 **Next**: unchanged — the proved chain drawn on the map, undirected (ADR-0049 §4.3).
+
+## The map is the scoreboard, part two: the proved chain, and the permission that was wrong
+
+`src/player/chains.ts` draws every hop of the route from a file you proved to the subject you proved
+it about — round 5's *"keep each proved chain drawn"*, the one of that round's four map requests
+ADR-0049 permits, and the last item this repo's Next line had been carrying.
+
+**The permission it was built on does not hold, and the measurement was the point.** ADR-0049
+decision 3 required *"re-measure against band A first, and state what the counterfactual holds
+fixed"*; `scripts/probe-chain.ts` is that, and it refutes §4.3's reason. The argument was *"adds no
+node and no edge the map is not already drawing"* — true about nodes and edges, **false about
+direction**, which decisions 1 and 2 of the same document refuse permanently. A route drawn from a
+member to the subject, with the subject marked as the subject, states which way every edge on it
+points however undirected the ink is; decision 2 already calls a hover-scoped arrow *"the same leak
+paid for in instalments"*, and a chain is a run of arrows. The soft spot was the consolation prize —
+§4 is what the document offers a player after a refusal, so it reads as generosity rather than as a
+claim, and nothing in it had been measured.
+
+Precision is 1.000 in every row by ADR-0008's invariant, so these are pure recall — the map handing
+over an answer key with no wrong picks. Half the deck answered: **5 of ark's 40 boards at band A or
+better, 8 of hono's 54, 6 of kysely's 75**; every board but the one scored: 9 / 14 / 9, with 5 / 11 / 8
+recovered *exactly*. Gated: **0, 0, 0**.
+
+The gate is one rule — a link `u → v` is drawn only where `v` carries no unanswered Blast Radius
+board — and it closes the leak **by construction**: every walk out of an open board must take an edge
+whose head is that board. That is why the column reads 0 rather than "under the bar", and why it needs
+no re-measure when a deck changes shape. It gates on the head node, so it is a property of the subject
+and never of a row (ADR-0020), and the absence it creates says nothing the question ring does not
+already say.
+
+Two instrument corrections, both in the direction that flatters: the probe now **self-gates at both
+extremes** (0.000 with no edge directed, 1.000 with every edge directed, reproducing ADR-0049 §2's
+table to the digit), because the middle rows are worth nothing without a plant proving the detector
+fires. And survival was first measured with **one** board open, where it reads 99% on all three repos
+— the bound, not a session; with half the deck open it is **72.8 / 81.8 / 93.0%**. That is ADR-0016's
+count-what-survives-the-gate defect, reproduced in the same commit as the comment quoting it.
+
+The ink is violet and that was derived rather than chosen. The palette comment claims a *fourth*
+family, which is a claim the pixels have to support: the first version was mint, which sits **34° from
+the teal question ring** — the smallest separation on the map, in the one pair a player must tell apart
+while a board is open. The three line inks sit at 12°, 40° and 180°; the largest gap runs 180° → 12°
+and its midpoint is 276°, which is 96° from its nearest neighbour. Same rule as any other threshold
+here: put it in the largest gap and name both neighbours.
+
+On this repo a full clear draws **138 links over 860 edges**, a half-clear 74, a tenth 23 — measured
+on the real renderer by `scripts/shot-chains.ts`, which grades real boards through `applyGrade` and
+injects the save, because `test:e2e` proves one board and its shot shows two links. The e2e gains a
+liveness step on the HUD's new `chains` count, gated on `__arkTraced` rather than on a prediction
+about which board the shell will serve.
+
+`tests/atlas/atlas.test.ts` asserts three things on the real deck: the layer fires, no in-edge of an
+open board is drawn, **and the ungated version leaks** — because a gate measured only on the arm where
+it holds is a rule nobody has priced. Six mutants of `chains.ts` die against `tests/unit/chains.test.ts`.
+
+**Next**: the hop-count label, which is the second half of the same quotation and the only part of it
+still missing. It carries no new disclosure — the cone is already unlocked for a subject whose board is
+answered — so ADR-0049 §7.6 records it as scope rather than as a refusal.

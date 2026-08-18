@@ -65,6 +65,8 @@ import type { Twins } from './twins.js';
 import { findTwins, nameableClass } from './twins.js';
 import type { Ties } from './ties.js';
 import { NO_TIES, tiesNamedBy } from './ties.js';
+import type { Chains } from './chains.js';
+import { NO_CHAINS, chainsProvedBy } from './chains.js';
 import type { WorldMode } from './world/index.js';
 import { createWorldMode } from './world/index.js';
 import type { SelectorState } from './selector.js';
@@ -379,20 +381,43 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    */
   let ties: Ties = NO_TIES;
   let tieFocus: NodeRef | null = null;
+  let chains: Chains = NO_CHAINS;
 
-  const retie = (): void => {
+  /**
+   * Rebuild both **earned** map layers — the history wires and the proved
+   * chains — from the record.
+   *
+   * One function and one pass, because the two are the same shape: a channel
+   * (`Verb.channel`), the boards on it whose answer the player has seen, and
+   * the boards on it still open, which is what each layer's gate is written
+   * against. Two functions would be two places to remember to call, and this
+   * file's own comment above records that every one of ADR-0014's leaks was a
+   * rule that lived twice.
+   *
+   * The gates themselves are **not** here. `tiesNamedBy` and `chainsProvedBy`
+   * each own theirs, for the same reason `draw.ts` owns none: a module that
+   * decides who may see what has to be the one that knows what is being asked.
+   */
+  const relayer = (): void => {
     const answered = answeredKeys(progress, liveness);
-    const passed: Challenge[] = [];
-    const openBoards = new Set<NodeRef>();
+    const namedTies: Challenge[] = [];
+    const openTies = new Set<NodeRef>();
+    const provedChains: Challenge[] = [];
+    const openChains = new Set<NodeRef>();
     for (const bucket of challengesById.values()) {
       for (const challenge of bucket) {
-        if (channelOf(challenge.verb) !== 'coChangeTies') continue;
+        const channel = channelOf(challenge.verb);
+        if (channel !== 'coChangeTies' && channel !== 'importRadius') continue;
         const ref = scene.graph.refById.get(challenge.subject);
-        if (answered.has(answerKey(challenge.verb, challenge.subject))) passed.push(challenge);
-        else if (ref !== undefined) openBoards.add(ref);
+        const seen = answered.has(answerKey(challenge.verb, challenge.subject));
+        const [shown, open] =
+          channel === 'coChangeTies' ? [namedTies, openTies] : [provedChains, openChains];
+        if (seen) shown.push(challenge);
+        else if (ref !== undefined) open.add(ref);
       }
     }
-    ties = tiesNamedBy(scene.atlas, scene.graph, passed, openBoards);
+    ties = tiesNamedBy(scene.atlas, scene.graph, namedTies, openTies);
+    chains = chainsProvedBy(scene.graph, provedChains, openChains);
   };
 
   /**
@@ -498,7 +523,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     answeredSet = answeredNodes(progress, liveness);
     regionProgress = clearedByRegion(scene, answeredSet, answerableByRegionMap);
     tracedRadius = subjectsPassed(progress, liveness, 'blastRadius');
-    retie();
+    relayer();
     saveProgress(store, saveKey, progress);
   };
 
@@ -618,7 +643,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     selector = { ...selector, attempts, metVerbs };
   }
   // Wires a restored save has already earned, before the first frame.
-  retie();
+  relayer();
 
   /**
    * Twin classes, computed once at load.
@@ -1492,6 +1517,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         questions: unanswered,
         peaks,
         ties,
+      chains,
         tieFocus,
       regionProgress,
         board: boardMarks(),
@@ -1575,7 +1601,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         // two claims, so it is the one more likely to be quietly false: a gate
         // that never opens draws a layer nobody ever sees, and simulating the
         // supply in node proves the *arithmetic*, not that a stroke happened.
-        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.boardDrawn} marks`,
+        // `chains` joins them for the third time and the same reason: it is the
+        // newest gated layer, its gate is what makes ADR-0049 §4.3 legal at all,
+        // and a gate that never opens draws a layer nobody sees.
+        `${stats.nodesDrawn} nodes · ${stats.edgesDrawn} edges · ${stats.islandsDrawn} isles · ${stats.labelsDrawn} labels · ${stats.peaksDrawn} peaks · ${stats.tiesDrawn} wires · ${stats.chainsDrawn} chains · ${stats.boardDrawn} marks`,
         openQuestions,
         unanswered.size,
         camera.bearing,

@@ -33,6 +33,26 @@ export interface Ink {
   readonly tie: string;
   /** The same wire at rest, once the moment of the grade has passed. */
   readonly tieRest: string;
+  /**
+   * A proved chain: the route from a file you proved to the subject you proved
+   * it about (`chains.ts`).
+   *
+   * A **fourth** family, for the same reason `tie` is a third: a link can lie
+   * inside a hovered blast cone, carry a history wire and belong to an open
+   * board's marking all at once, and four meanings sharing two hues is how a
+   * map stops being read.
+   *
+   * **Placed by derivation rather than by taste, because "a fourth family" is a
+   * claim the pixels have to support.** The three line inks sit at hues 12°
+   * (ember `tie`), 40° (gold `edgeHighlight`) and 180° (teal `question`); the
+   * largest gap on the circle runs 180° → 12° and its midpoint is **276°**. The
+   * first version of this was mint, which reads well on its own and sits **34°
+   * from the question ring** — the smallest separation on the map, in the one
+   * pair a player has to tell apart while a board is open. Violet is 96° from
+   * its nearest neighbour. Same rule as any other threshold here: put it in the
+   * largest gap and name both neighbours.
+   */
+  readonly chain: string;
   /** Ring on a node that still carries an unanswered question. */
   readonly question: string;
   readonly subject: string;
@@ -77,6 +97,7 @@ export const INK: Ink = {
   edgeHighlight: 'rgba(255, 214, 130, 0.85)',
   tie: 'rgba(240, 122, 92, 0.92)',
   tieRest: 'rgba(240, 122, 92, 0.30)',
+  chain: 'rgba(206, 158, 245, 0.88)',
   // Deliberately not the highlight colour: a question marker and a blast-radius
   // highlight appear at the same time and must not read as the same thing.
   question: 'rgba(126, 214, 214, 0.62)',

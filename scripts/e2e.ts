@@ -1813,6 +1813,51 @@ async function main(): Promise<number> {
       }
     }
 
+    // ---- proved chains reach a pixel -------------------------------------
+    //
+    // ADR-0049 §4.3's layer, on the same terms as the wires step above and for
+    // the same reason: `chains.ts` is gated, and simulating the gate in node
+    // proves the *arithmetic*, not that a stroke happened. `chainsDrawn` is
+    // counted at the point of `stroke()` and published in the HUD, so a number
+    // above zero here is a claim about ink.
+    //
+    // **Gated on a Blast Radius pass having actually happened**, rather than
+    // asserted unconditionally: ark indexes itself, so which boards this script
+    // reaches moves with every commit, and an assertion that assumes one is the
+    // landmine this file has paid for three times. `__arkTraced` is the register
+    // the layer reads, so it is the honest precondition.
+    {
+      await drawn(page);
+      const traced = ((await page.evaluate('window.__arkTraced ?? []')) as string[]) ?? [];
+      await page.waitForFunction(
+        () => /(\d+) chains/.test(document.querySelector('.hud-detail')?.textContent ?? ''),
+        undefined,
+        { timeout: 5000 },
+      );
+      const chains = Number(
+        /(\d+) chains/.exec(await page.locator('.hud-detail').innerText())?.[1] ?? '-1',
+      );
+      process.stdout.write(
+        `e2e: proved chains → ${chains} links, over ${traced.length} proved subjects\n`,
+      );
+      if (chains < 0) {
+        failures.push({ what: 'chains', detail: 'the HUD never reported a chain count' });
+      } else if (traced.length > 0 && chains === 0) {
+        failures.push({
+          what: 'chains',
+          detail: `${traced.length} Blast Radius subjects are proved and the map drew no chain — the layer is dead`,
+        });
+      } else if (traced.length === 0 && chains > 0) {
+        // The other direction, which is the leak rather than the dead layer:
+        // ink for a route nobody has proved.
+        failures.push({
+          what: 'chains',
+          detail: `the map drew ${chains} chain links with no proved subject at all`,
+        });
+      }
+      await page.screenshot({ path: join(SHOT_DIR, 'chains.png') });
+    }
+
     // ---- the panel only promises inputs the board actually has -----------
     //
     // "Tick a row here, or click its marker on the map" is verb-blind copy, and
