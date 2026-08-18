@@ -5117,3 +5117,34 @@ assertion, neither visible without it.
 **Next**: the class `FOOTPRINT_SCALE` turned out to be in. `RISE`, `ROAD_WIDTH` and `ARCH_SPAN` are
 tuned against one or two repos at one moment, with nothing measuring them across the reference set and
 no bar at all.
+
+## The world's other tuned constants, checked across nine repositories
+
+`FOOTPRINT_SCALE` was caught because it happened to have a bar to cross, and its neighbours never had
+one. `scripts/probe-city.ts` gives them one, taken from the invariant each constant's **own comment**
+claims, over nine repositories from 285 to 12,626 towers (measured at `b1ba3c6`).
+
+**Both hold.** `ROAD_WIDTH` promises that *"how many of them there are must stay countable"*: a road
+fan — the radius inside which half of a ≥4-road node's roads are touching — is **0.0–3.3 units at the
+median and 3.7–12.1 at p95**, against streets 7.7–13.0 wide, with 0.5%–9.0% of hub nodes carrying a fan
+wider than the nearest street. The counterfactual sits in the same table: at the pre-tuning 2.2 every
+figure is 2–6× larger, so the constant does something and what it does is enough. `RISE` was set
+against a *"6:1 canyon, which is not a city anyone can read from inside"*, and the canyon reads **0.4:1
+to 2.4:1** everywhere.
+
+One margin is recorded as a margin rather than a plateau: `RISE`'s other clause, *"the eye clears most
+of the skyline"*, is 5.9%–32.8% on eight repos and **49.2% on kysely** — "most" by 0.8 points. And the
+outlier is not the biggest repo. webpack, at 12,626 towers, is the **lowest** at 5.9%; kysely at 600 is
+the highest. Height is `elevation`, a bit length of a transitive dependent count, so this is a fact
+about dependency depth, and a session stress-testing by picking the largest repo would have measured
+the wrong axis and found nothing.
+
+Two instrument errors on the way, both reading the reassuring direction. `Road.from` is a **Tower, not
+a ref**, so the first version fed it to `world.byRef.get`, got `undefined` every time, and reported
+*"0 roads at the busiest hub, 0 merging"* on four repos. And the first plate metric took the **widest**
+adjacent gap, which answers "beyond what radius is every road distinct" and sends two nearly-parallel
+roads to 1,582 units — true, and not a plate. The metric the comment is actually about is a fan.
+
+**Next**: the standing benchmark. Round 5 measured 6.75 visual / 6.40 want-to-continue against the
+8/10 bar, and the region wash, medals, proved chain, hop count and complete reveal have all shipped
+since without being measured against it. That is a round-6 playtest, and it needs ten cold readers.

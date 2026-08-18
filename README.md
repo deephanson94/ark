@@ -747,9 +747,14 @@ shipped renderer at every position the product can put you in and finds **0 empt
 and 0 of 381 on hono**, median 205 and 291 towers. Its follow-up looked like a defect and is the
 mechanic — 1–2 labels in a frame of 205 towers is fog doing what risk #4 asks, and the same positions
 read 22 (the cap) under a surveyed map. That is the **third** account of one playtest report to fail
-measurement, after the cull and the frustum. What is left is the class `FOOTPRINT_SCALE` turned out to
-be in: `RISE`, `ROAD_WIDTH` and `ARCH_SPAN` are tuned against one or two repos at one moment, with
-nothing measuring them across the reference set and no bar at all · **bind mouse-look**, which is unbound
+measurement, after the cull and the frustum. The class `FOOTPRINT_SCALE` turned out to be in is
+**checked and holds**: `scripts/probe-city.ts` measures `RISE` and `ROAD_WIDTH` against the invariants
+their own comments claim, over nine repositories from 285 to 12,626 towers (at `b1ba3c6`). A road fan
+is 0.0–3.3 units at the median against streets 7.7–13.0 wide, and the 6:1 canyon `RISE` was set to fix
+reads 0.4:1 to 2.4:1 everywhere. One margin is recorded as a margin: *"the eye clears most of the
+skyline"* is 5.9%–32.8% on eight repos and **49.2% on kysely**, which satisfies "most" by 0.8 points —
+and the outlier is **not** the biggest repo, since webpack is the lowest at 5.9%, so this is a fact
+about dependency depth rather than size · **bind mouse-look**, which is unbound
 · then **decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
 with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
 repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
