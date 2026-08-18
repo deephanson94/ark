@@ -737,15 +737,17 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 ### Next
 
-**Make the map the scoreboard.** Round 5's five rounds of measurement converge on it: all ten testers
-named the map lighting up as the arc, and four independently asked for the same next step — *"make the
-map itself the scoreboard"*, *"keep each proved chain drawn, labelled with its hop count"*, *"put the
-region fraction on the map, not in a list"*. One of them names the mechanism without knowing it:
+**Draw the proved chain on the map, undirected.** Round 5's four independent requests for *"make the
+map itself the scoreboard"* split into two halves, and **the region half shipped** at `66f13d7`:
+cleared ground is brighter ground, so *"put the region fraction on the map, not in a list"* is done.
+What is left is the other half — *"keep each proved chain drawn, labelled with its hop count"* — which
+is the **one** of those asks [ADR-0049](./docs/decisions/0049-edge-direction-is-the-answer-key-and-can-never-be-drawn.md)
+§4.3 permits, because passing a board already unlocks the cone the chain lies inside, so it adds no
+node and no edge the map is not drawing. One tester named the mechanism without knowing it:
 `RevealNote.route` carried exactly that chain and was **deleted as dead infrastructure at `1c521d3`**,
 because nothing drew it. The removal was defensible and the reason it had no consumer was that the
-surface had not been built · then **the ADR refusing edge direction**, which is the top visual ask two
-rounds running and can never ship (F1 1.000 exact on 100% of both repos' boards) — a permanent
-refusal that is re-proposed every round it is not written down · then **a wrong answer you did not
+surface had not been built. Whoever builds it re-measures against band A first and states what the
+counterfactual holds fixed (ADR-0049 decision 3) · then **a wrong answer you did not
 pick is never explained** (the reveal's rows are `picked ∪ truth`, so a perfect score teaches nothing
 about the other eighteen)
 · **a rig that frames what is ahead**, which is the walk's actual defect now that the collision
