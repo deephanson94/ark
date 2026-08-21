@@ -21,7 +21,7 @@ import { placeLabels } from './labels.js';
 import { INK, regionColor, regionKnown, regionLabelColor, regionSilhouette, regionWash } from './palette.js';
 import type { Column, Orbit } from './orbit.js';
 import { projectAll } from './orbit.js';
-import type { Radius, Scene, SceneNode, SceneRegion } from './scene.js';
+import type { Radius, Scene, SceneNode, SceneRegion, SceneEdge } from './scene.js';
 import type { Tie, Ties } from './ties.js';
 import { tieWidth, tiesAt } from './ties.js';
 import type { ChainLink, Chains } from './chains.js';
@@ -143,6 +143,16 @@ export interface FrameStats {
    * by what survives rather than by what it emits.
    */
   readonly chainsDrawn: number;
+  /**
+   * Import edges stroked in the **radius pass** — the highlighted second pass
+   * that draws the open board's own ring over a muted field.
+   *
+   * Counted for the reason `tiesDrawn` is. Three cold testers reported the map
+   * as inert during a board, one having diffed two frames pixel-for-pixel, so
+   * "the ring is drawn" is exactly the kind of claim this repo requires a number
+   * for rather than a comment.
+   */
+  readonly radiusEdgesDrawn: number;
   /**
    * Board markers actually drawn. Measured, like `peaksDrawn` and `tiesDrawn`,
    * because a marking layer that never fires is the defect it was built to fix
@@ -291,6 +301,17 @@ function stamp(
  */
 const TIE_BOW = 0.16;
 
+/**
+ * How far the rest of the map fades while a blast radius is on screen, and how
+ * much thicker the radius itself is drawn.
+ *
+ * A width difference reads at any alpha; a colour difference does not, which is
+ * why the single-pass version was invisible at street zoom. Muting the field is
+ * the same act `dimmed` performs on the nodes — this is the edge half of it.
+ */
+const OFF_RADIUS_MUTE = 0.35;
+const RADIUS_WIDTH = 2.4;
+
 export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput): FrameStats {
   const { scene, camera, viewport, fog, hovered, selected, radius, questions, peaks, ties, chains, focus, board } =
     input;
@@ -402,28 +423,58 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   }
 
   // ---- edges ------------------------------------------------------------
-  context.lineWidth = Math.max(0.5, 0.9 * Math.min(1, camera.scale));
-  for (const edge of edges) {
+  //
+  // **Two passes, and the radius goes second.** One pass drew a highlighted edge
+  // wherever it happened to fall in `edges` order, so the other 800-odd painted
+  // over it; the two differed by colour and alpha at an identical width, which
+  // at street zoom is 0.85 against `INK.edge`'s 0.44 — a contrast of 1.9× spread
+  // over hundreds of lines. A cold tester on the *fixed* prompt reported exactly
+  // that: *"I zoomed to street level and still could not tell which edges
+  // terminated at the subject."* Raising `INK.edge` from 0.16 to 0.44 (ADR-0048,
+  // so the edges were visible at all) is what closed the gap — a fix to one
+  // complaint quietly weakening the channel another rests on.
+  //
+  // And the muting below is the **other half of a rule that was already here**:
+  // `dimmed` fades every node outside the radius, four hundred lines down, and
+  // nothing did the same for the edges. Half a rule reads as a design choice
+  // once it has been in the tree a milestone.
+  const baseWidth = Math.max(0.5, 0.9 * Math.min(1, camera.scale));
+  const isHighlighted = (edge: SceneEdge): boolean =>
+    radius !== null &&
+    (inRadius?.has(edge.from) === true || edge.from === radius.subject) &&
+    (inRadius?.has(edge.to) === true || edge.to === radius.subject);
+
+  const strokeEdge = (edge: SceneEdge): void => {
     const from = scene.nodes[edge.from];
     const to = scene.nodes[edge.to];
-    if (from === undefined || to === undefined) continue;
-    const highlighted =
-      radius !== null &&
-      (inRadius?.has(edge.from) === true || edge.from === radius.subject) &&
-      (inRadius?.has(edge.to) === true || edge.to === radius.subject);
-
+    if (from === undefined || to === undefined) return;
     const a = project(from);
     const b = project(to);
     context.beginPath();
     context.moveTo(a.x, a.y);
     context.lineTo(b.x, b.y);
-    context.strokeStyle = highlighted ? INK.edgeHighlight : INK.edge;
-    context.globalAlpha = highlighted ? 1 : style.edgeAlpha;
     // A `probable` edge is one the indexer had to guess between two viable
     // targets. Dashing it puts the confidence model on the map rather than
     // burying it in the schema.
     context.setLineDash(edge.confidence === 'probable' ? [3, 3] : []);
     context.stroke();
+  };
+
+  let radiusEdgesDrawn = 0;
+  context.lineWidth = baseWidth;
+  context.strokeStyle = INK.edge;
+  context.globalAlpha = radius === null ? style.edgeAlpha : style.edgeAlpha * OFF_RADIUS_MUTE;
+  for (const edge of edges) if (!isHighlighted(edge)) strokeEdge(edge);
+
+  if (radius !== null) {
+    context.lineWidth = baseWidth * RADIUS_WIDTH;
+    context.strokeStyle = INK.edgeHighlight;
+    context.globalAlpha = 1;
+    for (const edge of edges) {
+      if (!isHighlighted(edge)) continue;
+      strokeEdge(edge);
+      radiusEdgesDrawn += 1;
+    }
   }
   context.setLineDash([]);
   context.globalAlpha = 1;
@@ -831,6 +882,7 @@ export function drawFrame(context: CanvasRenderingContext2D, input: FrameInput):
   return {
     nodesDrawn: nodes.length,
     edgesDrawn: edges.length,
+    radiusEdgesDrawn,
     labelsDrawn,
     level,
     peaksDrawn,
@@ -1065,6 +1117,10 @@ export function drawOrbitFrame(
   return {
     nodesDrawn: ordered.length,
     edgesDrawn,
+    // **The orbit has no radius pass.** Its stalks are drawn by their own code
+    // path, so this is zero because it is zero — the distinction `islandsDrawn`
+    // makes two lines down, for the same reason.
+    radiusEdgesDrawn: 0,
     // The orbit draws no landmasses: the columns stand *on* the flat footings,
     // so a fill in the ground plane would be underfoot and read as a shadow
     // nothing is casting. Zero because it is zero, not because it is unwired.

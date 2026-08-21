@@ -1384,8 +1384,32 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // What the view was before this pan, and what the pan made of it. `close`
       // gives the first back if the second is still on screen untouched.
       borrowed = { own, lent: camera };
+      // **The board's own ring, drawn because the board is open.**
+      //
+      // This was missing, and the omission made a whole fix inert. `radius` was
+      // set only by hover and by click, so a board opened the way the guide
+      // opens one — "Where next?" then Enter, which is how every cold tester
+      // played — drew **no ring at all**, and the prompt's *"the lines drawn
+      // into X"* pointed at nothing. Two testers on the build that added the
+      // ring's own second pass still reported the map unreadable, one having
+      // diffed two frames pixel-for-pixel; the pass was correct and never
+      // reached. Counting how often new machinery fires on a real path is this
+      // repo's own rule and I did not run it.
+      //
+      // `depthFor` rather than a constant, so this discloses exactly what a
+      // hover already does: depth 1 for anything unproved (ADR-0008 decision 1,
+      // which draws the direct ring for every node whether or not a board is
+      // open), and the full cone only for a subject already passed.
+      selected = node;
+      radius = blastRadius(scene, node.ref, depthFor(node));
+      focus = focusFor(node);
     }
-    challengePanel.open(challenge);
+    // The surface the board is opened over, so the console can decline to make
+    // a claim about ink that view does not draw (see `challenge.ts`).
+    challengePanel.open(
+      challenge,
+      world.isActive() ? 'world' : orbit !== null ? 'orbit' : 'map',
+    );
     invalidate();
   }
 
@@ -1567,6 +1591,10 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // in total. An Archaeology board marks its subject — a file — and none of
       // its candidates, which are commits, so the two numbers differ on exactly
       // the verb where the click hint must not appear.
+      // The ring the open board draws, for the e2e — the measurement that tells
+      // a live layer from a correct but unreached one.
+      (globalThis as unknown as { __arkRingEdges?: unknown }).__arkRingEdges =
+        stats.radiusEdgesDrawn;
       (globalThis as unknown as { __arkCandidateMarks?: unknown }).__arkCandidateMarks =
         stats.candidatesDrawn;
       // **The other half of ADR-0008 decision 1**, from the same set the frame

@@ -22,6 +22,7 @@ import { NORTH, worldToScreen } from '../../src/player/camera.js';
 import { NO_CHAINS } from '../../src/player/chains.js';
 import { NO_TIES } from '../../src/player/ties.js';
 import { TERRAIN_INDEX, prepare } from '../../src/player/scene.js';
+import { dependents } from '../../src/atlas/index.js';
 import { atlasWith } from '../fixtures/atlas.js';
 
 /** Just enough 2D context for the renderer, and one honest `measureText`. */
@@ -79,6 +80,33 @@ function recordingContext(): { context: CanvasRenderingContext2D; fills: string[
     },
   }) as unknown as CanvasRenderingContext2D;
   return { context, fills };
+}
+
+/**
+ * Every `stroke()` in order, with the width, colour and alpha in force.
+ *
+ * The proxy stub swallows style writes, so an assertion about *how* something
+ * was stroked needs the writes recorded — and the defect this exists for is an
+ * ordering one (the radius pass must run last), which no end-state check can
+ * see.
+ */
+function strokeLog(): { context: CanvasRenderingContext2D; strokes: { width: number; style: string; alpha: number }[] } {
+  const strokes: { width: number; style: string; alpha: number }[] = [];
+  const state = { width: 1, style: '', alpha: 1 };
+  const base = stubContext();
+  const context = new Proxy(base, {
+    get: (object, key) => {
+      if (key === 'stroke') return () => strokes.push({ ...state });
+      return Reflect.get(object, key);
+    },
+    set: (object, key, value) => {
+      if (key === 'lineWidth' && typeof value === 'number') state.width = value;
+      if (key === 'strokeStyle' && typeof value === 'string') state.style = value;
+      if (key === 'globalAlpha' && typeof value === 'number') state.alpha = value;
+      return Reflect.set(object, key, value);
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return { context, strokes };
 }
 
 /** The alpha of an `hsla(...)` fill, or null if it is not one. */
@@ -650,5 +678,96 @@ describe('the region wash is the map\'s scoreboard', () => {
     const none = cleared(new Map());
     const zero = cleared(new Map([[0, 0]]));
     expect(zero).toEqual(none);
+  });
+});
+
+describe('the open board’s ring', () => {
+  /**
+   * `one.ts` and `two.ts` import `hub.ts`; `three.ts → four.ts` is **off** the
+   * radius entirely.
+   *
+   * That last edge is the plant. The shared fixture's only two edges are both
+   * inside the radius, so the ordering assertion below had nothing to order
+   * against and read `field.length === 0` — an empty control, which is this
+   * repo's most-repeated way of passing while testing nothing.
+   */
+  function cityWithRadius(open: boolean): FrameInput {
+    const atlas = atlasWith(
+      ['src/hub.ts', 'src/one.ts', 'src/two.ts', 'src/three.ts', 'src/four.ts'],
+      [
+        ['src/one.ts', 'src/hub.ts'],
+        ['src/two.ts', 'src/hub.ts'],
+        ['src/three.ts', 'src/four.ts'],
+      ],
+    );
+    const scene = prepare(atlas);
+    const surveyed = new Set(atlas.nodes.map((node) => node.id));
+    const subject = scene.nodes.findIndex((node) => node.path === 'src/hub.ts');
+    return {
+      ...frameInput([]),
+      scene,
+      fog: { surveyed, understood: surveyed },
+      radius: open
+        ? {
+            subject,
+            dependents: dependents(scene.graph, subject, Number.POSITIVE_INFINITY),
+            maxDepth: Number.POSITIVE_INFINITY,
+          }
+        : null,
+    };
+  }
+  const withRadius = (): FrameInput => cityWithRadius(true);
+
+  it('strokes the ring, and counts what it stroked', () => {
+    // Three cold testers reported the map inert during a board, one of them
+    // having diffed two frames pixel-for-pixel. "The ring is drawn" is exactly
+    // the sort of claim this repo requires a number for.
+    const stats = drawFrame(stubContext(), withRadius());
+    expect(stats.radiusEdgesDrawn).toBe(2);
+    expect(drawFrame(stubContext(), cityWithRadius(false)).radiusEdgesDrawn).toBe(0);
+  });
+
+  it('draws the ring after every other edge, so nothing paints over it', () => {
+    // **The defect, and it is an ordering one.** A single pass stroked a
+    // highlighted edge wherever it fell in `edges` order and let the rest paint
+    // over it. No end-state assertion can see that — only the sequence can.
+    const { context, strokes } = strokeLog();
+    drawFrame(context, withRadius());
+    const ring = strokes
+      .map((stroke, at) => ({ ...stroke, at }))
+      .filter((stroke) => stroke.style.includes('214')); // INK.edgeHighlight
+    const field = strokes
+      .map((stroke, at) => ({ ...stroke, at }))
+      .filter((stroke) => stroke.style.includes('140, 160, 190')); // INK.edge
+    expect(ring.length).toBe(2);
+    expect(field.length).toBeGreaterThan(0);
+    const lastField = Math.max(...field.map((stroke) => stroke.at));
+    const firstRing = Math.min(...ring.map((stroke) => stroke.at));
+    expect(firstRing).toBeGreaterThan(lastField);
+  });
+
+  it('draws the ring thicker, because colour alone did not read', () => {
+    // At street zoom the two differed by 0.85 against 0.44 at an identical
+    // width — 1.9x, spread over hundreds of lines. A width difference reads at
+    // any alpha.
+    const { context, strokes } = strokeLog();
+    drawFrame(context, withRadius());
+    const ring = strokes.filter((stroke) => stroke.style.includes('214'));
+    const field = strokes.filter((stroke) => stroke.style.includes('140, 160, 190'));
+    expect(ring[0]?.width).toBeGreaterThan((field[0]?.width ?? 0) * 1.5);
+    expect(ring[0]?.alpha).toBe(1);
+  });
+
+  it('mutes the rest of the field while a board is open, as the nodes already did', () => {
+    // `dimmed` has faded every node outside the radius since M2 and nothing did
+    // the same for the edges — half a rule, which reads as a design choice once
+    // it has been in the tree a milestone.
+    const open = strokeLog();
+    drawFrame(open.context, withRadius());
+    const closed = strokeLog();
+    drawFrame(closed.context, cityWithRadius(false));
+    const fieldAlpha = (log: typeof open) =>
+      log.strokes.find((stroke) => stroke.style.includes('140, 160, 190'))?.alpha ?? 0;
+    expect(fieldAlpha(open)).toBeLessThan(fieldAlpha(closed));
   });
 });

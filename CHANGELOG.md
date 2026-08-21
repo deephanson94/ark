@@ -5089,3 +5089,62 @@ most easily hide.
 
 **Next**: a rig that frames what is ahead. `scripts/probe-spawn.ts` refuted the collision theory (0 of
 227 on ark, 0 of 381 on hono), so the walk's real defect is the framing.
+
+## The walk has no framing defect, and three explanations for one bug report have now failed
+
+A playtester wrote *"I pressed `g` and there was nothing there"*. It was blamed first on the **cull** —
+a distant skyline was built for it — then, when 121 sampled positions turned out to have something in
+full view on both repos, on the **frustum**. Nobody measured the frustum. `scripts/probe-frame.ts`
+does, through the shipped renderer at every position the product can actually put you in: **0 empty
+frames of 242 on ark and 0 of 381 on hono**, median 205 and 291 towers, minimum 25 and 5, and the
+shore — what `g` shows with nothing selected — carrying 272 / 324 towers, 12 / 101 silhouettes, 6 / 11
+district arches and ~2,255 roads.
+
+The follow-up looked like the real defect and is the mechanic: **1–2 labels in a frame of 205 towers**.
+A tower is a label candidate only when `visibilityOf` is not `silhouette`, which is NORTH-STAR risk
+#4 in as many words — *"you can see there's something there, just not what"* — and the same positions
+read **22** under a fully surveyed map, which is `drawLabels`' own cap. So that is the third account
+of one report to fail measurement, and the Next line it justified is retired rather than done.
+
+**The probe needed its own plant twice.** Its first run reported 0 empty frames with a hand-built eye
+carrying no `yaw` and no `fov`, so every projection ran on `NaN` and no tower could be culled — the
+answer being "no defect here", which is the direction that gets believed. The tell was `roadsDrawn: 0`
+at every position against the e2e's 2,249. The plant then added — turn the hero around and the frame
+must empty — caught a **second** error on its first run: the bearing was off by exactly π, because
+`follow` puts the eye behind the hero and makes forward `(sin f, −cos f)`. Two errors, one adversarial
+assertion, neither visible without it.
+
+**Next**: the class `FOOTPRINT_SCALE` turned out to be in. `RISE`, `ROAD_WIDTH` and `ARCH_SPAN` are
+tuned against one or two repos at one moment, with nothing measuring them across the reference set and
+no bar at all.
+
+## The world's other tuned constants, checked across nine repositories
+
+`FOOTPRINT_SCALE` was caught because it happened to have a bar to cross, and its neighbours never had
+one. `scripts/probe-city.ts` gives them one, taken from the invariant each constant's **own comment**
+claims, over nine repositories from 285 to 12,626 towers (measured at `b1ba3c6`).
+
+**Both hold.** `ROAD_WIDTH` promises that *"how many of them there are must stay countable"*: a road
+fan — the radius inside which half of a ≥4-road node's roads are touching — is **0.0–3.3 units at the
+median and 3.7–12.1 at p95**, against streets 7.7–13.0 wide, with 0.5%–9.0% of hub nodes carrying a fan
+wider than the nearest street. The counterfactual sits in the same table: at the pre-tuning 2.2 every
+figure is 2–6× larger, so the constant does something and what it does is enough. `RISE` was set
+against a *"6:1 canyon, which is not a city anyone can read from inside"*, and the canyon reads **0.4:1
+to 2.4:1** everywhere.
+
+One margin is recorded as a margin rather than a plateau: `RISE`'s other clause, *"the eye clears most
+of the skyline"*, is 5.9%–32.8% on eight repos and **49.2% on kysely** — "most" by 0.8 points. And the
+outlier is not the biggest repo. webpack, at 12,626 towers, is the **lowest** at 5.9%; kysely at 600 is
+the highest. Height is `elevation`, a bit length of a transitive dependent count, so this is a fact
+about dependency depth, and a session stress-testing by picking the largest repo would have measured
+the wrong axis and found nothing.
+
+Two instrument errors on the way, both reading the reassuring direction. `Road.from` is a **Tower, not
+a ref**, so the first version fed it to `world.byRef.get`, got `undefined` every time, and reported
+*"0 roads at the busiest hub, 0 merging"* on four repos. And the first plate metric took the **widest**
+adjacent gap, which answers "beyond what radius is every road distinct" and sends two nearly-parallel
+roads to 1,582 units — true, and not a plate. The metric the comment is actually about is a fan.
+
+**Next**: the standing benchmark. Round 5 measured 6.75 visual / 6.40 want-to-continue against the
+8/10 bar, and the region wash, medals, proved chain, hop count and complete reveal have all shipped
+since without being measured against it. That is a round-6 playtest, and it needs ten cold readers.

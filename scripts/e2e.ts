@@ -551,6 +551,49 @@ async function main(): Promise<number> {
       // measured off the renderer like `peaksDrawn` and `tiesDrawn`. A layer
       // that never fires would otherwise be code and comments asserting a
       // behaviour the product does not have.
+      // **The board's own ring, counted off the renderer.** `openBoard` did not
+      // set `radius`, so a board opened the way the guide opens one drew no ring
+      // — and the prompt points at that ink as the evidence. Two cold testers
+      // reported the map unreadable on the build that had just made the ring a
+      // distinct pass, because the pass was never reached. A count is the only
+      // thing that can tell a correct-but-inert layer from a live one.
+      //
+      // **Both arms, because this step must not predict the board.** The first
+      // version demanded a ring on every board and went red on a Companion
+      // board about `docs/decisions/0014-….md` — a Markdown file with no import
+      // edges, where a ring of 0 is correct. ark indexes itself, so which board
+      // the shell serves moves with every commit; that is this file's oldest
+      // landmine and I walked into it again. Asserting the *iff* means one arm
+      // always fires whatever gets served, so the step can never pass by being
+      // silent.
+      const ringDrawn = await page.evaluate('window.__arkRingEdges ?? -1');
+      const openKey = String(await page.evaluate('window.__arkOpenKey ?? ""'));
+      // **`answerKey` is `verb \n subject`, not `verb:subject`.** The first
+      // version split on the colon, which lands inside the id's own `n:`/`c:`
+      // prefix — so the subject never matched a node and the check took its
+      // "no importers" arm on *every* board, silently. It passed because the
+      // board it happened to serve really had none.
+      const ringSubject = openKey.slice(openKey.indexOf('\n') + 1);
+      const importers = atlas.edges.filter(
+        (edge) => atlas.nodes[edge.to]?.id === ringSubject,
+      ).length;
+      process.stdout.write(
+        `e2e: board ring → ${String(ringDrawn)} edges, subject has ${importers} direct importers\n`,
+      );
+      if (typeof ringDrawn !== 'number') {
+        failures.push({ what: 'board', detail: 'the ring count is not published' });
+      } else if (importers > 0 && ringDrawn === 0) {
+        failures.push({
+          what: 'board',
+          detail: `the subject has ${importers} direct importers and the board drew no ring — the prompt points at ink that is not there`,
+        });
+      } else if (importers === 0 && ringDrawn > 0) {
+        failures.push({
+          what: 'board',
+          detail: `the subject has no importers and the board drew ${ringDrawn} ring edges`,
+        });
+      }
+
       const marks = await markCount(page, 1);
       if (marks <= 0) {
         failures.push({ what: 'board', detail: 'the map marked nothing on an open board' });

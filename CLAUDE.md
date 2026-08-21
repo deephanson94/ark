@@ -1124,6 +1124,30 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   list, ask whether they aggregate over the same key** — and treat a comment asserting a population
   is empty as a measurement someone owes you.
 
+- **Three explanations for one bug report, none of them measured until the third was refuted too.** A
+  playtester wrote *"I pressed `g` and there was nothing there"*. It was first blamed on the **cull**
+  and a distant skyline was built; the landmine below records that 121 sampled positions had something
+  in full view on both repos, so the cull was not it, and named the **frustum** instead. Nobody
+  measured the frustum either. Measured now, through the shipped renderer at every position the
+  product can actually put you in — `scripts/probe-frame.ts` — it is **0 empty frames of 242 on ark
+  and 0 of 381 on hono**, median 205 and 291 towers, and the shore carries 272 / 324. There is no
+  framing defect and there never was one. The third candidate looked strongest and is the mechanic:
+  **1–2 labels in a frame of 205 towers**, which is fog doing what NORTH-STAR risk #4 asks — the same
+  positions read **22** under a surveyed map, which is `drawLabels`' own cap. So a bug report bought
+  one shipped feature and two Next lines, and the only thing that ever tested any of it was pointing
+  the renderer at the question. **A report tells you what was on screen; every account of *why* is a
+  hypothesis, including the one that replaced the last hypothesis.**
+- **The probe that refutes a defect is not exempt from the plant it would demand of anything else.**
+  `probe-frame.ts`'s first run reported **0 empty frames** with a hand-built eye — `{x, y, z, facing,
+  pitch}`, no `yaw`, no `fov` — so every projection ran on `NaN`, `centre.forward <= 0` was false for
+  every tower, and the answer was "no defect here", which is the direction that gets believed. The
+  tell was `roadsDrawn: 0` at every position against the e2e's 2,249, and the fix is `follow()`, the
+  constructor the player uses. The plant added afterwards — **turn the hero around and the frame must
+  empty** — then caught a *second* error on its first run: the bearing was written `atan2(−dx, dy)`
+  where `follow` makes forward `(sin f, −cos f)`, so it was off by exactly π and reported 0 towers in
+  the direction of the city. Two errors, one instrument, both invisible to the eye and both caught by
+  one adversarial assertion.
+
 ---
 
 ## Subagents and parallelism
