@@ -1446,7 +1446,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // hover already does: depth 1 for anything unproved (ADR-0008 decision 1,
       // which draws the direct ring for every node whether or not a board is
       // open), and the full cone only for a subject already passed.
-      selected = node;
+      // **`radius` and `focus`, but not `selected`.** Setting `selected` here
+      // looked harmless and is not: `enterWorld` spawns the hero at the
+      // selection, so opening a board and then pressing `g` stopped starting at
+      // the shore and started deep inside a region — the e2e's world step read
+      // **38 towers, 0 roads, 0 arches** where it draws 273 and 2,249. The ring
+      // never needed it; `draw.ts` highlights off `radius` alone.
       radius = blastRadius(scene, node.ref, depthFor(node));
       focus = focusFor(node);
     }

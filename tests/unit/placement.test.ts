@@ -398,13 +398,19 @@ describe('pillar 3: the Ctrl+F gate reads the commit message', () => {
     expect(new Map(report.skipped).get('ctrlF')).toBe(1);
   });
 
-  it('scores exactly the three guesses this board invites, and no others', () => {
+  it('scores exactly the four guesses this board invites, and no others', () => {
     const { report } = generateWithReport(fixture([PLAIN]), OPTIONS);
     // `directory` is absent because a commit has no directory — a heuristic a
     // board cannot invite would delete questions for a strategy nobody could use.
+    //
+    // `partition` **is** here, and it is the counterexample to that reasoning
+    // being about the subject: a commit has no directory, but its *candidates*
+    // do, and the guess is anchored on nothing at all. hono shipped 7 Placement
+    // boards whose key was exactly one `src/middleware/*` folder.
     expect(report.heuristicMean.map(([id]) => id).sort()).toEqual([
       'churn',
       'name',
+      'partition',
       'recency',
     ]);
   });

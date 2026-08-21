@@ -47,14 +47,50 @@ import { directoryOf, jaccard, nameTokens, sharedPrefix } from '../paths.js';
 // the callers that import them from here are not wrong to.
 export { directoryOf, nameSimilarity, nameTokens, sharedSegments } from '../paths.js';
 
-export type StrategyId = 'graphAdjacent' | 'treeSibling' | 'nameSimilar' | 'coChange' | 'distant';
+export type StrategyId =
+  | 'graphAdjacent'
+  | 'treeSibling'
+  | 'nameSimilar'
+  | 'keySibling'
+  | 'coChange'
+  | 'distant';
 
 /** §8.3's starting ratio. "Tune from playtest" — so it lives in one place. */
+/**
+ * §8.3's ratio, plus the one this repo had to add.
+ *
+ * **`keySibling` exists because a board could be answered by sorting the
+ * filenames.** A round-7 cold tester scored a grade S on their first board with
+ * no reasoning at all: six of twenty candidates began `scripts/`, the other
+ * fourteen `src/`, and those six were the answer. Measured by
+ * `scripts/probe-prefix.ts`, the best single path prefix beats band A on **17 of
+ * ark's 40 Blast Radius boards (43%)** and is *exactly* the key on one — the
+ * tester's own — while on hono it takes 8 of 54 and 7 of Placement's 54 exactly.
+ * NORTH-STAR pillar 3 is violated *"when a challenge can be answered by
+ * `Ctrl+F` rather than by reasoning about structure"*, and a lexical partition
+ * is the cheapest `Ctrl+F` there is: it needs no graph, no history and no
+ * knowledge of the repository, only the twenty paths on screen.
+ *
+ * **`gate.ts` structurally cannot see this guess**, which is why it survived
+ * four milestones of gating. Its `directory` heuristic is anchored on the
+ * *subject's* folder; this guess is anchored on nothing — the player reads the
+ * choice set and finds the split. And gating it would be the wrong lever
+ * anyway: refusing every board it beats costs 43% of this repo's deck, where
+ * the supply fix costs none.
+ *
+ * **Every class gives up a tenth**, rather than the whole share coming out of
+ * `graphAdjacent`. Taking it from one place made graph-adjacency tie with
+ * tree-siblings at the default choice-set size and reddened a test asserting
+ * §8.3's declared ordering — which was right to go red: the ordering is the
+ * document's claim, not an accident, and a new class should not silently
+ * reorder the four it joins.
+ */
 export const TARGET_MIX: readonly (readonly [Exclude<StrategyId, 'distant'>, number])[] = [
-  ['graphAdjacent', 0.4],
-  ['treeSibling', 0.25],
-  ['nameSimilar', 0.2],
-  ['coChange', 0.15],
+  ['graphAdjacent', 0.36],
+  ['treeSibling', 0.225],
+  ['nameSimilar', 0.18],
+  ['coChange', 0.135],
+  ['keySibling', 0.1],
 ];
 
 /** How far "structurally near" reaches, ignoring edge direction. */
@@ -134,6 +170,16 @@ export interface DistractorContext {
   readonly pool: ReadonlySet<NodeRef>;
   /** Commits in which the subject and this node changed together. */
   readonly coChange: ReadonlyMap<NodeRef, number>;
+  /**
+   * The answer key this board is about to ship.
+   *
+   * Read **only** by `keySibling`, and only for its *paths* — never for
+   * reachability, which `pool` has already settled. A strategy that consulted
+   * the key for anything else would be choosing wrong answers by looking at the
+   * right ones, which is a different and much worse thing than making the board
+   * lexically inseparable.
+   */
+  readonly truth: readonly NodeRef[];
 }
 
 // ---------------------------------------------------------------------------
@@ -314,10 +360,59 @@ const coChangeStrategy: Strategy = (context, limit) => {
     .slice(0, limit);
 };
 
+/**
+ * A non-dependent living where an **answer** lives.
+ *
+ * `treeSibling` offers a file from the *subject's* folder, which teaches "a
+ * folder is not a module" about the subject. This teaches the same lesson about
+ * the answer key, and it is what makes the board lexically inseparable: if every
+ * directory the key occupies also holds a wrong answer, no prefix cut can select
+ * the key exactly.
+ *
+ * Directories are visited in the key's own byte order and taken round-robin, so
+ * a key spread over three folders gets a distractor in each before any folder
+ * gets a second. A key concentrated in one folder is the case the tester hit,
+ * and it is the case this serves first.
+ */
+const keySibling: Strategy = (context, limit) => {
+  const compare = byId(context);
+  const ranked: NodeRef[] = [];
+  const seen = new Set<NodeRef>();
+  // One bucket per directory the key occupies, deepest prefix first within each.
+  const buckets: NodeRef[][] = [];
+  const directories = new Set<string>();
+  for (const member of context.truth) {
+    const prefix = factOf(context, member).segments.slice(0, -1).join('/');
+    if (directories.has(prefix)) continue;
+    directories.add(prefix);
+    const level: NodeRef[] = [];
+    for (const ref of context.corpus.byDirPrefix.get(prefix) ?? []) {
+      if (ref === context.subject || seen.has(ref) || !context.pool.has(ref)) continue;
+      seen.add(ref);
+      level.push(ref);
+    }
+    level.sort(compare);
+    if (level.length > 0) buckets.push(level);
+  }
+  for (let round = 0; ranked.length < limit; round++) {
+    let progressed = false;
+    for (const bucket of buckets) {
+      const ref = bucket[round];
+      if (ref === undefined) continue;
+      ranked.push(ref);
+      progressed = true;
+      if (ranked.length >= limit) break;
+    }
+    if (!progressed) break;
+  }
+  return ranked;
+};
+
 const STRATEGIES: Readonly<Record<Exclude<StrategyId, 'distant'>, Strategy>> = {
   graphAdjacent,
   treeSibling,
   nameSimilar,
+  keySibling,
   coChange: coChangeStrategy,
 };
 

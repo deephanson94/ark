@@ -5262,3 +5262,53 @@ no verb's refusal — a board must not be partitionable by a single path prefix.
 are recorded and not yet acted on: three testers say **Archaeology and Placement are word-matching**
 (*"I had no basis for that at all"*), and a failed board is **permanently dead** three lines under copy
 saying *"answer as often as you like, nothing is lost"*.
+
+## The prefix leak is closed: a board can no longer be answered by sorting the filenames
+
+A round-7 cold tester scored a **grade S with no reasoning at all** — six of twenty candidates began
+`scripts/`, the other fourteen `src/`, and those six were the key — and said the S felt worthless the
+moment they noticed. NORTH-STAR pillar 3 is *"violated when a challenge can be answered by `Ctrl+F`
+rather than by reasoning about structure"*, and a lexical partition is the cheapest `Ctrl+F` there is:
+no graph, no history, no knowledge of the repository, only the paths on screen.
+
+Measured by `scripts/probe-prefix.ts`: the best single path prefix beat band A on **17 of ark's 40
+Blast Radius boards (43%)** and was exactly the key on **7 of hono's 54 Placement boards**.
+
+**Two fixes, and the obvious one alone was the wrong lever.**
+
+`keySibling` is a new §8.3 distractor class — a non-dependent living where an **answer** lives.
+`treeSibling` teaches *"a folder is not a module"* about the subject; this teaches it about the key,
+and it is what makes a board lexically inseparable. It took hono's Blast Radius leak from **15% to 7%**
+on its own. Every existing class gave up a tenth of its share rather than the whole share coming out of
+`graphAdjacent` — a test caught the first attempt reordering §8.3's declared ratio, and was right to.
+
+`partition` is a new gate heuristic: the guess `directory` **structurally cannot see**, because that
+one is anchored on the *subject's* folder and this is anchored on nothing at all. It **cost zero
+boards** — the deck is still 160 — exactly as ADR-0042's cap-limited finding predicts, since a refused
+subject is replaced by another.
+
+Result: **12 of 12 verb×repo rows read `player: beats A 0, exact 0`** across ark, hono, kysely and
+graphql-js.
+
+**Three wrong turns, each caught by something rather than by care.** The gate's tie-break scored **0**
+on the very board the tester aced: two groups matched the key's size — `scripts` (the key) and
+`src/indexer` (none of it) — and longest-prefix picked the wrong one. Over-correcting to refuse every
+one-file key was the opposite error, since kysely ships two boards where exactly *one* group is that
+size and the guess really does win; the surviving rule is about **ambiguity, not size**. And two unit
+fixtures went red because they were quietly building boards whose key was exactly one directory — the
+gate was right and the fixtures were fixed.
+
+**And a fourth, caught by the e2e**: setting `selected` in `openBoard` looked harmless and is not,
+because `enterWorld` spawns the hero at the selection — pressing `g` after a board started deep inside
+a region instead of at the shore, **38 towers and 0 roads** where it draws 273 and 2,249. The ring
+never needed it.
+
+Two instruments now measure this, and they measure different adversaries on purpose: the probe's
+`oracle` column scores the best prefix *against the key* (nobody can pick that without already knowing
+the answer) and its `player` column scores only size-matched splits, mirroring the gate's own
+carve-out so a non-zero means a gate defect rather than a difference of opinion.
+
+**Next**: round 7's other two findings, both bigger than this one. Three testers say **Archaeology and
+Placement are word-matching** rather than structural (*"I had no basis for that at all"* — one scored
+0%), and a **failed board is permanently dead** three lines under copy promising *"answer as often as
+you like, nothing is lost"*.

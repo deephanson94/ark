@@ -2512,6 +2512,26 @@ async function main(): Promise<number> {
     // 2.1× run speed the hero simply leaves the map and the next assertion goes
     // red instead, with `17 towers · 0 roads` on screen. Arriving *in* the city
     // is both the representative path and the one with something to survey.
+    // Every node the import graph actually touches, so the entry point below is
+    // one the world draws roads at.
+    const connected = new Set<string>();
+    for (const edge of atlas.edges) {
+      const from = atlas.nodes[edge.from]?.path;
+      const to = atlas.nodes[edge.to]?.path;
+      if (from !== undefined) connected.add(from);
+      if (to !== undefined) connected.add(to);
+    }
+
+    // **Fit first, or this scan is a function of the previous step's camera.**
+    // The grid below clicks whatever node it finds first and the hero then fast
+    // travels there, so the entry point depends on where the map happens to be
+    // pointing — and `openBoard` now frames the subject's import ring, which
+    // zooms a median 4.5x. That left the scan landing on a peripheral node and
+    // the world step reading **38 towers, 0 roads, 0 arches** where it draws 273
+    // and 2,249: a red step about walking, caused by a change to the flat map's
+    // camera. Fitting makes the pick a function of the layout, which is frozen.
+    await page.keyboard.press('f');
+    await settle();
     const entryBox = await page.locator('canvas.map').boundingBox();
     let entered = false;
     if (entryBox !== null) {
@@ -2521,6 +2541,15 @@ async function main(): Promise<number> {
           const y = entryBox.y + (entryBox.height * row) / 20;
           await page.mouse.move(x, y);
           if ((await page.locator('.inspector-path').count()) === 0) continue;
+          // **A node with edges, because this step is about roads.** The scan
+          // took the first node it found, and this repo's largest visual mass is
+          // its 120 edgeless docs and terrain files — so the hero fast-travelled
+          // into a lump with no import edges and the step read **0 roads, 0
+          // arches** while `arm=world` on the same build drew 2,274 and 6. A
+          // step that asserts the ground carries roads has to start somewhere
+          // roads exist; anything else is asserting the map's layout.
+          const at = (await page.locator('.inspector-path').innerText()).trim();
+          if (!connected.has(at)) continue;
           await page.mouse.click(x, y);
           entered = true;
         }

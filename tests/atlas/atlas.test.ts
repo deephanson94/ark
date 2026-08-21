@@ -1322,6 +1322,61 @@ describe('proved chains on this repo (ADR-0049)', () => {
  * scored at **0.857 against a 0.78 bar** on one of hono's Blast Radius boards.
  * A fixture cannot see that, because it has one board and one strategy mix.
  */
+/**
+ * **No board may be answered by sorting the filenames** — NORTH-STAR pillar 3.
+ *
+ * A round-7 cold tester scored a grade S on their first board with no reasoning
+ * at all: six of twenty candidates began `scripts/`, the other fourteen `src/`,
+ * and those six were the key. The guess needs no graph, no history and no
+ * knowledge of the repository, only the paths on screen — the cheapest possible
+ * `Ctrl+F`.
+ *
+ * Asserted here rather than in a unit fixture because it is a property of the
+ * **real deck**: a fixture has too few candidates for a prefix to partition
+ * anything, so it would pass while saying nothing.
+ */
+describe('a board cannot be answered by sorting the paths (pillar 3)', () => {
+  it('has no board where a size-matched path prefix beats band A', () => {
+    const pathById = new Map(atlas.nodes.map((node) => [node.id, node.path]));
+    let checked = 0;
+    let sizeMatched = 0;
+    const beaten: string[] = [];
+    for (const challenge of atlas.challenges) {
+      const truth = challenge.truth.filter(isNodeId);
+      if (truth.length === 0) continue;
+      checked += 1;
+      let best = 0;
+      let anySplit = false;
+      const groups = new Map<string, string[]>();
+      for (const id of challenge.candidates) {
+        const parts = (pathById.get(id) ?? '').split('/');
+        for (let i = 1; i < parts.length; i++) {
+          const prefix = parts.slice(0, i).join('/');
+          const at = groups.get(prefix);
+          if (at === undefined) groups.set(prefix, [id]);
+          else at.push(id);
+        }
+      }
+      for (const picked of groups.values()) {
+        // Only a split whose size matches the key is one a player can pick —
+        // the board prints that number. The oracle version (best prefix scored
+        // against the key) is a different and much weaker claim; see
+        // `scripts/probe-prefix.ts` for why both are measured and labelled.
+        if (picked.length !== truth.length) continue;
+        anySplit = true;
+        best = Math.max(best, scoreSet(picked, truth).score);
+      }
+      if (anySplit) sizeMatched += 1;
+      if (best >= 0.78) beaten.push(`${challenge.id} (${best.toFixed(3)})`);
+    }
+    expect(checked).toBeGreaterThan(50);
+    // **The plant.** If no board even *offers* a size-matched split, the loop
+    // above proves nothing — a clean zero would mean the check never ran.
+    expect(sizeMatched, 'no board offers a size-matched prefix — this check is inert').toBeGreaterThan(10);
+    expect(beaten).toEqual([]);
+  });
+});
+
 describe('every wrong answer is accounted for (ADR-0050)', () => {
   it('gives each candidate a row, and no unpicked row a strategy', () => {
     const graph = buildGraph(atlas);

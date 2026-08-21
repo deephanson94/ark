@@ -14,8 +14,26 @@
  * one worth measuring.
  *
  * Scored with `scoreSet`, the metric §8.2 grades in, against band A (0.78).
- * Every prefix of every candidate's directory is tried and the best reported —
- * a player scanning a list of twenty paths sees all of them at once.
+ *
+ * **Two adversaries, and they are not the same one.**
+ *
+ * - `player` is the guess a person can actually make: among the path prefixes
+ *   that select *exactly as many candidates as the board says count* — a number
+ *   the prompt prints — tick one. This is what the tester did. `gate.ts`'s
+ *   `partition` heuristic models it and the generator refuses any board it
+ *   beats, so this column should read **0** on a shipped deck; a non-zero is a
+ *   defect in the gate. It carries the gate's own carve-out: a **one-file key**
+ *   whose size several groups match is luck rather than reading, so neither
+ *   side counts it. kysely ships two such boards, which is a real residual and
+ *   is recorded as one.
+ * - `oracle` is the best prefix scored *against the answer key*. No player can
+ *   compute it, because picking it requires already knowing the answer. It is
+ *   reported as an upper bound on how lexically clustered a repository is, and
+ *   it does not go to zero — nor should it, since a well-organised codebase
+ *   really does put related files together.
+ *
+ * Quoting the oracle as the leak is the units mistake this repo has a landmine
+ * for, so both are printed and labelled.
  *
  *   npx tsx scripts/probe-prefix.ts [repo ...]
  */
@@ -40,6 +58,8 @@ for (const repo of repos) {
     let sum = 0;
     let beat = 0;
     let exact = 0;
+    let playerBeat = 0;
+    let playerExact = 0;
     const examples: string[] = [];
     for (const board of boards) {
       const truth = board.truth.filter(isNodeId);
@@ -56,6 +76,10 @@ for (const repo of repos) {
       }
       let best = 0;
       let bestAt = '';
+      let player = 0;
+      // Groups of exactly the key's size, so the player column can apply the
+      // same ambiguity rule the gate does — see below.
+      let sizeMatchedGroups = 0;
       for (const prefix of prefixes) {
         const picked = board.candidates.filter((id) => (pathById.get(id) ?? ' ').startsWith(prefix));
         if (picked.length === 0) continue;
@@ -64,7 +88,23 @@ for (const repo of repos) {
           best = f1;
           bestAt = prefix;
         }
+        // The player's version: only splits whose size matches the stated key
+        // size are pickable, and the best of those is what the gate refuses on.
+        if (picked.length === truth.length) {
+          sizeMatchedGroups += 1;
+          if (f1 > player) player = f1;
+        }
       }
+      // **The gate's carve-out, mirrored here so the two columns mean the same
+      // thing.** A one-file key whose size is matched by several groups is not
+      // a guess: picking one singleton out of ten is luck, not reading. The
+      // gate declines it, so this column must too — otherwise a "leak" it
+      // reports is a disagreement between two instruments rather than a defect.
+      // What remains is a genuine residual and is named in the README's known
+      // gaps: kysely ships two such boards.
+      const pickable = truth.length >= 2 || sizeMatchedGroups <= 1;
+      if (pickable && player >= BAND_A) playerBeat += 1;
+      if (pickable && player >= 0.999) playerExact += 1;
       sum += best;
       if (best >= BAND_A) beat += 1;
       if (best >= 0.999) {
@@ -76,8 +116,9 @@ for (const repo of repos) {
     }
     const share = ((beat / boards.length) * 100).toFixed(0);
     console.log(
-      `${repo} ${verb.padEnd(12)}: ${boards.length} boards - best-prefix mean F1 ${(sum / boards.length).toFixed(3)}` +
-        ` - beats band A on ${beat} (${share}%) - EXACT on ${exact}`,
+      `${repo} ${verb.padEnd(12)}: ${boards.length} boards` +
+        ` | player: beats A ${playerBeat}, exact ${playerExact}` +
+        ` | oracle: mean ${(sum / boards.length).toFixed(3)}, beats A ${beat} (${share}%), exact ${exact}`,
     );
     for (const line of examples) console.log(`      ${line}`);
   }
