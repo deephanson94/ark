@@ -338,7 +338,8 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 - **Blast Radius is starved on half of real repositories, and the reference set could not see it**
   ([ADR-0042](./docs/decisions/0042-blast-radius-is-taint-limited-on-half-the-real-repositories.md),
-  proposed). Measured on **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
+  **accepted — decisions 2 and 5 taken by the owner on 2026-08-14, and both shipped**). Measured on
+  **19 repositories at pinned commits**: the v1 verb is fully supplied on **8**
   (the deck cap is what bounds it), ships a token deck on **7** (2.4%–25.4% of subjects), and does not
   exist on **4**. `typeorm` `df07bf1e` ships **58 boards of 2,221 subjects at 97.6% resolution**;
   `vue-core` 7 of 254; `nest` 7 of 286. The three git-graded verbs are unaffected on almost all of
@@ -348,7 +349,8 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   **All four reference repos — ark, hono, kysely, graphql-js — are cap-limited**, as are both of
   `docs/experiments/0001`'s matched pair, so every "the cap is the binding constraint" measurement in
   this repository (ADR-0039's `retain` work, ADR-0040's progression, ADR-0012's dedupe costs) was
-  taken where the cap binds. ADR-0042 decision 2 proposes adding a taint-limited member.
+  taken where the cap binds. **ADR-0042 decision 2 closed that**: `typeorm` `df07bf1e` is in the
+  reference set, and ADR-0043 already measures on it by name.
 
   **Resolution rate is anti-predictive and `rate × mean closure depth` is not the metric either** —
   ADR-0024 decision 4's successor is *position*: typeorm's single `src/platform/PlatformTools.ts`
@@ -760,10 +762,14 @@ caught it. It was then briefly written as 17.8%, quoted off a run that had not f
 skyline"* is 5.9%–32.8% on eight repos and **49.2% on kysely**, which satisfies "most" by 0.8 points —
 and the outlier is **not** the biggest repo, since webpack is the lowest at 5.9%, so this is a fact
 about dependency depth rather than size · **bind mouse-look**, which is unbound
-· then **decide what ADR-0042 proposes** — the survey is done and the two expensive candidates are refused
-with measurements; what is open is whether to ship the workspace-resolution patch (+250 boards on 3
-repos of 19, 0 wrong answer keys) and whether to add a taint-limited repo to the reference set.
-Neither is a session's call · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
+· then **a truth-direction arm for `npm run check:keys`** — ADR-0042's workspace
+resolver shipped and a post-ship review then found **two real wrong answer keys on webpack**, closed by
+the two-condition rule; but `check:keys` asks only whether a *distractor* imports the subject, never
+whether a **truth member really is a dependent**, which is the direction those two failed in. That arm
+is guarded today by unit fixtures alone. *(This line used to say "decide what ADR-0042 proposes" and
+quoted "0 wrong answer keys" — both items were decided by the owner on 2026-08-14 and shipped, and that
+figure is one the ADR itself withdrew. Three places in this file said "proposed" while a fourth said it
+had happened.)* · then **run `docs/experiments/0001`** — its three structural blockers are closed and it is **runnable**,
 though **[ADR-0040](./docs/decisions/0040-a-progression-ascends-through-each-verbs-own-range.md) is a
 reason to look at the opening first**: on both of that experiment's matched repos a participant's
 first fifteen boards were one verb at the difficulty floor, and seven of graphql-js's first ten were

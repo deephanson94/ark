@@ -5148,3 +5148,47 @@ roads to 1,582 units — true, and not a plate. The metric the comment is actual
 **Next**: the standing benchmark. Round 5 measured 6.75 visual / 6.40 want-to-continue against the
 8/10 bar, and the region wash, medals, proved chain, hop count and complete reveal have all shipped
 since without being measured against it. That is a round-6 playtest, and it needs ten cold readers.
+
+## Round 6, and three defects it found in this session's own work
+
+Ten cold playtesters, personas spread across backgrounds, ten minutes each, scoring the first-session
+feel: **7.5 visual / 7.0 continue**, against round 5's 6.75 / 6.40. Nine of ten scored continue at
+exactly 7 — a flat ceiling rather than scatter, which says something specific caps it.
+
+**They found three live defects, all introduced earlier in the same session, and each one hid the
+next.** The Blast Radius prompt read *"…this question is about what reaches it **beyond** them"*, which
+ADR-0008 makes false — direct importers are **38.8% of ark's key members and 34.0% of hono's**, and 7
+of 40 / 15 of 54 boards have a key made entirely of them, where obeying the sentence scores **0.000**.
+Four of ten testers failed a board on it and named it unprompted. Fixing the sentence exposed the
+second: the map could not show the ink the sentence points at, because edges drew in **one pass** so a
+highlighted edge was overpainted by the other ~880, differing only by colour and alpha at an identical
+width — and raising `INK.edge` 0.16 → 0.44 earlier this session is what closed that contrast. Fixing
+*that* exposed the third: **`openBoard` never set `radius`**, so a board opened the way the guide opens
+one drew no ring at all and the two-pass rendering was correct and unreachable. The e2e could not catch
+it — it reaches boards by clicking discs, which does set the radius.
+
+**A review then blocked the first draft of those fixes on three more findings, all reproduced.** The
+corrected sentence was still false **in the world**, where roads are built from every edge undirected
+and 33.5% of the lines at a subject are its own *outgoing* imports; `probe-city`'s fan column compared
+against the *repository median* street while its prose said *"nearest"*, understating it roughly 2×;
+and the retired roadmap item was **not the one measured** — the rig item is the *opposite* failure and
+`probe-spawn` reads 4.5% of ark's spawns at ≥90% of frame height, so it is live. The reviewer also
+passed the new wording assertions **two false sentences** restating the exact regression, because a
+blacklist plus `toContain('count')` is not a claim.
+
+Six instrument errors along the way and **every one read as "no defect here"**: an eye with no `yaw`
+or `fov` so every projection ran on `NaN`; a bearing off by exactly π; `Road.from` fed to `byRef.get`
+when it is a Tower; a plate metric calling two parallel roads a 1,582-unit plate; an `answerKey` split
+on `:` when it is `\n`, which took the "no importers" arm on every board; and a ring gate that
+predicted the board would be import-graded. A correction was also quoted off an unfinished run —
+django landed at **22.2%** after the range had been written down as 17.8%.
+
+Also closed: three places in `README.md` said ADR-0042 was "proposed" while a fourth said it had
+happened, and the Next line quoted **"0 wrong answer keys"** — a figure the ADR itself withdrew after
+a post-ship review found two real wrong keys on webpack.
+
+**Next**: the two things capping the score, both owner-level — the map turning between challenges
+(ADR-0017, named the biggest problem by two testers including the only 8/8) and an opening that serves
+one verb (four of ten saw only Blast Radius in ten minutes). Below them, a **truth-direction arm for
+`check:keys`**, which today asks only whether a distractor imports the subject and never whether a
+truth member really is a dependent — the direction webpack's two wrong keys failed in.
