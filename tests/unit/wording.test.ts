@@ -258,6 +258,40 @@ describe('the evidence line', () => {
     expect(evidence.toLowerCase()).not.toContain('click');
   });
 
+  it('never puts the drawn importers outside the question, because they are 38.8% of the key', () => {
+    // **The regression this guards cost four of five cold testers a board.** The
+    // sentence that replaced the hover instruction read *"…import X directly —
+    // this question is about what reaches it **beyond** them"*, and ADR-0008
+    // makes truth the *unbounded* dependent set: a direct importer is not
+    // outside the question. Measured on the real deck, direct importers are
+    // **85 of ark's 219 key members (38.8%) and 84 of hono's 247 (34.0%)**, and
+    // **7 of ark's 40 boards and 15 of hono's 54** have a key made entirely of
+    // them — where obeying the sentence scores **0.000**. Deck-wide it caps a
+    // believing player at 0.654 / 0.598 against a 0.78 band A.
+    //
+    // Asserted here rather than left to the atlas suite because this is a claim
+    // about a **sentence**, and 1,051 unit tests passed while it was false —
+    // which is this repo's landmine in one line: a suite that checks the shape
+    // of a sentence never checks whether it is true.
+    const evidence = (VERBS.blastRadius.prompt(board, words).evidence ?? '').toLowerCase();
+    for (const exclusion of ['beyond them', 'other than', 'apart from', 'excluding', 'do not count']) {
+      expect(evidence, `the evidence line puts the drawn ring outside the answer: "${exclusion}"`)
+        .not.toContain(exclusion);
+    }
+    // And it says the opposite, so this is not satisfied by a line that simply
+    // stops mentioning them — which would leave the player guessing the same way.
+    expect(evidence).toContain('count');
+  });
+
+  it('does not reuse the legend\'s word for something else', () => {
+    // Three cold testers named this separately: the legend defines RING as
+    // *"has a question you have not answered"*, and the evidence line used
+    // "ringed" to mean *"has an import edge drawn to the subject"*. One screen,
+    // one word, two meanings — and the reader has no way to know which is meant.
+    const evidence = (VERBS.blastRadius.prompt(board, words).evidence ?? '').toLowerCase();
+    expect(evidence).not.toContain('ring');
+  });
+
   it('is absent on every verb graded on git', () => {
     // The seam: a shared sentence here would be the class-label failure this
     // repo has paid for repeatedly — true of one verb, printed over four.

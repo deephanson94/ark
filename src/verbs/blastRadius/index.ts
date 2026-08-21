@@ -78,7 +78,26 @@ export function promptFor(challenge: Challenge, words: Words): Prompt {
     // A sentence that tells a player how to win, and cannot be followed at the
     // moment it appears, is worse than no sentence: two testers failed boards
     // that the drawn ring alone scores 0.729 on.
-    evidence: `The ${members.many} already ringed on the map import ${words.label(challenge.subject)} directly — this question is about what reaches it beyond them.`,
+    //
+    // **The version that replaced it was worse, because it was false.** It read
+    // *"…import X directly — this question is about what reaches it beyond
+    // them"*, and ADR-0008 makes truth the **unbounded** dependent set, so a
+    // direct importer is not outside the question, it is 38.8% of this repo's
+    // key members and 34.0% of hono's. **7 of ark's 40 boards and 15 of hono's
+    // 54 have a key made *entirely* of direct importers**, where a player who
+    // believes the sentence scores 0.000; deck-wide, obeying it caps you at
+    // 0.654 and 0.598 against a 0.78 band A. Four of five cold testers in round
+    // 6 excluded the direct importers and said so unprompted — *"I scored 40%
+    // against a 50% bar because I believed the instructions"*.
+    //
+    // Two defects in one sentence, and the second is why nothing caught it.
+    // *"Ringed"* is the **legend's** word for something else — "has a question
+    // you have not answered" — so one screen used one term for two things, and
+    // three testers named that collision separately. This repo's landmine is
+    // exact about the class: a suite that checks the shape of a sentence never
+    // checks whether it is true. `tests/unit/wording.test.ts` now holds this one
+    // to the fact it asserts.
+    evidence: `The lines drawn into ${words.label(challenge.subject)} are the ${members.many} that import it directly. Those count — and so does anything that reaches it through a chain of them.`,
   };
 }
 
