@@ -787,24 +787,38 @@ async function main(): Promise<number> {
       await submitBoard(page, 'rotation: back to the map'); // "back to the map"
       await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
       await settle();
-      // Frame the whole map at the new heading before anything scans it again:
-      // the turn pivots about the file just graded, so the camera moves as well
-      // as turns, and a later grid scan hunting a particular node needs it on
-      // screen. Exercises the bearing-aware `fit` while it is at it.
+      // **A grade must NOT turn the map** (ADR-0017 decision 1, amended by the
+      // owner). It used to, and two of ten cold testers named that the single
+      // biggest problem in the product — the picture re-scrambled at the moment
+      // it was earned. Asserted as an equality against the pre-grade heading
+      // rather than as "still north", because the board before this one may
+      // have left the map anywhere.
+      const afterGrade = await heading();
+      process.stdout.write(`e2e: after one grade the map is at ${afterGrade}° (expected unchanged)\n`);
+      if (afterGrade !== headingBeforeGrade) {
+        failures.push({
+          what: 'rotation',
+          detail: `grading a challenge turned the map from ${headingBeforeGrade}° to ${afterGrade}° — the turn is the player's now`,
+        });
+      }
+
+      // **And `r` must turn it, by the angle ADR-0017 measured.** The mechanism
+      // is kept, as an opt-in: pressing `r` repeatedly walks the same golden
+      // sequence. Derived from the constant the player uses, so this stays true
+      // if the schedule changes and false the moment the *rendered* heading
+      // stops agreeing with it — "not north" is too weak, since a sign flip in
+      // the compass reads 222° and passes it.
+      await page.keyboard.press('r');
+      await settle();
       await page.keyboard.press('f');
       await page.waitForTimeout(120);
       const turnedTo = await heading();
-      // Derived from the constant the player uses, so this stays true if the
-      // schedule ever changes — and false the moment the *rendered* heading
-      // stops agreeing with it. "Not north" was too weak a claim: a sign flip
-      // in the compass reads 222° and passes it, which is the decoy instrument
-      // the needle is supposed not to be.
-      const oneTurn = Math.round(((GOLDEN_TURN * 180) / Math.PI) % 360);
-      process.stdout.write(`e2e: after one grade the map is turned ${turnedTo}° (expected ${oneTurn}°)\n`);
+      const oneTurn = Math.round((headingBeforeGrade + (GOLDEN_TURN * 180) / Math.PI) % 360);
+      process.stdout.write(`e2e: r → ${turnedTo}° (expected ${oneTurn}°)\n`);
       if (turnedTo !== oneTurn) {
         failures.push({
           what: 'rotation',
-          detail: `grading a challenge left the map at ${turnedTo}°, not the ${oneTurn}° it turns by`,
+          detail: `r left the map at ${turnedTo}°, not the ${oneTurn}° it turns by`,
         });
       }
       await page.screenshot({ path: join(SHOT_DIR, 'turned.png') });
@@ -825,9 +839,10 @@ async function main(): Promise<number> {
         failures.push({ what: 'rotation', detail: `n left the map at ${backTo}° instead of north` });
       }
 
-      // **Only a *grade* turns the map.** The pending flag exists so that
-      // opening a question and thinking better of it costs nothing; without a
-      // test, turning on every close passes everything else in this file.
+      // **Nothing but `r` turns the map**, and closing a board is the case most
+      // likely to regress: the turn used to be armed by a grade and spent when
+      // the console closed, so a stray `turnTo` on close would look like the old
+      // behaviour returning.
       await page.locator('.inspector-action').click();
       await page.waitForSelector('.console-panel', { timeout: 5000 });
       await page.keyboard.press('Escape');

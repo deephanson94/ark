@@ -144,6 +144,15 @@ export function controlsFor(arm: Arm | null, view: View): readonly Control[] {
         what: 'Fit the whole map on screen — at the heading you are on, never back to north.',
       },
       { keys: 'n', brief: 'north', what: 'Face north again.' },
+      // **The turn, since ADR-0017 decision 1 was amended.** It used to happen
+      // to the player after every graded board; now it is theirs. Advertised on
+      // the HUD line rather than buried in the help card, because a mechanic
+      // that no longer fires on its own is one nobody discovers.
+      {
+        keys: 'r',
+        brief: 'turn',
+        what: 'Turn the map by a third of a turn. Seeing it from a new angle is what makes the shape stick rather than the picture.',
+      },
       {
         keys: 'arrows',
         brief: null,

@@ -874,7 +874,6 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * a wrong answer never costs anything, and a heading that only advanced on a
    * pass would make the turn a reward and the flat map a punishment.
    */
-  let turnPending = false;
   const challengePanel = createConsole(scene, {
     onGraded(challenge, grade, reveal) {
       // **The two channels do not behave alike here, and that is deliberate.**
@@ -975,7 +974,17 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
           focus = focusFor(node);
         }
       }
-      turnPending = true;
+      // **The turn is no longer armed by a grade.** ADR-0017 decision 1 turned
+      // the map after every graded board, and its argument still holds — a
+      // north-up-forever map teaches an alignment-specific picture rather than a
+      // structure. What it did not price is what a turn costs *at that moment*:
+      // two of ten cold testers named it the single biggest problem in the
+      // product, one of them the only tester to score 8/8, and both described
+      // the same thing — the picture is re-scrambled at the exact instant it was
+      // earned. The owner's call is that the mechanism becomes the player's
+      // (ADR-0017 decision 1, amended): `r` turns by the same golden angle, so
+      // pressing it walks the same 80-distinct-heading sequence, and nothing
+      // turns the map that the player did not ask for.
       describe(selected);
       invalidate();
       return register;
@@ -995,10 +1004,6 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // it would be the same theft in the other direction.
       if (borrowed !== null && sameCamera(camera, borrowed.lent)) camera = borrowed.own;
       borrowed = null;
-      if (turnPending) {
-        turnPending = false;
-        turnTo(camera.bearing + GOLDEN_TURN, pivotOn(selected));
-      }
       invalidate();
     },
     // The map draws the open board (`draw.ts`'s `BoardMarks`), so a tick or a
@@ -2046,6 +2051,18 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       landTurn();
       camera = fit(scene.bounds, viewport, camera.bearing);
       invalidate();
+    }
+    if (event.key === 'r') {
+      // **The turn, on request.** The same golden angle ADR-0017 measured, so
+      // the sequence it chose is unchanged — 80 distinct headings over an
+      // 80-question deck, no consecutive repeat, exactly one answered from
+      // north. It is a keystroke now rather than a consequence, which is the
+      // whole of the amendment: the transfer argument is available to a player
+      // who wants it and is never spent on one who does not.
+      //
+      // Pivoted on the selection like the automatic turn was, so turning while
+      // looking at something keeps that thing where it is.
+      turnTo(camera.bearing + GOLDEN_TURN, pivotOn(selected));
     }
     if (event.key === 'n') {
       // The way back. Guardrail 6 in a keystroke: the map turning between

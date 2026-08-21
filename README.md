@@ -128,7 +128,12 @@ map, the field notes, the deck or the selector names a verb.
 Shipped beyond the roadmap: **elevation** (a third dimension derived from the graph, ADR-0013), an
 **orbit view** (press `o`), a **walkable world** (press `g` — a hero, the roads are the import
 edges, and every district carries its name on an arch in its own colour, ADR-0033 and ADR-0044),
-**map rotation between challenges** (ADR-0017), a **co-change layer** on the map
+**map rotation on request** (press `r` — ADR-0017, decision 1 amended by
+[ADR-0051](./docs/decisions/0051-the-turn-is-the-players.md): a grade turned the map until round 6's
+testers named that the product's single biggest problem, two of ten unprompted and one of them the
+round's only 8/8. The mechanism is kept whole — `r` walks the same 80-distinct-heading golden
+sequence — and the cost is stated rather than assumed, since a player who never presses it learns the
+orientation-locked map that ADR was written against), a **co-change layer** on the map
 (ADR-0016), and the **negative witness** — every wrong answer carries the reason it was offered
 (ADR-0020).
 

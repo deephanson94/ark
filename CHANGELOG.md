@@ -5192,3 +5192,34 @@ a post-ship review found two real wrong keys on webpack.
 one verb (four of ten saw only Blast Radius in ten minutes). Below them, a **truth-direction arm for
 `check:keys`**, which today asks only whether a distractor imports the subject and never whether a
 truth member really is a dependent — the direction webpack's two wrong keys failed in.
+
+## The turn is the player's
+
+Round 6's ten cold testers named the automatic turn twice, unprompted, as the single biggest problem
+in the product — including the tester who gave the round's only 8/8. *"Re-scrambling my mental picture
+at the exact moment I have just earned a landmark is working against itself. There is a compass and an
+`n` key, but needing them is the symptom."* The owner's call, taken on that measurement:
+**[ADR-0051](./docs/decisions/0051-the-turn-is-the-players.md)**.
+
+A grade no longer turns the map. **`r` does**, by the same angle, with the same animation and pivot —
+so this amends ADR-0017 decision 1 rather than reversing it. The mechanism is kept whole: pressing `r`
+walks the identical sequence that document's table measured, 80 distinct headings over an 80-question
+deck with no consecutive turn of 0°. What changed is who spends it. Decisions 2, 3 and 4 stand.
+
+The cost is written down rather than assumed: **a player who never presses `r` learns an
+orientation-locked map**, which is the risk ADR-0017 exists against, and it is now borne by default
+rather than by exception. The key is on the HUD's control line rather than in the help card, because a
+mechanic that no longer fires on its own is one nobody discovers. Whether the default belongs the
+other way needs `docs/experiments/0001`, still unrun.
+
+**`test:e2e` was the only thing asserting the old behaviour — 1,057 unit tests passed with it
+deleted.** That assertion is inverted rather than dropped: a grade must leave the heading *unchanged*
+(an equality against the pre-grade heading, since the previous board may have left the map anywhere),
+`r` must move it by exactly `GOLDEN_TURN`, and closing a board unanswered must still not turn it —
+the case most likely to regress, since the turn used to be armed by a grade and spent on close.
+Measured live: after a grade 0°, `r` → 138°, `n` → 0°.
+
+**Next**: round 7 is running against a frozen snapshot of the pre-amendment build, so it reads the
+three round-6 fixes and not this one. The opening's verb mix stays as it is — the owner's call is that
+the difficulty tiers remain the spine (ADR-0040 §6), so the symptom gets addressed without touching
+the rank order.
