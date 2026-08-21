@@ -38,14 +38,21 @@
  *   graphql-js      549      32.8%    11.8   0.4:1     1.1 / 11.3       15.5%
  *   kysely          600      49.2%    12.3   2.4:1     3.3 / 12.1       10.6%
  *   hugo          1,242      14.1%     9.8   0.5:1     1.4 / 7.1        17.8%
+ *   django        3,035      13.4%     8.9   0.6:1     0.4 / 9.3        22.2%
  *   typeorm       3,704      13.0%     7.7   1.4:1     0.3 / 11.4       13.4%
+ *   webpack      12,626       5.9%     7.4   0.7:1     0.5 / 6.8        12.0%
  *
  * `ROAD_WIDTH` holds, and by less than the first draft claimed: a fan is
- * 0.0–3.3 units at the median against streets 7.7–13.0 wide, and **2.2%–17.8%**
+ * 0.0–3.3 units at the median against streets 7.7–13.0 wide, and **2.2%–22.2%**
  * of hub nodes have one wider than their own nearest street. The counterfactual
  * is in the table — at the pre-tuning 2.2 every fan figure is 2–6× larger — so
- * the constant does something and what it does is still enough, with hugo the
- * worst case rather than typeorm.
+ * the constant does something and what it does is still enough, with **django**
+ * the worst case rather than typeorm.
+ *
+ * *That range was quoted as 2.2%–17.8% for one commit, off a run that had not
+ * finished: django and webpack landed after the figure was written down. A
+ * correction taken from a partial run is the original error wearing the clothes
+ * of the fix.*
  *
  * `RISE` holds on the failure it names: the *"6:1 canyon, which is not a city
  * anyone can read from inside"* reads **0.4 : 1 to 2.4 : 1** everywhere. Its

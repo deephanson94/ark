@@ -752,9 +752,10 @@ did fail measurement: 1–2 labels in a frame of 205 towers is fog doing what ri
 same positions read 22 (the cap) under a surveyed map. The class `FOOTPRINT_SCALE` turned out to be in is
 **checked and holds**: `scripts/probe-city.ts` measures `RISE` and `ROAD_WIDTH` against the invariants
 their own comments claim, over nine repositories from 285 to 12,626 towers (at `b1ba3c6`). A road fan
-is 0.0–3.3 units at the median against streets 7.7–13.0 wide, with **2.2%–17.8%** of hubs carrying one
-wider than their own nearest street — *that last figure was 0.5%–9.0% in the first draft, which paired
-each fan against the repository median while the sentence said "nearest"; a reviewer caught it.* The
+is 0.0–3.3 units at the median against streets 7.7–13.0 wide, with **2.2%–22.2%** of hubs carrying one
+wider than their own nearest street (worst: django) — *that figure was 0.5%–9.0% in the first draft,
+which paired each fan against the repository median while the sentence said "nearest"; a reviewer
+caught it. It was then briefly written as 17.8%, quoted off a run that had not finished.* The
 6:1 canyon `RISE` was set to fix reads 0.4:1 to 2.4:1 everywhere. One margin is recorded as a margin: *"the eye clears most of the
 skyline"* is 5.9%–32.8% on eight repos and **49.2% on kysely**, which satisfies "most" by 0.8 points —
 and the outlier is **not** the biggest repo, since webpack is the lowest at 5.9%, so this is a fact
