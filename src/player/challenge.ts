@@ -54,6 +54,9 @@ export interface BoardView {
   readonly hovered: AtlasId | null;
 }
 
+/** Which view a board was opened over. */
+export type BoardSurface = 'map' | 'orbit' | 'world';
+
 export interface Console {
   readonly root: HTMLElement;
   /**
@@ -68,7 +71,11 @@ export interface Console {
    * canvas: the scrim is `inset: 0`.
    */
   readonly panel: HTMLElement;
-  open(challenge: Challenge): void;
+  /**
+   * @param surface Which view is behind the scrim. `Prompt.evidence` is a claim
+   * about the **flat map's** ink and is rendered only there — see `renderQuestion`.
+   */
+  open(challenge: Challenge, surface: BoardSurface): void;
   close(): void;
   isOpen(): boolean;
   /** The open, unanswered board — `null` while closed or showing a result. */
@@ -109,6 +116,13 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
   root.hidden = true;
 
   let open: Challenge | null = null;
+  /**
+   * Which view the board was opened over.
+   *
+   * The console still knows nothing about verbs — this is a fact about the
+   * *shell*, which is the one thing the console is entitled to know.
+   */
+  let shownOver: BoardSurface = 'map';
   /**
    * The live board, or `null` once it has been answered.
    *
@@ -259,7 +273,22 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // asked for exactly this input and **none of them found it**, including
       // by accident — the mechanism has shipped for milestones with nothing
       // anywhere saying so.
-      ...(prompt.evidence === undefined
+      // **Only over the flat map, because that is the surface it describes.**
+      // `Prompt.evidence` says *"the lines drawn into X are the [files] that
+      // import it directly"*, and a Blast Radius board opens in the **world**
+      // too (`main.ts`'s Enter on a focused tower). There the lines are roads,
+      // and `world/build.ts` builds one from **every** `scene.edge`, undirected,
+      // with no importer channel in the renderer at all — so the lines meeting a
+      // building include the subject's own *outgoing* imports, which are
+      // non-dependents. Measured on ark's 40 blast subjects: **199 of 594 lines
+      // (33.5%) are outgoing, 34 of 40 boards carry at least one, and on 14 of
+      // 40 half or more are** — so "those count" over that ink instructs
+      // spurious picks, and §8.2 makes every one of them cost precision.
+      //
+      // The verb keeps writing the sentence (ADR-0020's rule); the shell decides
+      // whether the surface it describes is on screen, which is the only half of
+      // this the shell is entitled to judge.
+      ...(prompt.evidence === undefined || shownOver !== 'map'
         ? []
         : [el('p', 'console-evidence-hint', [prompt.evidence])]),
       // **Only where the rows have markers to click.** Archaeology's candidates
@@ -502,8 +531,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
   return {
     root,
     panel,
-    open(challenge) {
+    open(challenge, surface) {
       open = challenge;
+      shownOver = surface;
       root.hidden = false;
       renderQuestion(challenge);
       const first = panel.querySelector('.choice-button');

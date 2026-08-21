@@ -14,11 +14,26 @@
  * the player sees: `drawWorldFrame` against a no-op context, at every position
  * the product can actually put you in.
  *
- * **The result retires the item it was written to serve.** Measured through the
- * shipped renderer at every position the product can put you in:
+ * **What this retires is the *cull* and the *frustum*, not the rig item.** That
+ * distinction was got wrong once already and a reviewer caught it: the rig item
+ * is defined in `SPAWN_STANDOFF`'s own comment as the **opposite** failure — the
+ * target *filling* the frame — and `scripts/probe-spawn.ts`, its actual
+ * instrument, reads **11 of ark's 243 spawns (4.5%) at ≥90% of frame height,
+ * worst `schema.ts` at 122%**, and 11 of hono's 381 (2.9%). An empty-frame
+ * measurement cannot speak to that, and "count the clauses in the thing you are
+ * re-opening" is this repo's own rule for exactly this.
  *
- *   ark   242 board spawns · median 205 towers, min 25 · **0 empty**
+ * Measured through the shipped renderer at every position the product can put
+ * you in (at `4ab4861`, on the working tree — see the caveat below):
+ *
+ *   ark   245 board spawns · median 182 towers, min 22 · **0 empty**
  *   hono  381 board spawns · median 291 towers, min 5  · **0 empty**
+ *
+ * **These figures move with every commit**, because ark indexes itself and the
+ * probe runs against the working tree — the first version of this header quoted
+ * 242 / 205 / 25 with no commit named, and a reviewer read 245 / 182 / 22 on the
+ * next tree. Re-run rather than quote; the invariant (`0 empty`) is the part
+ * that holds.
  *
  * and the shore — what `g` shows with nothing selected — carries 272 / 324
  * towers, 12 / 101 silhouettes, 6 / 11 district arches and ~2,255 roads. There

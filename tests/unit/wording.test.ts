@@ -273,14 +273,23 @@ describe('the evidence line', () => {
     // about a **sentence**, and 1,051 unit tests passed while it was false —
     // which is this repo's landmine in one line: a suite that checks the shape
     // of a sentence never checks whether it is true.
+    // **Asserted positively, because a blacklist is not a claim.** The first
+    // version of this test banned five phrases and then required the word
+    // "count" — and a reviewer passed it two sentences that restate the exact
+    // regression: *"They **don't count** — this question is about what reaches
+    // it past them"* and *"**only** what reaches it through a chain
+    // **counts**"*. Both clear the blacklist, and both satisfy `toContain
+    // ('count')` with the negation itself. A test that enumerates the wordings
+    // someone already thought of is the shape-of-a-sentence failure wearing the
+    // clothes of the fix for it.
     const evidence = (VERBS.blastRadius.prompt(board, words).evidence ?? '').toLowerCase();
-    for (const exclusion of ['beyond them', 'other than', 'apart from', 'excluding', 'do not count']) {
-      expect(evidence, `the evidence line puts the drawn ring outside the answer: "${exclusion}"`)
-        .not.toContain(exclusion);
+    // The inclusive claim, as a literal: the drawn set counts.
+    expect(evidence).toContain('those count');
+    // And nothing may take it back in the same breath.
+    for (const negation of ['not count', "n't count", 'only what', 'past them', 'beyond them']) {
+      expect(evidence, `the evidence line withdraws its own claim: "${negation}"`)
+        .not.toContain(negation);
     }
-    // And it says the opposite, so this is not satisfied by a line that simply
-    // stops mentioning them — which would leave the player guessing the same way.
-    expect(evidence).toContain('count');
   });
 
   it('does not reuse the legend\'s word for something else', () => {

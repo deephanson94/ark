@@ -1385,7 +1385,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
       // gives the first back if the second is still on screen untouched.
       borrowed = { own, lent: camera };
     }
-    challengePanel.open(challenge);
+    // The surface the board is opened over, so the console can decline to make
+    // a claim about ink that view does not draw (see `challenge.ts`).
+    challengePanel.open(
+      challenge,
+      world.isActive() ? 'world' : orbit !== null ? 'orbit' : 'map',
+    );
     invalidate();
   }
 

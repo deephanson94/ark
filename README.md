@@ -741,17 +741,21 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
 
 **The world's remaining constants, measured across the reference set.** Round 5 is **closed**: the
 region wash shipped at `66f13d7`, the proved chain at `bc3f039`, its hop count at `19b571a`, and the
-reveal now accounts for every candidate (ADR-0050). *This line used to say "a rig that frames what is
-ahead" and that item is **retired by measurement**, not done*: `scripts/probe-frame.ts` drives the
-shipped renderer at every position the product can put you in and finds **0 empty frames of 242 on ark
-and 0 of 381 on hono**, median 205 and 291 towers. Its follow-up looked like a defect and is the
-mechanic — 1–2 labels in a frame of 205 towers is fog doing what risk #4 asks, and the same positions
-read 22 (the cap) under a surveyed map. That is the **third** account of one playtest report to fail
-measurement, after the cull and the frustum. The class `FOOTPRINT_SCALE` turned out to be in is
+reveal now accounts for every candidate (ADR-0050). *This line used to say the walk's framing was
+**retired by measurement**, and that was wrong — a reviewer caught it.* What `scripts/probe-frame.ts`
+retires is the **cull** and the **frustum** theories: it drives the shipped renderer at every position
+the product can put you in and finds **0 empty frames** on both repos. The rig item is the *opposite*
+failure — the target **filling** the frame — and its own instrument, `scripts/probe-spawn.ts`, reads
+**11 of ark's 243 spawns (4.5%) at ≥90% of frame height, worst 122%**, so it is **live**. Counting the
+clauses in the thing you are re-opening is this repo's own rule and I did not run it. A third account
+did fail measurement: 1–2 labels in a frame of 205 towers is fog doing what risk #4 asks, since the
+same positions read 22 (the cap) under a surveyed map. The class `FOOTPRINT_SCALE` turned out to be in is
 **checked and holds**: `scripts/probe-city.ts` measures `RISE` and `ROAD_WIDTH` against the invariants
 their own comments claim, over nine repositories from 285 to 12,626 towers (at `b1ba3c6`). A road fan
-is 0.0–3.3 units at the median against streets 7.7–13.0 wide, and the 6:1 canyon `RISE` was set to fix
-reads 0.4:1 to 2.4:1 everywhere. One margin is recorded as a margin: *"the eye clears most of the
+is 0.0–3.3 units at the median against streets 7.7–13.0 wide, with **2.2%–17.8%** of hubs carrying one
+wider than their own nearest street — *that last figure was 0.5%–9.0% in the first draft, which paired
+each fan against the repository median while the sentence said "nearest"; a reviewer caught it.* The
+6:1 canyon `RISE` was set to fix reads 0.4:1 to 2.4:1 everywhere. One margin is recorded as a margin: *"the eye clears most of the
 skyline"* is 5.9%–32.8% on eight repos and **49.2% on kysely**, which satisfies "most" by 0.8 points —
 and the outlier is **not** the biggest repo, since webpack is the lowest at 5.9%, so this is a fact
 about dependency depth rather than size · **bind mouse-look**, which is unbound
