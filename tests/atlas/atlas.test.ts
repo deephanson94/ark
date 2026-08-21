@@ -1347,6 +1347,7 @@ describe('a board cannot be answered by sorting the paths (pillar 3)', () => {
       checked += 1;
       let best = 0;
       let anySplit = false;
+      let sizeMatched2 = 0;
       const groups = new Map<string, string[]>();
       for (const id of challenge.candidates) {
         const parts = (pathById.get(id) ?? '').split('/');
@@ -1364,10 +1365,22 @@ describe('a board cannot be answered by sorting the paths (pillar 3)', () => {
         // `scripts/probe-prefix.ts` for why both are measured and labelled.
         if (picked.length !== truth.length) continue;
         anySplit = true;
+        sizeMatched2 += 1;
         best = Math.max(best, scoreSet(picked, truth).score);
       }
       if (anySplit) sizeMatched += 1;
-      if (best >= 0.78) beaten.push(`${challenge.id} (${best.toFixed(3)})`);
+      // **The gate's ambiguity carve-out, and this test is the third place the
+      // rule lives.** It is re-derived here rather than imported on purpose — a
+      // check that calls the function under test cannot catch a bug in it — but
+      // re-deriving means carrying the whole rule, and the first version carried
+      // only half. A **one-file** key matched by several groups is luck rather
+      // than reading (picking one singleton out of ten), so `gate.ts` declines
+      // it and so must this; without the clause the suite went red on a board
+      // the generator had correctly shipped. `scripts/probe-prefix.ts` states
+      // the same carve-out, and the README's known gaps name the two kysely
+      // boards that survive it.
+      const pickable = truth.length >= 2 || sizeMatched2 <= 1;
+      if (pickable && best >= 0.78) beaten.push(`${challenge.id} (${best.toFixed(3)})`);
     }
     expect(checked).toBeGreaterThan(50);
     // **The plant.** If no board even *offers* a size-matched split, the loop
