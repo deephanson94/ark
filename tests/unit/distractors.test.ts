@@ -47,12 +47,15 @@ function contextFor(
   atlas: Atlas,
   subjectPath: string,
   coChange: ReadonlyMap<NodeRef, number> = new Map(),
+  /** The answer key, for `keySibling`. Empty unless a test is about that. */
+  truth: readonly NodeRef[] = [],
 ): {
   graph: ReturnType<typeof buildGraph>;
   corpus: ReturnType<typeof analyse>;
   subject: NodeRef;
   pool: Set<NodeRef>;
   coChange: ReadonlyMap<NodeRef, number>;
+  truth: readonly NodeRef[];
 } {
   const graph = buildGraph(atlas);
   return {
@@ -60,6 +63,7 @@ function contextFor(
     corpus: analyse(graph),
     subject: refOfPath(atlas, subjectPath),
     pool: poolFor(atlas, subjectPath),
+    truth,
     coChange,
   };
 }

@@ -542,6 +542,9 @@ export function generateWithReport(
       subject,
       pool: new Set(pool),
       coChange: coChange.get(subject) ?? new Map(),
+      // The key, for `keySibling` and nothing else — see its comment. `pool`
+      // has already settled reachability, so this is read for paths only.
+      truth: truthRefs,
     };
     const want = Math.min(pool.size, options.candidateCount - size);
 

@@ -97,7 +97,10 @@ describe('gradeHeuristics', () => {
     // against exactly that guess, so a question it answers is easy, not broken.
     const [subject] = refs(atlas, ['src/a/subject.ts']);
     const verdict = gradeHeuristics(buildGraph(atlas), pathSubject(buildGraph(atlas), subject ?? 0), refs(atlas, ['src/a/one.ts']), refs(atlas, ['src/a/one.ts']));
-    expect(verdict.scores.map(([id]) => id).sort()).toEqual(['directory', 'name']);
+    // `partition` since the round-7 playtest: a board must not be answerable by
+    // sorting the paths, which `directory` cannot see because it is anchored on
+    // the subject's own folder.
+    expect(verdict.scores.map(([id]) => id).sort()).toEqual(['directory', 'name', 'partition']);
   });
 });
 

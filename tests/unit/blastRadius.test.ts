@@ -425,6 +425,13 @@ describe('dedupe — no answer key is issued twice', () => {
       links.push([path, 'src/barrel.ts']);
     }
     for (let i = 0; i < spare; i++) paths.push(`src/spare/s${String(i).padStart(2, '0')}.ts`);
+    // **Non-dependents inside `src/use/`, without which no twin board can
+    // ship.** Every follower lived there and none of the spares did, so the
+    // candidate set's `src/use` group *was* the answer key exactly — the
+    // pillar-3 partition guess at 1.000, which `gate.ts` refuses. These four are
+    // the fixture's stand-in for `keySibling`, which supplies the same thing on
+    // a real repository: a wrong answer living where the right ones live.
+    for (let i = 0; i < 4; i++) paths.push(`src/use/bystander${i}.ts`);
     return atlasWith(paths, links);
   }
 
@@ -505,7 +512,15 @@ describe('dedupe — no answer key is issued twice', () => {
     const paths = [
       'src/near.ts',
       'src/far.ts',
-      ...Array.from({ length: 6 }, (_, i) => `src/use/u${i + 1}.ts`),
+      // **The key spans two directories, and the board cannot ship otherwise.**
+      // With all six dependents under `src/use/`, "everything under src/use"
+      // selected exactly the key — the pillar-3 partition guess, scoring 1.000,
+      // which `gate.ts` now refuses. The fixture was quietly building a board a
+      // player could win by sorting the filenames, and the gate was right to
+      // reject it. Splitting the key is the fixture's version of what
+      // `keySibling` does on a real repo.
+      ...Array.from({ length: 3 }, (_, i) => `src/use/u${i + 1}.ts`),
+      ...Array.from({ length: 3 }, (_, i) => `src/deep/u${i + 4}.ts`),
       ...Array.from({ length: 20 }, (_, i) => `src/spare/s${String(i).padStart(2, '0')}.ts`),
     ];
     const links: [string, string][] = [
@@ -517,9 +532,9 @@ describe('dedupe — no answer key is issued twice', () => {
       // a two-hop dependent of the other. That is the whole gadget.
       ['src/use/u3.ts', 'src/near.ts'],
       ['src/use/u3.ts', 'src/use/u2.ts'],
-      ['src/use/u4.ts', 'src/use/u3.ts'],
-      ['src/use/u5.ts', 'src/use/u4.ts'],
-      ['src/use/u6.ts', 'src/use/u5.ts'],
+      ['src/deep/u4.ts', 'src/use/u3.ts'],
+      ['src/deep/u5.ts', 'src/deep/u4.ts'],
+      ['src/deep/u6.ts', 'src/deep/u5.ts'],
     ];
     const atlas = atlasWith(paths, links);
     // The premise: identical answer keys, or there is no group to choose from.

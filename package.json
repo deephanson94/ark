@@ -33,7 +33,8 @@
     "test:e2e": "tsx scripts/e2e.ts",
     "raster": "tsx scripts/raster.ts",
     "play": "tsx src/indexer/cli.ts play",
-    "check:keys": "tsx scripts/check-keys.ts"
+    "check:keys": "tsx scripts/check-keys.ts",
+    "probe:prefix": "tsx scripts/probe-prefix.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

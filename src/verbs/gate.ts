@@ -122,18 +122,23 @@
  */
 
 import type { CommitId, Graph, IsoDate, NodeRef } from '../atlas/index.js';
-import { commitIdFor, nodeAt } from '../atlas/index.js';
+import { byteCompare, commitIdFor, nodeAt } from '../atlas/index.js';
 import { BAND_THRESHOLDS } from './types.js';
 import { scoreSet } from './score.js';
 import { directoryOf, nameTokens } from './paths.js';
 
-export type HeuristicId = 'directory' | 'name' | 'churn' | 'recency';
+export type HeuristicId = 'directory' | 'name' | 'churn' | 'recency' | 'partition';
 
 /** What Blast Radius is checked against. Unchanged from M2 — see the header. */
-export const PATH_HEURISTICS: readonly HeuristicId[] = ['directory', 'name'];
+export const PATH_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 'partition'];
 
 /** Companion adds the busiest-files guess. */
-export const HISTORY_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 'churn'];
+export const HISTORY_HEURISTICS: readonly HeuristicId[] = [
+  'directory',
+  'name',
+  'churn',
+  'partition',
+];
 
 /**
  * Placement's set. `directory` is **absent and that is not an oversight**: a
@@ -151,7 +156,15 @@ export const HISTORY_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 
  * boards**, scoring a flat 1.00 on several. On ark it beats none (mean 0.348,
  * best 0.71), which is exactly why measuring on a second repo is not optional.
  */
-export const COMMIT_HEURISTICS: readonly HeuristicId[] = ['name', 'churn', 'recency'];
+export const COMMIT_HEURISTICS: readonly HeuristicId[] = [
+  'name',
+  'churn',
+  'recency',
+  // A commit has no directory, but its *candidates* do, and `partition` is
+  // anchored on nothing — see its implementation. hono ships 7 Placement boards
+  // whose key is exactly one `src/middleware/*` folder.
+  'partition',
+];
 
 /**
  * Band A. Read the header for why this is not the pass threshold.
@@ -240,6 +253,24 @@ function guess(
   subject: GateSubject,
   candidates: readonly NodeRef[],
   size: number,
+  /**
+   * The key, read by `partition` and by nothing else.
+   *
+   * **A heuristic that consults the answer is normally the wrong shape** — the
+   * gate models a player, and a player has no key. `partition` needs it for one
+   * narrow purpose: a board can offer several groups of exactly the key's size,
+   * and which one a player ticks is a *semantic* judgement the gate cannot
+   * simulate. The board this was written for has two — `scripts` (the key) and
+   * `src/indexer` (none of it) — and the first version tie-broke on the longest
+   * prefix, picked `src/indexer`, scored **0**, and passed the board a tester
+   * had just aced.
+   *
+   * Taking the best of the tied groups is the conservative direction for a
+   * *refusal*: being generous to the adversary refuses a board a player might
+   * have got wrong, which costs a question. Being stingy ships one they can win
+   * by sorting, which costs the pillar.
+   */
+  key: ReadonlySet<NodeRef>,
 ): NodeRef[] {
   if (heuristic === 'directory') {
     // A homeless subject cannot be guessed at by folder. Returning nothing
@@ -249,6 +280,55 @@ function guess(
     if (subject.home === null) return [];
     const home = subject.home;
     return candidates.filter((ref) => directoryOf(nodeAt(graph, ref).path) === home);
+  }
+  if (heuristic === 'partition') {
+    // **The guess `directory` cannot make.** That one is anchored on the
+    // *subject's* folder; this is anchored on nothing at all. The player reads
+    // the twenty paths, sees that some share a prefix the others do not, and
+    // — knowing the key's size, which the board prints — ticks the group whose
+    // size matches. A round-7 cold tester did exactly this and scored a grade S
+    // without reasoning about a single import.
+    //
+    // Choosing the prefix by *count* rather than by score is what keeps this a
+    // player's guess rather than an oracle: nothing here consults `truth`, and
+    // the size is a number the prompt states out loud.
+    const groups = new Map<string, NodeRef[]>();
+    for (const ref of candidates) {
+      const parts = nodeAt(graph, ref).path.split('/');
+      for (let i = 1; i < parts.length; i++) {
+        const prefix = parts.slice(0, i).join('/');
+        const at = groups.get(prefix);
+        if (at === undefined) groups.set(prefix, [ref]);
+        else at.push(ref);
+      }
+    }
+    // Among the groups whose size matches, the one that best matches the key —
+    // see `key` above for why the adversary is granted that choice. Ties break
+    // on the longest prefix and then byte order, so the pick is deterministic.
+    const matches = [...groups]
+      .filter(([, refs]) => refs.length === size)
+      .sort(
+        (a, b) =>
+          b[1].filter((ref) => key.has(ref)).length - a[1].filter((ref) => key.has(ref)).length ||
+          b[0].split('/').length - a[0].split('/').length ||
+          byteCompare(a[0], b[0]),
+      );
+    // **A one-file "block" is only a guess when nothing else is that size.**
+    // The first version had no rule here and fired on any single candidate
+    // sitting alone in its directory, which on a one-member key is most of
+    // them — three unit fixtures went red because their key is one file and
+    // every leaf directory is a singleton. The second version refused every
+    // `size < 2` board, which is the opposite error: kysely ships two boards
+    // whose key is one file and where **exactly one** group is that size, so
+    // "only one candidate is under `scripts/`, and exactly one counts" is a
+    // guess a player really can make and really does win with.
+    //
+    // The rule is therefore about *ambiguity*, not size: granting the adversary
+    // the best of several equally-sized groups is fair when the block is
+    // visible (several rows share a prefix, several do not), and unfair when it
+    // means picking one singleton out of ten.
+    if (size < 2 && matches.length > 1) return [];
+    return matches[0]?.[1] ?? [];
   }
   if (heuristic === 'recency') {
     // Structure-blind in the purest form available: two dates, one in the
@@ -286,7 +366,7 @@ export function gradeHeuristics(
   const beatenBy: HeuristicId[] = [];
 
   for (const heuristic of heuristics) {
-    const picked = guess(heuristic, graph, subject, candidates, truth.length).map(
+    const picked = guess(heuristic, graph, subject, candidates, truth.length, new Set(truth)).map(
       (ref) => nodeAt(graph, ref).id,
     );
     // The real scorer, not a reimplementation of it. If the pass threshold

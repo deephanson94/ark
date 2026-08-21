@@ -1148,6 +1148,28 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the direction of the city. Two errors, one instrument, both invisible to the eye and both caught by
   one adversarial assertion.
 
+- **A gate anchored on the subject cannot see a guess anchored on nothing, and the deck can be beaten
+  by sorting the filenames.** `gate.ts`'s `directory` heuristic asks *"are the answers in the
+  **subject's** folder?"* — so it is blind to a player who ignores the subject entirely, reads the
+  twenty paths, notices that six share a prefix and fourteen do not, and ticks the six because the
+  board prints *"exactly 6 of these 20 count"*. A round-7 cold tester scored a **grade S with no
+  reasoning at all** that way and said the S felt worthless. Measured, the best single path prefix beat
+  band A on **17 of ark's 40 Blast Radius boards (43%)** and was exactly the key on 7 of hono's
+  Placement boards. Two lessons beyond the fix. **The obvious lever was the wrong one**: gating alone
+  refuses boards, and the honest fix is *supply* — `keySibling` offers a non-dependent living where an
+  **answer** lives, which took hono's leak from 15% to 7% at a cost of zero boards, because ark is
+  cap-limited and a refused subject is simply replaced. And **the gate's first two versions were each
+  wrong in a way the fixtures caught**: tie-breaking size-matched groups on the longest prefix picked
+  `src/indexer` over `scripts` and scored **0** on the very board the tester aced, while refusing every
+  one-file key was the opposite error — kysely ships two boards where exactly one group is that size,
+  which is a guess a player really wins with. The rule that survives is about **ambiguity, not size**.
+- **Two instruments measuring "the same" leak will disagree, and the disagreement reads as a defect.**
+  `probe-prefix.ts` scores the best prefix *against the answer key*; `gate.ts` scores the best
+  **size-matched** prefix, because a player cannot pick a split by knowing the answer. Those are
+  different adversaries and the first is strictly stronger — quoting it as the leak is the wrong-units
+  landmine, and the probe now prints both columns, labelled, with the gate's own carve-out mirrored so
+  that a non-zero in the player column means a gate defect rather than a difference of opinion.
+
 ---
 
 ## Subagents and parallelism

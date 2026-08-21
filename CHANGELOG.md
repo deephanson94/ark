@@ -5148,3 +5148,167 @@ roads to 1,582 units — true, and not a plate. The metric the comment is actual
 **Next**: the standing benchmark. Round 5 measured 6.75 visual / 6.40 want-to-continue against the
 8/10 bar, and the region wash, medals, proved chain, hop count and complete reveal have all shipped
 since without being measured against it. That is a round-6 playtest, and it needs ten cold readers.
+
+## Round 6, and three defects it found in this session's own work
+
+Ten cold playtesters, personas spread across backgrounds, ten minutes each, scoring the first-session
+feel: **7.5 visual / 7.0 continue**, against round 5's 6.75 / 6.40. Nine of ten scored continue at
+exactly 7 — a flat ceiling rather than scatter, which says something specific caps it.
+
+**They found three live defects, all introduced earlier in the same session, and each one hid the
+next.** The Blast Radius prompt read *"…this question is about what reaches it **beyond** them"*, which
+ADR-0008 makes false — direct importers are **38.8% of ark's key members and 34.0% of hono's**, and 7
+of 40 / 15 of 54 boards have a key made entirely of them, where obeying the sentence scores **0.000**.
+Four of ten testers failed a board on it and named it unprompted. Fixing the sentence exposed the
+second: the map could not show the ink the sentence points at, because edges drew in **one pass** so a
+highlighted edge was overpainted by the other ~880, differing only by colour and alpha at an identical
+width — and raising `INK.edge` 0.16 → 0.44 earlier this session is what closed that contrast. Fixing
+*that* exposed the third: **`openBoard` never set `radius`**, so a board opened the way the guide opens
+one drew no ring at all and the two-pass rendering was correct and unreachable. The e2e could not catch
+it — it reaches boards by clicking discs, which does set the radius.
+
+**A review then blocked the first draft of those fixes on three more findings, all reproduced.** The
+corrected sentence was still false **in the world**, where roads are built from every edge undirected
+and 33.5% of the lines at a subject are its own *outgoing* imports; `probe-city`'s fan column compared
+against the *repository median* street while its prose said *"nearest"*, understating it roughly 2×;
+and the retired roadmap item was **not the one measured** — the rig item is the *opposite* failure and
+`probe-spawn` reads 4.5% of ark's spawns at ≥90% of frame height, so it is live. The reviewer also
+passed the new wording assertions **two false sentences** restating the exact regression, because a
+blacklist plus `toContain('count')` is not a claim.
+
+Six instrument errors along the way and **every one read as "no defect here"**: an eye with no `yaw`
+or `fov` so every projection ran on `NaN`; a bearing off by exactly π; `Road.from` fed to `byRef.get`
+when it is a Tower; a plate metric calling two parallel roads a 1,582-unit plate; an `answerKey` split
+on `:` when it is `\n`, which took the "no importers" arm on every board; and a ring gate that
+predicted the board would be import-graded. A correction was also quoted off an unfinished run —
+django landed at **22.2%** after the range had been written down as 17.8%.
+
+Also closed: three places in `README.md` said ADR-0042 was "proposed" while a fourth said it had
+happened, and the Next line quoted **"0 wrong answer keys"** — a figure the ADR itself withdrew after
+a post-ship review found two real wrong keys on webpack.
+
+**Next**: the two things capping the score, both owner-level — the map turning between challenges
+(ADR-0017, named the biggest problem by two testers including the only 8/8) and an opening that serves
+one verb (four of ten saw only Blast Radius in ten minutes). Below them, a **truth-direction arm for
+`check:keys`**, which today asks only whether a distractor imports the subject and never whether a
+truth member really is a dependent — the direction webpack's two wrong keys failed in.
+
+## The turn is the player's
+
+Round 6's ten cold testers named the automatic turn twice, unprompted, as the single biggest problem
+in the product — including the tester who gave the round's only 8/8. *"Re-scrambling my mental picture
+at the exact moment I have just earned a landmark is working against itself. There is a compass and an
+`n` key, but needing them is the symptom."* The owner's call, taken on that measurement:
+**[ADR-0051](./docs/decisions/0051-the-turn-is-the-players.md)**.
+
+A grade no longer turns the map. **`r` does**, by the same angle, with the same animation and pivot —
+so this amends ADR-0017 decision 1 rather than reversing it. The mechanism is kept whole: pressing `r`
+walks the identical sequence that document's table measured, 80 distinct headings over an 80-question
+deck with no consecutive turn of 0°. What changed is who spends it. Decisions 2, 3 and 4 stand.
+
+The cost is written down rather than assumed: **a player who never presses `r` learns an
+orientation-locked map**, which is the risk ADR-0017 exists against, and it is now borne by default
+rather than by exception. The key is on the HUD's control line rather than in the help card, because a
+mechanic that no longer fires on its own is one nobody discovers. Whether the default belongs the
+other way needs `docs/experiments/0001`, still unrun.
+
+**`test:e2e` was the only thing asserting the old behaviour — 1,057 unit tests passed with it
+deleted.** That assertion is inverted rather than dropped: a grade must leave the heading *unchanged*
+(an equality against the pre-grade heading, since the previous board may have left the map anywhere),
+`r` must move it by exactly `GOLDEN_TURN`, and closing a board unanswered must still not turn it —
+the case most likely to regress, since the turn used to be armed by a grade and spent on close.
+Measured live: after a grade 0°, `r` → 138°, `n` → 0°.
+
+**Next**: round 7 is running against a frozen snapshot of the pre-amendment build, so it reads the
+three round-6 fixes and not this one. The opening's verb mix stays as it is — the owner's call is that
+the difficulty tiers remain the spine (ADR-0040 §6), so the symptom gets addressed without touching
+the rank order.
+
+## Round 7, the ring framed, and a board you can answer by sorting the filenames
+
+Round 7 put ten minutes of the post-round-6 build in front of five cold testers and read **7.4 visual
+/ 6.8 continue** against round 6's 7.5 / 7.0 — flat. Three fixes moved the number by nothing, which is
+the useful part of the result: **what caps this at 7 is not what was being fixed.**
+
+**The ring was drawn correctly and was two percent of the screen.** Three testers across two rounds
+reported it invisible; I answered twice with contrast and width. Measured properly, a subject's direct
+importers span a median **21% of the visible map and a minimum of 2%** — a handful of short lines
+inside one dense region, unreadable at any weight. Opening an import-graded board now **frames the
+ring** rather than centring on the subject, worth a median **4.5×** of scale.
+
+That change shipped broken and its own gate caught it within the hour. The pan offset is a delta in
+*world* units read off the camera, so taking it before a fit that zooms 4.5× makes it 4.5× too large:
+the subject and its whole ring went off screen and `board ring` went to **0 edges** on a subject with
+three importers. The counter was added one commit earlier, for exactly this, and is the entire
+argument for adding it.
+
+**A board can be answered by sorting the paths, and that is pillar 3.** A tester scored a grade S on
+their first board with no reasoning at all — six of twenty candidates began `scripts/`, the other
+fourteen `src/`, and those six were the key. `scripts/probe-prefix.ts` scores the best single path
+prefix with `scoreSet`:
+
+| repo · verb | beats band A from a prefix alone | exact |
+|---|---|---|
+| ark · blastRadius | **17 of 40 (43%)** | 1 — the tester's own board |
+| hono · blastRadius | 8 of 54 (15%) | 0 |
+| hono · placement | 10 of 54 (19%) | **7** |
+| companion (both) | 0 | 0 |
+
+No graph, no history, no knowledge of the repository — only the twenty paths on screen. Pillar 3 is
+*"violated when a challenge can be answered by `Ctrl+F` rather than by reasoning about structure"*.
+
+**Next**: close it. The lever is §8.3's distractor selection, which changes no answer key and touches
+no verb's refusal — a board must not be partitionable by a single path prefix. Two further findings
+are recorded and not yet acted on: three testers say **Archaeology and Placement are word-matching**
+(*"I had no basis for that at all"*), and a failed board is **permanently dead** three lines under copy
+saying *"answer as often as you like, nothing is lost"*.
+
+## The prefix leak is closed: a board can no longer be answered by sorting the filenames
+
+A round-7 cold tester scored a **grade S with no reasoning at all** — six of twenty candidates began
+`scripts/`, the other fourteen `src/`, and those six were the key — and said the S felt worthless the
+moment they noticed. NORTH-STAR pillar 3 is *"violated when a challenge can be answered by `Ctrl+F`
+rather than by reasoning about structure"*, and a lexical partition is the cheapest `Ctrl+F` there is:
+no graph, no history, no knowledge of the repository, only the paths on screen.
+
+Measured by `scripts/probe-prefix.ts`: the best single path prefix beat band A on **17 of ark's 40
+Blast Radius boards (43%)** and was exactly the key on **7 of hono's 54 Placement boards**.
+
+**Two fixes, and the obvious one alone was the wrong lever.**
+
+`keySibling` is a new §8.3 distractor class — a non-dependent living where an **answer** lives.
+`treeSibling` teaches *"a folder is not a module"* about the subject; this teaches it about the key,
+and it is what makes a board lexically inseparable. It took hono's Blast Radius leak from **15% to 7%**
+on its own. Every existing class gave up a tenth of its share rather than the whole share coming out of
+`graphAdjacent` — a test caught the first attempt reordering §8.3's declared ratio, and was right to.
+
+`partition` is a new gate heuristic: the guess `directory` **structurally cannot see**, because that
+one is anchored on the *subject's* folder and this is anchored on nothing at all. It **cost zero
+boards** — the deck is still 160 — exactly as ADR-0042's cap-limited finding predicts, since a refused
+subject is replaced by another.
+
+Result: **12 of 12 verb×repo rows read `player: beats A 0, exact 0`** across ark, hono, kysely and
+graphql-js.
+
+**Three wrong turns, each caught by something rather than by care.** The gate's tie-break scored **0**
+on the very board the tester aced: two groups matched the key's size — `scripts` (the key) and
+`src/indexer` (none of it) — and longest-prefix picked the wrong one. Over-correcting to refuse every
+one-file key was the opposite error, since kysely ships two boards where exactly *one* group is that
+size and the guess really does win; the surviving rule is about **ambiguity, not size**. And two unit
+fixtures went red because they were quietly building boards whose key was exactly one directory — the
+gate was right and the fixtures were fixed.
+
+**And a fourth, caught by the e2e**: setting `selected` in `openBoard` looked harmless and is not,
+because `enterWorld` spawns the hero at the selection — pressing `g` after a board started deep inside
+a region instead of at the shore, **38 towers and 0 roads** where it draws 273 and 2,249. The ring
+never needed it.
+
+Two instruments now measure this, and they measure different adversaries on purpose: the probe's
+`oracle` column scores the best prefix *against the key* (nobody can pick that without already knowing
+the answer) and its `player` column scores only size-matched splits, mirroring the gate's own
+carve-out so a non-zero means a gate defect rather than a difference of opinion.
+
+**Next**: round 7's other two findings, both bigger than this one. Three testers say **Archaeology and
+Placement are word-matching** rather than structural (*"I had no basis for that at all"* — one scored
+0%), and a **failed board is permanently dead** three lines under copy promising *"answer as often as
+you like, nothing is lost"*.
