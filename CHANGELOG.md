@@ -5223,3 +5223,42 @@ Measured live: after a grade 0°, `r` → 138°, `n` → 0°.
 three round-6 fixes and not this one. The opening's verb mix stays as it is — the owner's call is that
 the difficulty tiers remain the spine (ADR-0040 §6), so the symptom gets addressed without touching
 the rank order.
+
+## Round 7, the ring framed, and a board you can answer by sorting the filenames
+
+Round 7 put ten minutes of the post-round-6 build in front of five cold testers and read **7.4 visual
+/ 6.8 continue** against round 6's 7.5 / 7.0 — flat. Three fixes moved the number by nothing, which is
+the useful part of the result: **what caps this at 7 is not what was being fixed.**
+
+**The ring was drawn correctly and was two percent of the screen.** Three testers across two rounds
+reported it invisible; I answered twice with contrast and width. Measured properly, a subject's direct
+importers span a median **21% of the visible map and a minimum of 2%** — a handful of short lines
+inside one dense region, unreadable at any weight. Opening an import-graded board now **frames the
+ring** rather than centring on the subject, worth a median **4.5×** of scale.
+
+That change shipped broken and its own gate caught it within the hour. The pan offset is a delta in
+*world* units read off the camera, so taking it before a fit that zooms 4.5× makes it 4.5× too large:
+the subject and its whole ring went off screen and `board ring` went to **0 edges** on a subject with
+three importers. The counter was added one commit earlier, for exactly this, and is the entire
+argument for adding it.
+
+**A board can be answered by sorting the paths, and that is pillar 3.** A tester scored a grade S on
+their first board with no reasoning at all — six of twenty candidates began `scripts/`, the other
+fourteen `src/`, and those six were the key. `scripts/probe-prefix.ts` scores the best single path
+prefix with `scoreSet`:
+
+| repo · verb | beats band A from a prefix alone | exact |
+|---|---|---|
+| ark · blastRadius | **17 of 40 (43%)** | 1 — the tester's own board |
+| hono · blastRadius | 8 of 54 (15%) | 0 |
+| hono · placement | 10 of 54 (19%) | **7** |
+| companion (both) | 0 | 0 |
+
+No graph, no history, no knowledge of the repository — only the twenty paths on screen. Pillar 3 is
+*"violated when a challenge can be answered by `Ctrl+F` rather than by reasoning about structure"*.
+
+**Next**: close it. The lever is §8.3's distractor selection, which changes no answer key and touches
+no verb's refusal — a board must not be partitionable by a single path prefix. Two further findings
+are recorded and not yet acted on: three testers say **Archaeology and Placement are word-matching**
+(*"I had no basis for that at all"*), and a failed board is **permanently dead** three lines under copy
+saying *"answer as often as you like, nothing is lost"*.

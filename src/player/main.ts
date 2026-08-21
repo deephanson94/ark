@@ -23,6 +23,7 @@ import {
 import type { Camera, Point } from './camera.js';
 import {
   NORTH,
+  boundsOf,
   centreOn,
   facingNorth,
   fit,
@@ -1367,12 +1368,53 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   /** What the console has open, for the e2e's caption-vs-board check. */
   let openChallenge: Challenge | null = null;
 
+  /**
+   * How much room the ring gets when a board frames it.
+   *
+   * Generous, because the console occupies the right of the screen and a fit
+   * that used the whole viewport would put half the ring under the panel.
+   */
+  const RING_MARGIN = 260;
+
   function openBoard(challenge: Challenge): void {
     openChallenge = challenge;
     const ref = scene.graph.refById.get(challenge.subject);
     const node = ref === undefined ? undefined : scene.nodes[ref];
+    // The direct importers, which are what the prompt points at and what the
+    // camera is about to be framed on. `DIRECT_ONLY` rather than `depthFor`:
+    // this is the frame, not the disclosure, and the disclosure below is
+    // unchanged.
+    const ring =
+      ref === undefined ? [] : [...blastRadius(scene, ref, DIRECT_ONLY).dependents.keys()];
     if (node !== undefined) {
       landTurn();
+      const own = camera;
+      // **Frame the ring, not just the subject.**
+      //
+      // Centring on the subject at whatever scale the map happened to be at
+      // leaves its direct importers spanning a median **21% of the visible map
+      // and a minimum of 2%** — a handful of short lines inside one dense
+      // region. That is why three cold testers across two rounds reported the
+      // ring as invisible *after* it was given its own pass, its own width and
+      // a muted field: the treatment was fine and the thing was two percent of
+      // the screen. Framing it is worth a median **4.5×** of scale.
+      //
+      // Only where there is a ring to frame. A history-graded board has none,
+      // and a subject with no importers keeps the plain pan.
+      const ringNodes = ring
+        .map((r) => scene.nodes[r])
+        .filter((n): n is SceneNode => n !== undefined);
+      camera =
+        ringNodes.length > 0
+          ? fit(boundsOf([node, ...ringNodes]), viewport, camera.bearing, RING_MARGIN)
+          : camera;
+      // **The offset is computed after the fit, and the first version was not.**
+      // `anchor − wanted` is a delta in *world* units read off the camera, so
+      // taking it before a fit that zooms in a median 4.5× makes it 4.5× too
+      // large — which shoved the subject and its whole ring off screen, and the
+      // e2e's ring counter went straight to `0 edges` on a subject with three
+      // importers. The gate added one commit earlier caught the regression the
+      // same hour it was written, which is the entire argument for it.
       const anchor = screenToWorld(camera, viewport, {
         x: viewport.width * 0.5,
         y: viewport.height * 0.5,
@@ -1381,7 +1423,6 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         x: viewport.width * 0.3,
         y: viewport.height * 0.5,
       });
-      const own = camera;
       camera = centreOn(camera, {
         x: node.x + (anchor.x - wanted.x),
         y: node.y + (anchor.y - wanted.y),
