@@ -181,11 +181,27 @@ orientation-locked map that ADR was written against), a **co-change layer** on t
 
 Kept deliberately, because a checklist item nobody can satisfy gets ticked from memory.
 
-- **The first ten minutes score 6.75 visual and 6.4 "would you keep playing", against a goal of 8.**
+- **A one-file answer key can still be guessed from the paths, on 2 of kysely's 150 boards.**
+  `gate.ts`'s `partition` heuristic refuses any board whose key is selected exactly by a path prefix
+  of the size the prompt states — the guess a round-7 tester used to score a grade S with no
+  reasoning. It carries one carve-out: when the key is **one file** and several prefix groups are
+  that size, picking one singleton out of ten is luck rather than reading, so the guess is declined.
+  kysely ships two boards where exactly one group matches a one-file key, which is a genuine
+  residual: `blast-179e2ca8e038` (`scripts/`) and `placement-5b79e88d2e93`
+  (`site/src/components/SectionFeatures/`), measured at `384568f` by `npm run probe:prefix`. Every
+  other row reads zero — 12 of 12 verb × repo across ark, hono, kysely and graphql-js.
+- **The first ten minutes score 7.4 visual and 6.8 "would you keep playing", against a goal of 8.**
   Ten personas from different technical backgrounds, one fixed build each round, each told only what
-  a new player is told, scoring off screenshots they looked at (`docs/playtests/`). Five rounds:
-  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70 → 6.75 / 6.40** (round 5 measured at
-  `ef196db`).
+  a new player is told, scoring off screenshots they looked at. Seven rounds:
+  **7.11 / 6.22 → 7.00 / 6.90 → 7.20 / 6.80 → 6.20 / 6.70 → 6.75 / 6.40 → 7.5 / 7.0 → 7.4 / 6.8**
+  (round 7 measured on a frozen snapshot of `4c201cb`, five testers; rounds 1–4 were told *"wrong
+  picks cost you nothing"*, which §8.2 makes false, so only rounds 5–7 are comparable to each other).
+  **Round 7 was flat against round 6**, which is the useful part of it: the three fixes round 6
+  bought moved the number by nothing, so what caps this at 7 is not what was being fixed. What it
+  found instead is above — a board answerable by sorting the filenames — plus two open items: three
+  testers report **Archaeology and Placement as word-matching rather than structural** (one scored
+  0%, *"I had no basis for that at all"*), and a **failed board is permanently dead** three lines
+  under copy promising *"answer as often as you like, nothing is lost"*.
   **Round 4's dominant complaint is closed and round 5 replaced it.** Four of ten had said the game
   had no arc; all ten now describe one, and every one names the same thing — *the map lighting up*,
   not the medals (*"my knowledge had a shape and a location"*, *"that single moment is the best thing
