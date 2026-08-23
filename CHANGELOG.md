@@ -5312,3 +5312,34 @@ carve-out so a non-zero means a gate defect rather than a difference of opinion.
 Placement are word-matching** rather than structural (*"I had no basis for that at all"* — one scored
 0%), and a **failed board is permanently dead** three lines under copy promising *"answer as often as
 you like, nothing is lost"*.
+
+## The panel promised nothing was lost, two lines from the code that says otherwise
+
+After a below-the-bar answer the console read *"the question stays on the map. **Nothing is lost** —
+come back to it whenever you like."* `applyGrade`'s own comment, two lines from the code that renders
+it, says the opposite: a certificate is recorded for **every** graded answer, passing or not, *"and it
+is the reason the next one cannot prove anything."* So something is lost, precisely — the board can
+never be `proved` again, only `shown`.
+
+A round-7 cold tester read the pair and called it hollow: *"Two of my four boards are now dead content
+forever."* They were right about the mechanic and **wrong about the consequence** — a later pass does
+write a field note, in the *revealed* register — and that gap is the tell that the sentence was doing
+the misleading. It now names which register a later pass earns and why, which is NORTH-STAR §9's
+proved-versus-shown distinction stated up front instead of discovered.
+
+The sentence lives in `src/player/reveal.ts` rather than in `challenge.ts`, because that file is a DOM
+builder with no unit tests and this is a claim that has to be **true** rather than merely rendered.
+The test asserts the mechanic and the wording *together*: either alone misses this, since the mechanic
+was always right and only the sentence was wrong. Both mutants die — the old sentence restored
+verbatim, and the register distinction dropped while keeping the rest.
+
+**Two errors while writing that test, and the second is the interesting one.** `applyGrade`'s fourth
+parameter is `threshold`, not `liveness`, so the first version compared `score >= <object>` and
+recorded nothing. Then the fixture used `challengeFor`'s default key — **arbitrary node ids rather
+than real dependents** — and `gradedKeys` discards a certificate whose members no longer *hold*, so
+the failing answer's certificate was thrown away, `first` stayed true, and the second answer minted
+`proved`. The fixture asserted that the old sentence was correct. It is not; the fixture was.
+
+**Next**: the design question underneath, which is the owner's — whether a failed board should be
+re-earnable at all (ADR-0047's proved/shown rule). Round 7's other open finding is unchanged: three
+testers report Archaeology and Placement as word-matching rather than structural.

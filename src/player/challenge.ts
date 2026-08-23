@@ -25,7 +25,7 @@ import { isNodeId } from '../atlas/index.js';
 import type { Grade, NoteKind, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
 import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
-import { groupAvoided } from './reveal.js';
+import { belowBarNote, groupAvoided } from './reveal.js';
 import { el } from './ui.js';
 
 const BAND_LABEL: Readonly<Record<string, string>> = {
@@ -415,11 +415,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // answer, which guardrail 6 forbids.
       ...(register === null
         ? [
-            el('p', 'console-register', [
-              `Below the pass mark of ${Math.round(PASS_THRESHOLD * 100)}%, so this ` +
-                'is not written to your field notes yet and the question stays on the ' +
-                'map. Nothing is lost — come back to it whenever you like.',
-            ]),
+            el('p', 'console-register', [belowBarNote(PASS_THRESHOLD)]),
           ]
         : []),
       el('div', 'console-footer', [el('div', 'console-tally', []), done]),

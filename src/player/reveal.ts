@@ -45,3 +45,33 @@ export function groupAvoided(notes: readonly RevealNote[]): AvoidedGroup[] {
   }
   return [...groups].map(([note, members]) => ({ note, members }));
 }
+
+/**
+ * What a below-the-bar answer costs, said accurately.
+ *
+ * The panel used to read *"…the question stays on the map. **Nothing is lost** —
+ * come back to it whenever you like."* Two lines under the code that writes it,
+ * `applyGrade`'s own comment says the opposite: a certificate is recorded for
+ * **every** graded answer, passing or not, *"and it is the reason the next one
+ * cannot prove anything"*. So something is lost, precisely — the board can never
+ * be `proved` again, only `shown` — and the panel promised it was not.
+ *
+ * A round-7 cold tester read the pair and called it hollow: *"I scored 40%
+ * twice. The reveal handed me the complete answer key and there is no retry. Two
+ * of my four boards are now dead content forever."* They were right about the
+ * mechanic and wrong about the consequence, which is the tell that the sentence
+ * was doing the misleading: a later pass **does** write a field note, in the
+ * *revealed* register rather than the proved one. Saying which is the whole of
+ * NORTH-STAR §9's distinction, and the player deserves it up front.
+ *
+ * Here rather than in `challenge.ts` because that file is a DOM builder with no
+ * unit tests, and this is a claim that has to be **true**, not merely rendered.
+ */
+export function belowBarNote(passMark: number): string {
+  return (
+    `Below the pass mark of ${Math.round(passMark * 100)}%, so nothing reaches your field notes ` +
+    'yet and the question stays on the map. Come back whenever you like — a later pass is ' +
+    'recorded as revealed rather than proved, because the first answer is the one that can ' +
+    'prove a board.'
+  );
+}
