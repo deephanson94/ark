@@ -28,8 +28,10 @@ import {
   applyGrade,
   deriveFog,
   livenessOf,
+  namedMembers,
   recordPass,
   recordSurvey,
+  servedBoard,
 } from '../../src/player/progress.js';
 import { PASS_THRESHOLD, gradeSet } from '../../src/verbs/index.js';
 import { PHRASING as BLAST_PHRASING } from '../../src/verbs/blastRadius/index.js';
@@ -642,5 +644,168 @@ describe('a farmed board proves nothing', () => {
 
     const reloaded = parseProgress(serializeProgress(missed.progress));
     expect(answer(reloaded, truth).register).toBe('shown');
+  });
+});
+
+/**
+ * **A failed board is re-earnable, and only on a question it did not answer for
+ * you** (ADR-0053; owner's decision of 2026-08-25, amending ADR-0047 decision 2).
+ *
+ * The constraint is not a preference. `Grade.missed` is `truth \ picked` and
+ * NORTH-STAR §8.1 requires an honest grade, so **every failing submission prints
+ * the whole key by name** — the console renders one `missed` row per member.
+ * Guardrail 6 then makes retries free and unlimited. Within one board there is
+ * therefore no state after a failed answer in which the player does not know the
+ * answer, which is exactly why ADR-0047 made proof a property of the first
+ * submission.
+ *
+ * So the re-earn is a **second window**: the same subject, a disjoint key. The
+ * ledger rule that expresses it is *proof is a claim about members, not about
+ * attempt numbers* — and it is strictly more general than the rule it replaces,
+ * which is why the two farm suites above still pass unchanged.
+ */
+describe('a failed board is re-earnable on a window it did not name', () => {
+  const second = candidates.slice(4, 8);
+  const secondCandidates = [...candidates.slice(4, 20), ...candidates.slice(0, 4)].sort();
+  const withRetry: Challenge = {
+    ...challenge,
+    retry: {
+      candidates: secondCandidates,
+      truth: second,
+      witness: witnessFor(secondCandidates, second),
+      difficulty: 0.55,
+    },
+  };
+  const answer = (
+    progress: Parameters<typeof applyGrade>[0],
+    board: Challenge,
+    picked: readonly NodeId[],
+  ): ReturnType<typeof applyGrade> =>
+    applyGrade(progress, board, gradeSet(board, { picked }, BLAST_PHRASING));
+
+  const key = answerKey('blastRadius', subject);
+
+  it('serves window 0 until the board has named it', () => {
+    expect(servedBoard(withRetry, null)).toBe(withRetry);
+    expect(servedBoard(withRetry, new Set()).truth).toEqual(truth);
+  });
+
+  it('serves the second window once the first has been named, and swaps them', () => {
+    const served = servedBoard(withRetry, new Set(truth));
+    expect(served.truth).toEqual(second);
+    expect(served.candidates).toEqual(secondCandidates);
+    // Swapped rather than dropped: `applyGrade` takes its member universe from
+    // both windows, so whichever one it is handed has to name the other.
+    expect(served.retry?.truth).toEqual(truth);
+    // The identity that keeps the save, the deck and the selector working.
+    expect(served.subject).toBe(withRetry.subject);
+    expect(served.verb).toBe(withRetry.verb);
+    expect(served.id).toBe(withRetry.id);
+  });
+
+  it('mints proof for a pass on the window the board never named', () => {
+    // Fail window 0 outright. The grade prints all four missed members.
+    const failed = answer(EMPTY_PROGRESS, withRetry, []);
+    expect(failed.unlocked).toBe(false);
+    expect(failed.register).toBeNull();
+
+    // Come back. The player is served the second window and answers it.
+    const served = servedBoard(withRetry, namedMembers(failed.progress, UNCHECKED, key));
+    expect(served.truth).toEqual(second);
+    const earned = answer(failed.progress, served, second);
+    expect(earned.unlocked).toBe(true);
+    expect(earned.register).toBe('proved');
+    expect([...(earned.progress.passes[0]?.proved ?? [])].sort()).toEqual([...second].sort());
+    // And the map lights, which is the whole point of the owner's decision:
+    // under ADR-0047 decision 2 this player's fog never moved.
+    expect(fogOf(earned.progress).understood.has(subject)).toBe(true);
+  });
+
+  it('still refuses a retyped key, which is the farm this replaces', () => {
+    const failed = answer(EMPTY_PROGRESS, withRetry, []);
+    // Type window 0 back rather than answering what you were served. Every
+    // member is named, so it passes and proves nothing — byte-identical to the
+    // behaviour before this change.
+    const retyped = answer(failed.progress, withRetry, truth);
+    expect(retyped.unlocked).toBe(true);
+    expect(retyped.register).toBe('shown');
+    expect(fogOf(retyped.progress).understood.size).toBe(0);
+  });
+
+  it('still refuses a sweep of the second window', () => {
+    // The `sweep` needs no reveal: a single pick scores above zero exactly when
+    // it is in the key. But its *first* submission is a graded answer, which
+    // records a certificate naming that window's whole key — so by the time the
+    // sweeper types it back, it is named.
+    const failed = answer(EMPTY_PROGRESS, withRetry, []);
+    const served = servedBoard(withRetry, namedMembers(failed.progress, UNCHECKED, key));
+    let progress = failed.progress;
+    const learned: NodeId[] = [];
+    for (const id of served.candidates) {
+      progress = answer(progress, served, [id]).progress;
+      if (gradeSet(served, { picked: [id] }, BLAST_PHRASING).score > 0) learned.push(id);
+    }
+    expect([...learned].sort()).toEqual([...second].sort());
+    const final = answer(progress, served, learned);
+    expect(final.unlocked).toBe(true);
+    expect(final.register).toBe('shown');
+    expect(fogOf(final.progress).understood.size).toBe(0);
+  });
+
+  it('remembers window 0 after window 1 has also been graded', () => {
+    // **The hole the accumulation closes.** The certificate used to *replace*
+    // rather than merge, so failing both windows left a record naming only the
+    // second — and window 0 would come back looking un-named, ready to be
+    // retyped for `proved`. That is the laundering sequence rebuilt out of the
+    // fix for it.
+    const failedFirst = answer(EMPTY_PROGRESS, withRetry, []);
+    const served = servedBoard(withRetry, namedMembers(failedFirst.progress, UNCHECKED, key));
+    const failedSecond = answer(failedFirst.progress, served, []);
+    const named = namedMembers(failedSecond.progress, UNCHECKED, key) ?? new Set();
+    for (const member of [...truth, ...second]) expect(named.has(member)).toBe(true);
+    // Both windows are known, so whichever is served the pass is `shown`.
+    expect(servedBoard(withRetry, named).truth).toEqual(truth);
+    const retyped = answer(failedSecond.progress, withRetry, truth);
+    expect(retyped.register).toBe('shown');
+  });
+
+  it('drops a carried member the board no longer asks about', () => {
+    // ADR-0047 decision 3b's intent, preserved: a re-rolled board is certified
+    // by *its* key, so accumulation is taken inside the board's own member
+    // universe and a member belonging to neither window is forgotten exactly as
+    // a wholesale replacement would forget it.
+    const failed = answer(EMPTY_PROGRESS, withRetry, []);
+    // Built from `challenge` rather than by overriding `withRetry.retry` to
+    // `undefined`: `exactOptionalPropertyTypes` refuses the second spelling, and
+    // it is right to — "absent" and "present and undefined" are different shapes
+    // and the validator only ever produces the first.
+    const rerolled: Challenge = {
+      ...challenge,
+      truth: second,
+      candidates: secondCandidates,
+      witness: witnessFor(secondCandidates, second),
+    };
+    const after = answer(failed.progress, rerolled, []);
+    const named = namedMembers(after.progress, UNCHECKED, key) ?? new Set();
+    for (const member of second) expect(named.has(member)).toBe(true);
+    for (const member of truth) expect(named.has(member)).toBe(false);
+  });
+
+  it('leaves a board with no second window exactly as it was', () => {
+    // Most of a repo's history boards have none — a key that *is* its whole
+    // population cannot be re-earned, and that is a fact about the repository.
+    // Such a board must behave precisely as it did before ADR-0053.
+    expect(servedBoard(challenge, new Set(truth))).toBe(challenge);
+    const failed = answer(EMPTY_PROGRESS, challenge, []);
+    const retyped = answer(failed.progress, challenge, truth);
+    expect(retyped.register).toBe('shown');
+  });
+
+  it('proves everything on a first pass, which is the control', () => {
+    // If this ever goes red the suite would be passing against a product that
+    // never proves anything at all.
+    const straight = answer(EMPTY_PROGRESS, withRetry, truth);
+    expect(straight.register).toBe('proved');
+    expect([...(straight.progress.passes[0]?.proved ?? [])].sort()).toEqual([...truth].sort());
   });
 });

@@ -25,7 +25,7 @@ import { isNodeId } from '../atlas/index.js';
 import type { Grade, NoteKind, NoteRegister, Reveal, RevealNote } from '../verbs/index.js';
 import { PASS_THRESHOLD, VERBS, bandFor, memberLabel, wordsFor } from '../verbs/index.js';
 import type { Scene } from './scene.js';
-import { groupAvoided } from './reveal.js';
+import { belowBarNote, groupAvoided } from './reveal.js';
 import { el } from './ui.js';
 
 const BAND_LABEL: Readonly<Record<string, string>> = {
@@ -184,8 +184,14 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     // the ordering a list of events is read in, and it is not a giveaway kept
     // by accident: every row shows its date whatever the order, so the "tick the
     // oldest K" guess exists either way and `oldestK` scores and refuses it.
+    // **The verb decides whether a row carries a fact, and which.** The console
+    // stays verb-blind: it asks, renders what comes back, and knows nothing
+    // about churn or dates. Placement is the only verb that answers today,
+    // because its gate is the only one that already scores those numbers.
+    const noteFor = (id: AtlasId): string | null =>
+      VERBS[challenge.verb as keyof typeof VERBS]?.candidateNote?.(id, words) ?? null;
     const rows = [...challenge.candidates]
-      .map((id) => ({ id, label: labelOf(id) }))
+      .map((id) => ({ id, label: labelOf(id), note: noteFor(id) }))
       .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
     const submit = el('button', 'console-submit', ['Submit']);
@@ -216,7 +222,13 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     for (const row of rows) {
       const box = el('span', 'choice-box');
       const item = el('li', 'choice');
-      const button = el('button', 'choice-button', [box, el('span', 'choice-path', [row.label])]);
+      const button = el('button', 'choice-button', [
+        box,
+        el('span', 'choice-text', [
+          el('span', 'choice-path', [row.label]),
+          ...(row.note === null ? [] : [el('span', 'choice-note', [row.note])]),
+        ]),
+      ]);
       button.type = 'button';
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {
@@ -251,7 +263,10 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // the gate's own showcase case was the exploit — pick one file correctly,
       // take precision 1.0, get the whole annotated key and the drawn cone
       // without passing, reopen and type it back. What is defended instead is
-      // the ledger: `applyGrade` mints proof only on a board's first submission.
+      // the ledger: `applyGrade` mints proof only for members the board has not
+      // already named (ADR-0053, which restates ADR-0047 decision 2's own reason
+      // and generalises it — this comment said "only on a board's first
+      // submission", which was the same rule while a board had one window).
       const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
       const register = handlers.onGraded(challenge, grade, reveal);
       renderResult(challenge, grade, reveal, register);
@@ -400,8 +415,8 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       ...(register === 'shown'
         ? [
             el('p', 'console-register', [
-              'Recorded as shown rather than proved — this board had already ' +
-                'explained itself. The first answer is the one that counts as knowledge.',
+              'Recorded as shown rather than proved — this board had already named ' +
+                'these answers to you. Proof is what you were not told.',
             ]),
           ]
         : []),
@@ -416,9 +431,7 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       ...(register === null
         ? [
             el('p', 'console-register', [
-              `Below the pass mark of ${Math.round(PASS_THRESHOLD * 100)}%, so this ` +
-                'is not written to your field notes yet and the question stays on the ' +
-                'map. Nothing is lost — come back to it whenever you like.',
+              belowBarNote(PASS_THRESHOLD, challenge.retry !== undefined),
             ]),
           ]
         : []),

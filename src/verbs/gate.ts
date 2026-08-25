@@ -121,13 +121,13 @@
  * installed.
  */
 
-import type { CommitId, Graph, IsoDate, NodeRef } from '../atlas/index.js';
+import type { CommitId, Graph, IsoDate, NodeId, NodeRef } from '../atlas/index.js';
 import { byteCompare, commitIdFor, nodeAt } from '../atlas/index.js';
 import { BAND_THRESHOLDS } from './types.js';
 import { scoreSet } from './score.js';
 import { directoryOf, nameTokens } from './paths.js';
 
-export type HeuristicId = 'directory' | 'name' | 'churn' | 'recency' | 'partition';
+export type HeuristicId = 'directory' | 'name' | 'churn' | 'recency' | 'partition' | 'datedChurn';
 
 /** What Blast Radius is checked against. Unchanged from M2 — see the header. */
 export const PATH_HEURISTICS: readonly HeuristicId[] = ['directory', 'name', 'partition'];
@@ -164,6 +164,19 @@ export const COMMIT_HEURISTICS: readonly HeuristicId[] = [
   // anchored on nothing — see its implementation. hono ships 7 Placement boards
   // whose key is exactly one `src/middleware/*` folder.
   'partition',
+  // **The conjunction of the two above, which scoring them separately does not
+  // bound.** Added when Placement began printing each candidate's churn and
+  // last-seen on its row: those two numbers were always *scored* here, but they
+  // lived in an inspector an open board makes unreachable, so the guess was
+  // priced and not available. Making it available is what required this.
+  //
+  // Measured on six repos before shipping either half: reading both columns
+  // beats band A on **0 boards of ark's 40, hono's 54, kysely's 75 and
+  // graphql-js's 69 — and on 2 of django's 273 and 2 of svelte's 235, at a flat
+  // 1.000**. Three repos said the channel was free and the fourth and fifth said
+  // it hands out an exact answer key, which is this repo's own rule about
+  // measuring on a second repo arriving for the fourth time.
+  'datedChurn',
 ];
 
 /**
@@ -338,6 +351,54 @@ function guess(
     if (subject.date === null) return [];
     const when = subject.date;
     return candidates.filter((ref) => nodeAt(graph, ref).lastSeen === when);
+  }
+  if (heuristic === 'datedChurn') {
+    // **Two columns read together, which scoring each alone does not bound.**
+    // `recency` filters on the date and `churn` ranks on the count; neither
+    // sees the other, and the *conjunction* is not dominated by either — a
+    // date filter that returns more rows than the key needs can be truncated
+    // by churn, and precision rises where recall does not fall.
+    //
+    // Both readings are offered, because both are things a person does with two
+    // columns, and the better of them is taken for the same reason `partition`
+    // takes the best of its tied groups: being generous to the adversary
+    // refuses a board a player might have got wrong, which costs one question,
+    // where being stingy ships one they can win without reasoning, which costs
+    // the pillar. Measured, each reading is the *only* one that fires on some
+    // repo — django's two boards are date-then-churn at 1.000, svelte has one
+    // churn-then-date at 0.800 — so scoring one and not the other would leave
+    // the leak open on a repo nobody looked at.
+    if (subject.date === null) return [];
+    const when = subject.date;
+    const byChurn = [...candidates].sort(
+      (a, b) =>
+        nodeAt(graph, b).churn - nodeAt(graph, a).churn ||
+        (nodeAt(graph, a).id < nodeAt(graph, b).id ? -1 : 1),
+    );
+    const dated = candidates.filter((ref) => nodeAt(graph, ref).lastSeen === when);
+    // Of those dated right, the busiest — as many as the key holds.
+    const datedThenBusiest = [...dated]
+      .sort(
+        (a, b) =>
+          nodeAt(graph, b).churn - nodeAt(graph, a).churn ||
+          (nodeAt(graph, a).id < nodeAt(graph, b).id ? -1 : 1),
+      )
+      .slice(0, size);
+    // Of the busiest, those dated right — fewer than the key, and sometimes
+    // more precise for it.
+    const busiestThenDated = byChurn
+      .slice(0, size)
+      .filter((ref) => nodeAt(graph, ref).lastSeen === when);
+    // Scored with the real scorer rather than by counting hits, which is the
+    // rule `gradeHeuristics` states one function down — and it is not a nicety
+    // here. `busiestThenDated` is a *subset* of the key-sized reading, so on
+    // equal hits it is strictly smaller and therefore strictly more precise;
+    // a hit count would call that a tie and hand back the weaker set.
+    const ids = (refs: readonly NodeRef[]): NodeId[] => refs.map((ref) => nodeAt(graph, ref).id);
+    const keyIds = ids([...key]);
+    const a = scoreSet(ids(datedThenBusiest), keyIds).score;
+    const b = scoreSet(ids(busiestThenDated), keyIds).score;
+    return b > a ? busiestThenDated : datedThenBusiest;
   }
   if (heuristic === 'churn') {
     return [...candidates]

@@ -37,6 +37,7 @@ export type {
   Region,
   RegionKind,
   RepoMeta,
+  RetryWindow,
   SkipCount,
   Truncation,
   UnreadableCount,

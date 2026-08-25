@@ -289,9 +289,25 @@ export function applyGrade(
   const seen = [challenge.subject, ...challenge.candidates].filter(isNodeId);
   let next = recordSurvey(progress, seen);
   const key = answerKey(challenge.verb, challenge.subject);
-  const first = !gradedKeys(progress, liveness).has(key);
   const passed = grade.score >= threshold;
-  const register: Register | null = passed ? (first ? 'proved' : 'shown') : null;
+  // **Proof is a claim about members, not about attempt numbers** (ADR-0053).
+  //
+  // ADR-0047 decision 2 made it `first submission or nothing`, and its reason is
+  // exact: `Grade.missed` is `truth \\ picked` and §8.1 requires an honest grade,
+  // so **any failing submission names the whole key on screen** — so a second
+  // pass on the same key certifies a fact the board handed over.
+  //
+  // That reason is about the *members*, and stating it that way is strictly
+  // more general. A board that has never been graded names nothing, so a first
+  // pass proves everything, byte-identically to before. A retyped key is wholly
+  // named, so it is `shown`, byte-identically to before — including the sweep,
+  // which grades a certificate naming the whole key on its very first
+  // submission. And a **second window** (ADR-0053) shares no member with the
+  // first, so passing it proves something the player was never told, which the
+  // attempt-number rule could not express.
+  const named = namedMembers(progress, liveness, key);
+  const told = named !== null && grade.correct.some((member) => named.has(member));
+  const register: Register | null = passed ? (told ? 'shown' : 'proved') : null;
   if (register !== null) {
     next = recordPass(next, challenge.verb, challenge.subject, grade.correct, register);
   }
@@ -299,12 +315,27 @@ export function applyGrade(
   // explains a board is usually the one that failed, and it is the reason the
   // next one cannot prove anything.
   //
-  // **With the members, which is what makes it decay correctly.** The entry
-  // replaces any earlier one for the same key rather than merging, because what
-  // it certifies is *the board as it was just graded* — a re-rolled board that
-  // has been answered again is certified by its current key, not by the one it
-  // used to have.
-  const certificate: GradedBoard = { key, members: [...challenge.truth].sort(byteCompare) };
+  // **With the members, which is what makes it decay correctly** (ADR-0047
+  // decision 3b), and **accumulated across the board's own windows**, which is
+  // what makes ADR-0053 sound. The entry used to *replace* any earlier one, so a
+  // player who failed window 0, was served window 1 and failed that too would
+  // have a certificate naming only window 1 — and window 0 would come back
+  // looking un-named, ready to be retyped for `proved`. That is §2.1's laundering
+  // sequence rebuilt out of the fix for it.
+  //
+  // The union is taken **inside the board's own member universe**, which keeps
+  // decision 3b's intent intact rather than arguing with it: a re-rolled board
+  // has different windows, so members belonging to neither are dropped exactly
+  // as a wholesale replacement would drop them. What survives is only ever
+  // something *this* board named.
+  const universe = new Set<AtlasId>([...challenge.truth, ...(challenge.retry?.truth ?? [])]);
+  const carried = (progress.graded.find((entry) => entry.key === key)?.members ?? []).filter(
+    (member) => universe.has(member),
+  );
+  const certificate: GradedBoard = {
+    key,
+    members: [...new Set([...carried, ...challenge.truth])].sort(byteCompare),
+  };
   next = {
     ...next,
     graded: [...next.graded.filter((entry) => entry.key !== key), certificate].sort((a, b) =>
@@ -492,6 +523,77 @@ export function gradedKeys(progress: Progress, liveness: Liveness): Set<string> 
     keys.add(entry.key);
   }
   return keys;
+}
+
+/**
+ * The members this board has **already named to this player**, or `null` where
+ * it has never been graded.
+ *
+ * `gradedKeys` asks *whether* a board has explained itself; this asks *what it
+ * explained*, which is the finer question ADR-0053 needs. The datum was already
+ * being stored — ADR-0047 decision 3b put the members on the certificate so it
+ * could decay by them — and nothing had ever read them for their content.
+ *
+ * Same liveness rule as `gradedKeys`, and deliberately so: a certificate that
+ * has decayed names nothing, because the board it certified is a different
+ * question now.
+ */
+export function namedMembers(
+  progress: Progress,
+  liveness: Liveness,
+  key: string,
+): Set<AtlasId> | null {
+  if (!gradedKeys(progress, liveness).has(key)) return null;
+  const entry = progress.graded.find((candidate) => candidate.key === key);
+  return entry === undefined ? null : new Set(entry.members);
+}
+
+/**
+ * **Which window of a board the player is served** (ADR-0053).
+ *
+ * A failing submission prints every missed member by name, so the board the
+ * player comes back to must not be the one it just answered for them. Where the
+ * generator could build a disjoint second window, this returns it.
+ *
+ * Pure, and a *view* rather than a new challenge: `id`, `verb`, `tier`,
+ * `subject` and `evidence` are the board's, so `(verb, subject)` still keys the
+ * save, the deck and the selector, and everything downstream that reads
+ * `candidates`, `truth`, `witness` and `difficulty` reads this window without
+ * knowing there was another. **The two windows are swapped rather than one being
+ * dropped**, so `challenge.retry` always names the other one — which is what
+ * lets `applyGrade` take the union over the board's whole member universe
+ * whichever window it was handed.
+ *
+ * Three states, and the third is the one to keep in mind:
+ *
+ * - nothing named → window 0, which is every board before it is first answered.
+ * - window 0 named, window 1 not → window 1, the re-earn this exists for.
+ * - both named → window 0. Everything is known, so which window is served
+ *   changes nothing; `applyGrade` will record `shown` either way, and serving
+ *   the board's own key keeps the panel and the field note talking about the
+ *   question the player first met.
+ */
+export function servedBoard(
+  challenge: Challenge,
+  named: ReadonlySet<AtlasId> | null,
+): Challenge {
+  const retry = challenge.retry;
+  if (retry === undefined || named === null) return challenge;
+  if (!challenge.truth.some((member) => named.has(member))) return challenge;
+  if (retry.truth.some((member) => named.has(member))) return challenge;
+  return {
+    ...challenge,
+    candidates: retry.candidates,
+    truth: retry.truth,
+    witness: retry.witness,
+    difficulty: retry.difficulty,
+    retry: {
+      candidates: challenge.candidates,
+      truth: challenge.truth,
+      witness: challenge.witness,
+      difficulty: challenge.difficulty,
+    },
+  };
 }
 
 /** The key a challenge is "answered" under. `(verb, subject)`, never `id`. */

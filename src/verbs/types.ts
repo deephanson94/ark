@@ -243,6 +243,23 @@ export interface Words {
    */
   noun(ids: Iterable<AtlasId>): Noun;
   /**
+   * A node's history, as the **inspector** already prints it, or `null` for an
+   * id that has none (a commit, or a node the atlas does not hold).
+   *
+   * Here so a verb can put on a candidate row the facts its own gate already
+   * assumes the player has. `gate.ts` scores Placement against `churn` and
+   * `recency` — so every shipped Placement board is proof against a player who
+   * can read those two numbers, while the player cannot: they live in the
+   * inspector, and an open board redirects the map's hover to row highlighting,
+   * so no candidate can be inspected while the question is up.
+   *
+   * The precedent is one line of `challenge.ts`: every commit row shows its
+   * date *"whatever the order, so the 'tick the oldest K' guess exists either
+   * way and `oldestK` scores and refuses it"*. Show the fact; let the gate
+   * refuse the boards the guess beats.
+   */
+  history(id: AtlasId): { readonly churn: number; readonly lastSeen: string | null } | null;
+  /**
    * What *every* node in this atlas is, collectively.
    *
    * For a sentence about a repo-wide rule rather than about this board:
@@ -417,6 +434,19 @@ export interface Verb<C extends Challenge = Challenge, A = SetAnswer> {
    * never sees the atlas here, only the names and nouns it needs.
    */
   prompt(challenge: C, words: Words): Prompt;
+  /**
+   * A short fact printed on each candidate row, or absent for a verb whose gate
+   * does not already assume the player has it.
+   *
+   * **Per verb, and that is the whole point.** Placement's gate scores `churn`
+   * and `recency`, so showing them is free against it — the argument `keyRule`
+   * makes for stating the key size. Blast Radius's gate scores neither
+   * (`PATH_HEURISTICS` is `directory`, `name`, `partition`), so the same
+   * annotation there would open a channel nothing refuses. A console that
+   * decided this for itself would be choosing what a verb gives away, which is
+   * the seam ADR-0027 exists to keep.
+   */
+  candidateNote?(id: AtlasId, words: Words): string | null;
   /**
    * Why each pick was right or wrong. On the contract rather than imported from
    * one verb's directory, which is what the console did until M4 — it reached

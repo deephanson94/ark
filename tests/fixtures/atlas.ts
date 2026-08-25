@@ -214,5 +214,6 @@ export function wordsOf(graph: Graph): Words {
 export const plainWords: Words = {
   label: (id) => id,
   noun: () => ({ one: 'file', many: 'files' }),
+  history: () => null,
   repo: { one: 'file', many: 'files' },
 };

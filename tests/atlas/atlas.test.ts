@@ -468,6 +468,38 @@ describe('challenges', () => {
     }
   });
 
+  it('holds the same invariant for every second window, and keeps them disjoint', () => {
+    // **A retry window is a board the player answers** (ADR-0053), so every rule
+    // window 0 is held to applies to it — and the check above does not see it,
+    // because it reads `challenge.candidates`. Without this, half of each
+    // retriable board would be the one choice set in the atlas that no
+    // recomputed-from-source check had ever looked at.
+    const graph = buildGraph(atlas);
+    const withRetry = atlas.challenges.filter(
+      (c) => c.verb === 'blastRadius' && c.retry !== undefined,
+    );
+    // **The plant.** A repository whose cones are all smaller than twice their
+    // keys ships no second window at all, and then the loop below proves
+    // nothing — the clean zero this repo keeps having to distrust.
+    expect(withRetry.length, 'no board ships a second window — this check is inert').toBeGreaterThan(
+      10,
+    );
+    for (const challenge of withRetry) {
+      const retry = challenge.retry;
+      if (retry === undefined) continue;
+      const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
+      const reachedIds = new Set([...reached.keys()].map((ref) => nodeAt(graph, ref).id));
+      const intersection = retry.candidates.filter((id) => reachedIds.has(id));
+      expect(intersection, `${challenge.id} retry`).toEqual([...retry.truth]);
+      // The clause the mechanism rests on. A failing grade prints every member
+      // of `truth` by name, so a shared member would make the retry ask about
+      // something the player has already been told.
+      const shared = retry.truth.filter((id) => challenge.truth.includes(id));
+      expect(shared, `${challenge.id} retry overlaps its own key`).toEqual([]);
+      expect(retry.truth.length).toBe(challenge.truth.length);
+    }
+  });
+
   it('holds the companion invariant against a freshly recomputed matrix', () => {
     // The M4 equivalent, and it is the same shape on purpose:
     // candidates ∩ companions(subject) = truth. Recomputed from the atlas, not
@@ -485,6 +517,32 @@ describe('challenges', () => {
       const row = index.rows.get(refOf(graph, challenge.subject)) ?? new Map<number, number>();
       const inMatrix = challenge.candidates.filter((id) => row.has(refOf(graph, id)));
       expect(inMatrix, `${challenge.id}`).toEqual([...challenge.truth]);
+    }
+  });
+
+  it('holds the companion invariant for every second window too', () => {
+    // **The fourth member of a family gets the check the first three had**, and
+    // this repo has a landmine about adding one and discovering the others were
+    // never checked. A retry window (ADR-0053) is a board the player answers, so
+    // `candidates ∩ companions(subject) = truth` applies to it exactly as it
+    // does to window 0 — and the check above reads `challenge.candidates`, which
+    // is window 0 and only window 0.
+    const graph = buildGraph(atlas);
+    const index = indexCoChange(atlas);
+    const withRetry = atlas.challenges.filter(
+      (c) => c.verb === 'companion' && c.retry !== undefined,
+    );
+    // The plant: a repo whose subjects all have fewer than twice their key in
+    // partners ships none, and then this proves nothing.
+    expect(withRetry.length, 'no companion board ships a second window').toBeGreaterThan(3);
+    for (const challenge of withRetry) {
+      const retry = challenge.retry;
+      if (retry === undefined) continue;
+      const row = index.rows.get(refOf(graph, challenge.subject)) ?? new Map<number, number>();
+      const inMatrix = retry.candidates.filter((id) => row.has(refOf(graph, id)));
+      expect(inMatrix, `${challenge.id} retry`).toEqual([...retry.truth]);
+      const shared = retry.truth.filter((id) => challenge.truth.includes(id));
+      expect(shared, `${challenge.id} retry overlaps its own key`).toEqual([]);
     }
   });
 
@@ -1386,6 +1444,78 @@ describe('a board cannot be answered by sorting the paths (pillar 3)', () => {
     // **The plant.** If no board even *offers* a size-matched split, the loop
     // above proves nothing — a clean zero would mean the check never ran.
     expect(sizeMatched, 'no board offers a size-matched prefix — this check is inert').toBeGreaterThan(10);
+    expect(beaten).toEqual([]);
+  });
+});
+
+/**
+ * **A Placement row prints its own churn and last-seen, so the two-column guess
+ * must not win** — NORTH-STAR pillar 3, one step past the prefix check above.
+ *
+ * `gate.ts` has scored `churn` and `recency` since ADR-0018, but each *alone*:
+ * the conjunction is not bounded by either, because a date filter returning more
+ * rows than the key needs can be truncated by churn, raising precision without
+ * costing recall. That was priced and unavailable while both numbers lived in an
+ * inspector an open board makes unreachable. Printing them on the row made it
+ * available, and the measurement that followed is why this test exists: three
+ * repos said the channel was free (ark, hono, kysely — 0 boards) and the fourth
+ * and fifth said it hands out an exact key (django 2, svelte 2, at 1.000).
+ *
+ * Here rather than in a unit fixture for the same reason as the prefix check: a
+ * fixture's dates are too regular to produce the population, which is this
+ * repo's own landmine about a suite running twelve assertions over one board.
+ */
+describe('a board cannot be answered by reading churn and last-seen (pillar 3)', () => {
+  it('has no Placement board where the two columns together beat band A', () => {
+    const nodeById = new Map(atlas.nodes.map((node) => [node.id, node]));
+    const commitById = new Map(
+      atlas.history.commits.map((commit) => [commitIdFor(commit.sha), commit] as const),
+    );
+    let checked = 0;
+    let offered = 0;
+    const beaten: string[] = [];
+    for (const challenge of atlas.challenges) {
+      if (challenge.verb !== 'placement') continue;
+      const truth = challenge.truth.filter(isNodeId);
+      const commit = commitById.get(challenge.subject as never);
+      if (truth.length === 0 || commit === undefined) continue;
+      checked += 1;
+      const files = challenge.candidates.filter(isNodeId);
+      const byChurn = [...files].sort(
+        (a, b) =>
+          (nodeById.get(b)?.churn ?? 0) - (nodeById.get(a)?.churn ?? 0) || (a < b ? -1 : 1),
+      );
+      const dated = files.filter((id) => nodeById.get(id)?.lastSeen === commit.date);
+      if (dated.length > 0) offered += 1;
+      // Both readings a person makes with two columns, exactly as `gate.ts`
+      // scores them: of those dated right the busiest, and of the busiest those
+      // dated right. Re-derived rather than imported — a check that calls the
+      // function under test cannot catch a bug in it — which is why the whole
+      // rule is carried, including the second reading. Scoring only the first
+      // would have left svelte's churn-then-date board open.
+      const datedThenBusiest = [...dated]
+        .sort(
+          (a, b) =>
+            (nodeById.get(b)?.churn ?? 0) - (nodeById.get(a)?.churn ?? 0) || (a < b ? -1 : 1),
+        )
+        .slice(0, truth.length);
+      const busiestThenDated = byChurn
+        .slice(0, truth.length)
+        .filter((id) => nodeById.get(id)?.lastSeen === commit.date);
+      const best = Math.max(
+        datedThenBusiest.length === 0 ? 0 : scoreSet(datedThenBusiest, truth).score,
+        busiestThenDated.length === 0 ? 0 : scoreSet(busiestThenDated, truth).score,
+      );
+      if (best >= 0.78) beaten.push(`${challenge.id} (${best.toFixed(3)})`);
+    }
+    expect(checked).toBeGreaterThan(20);
+    // **The plant.** If no board offers a candidate dated on the commit's own
+    // day, the date half of the guess never fires and a clean zero would be an
+    // instrument measuring nothing — the failure mode this repo keeps paying
+    // for, and the one that always reads as good news.
+    expect(offered, 'no board offers a date-matched candidate — this check is inert').toBeGreaterThan(
+      5,
+    );
     expect(beaten).toEqual([]);
   });
 });

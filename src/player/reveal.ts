@@ -45,3 +45,48 @@ export function groupAvoided(notes: readonly RevealNote[]): AvoidedGroup[] {
   }
   return [...groups].map(([note, members]) => ({ note, members }));
 }
+
+/**
+ * What a below-the-bar answer costs, said accurately.
+ *
+ * The panel used to read *"…the question stays on the map. **Nothing is lost** —
+ * come back to it whenever you like."* Two lines under the code that writes it,
+ * `applyGrade`'s own comment says the opposite: a certificate is recorded for
+ * **every** graded answer, passing or not, *"and it is the reason the next one
+ * cannot prove anything"*. So something is lost, precisely — the board can never
+ * be `proved` again, only `shown` — and the panel promised it was not.
+ *
+ * A round-7 cold tester read the pair and called it hollow: *"I scored 40%
+ * twice. The reveal handed me the complete answer key and there is no retry. Two
+ * of my four boards are now dead content forever."* They were right about the
+ * mechanic and wrong about the consequence, which is the tell that the sentence
+ * was doing the misleading: a later pass **does** write a field note, in the
+ * *revealed* register rather than the proved one. Saying which is the whole of
+ * NORTH-STAR §9's distinction, and the player deserves it up front.
+ *
+ * Here rather than in `challenge.ts` because that file is a DOM builder with no
+ * unit tests, and this is a claim that has to be **true**, not merely rendered.
+ */
+export function belowBarNote(passMark: number, reEarnable: boolean): string {
+  const opening =
+    `Below the pass mark of ${Math.round(passMark * 100)}%, so nothing reaches your field notes ` +
+    'yet and the question stays on the map. ';
+  // **Two sentences because there are two mechanics, and only one of them was
+  // ever true of every board** (ADR-0053). The grade above has just printed
+  // every member you missed, by name — so passing *this* key afterwards proves
+  // nothing, and it says so. Where the subject has enough dependents for a
+  // second, disjoint question, coming back gets that one instead, and passing it
+  // is proof in full.
+  //
+  // The flag comes from the board rather than from a guess here: whether a
+  // subject can supply a whole second window is a fact about the repository, and
+  // this file has no way to know it. A single sentence covering both would have
+  // to be the weaker one, which is how the sentence it replaced came to promise
+  // less than the product does.
+  return reEarnable
+    ? `${opening}Come back whenever you like — this board will ask about a different set of ` +
+        'files next time, since it has just named these. Pass that one and it counts as proved.'
+    : `${opening}Come back whenever you like — a later pass is recorded as revealed rather than ` +
+        'proved, because this board has just named its whole answer and has no second question to ' +
+        'ask.';
+}

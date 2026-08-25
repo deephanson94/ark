@@ -175,6 +175,12 @@ export function wordsFor(graph: Graph): Words {
   return {
     label: (id) => memberLabel(graph, id),
     noun: (ids) => memberNoun(graph, ids),
+    history: (id) => {
+      const ref = graph.refById.get(id);
+      if (ref === undefined) return null;
+      const node = graph.atlas.nodes[ref];
+      return node === undefined ? null : { churn: node.churn, lastSeen: node.lastSeen ?? null };
+    },
     repo,
   };
 }

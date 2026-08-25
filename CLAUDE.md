@@ -1148,6 +1148,70 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the direction of the city. Two errors, one instrument, both invisible to the eye and both caught by
   one adversarial assertion.
 
+- **A generator that claims what it asks about will re-roll the deck when you give it more to ask.**
+  Companion claims each pair it uses (*a fact is issued once*), so claiming a **retry's** pairs inside
+  the build loop shrank `available` for every subject built afterwards: **20 of ark's 40 Companion
+  boards moved onto different subjects** and 12 more were re-keyed — half the deck, and every affected
+  player's saved progress decaying with it, as a side effect of a feature about *failed* boards.
+  Nothing was red; the counts were identical (`generated` 40 → 40) and only a diff of the artifact
+  showed it. The fix was already in the sibling verb, which computes its windows **after the cap** for
+  an unrelated reason. Two rules follow. **When you add a second thing for a claiming generator to
+  claim, diff the boards, not the counts** — byte-identity is the acceptance test a frozen deck
+  demands, exactly as ADR-0038 found for a frozen layout. And **look at how the other verb does it
+  before inventing a placement for the new pass**; the reason it is where it is may be different from
+  yours and still be the reason you need.
+- **A fix for a laundering sequence can rebuild it one step further out, in the code that fixes it.**
+  ADR-0047 records a certificate of the members a board has named, and it *replaced* the entry on each
+  grading — right when a board has one question, and a hole the moment it has two. Fail window 0, be
+  served window 1, fail that too: the certificate now names only window 1, so **window 0 comes back
+  looking un-named and ready to be retyped for `proved`**. That is ADR-0047 §2.1, reconstructed out of
+  the machinery built to close it, and nothing in the suite could see it because every existing test
+  had one window to work with. The fix is a union taken **inside the board's own member universe**,
+  which preserves the re-roll behaviour rather than arguing with it. **When you give an existing record
+  a second thing to remember, replay every sequence the record was written to refuse.**
+- **The instrument that can see the defect is the one to extend, not the one that is convenient.**
+  Adding a second choice set to each board left three checks reading `challenge.candidates`: the atlas
+  invariant, the generator's authoritative guardrail-4 pass, and `check:keys`. Two of them are
+  atlas-derived and **structurally cannot see a missing edge** — ADR-0024 §6.1's whole point — so
+  covering the retry windows with those alone would have been covering them with the checks that
+  cannot fail. `check:keys` reads the repository's **source**; it iterates choice sets now, 70 of them
+  where it used to see 40. The generator's check was the sharper miss: it reads `entry.candidateRefs`,
+  which is window 0 and only window 0, so half of every retriable board would have been the one choice
+  set in the atlas that no authoritative check had ever looked at.
+- **A selector that matches nothing reports the feature as broken.** The re-earn e2e invented
+  `.note-claim` and a `j` keypress where four other steps in the same file use `.hud-notes` and
+  `.field-note-claim`; an empty list then failed with *"no field note for src/indexer/elevation.ts"*,
+  which reads exactly like the re-earn having failed to write one. The same run had already cost a
+  30-second timeout on `.console-panel`, because the guide's action is **two beats** on a node
+  subject — it walks you there first — and the idiom for that was sitting in the select-all step
+  twelve hundred lines up. Both are the same rule: **before writing a new e2e step, grep the file for
+  how the existing ones do it**, because a step that is wrong about the harness and a step that is
+  wrong about the product produce the same red.
+- **Two heuristics scored separately do not price their conjunction, and four repos will tell you they
+  do.** `gate.ts` has scored Placement against `churn` and `recency` since ADR-0018 — each alone. The
+  conjunction is not dominated by either: a date filter returning **more** rows than the key needs can
+  be truncated by churn, which raises precision without costing recall. It was a priced-but-unavailable
+  guess for as long as both numbers lived in an inspector an open board makes unreachable, and printing
+  them on the candidate row is what made it available. Measured, it beats band A on **0 boards of ark's
+  40, hono's 54, kysely's 75 and graphql-js's 69 — and on 2 of django's 273 and 2 of svelte's 235, at a
+  flat 1.000**. Four repos said the channel was free; the fifth and sixth said it hands out an exact
+  answer key, and the four that read zero include the bootstrap repo, the one a session looks at
+  hardest. Two further traps sat inside it. The guess has **two readings** — *of those dated right the
+  busiest k*, and *of the busiest k those dated right* — and each is the only one that fires on some
+  repo, so scoring one and calling the class covered is the conjunction landmine one row down. And
+  choosing between them by **hit count** hands back the weaker set: the second reading is a *subset* of
+  the first, so on equal hits it is strictly smaller and therefore strictly more precise. Use the real
+  scorer, which is the rule `gradeHeuristics` states one function below and the reason it was there.
+- **A row is not its label any more, and six places in one file thought it was.** Adding one
+  `.choice-note` span inside `.choice-button` broke every `wanted.has(await button.innerText())` in
+  `scripts/e2e.ts` at once — and the symptom was not "the label is wrong": one site ticked nothing and
+  then hung thirty seconds on a **correctly-disabled Submit**, which reads exactly like the feature
+  being broken. The diagnostic that made it one step was `submitBoard`'s own message, which prints the
+  tally and the picked-row count instead of letting Playwright time out. This is the `innerText`
+  landmine arriving from the other direction: not *rendered text differs from the string you built*,
+  but *the element you are reading now contains more than the thing you want*. Read the element that
+  carries the fact (`.choice-path`), through **one** helper — a rule that lives six times has already
+  diverged.
 - **A gate anchored on the subject cannot see a guess anchored on nothing, and the deck can be beaten
   by sorting the filenames.** `gate.ts`'s `directory` heuristic asks *"are the answers in the
   **subject's** folder?"* — so it is blind to a player who ignores the subject entirely, reads the
@@ -1233,6 +1297,11 @@ npm run test:atlas         # schema + integrity of the generated atlas
 npm run test:determinism   # index twice, assert byte-identical
 npm run test:pack          # ~30 s — pack, install outside the repo, run `ark index` and `ark play`
 npm run budget             # print measured budgets, fail over ceiling
+npm run probe:cold         # ADR-0052 — what a player scores reading only the two columns a
+                           #   Placement row prints. Read the `best` column, not the mean: a bar is
+                           #   crossed by one board, and ark re-rolls its deck on every commit.
+npm run probe:retry        # ADR-0053 — the *ceiling* on re-earnable boards, per verb: for how many
+                           #   does a whole disjoint second window of the population exist at all?
 npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
                            #   a real dependent as a wrong answer. The only check here that can see a
                            #   *missing* edge; gates itself on a plant and fails if the detector is inert.

@@ -5312,3 +5312,171 @@ carve-out so a non-zero means a gate defect rather than a difference of opinion.
 Placement are word-matching** rather than structural (*"I had no basis for that at all"* — one scored
 0%), and a **failed board is permanently dead** three lines under copy promising *"answer as often as
 you like, nothing is lost"*.
+
+## The panel promised nothing was lost, two lines from the code that says otherwise
+
+After a below-the-bar answer the console read *"the question stays on the map. **Nothing is lost** —
+come back to it whenever you like."* `applyGrade`'s own comment, two lines from the code that renders
+it, says the opposite: a certificate is recorded for **every** graded answer, passing or not, *"and it
+is the reason the next one cannot prove anything."* So something is lost, precisely — the board can
+never be `proved` again, only `shown`.
+
+A round-7 cold tester read the pair and called it hollow: *"Two of my four boards are now dead content
+forever."* They were right about the mechanic and **wrong about the consequence** — a later pass does
+write a field note, in the *revealed* register — and that gap is the tell that the sentence was doing
+the misleading. It now names which register a later pass earns and why, which is NORTH-STAR §9's
+proved-versus-shown distinction stated up front instead of discovered.
+
+The sentence lives in `src/player/reveal.ts` rather than in `challenge.ts`, because that file is a DOM
+builder with no unit tests and this is a claim that has to be **true** rather than merely rendered.
+The test asserts the mechanic and the wording *together*: either alone misses this, since the mechanic
+was always right and only the sentence was wrong. Both mutants die — the old sentence restored
+verbatim, and the register distinction dropped while keeping the rest.
+
+**Two errors while writing that test, and the second is the interesting one.** `applyGrade`'s fourth
+parameter is `threshold`, not `liveness`, so the first version compared `score >= <object>` and
+recorded nothing. Then the fixture used `challengeFor`'s default key — **arbitrary node ids rather
+than real dependents** — and `gradedKeys` discards a certificate whose members no longer *hold*, so
+the failing answer's certificate was thrown away, `first` stayed true, and the second answer minted
+`proved`. The fixture asserted that the old sentence was correct. It is not; the fixture was.
+
+**Next**: the design question underneath, which is the owner's — whether a failed board should be
+re-earnable at all (ADR-0047's proved/shown rule). Round 7's other open finding is unchanged: three
+testers report Archaeology and Placement as word-matching rather than structural.
+
+---
+
+## A Placement row carries what its own gate already prices — and the conjunction nobody priced
+
+Three round-7 testers read Placement as word-matching rather than structural; one scored **0%** and
+said *"I had no basis for that at all"*. The cause was in the code, not the wording: `placement`
+declares `channel: 'nothing'`, so the map is scenery while its board is open — a refusal nobody ever
+decided, unlike Companion's, which ADR-0016 argues for. Meanwhile `gate.ts` has scored Placement
+against `churn` and `recency` since ADR-0018, so **every shipped board was already proof against a
+player who could read those two numbers**, and the player could not: they live in an inspector an
+open board makes unreachable.
+
+So `Verb.candidateNote?()` — optional, per verb, Placement the only implementer — puts
+`12 commits · last 2026-08-21` on each row. `Words.history()` supplies the fact and the verb writes
+the string, because a console that decided this would be choosing what a verb gives away (ADR-0027).
+Blast Radius's gate prices neither column, so the **absence** is asserted too.
+
+**Then measuring it changed the shape of the change.** The two heuristics were scored *each alone*
+and the conjunction is not bounded by either — a date filter returning more rows than the key needs
+can be truncated by churn, raising precision without costing recall. On ark, hono, kysely and
+graphql-js that guess beats band A on **0 boards**. On django it beats it on **2** and on svelte on
+**2**, both at a flat **1.000**: an exact answer key from reading two columns. Four repos said the
+channel was free and the fifth and sixth said it hands out the answer, which is this repo's rule
+about measuring on a second repo arriving for the fourth time — and the four that read zero include
+the bootstrap repo, the one a session looks at hardest.
+
+`datedChurn` therefore joins `COMMIT_HEURISTICS`. It has **two readings** and each is the only one
+that fires somewhere (django's two are date-then-churn, svelte has one churn-then-date at 0.800), so
+both are scored and the better taken — compared with `scoreSet` rather than a hit count, because the
+second reading is a *subset* of the first and on equal hits is strictly more precise. Afterwards:
+**0 boards beaten on all six repos**, best 0.750 against the 0.78 bar. Cost: one board on django
+(273 → 272), one on svelte (235 → 234), none on the four cap-limited repos.
+
+Mutation-tested — deleting the second reading kills exactly the second fixture; removing the
+heuristic from the set kills all three. The atlas-level check is a **canary** and says so: ark ships
+no board it would catch even with the gate removed, which is why the unit fixtures exist.
+
+Also fixed on the way: six sites in `scripts/e2e.ts` read a choice row's whole `innerText` as its
+member label, so the first note broke them all — one ticked nothing and then hung thirty seconds on
+a correctly-disabled Submit, which reads as the feature being broken. One `rowLabel()` helper now.
+And the Placement note assertion sits on the step **guaranteed** to serve a Placement board, not on
+the step whose verb moves with every commit — on the run that caught this, that arm never executed.
+
+Stated rather than buried: reading both columns and nothing else still reaches a bare pass on
+**35% / 24% / 19% / 16% / 39% / 56%** of boards across the six repos (clean clone of `3d08b01`).
+*Every ark figure in this entry was re-measured there after committing, and the ark ones had all
+moved — the five external columns reproduced to the digit. See ADR-0052 §7.* That is a grade-C floor bought
+with no reasoning about coupling. The gate's bar is band A on purpose (ADR-0010), the honest
+comparison is against the **zero** the same player scored yesterday, and moving the bar governs every
+verb — an owner's decision.
+
+**Next**: **Archaeology's half of the same finding**, which is untouched — and the obvious fix is
+already measured, because the lesson above is cheap to apply twice. Its candidates are commits
+printing a date and a message; the fact they lack is the commit's **diff width**. Ticking the k
+widest commits beats band A on **0 / 2 / 2 / 0 / 2 / 1** boards across the six repos, several at
+1.000, so it needs a gate heuristic before it can be shown. `broadKnown` does not cover it: it
+filters to commits an earlier reveal has already priced, and a printed column is unfiltered. Then the
+owner's open question from last time: whether a failed board should be re-earnable at all (ADR-0047's
+proved/shown rule).
+
+---
+
+## A failed board is re-earnable, on a question it did not answer for you
+
+The owner decided the outcome (2026-08-25); the mechanism was not free to choose. **A failing
+submission names the whole answer key on screen, by name** — `Grade.missed` is `truth \ picked`,
+NORTH-STAR §8.1 requires an honest grade, and the console renders one `missed` row per member. So
+within one board there is no state after a failed answer in which the player does not know the
+answer, and letting a later pass mint `proved` on the same key restores ADR-0047 §2.1's laundering
+sequence in full. Three variants die to that one sentence, including the "hold the reveal until I
+ask" pacing control ADR-0047's own corollary forbids.
+
+The honest re-earn is a **second, disjoint window**: `Challenge.retry`, the same subject, an answer
+key sharing no member with the board's. Knowing window 0 tells you nothing about window 1. The
+machinery already existed — ADR-0012's `reask` re-asks a *colliding* subject with a later window of
+its own ranking; `secondWindow` runs the same search aimed at *give this subject a key **it** has not
+issued*, with the deck's uniqueness rule still applying on top. It is stored **on the board** so it
+costs no deck slot, and computed **after the cap**, which drops 95 of hono's 149.
+
+**The ledger change is one expression, and it is a generalisation rather than an exception.**
+ADR-0047 made proof a property of the first submission; its *reason* was about members all along — a
+later pass certifies nothing **because the board already named them**. So the rule is now `proved`
+unless a claimed member was already named. It reproduces every case the old rule decided (first pass
+proves; retyped key is `shown`; the sweep is `shown`, because its first submission records a
+certificate naming that window's whole key) and adds the one it could not express. **ADR-0047's two
+farm suites pass unchanged**, which is the control.
+
+The first draft had a hole one step further out: the certificate *replaced* on each grading, so
+failing both windows left a record naming only the second and window 0 came back looking un-named,
+ready to be retyped for proof — §2.1 rebuilt out of the fix for it. It accumulates now, inside the
+board's own member universe, which keeps ADR-0047 decision 3b's re-roll behaviour intact rather than
+arguing with it.
+
+**Two verbs of four, and that is named as a partial delivery.** Blast Radius ships a second window on
+75 / 50 / 89 / 88% of its boards and Companion on 33 / 31 / 59 / 57%, against arithmetic ceilings of
+78 / 56 / 95 / 88% and 45 / 41 / 64 / 62%. Archaeology (24–56%) and Placement (**4–20%**, because its
+subject is a commit and a commit's file list is usually about the size of the key sampled out of it)
+are unwired, and their ceilings are lower for reasons no design changes.
+
+**Companion's first implementation re-rolled half the deck** and that is the finding worth carrying.
+It claims each pair it asks about — *a fact is issued once*, ADR-0012 one level down — so claiming a
+retry's pairs inside the build loop shrank `available` for every later subject: **20 of ark's 40
+Companion boards moved onto different subjects** and 12 more were re-keyed, with every affected
+player's saved progress decaying alongside. A deck change nobody asked for, arriving as a side effect
+of a feature about failed boards. The fix was already in `blastRadius/generate.ts` — compute the
+window after the cap — and the acceptance test is byte-identity rather than a count: every board on
+all four repos is identical in id, verb, truth, candidates, witness and difficulty with and without
+retries.
+
+**Two guards look redundant and only one is.** Deleting either of `secondWindow`'s two rejections
+leaves `npm run index` passing, because both reject window 0 — this repo's *two rules that constrain
+the same search hide each other's tests* landmine, walked into during review. Instrumented rather than
+inferred, both fire heavily (31/27/71/61 and 6/9/152/66). Companion's slice past `size` was the
+genuinely dead one: **0 refs removed that the claim filter had kept**, on four repos, so it is gone
+and `validate.ts` is the guarantee.
+
+Three things beyond the verb. `belowBarNote` told every failing player that a later pass is *revealed
+rather than proved* — now **false on 75% of this repo's Blast Radius boards** — so there are two
+sentences, each asserted **true** of its own case rather than merely rendered. The generator's
+authoritative guardrail-4 check now runs on the retry's own candidates: it reads `entry.candidateRefs`,
+which is window 0 and only window 0, so without that line half of each retriable board would be the
+one choice set in the atlas no authoritative check had seen. And `check:keys` iterates **choice sets**
+rather than challenges — it is the only instrument here that reads the repository's *source*, so it
+is the only one that can see a **missing** edge, and covering retries with the atlas-derived checks
+alone would have been covering them with the checks that structurally cannot see the defect.
+
+`ATLAS_VERSION` 11 → 12 (+3.6–5.8%, budget unmoved at 1,681 B/file against 2,621); `SAVE_VERSION`
+stays at 2, because the ledger's shape did not change, only what is derived from it. Four mutants,
+each killed by exactly the assertion aimed at it. The e2e plays the whole loop in a browser and reads
+back *"You proved 6 files that depend on src/indexer/elevation.ts"*.
+
+**Next**: **Archaeology's second window** (ceiling 24–56%) if it is worth the seam; Placement almost
+certainly is not, at 4–20%. Then **Archaeology's
+candidate rows**, which still carry no structural fact: its obvious one, the commit's diff width,
+beats band A on 0 / 2 / 2 / 0 / 2 / 1 boards across six repos and so needs a gate heuristic before it
+can be shown, exactly as `datedChurn` did.

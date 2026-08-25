@@ -12,11 +12,13 @@ import { describe, expect, it } from 'vitest';
 import type { Atlas } from '../../src/atlas/index.js';
 import { buildGraph, validateAtlas } from '../../src/atlas/index.js';
 import {
+  COMMIT_HEURISTICS,
   CTRL_F_THRESHOLD,
   HISTORY_HEURISTICS,
   PATH_HEURISTICS,
   gradeHeuristics,
   pathSubject,
+  textSubject,
 } from '../../src/verbs/gate.js';
 import { generateBlastRadius, generateWithReport } from '../../src/verbs/blastRadius/index.js';
 import { BAND_THRESHOLDS, PASS_THRESHOLD } from '../../src/verbs/index.js';
@@ -279,5 +281,134 @@ describe('the churn heuristic (Companion)', () => {
       HISTORY_HEURISTICS,
     );
     expect(verdict.scores.find(([id]) => id === 'churn')?.[1]).toBe(0);
+  });
+});
+
+/**
+ * **The two-column guess** — `datedChurn`, Placement's set.
+ *
+ * `churn` and `recency` were both already scored, and each *alone*. The
+ * conjunction is not bounded by either: a date filter that returns more rows
+ * than the key needs can be truncated by churn, raising precision without
+ * costing recall. That guess was priced and unavailable for as long as both
+ * numbers lived in an inspector an open board makes unreachable; printing them
+ * on the candidate row made it available, and measuring it then found **2 of
+ * django's 273 boards and 2 of svelte's 235 at a flat 1.000** where ark, hono,
+ * kysely and graphql-js all read zero.
+ *
+ * **Two fixtures, because the guess has two readings and each is the only one
+ * that fires on some repo.** Scoring one and calling the class covered is this
+ * repo's own landmine about a conjunction whose second clause nobody enforced —
+ * so there is one assertion per reading, and each fixture is built so that
+ * neither `churn` nor `recency` alone can reach the bar. Without that the test
+ * would pass on whichever heuristic happened to fire and prove nothing.
+ */
+describe('the two-column heuristic (Placement)', () => {
+  const WHEN = '2026-08-20';
+  const OTHER = '2020-01-01';
+
+  function dated(atlas: Atlas, churn: ReadonlyMap<string, number>, seen: ReadonlyMap<string, string>): Atlas {
+    return validateAtlas({
+      ...atlas,
+      nodes: atlas.nodes.map((node) => ({
+        ...node,
+        churn: churn.get(node.path) ?? 1,
+        lastSeen: (seen.get(node.path) ?? OTHER) as never,
+      })),
+    });
+  }
+
+  it('catches a board answered by the busiest of the date-matched rows', () => {
+    // Six candidates carry the commit's date, so `recency` alone picks twice
+    // the key and scores 0.667. The two busiest files in the whole set are
+    // *not* dated, so `churn` alone picks mostly wrong and scores 0.333. Only
+    // the two columns read together — of those dated right, the busiest three —
+    // land the key exactly.
+    const paths = [
+      'src/alpha/key-one.ts',
+      'src/alpha/decoy-one.ts',
+      'src/beta/key-two.ts',
+      'src/beta/decoy-two.ts',
+      'src/gamma/key-three.ts',
+      'src/gamma/decoy-three.ts',
+      'lib/busy-one.ts',
+      'lib/busy-two.ts',
+    ];
+    const keys = ['src/alpha/key-one.ts', 'src/beta/key-two.ts', 'src/gamma/key-three.ts'];
+    const atlas = dated(
+      atlasWith(paths),
+      new Map([
+        ...keys.map((p) => [p, 50] as const),
+        ['lib/busy-one.ts', 100] as const,
+        ['lib/busy-two.ts', 100] as const,
+      ]),
+      new Map(paths.filter((p) => p.startsWith('src/')).map((p) => [p, WHEN] as const)),
+    );
+    const graph = buildGraph(atlas);
+    const refOf = (path: string): number => atlas.nodes.findIndex((n) => n.path === path);
+    const verdict = gradeHeuristics(
+      graph,
+      // A commit message sharing no token with any candidate, so `name` is 0.
+      textSubject('chore: bump the toolchain', WHEN as never),
+      atlas.nodes.map((_, ref) => ref),
+      keys.map(refOf),
+      COMMIT_HEURISTICS,
+    );
+    expect(verdict.beatenBy).toEqual(['datedChurn']);
+    expect(verdict.scores.find(([id]) => id === 'recency')?.[1]).toBeLessThan(CTRL_F_THRESHOLD);
+    expect(verdict.scores.find(([id]) => id === 'churn')?.[1]).toBeLessThan(CTRL_F_THRESHOLD);
+    expect(verdict.passed).toBe(false);
+  });
+
+  it('catches a board answered by the date-matched of the busiest rows', () => {
+    // The mirror reading, and it is not reachable by the first: the third key
+    // file is **not** dated, so filtering by date first can never find it and
+    // that arm tops out at 0.667. Taking the busiest three and *then* keeping
+    // the dated ones returns two picks, both right — precision 1.0 against
+    // recall 2/3, which is 0.800 and over the bar. svelte ships one of these.
+    const paths = [
+      'src/alpha/key-one.ts',
+      'src/alpha/decoy-one.ts',
+      'src/beta/key-two.ts',
+      'src/beta/decoy-two.ts',
+      'src/gamma/decoy-three.ts',
+      'src/gamma/decoy-four.ts',
+      'src/delta/decoy-five.ts',
+      'src/delta/decoy-six.ts',
+      'lib/key-three.ts',
+      'lib/loud.ts',
+    ];
+    const keys = ['src/alpha/key-one.ts', 'src/beta/key-two.ts', 'lib/key-three.ts'];
+    const atlas = dated(
+      atlasWith(paths),
+      new Map([
+        ['src/alpha/key-one.ts', 100] as const,
+        ['src/beta/key-two.ts', 90] as const,
+        ['lib/loud.ts', 95] as const,
+        ['lib/key-three.ts', 10] as const,
+        ...paths.filter((p) => p.includes('decoy')).map((p) => [p, 30] as const),
+      ]),
+      new Map(paths.filter((p) => p.startsWith('src/')).map((p) => [p, WHEN] as const)),
+    );
+    const graph = buildGraph(atlas);
+    const refOf = (path: string): number => atlas.nodes.findIndex((n) => n.path === path);
+    const verdict = gradeHeuristics(
+      graph,
+      textSubject('chore: bump the toolchain', WHEN as never),
+      atlas.nodes.map((_, ref) => ref),
+      keys.map(refOf),
+      COMMIT_HEURISTICS,
+    );
+    expect(verdict.beatenBy).toEqual(['datedChurn']);
+    expect(verdict.scores.find(([id]) => id === 'recency')?.[1]).toBeLessThan(CTRL_F_THRESHOLD);
+    expect(verdict.scores.find(([id]) => id === 'churn')?.[1]).toBeLessThan(CTRL_F_THRESHOLD);
+  });
+
+  it('is not scored on a verb whose rows do not print those columns', () => {
+    // Blast Radius candidates carry no churn and no date on screen, so scoring
+    // this against them would delete questions for a guess nobody could make.
+    expect(PATH_HEURISTICS).not.toContain('datedChurn');
+    expect(HISTORY_HEURISTICS).not.toContain('datedChurn');
+    expect(COMMIT_HEURISTICS).toContain('datedChurn');
   });
 });

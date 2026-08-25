@@ -1,6 +1,6 @@
 # The atlas format
 
-**Schema version: 11**
+**Schema version: 12**
 
 `atlas.json` is the only interface between the indexer and the player. The indexer touches your
 source; the player never does. Everything the player knows about a codebase, it knows from this
@@ -37,7 +37,7 @@ to assume anything weaker.
 
 ```jsonc
 {
-  "version": 11,
+  "version": 12,
   "repo":       { … },   // §3.1
   "nodes":      [ … ],   // §3.2  — index into this array is a NodeRef
   "edges":      [ … ],   // §3.3
@@ -396,6 +396,7 @@ throughout, and tiers 1–4 remain fully playable (NORTH-STAR risk #7).
 | `truth` | `AtlasId[]` | Sorted. Non-empty. A **proper** subset of `candidates`. |
 | `witness` | `string` | **Why each wrong answer is here.** One space-separated token per candidate, positionally aligned with `candidates`; `-` where the candidate is in `truth`. See below. |
 | `evidence` | `Evidence` | `{kind: "importGraph", depth}`, `{kind: "coChange", minCount, wideLimit, atMost}`, `{kind: "commit", subject, date, touched}`, or `{kind: "history", touchedBy}`. |
+| `retry` | `RetryWindow?` | **Optional. A second, disjoint question about the same subject** — `{candidates, truth, witness, difficulty}`, every field obeying its own rule above. Its `truth` shares **no member** with the board's, which the validator enforces. Absent where the subject's population cannot supply a whole second window. See §3.6.1. |
 
 **`evidence.kind` decides what kind of id each role holds, and the validator enforces it.** It is not
 an extra fact anyone has to be told — `commit` evidence describes an event and `history` evidence
@@ -589,6 +590,34 @@ verb-blind set of opaque facts (`src/verbs/disclosure.ts`), so neither verb name
 > principled distractor strategy rather than from `distant` padding, and **how many nodes no
 > question can ever reveal** — the coverage a refusal costs, which a deck count alone hides.
 
+#### 3.6.1 `retry` — the second window
+
+A failing submission is graded honestly (NORTH-STAR §8.1), so `Grade.missed` is `truth \ picked` and
+the console prints **every member of the answer key by name**. Guardrail 6 then makes retries free and
+unlimited. Within one board there is therefore no state after a failed answer in which the player does
+not know the answer — which is why proof cannot be re-earned on the same key, and why
+[ADR-0047](./decisions/0047-proof-is-what-the-first-answer-earned.md) decision 2 made it a property of
+the first submission.
+
+`retry` is the honest alternative ([ADR-0053](./decisions/0053-a-failed-board-is-re-earnable-on-a-question-it-did-not-answer.md)):
+the same subject, a **disjoint** answer key, so knowing window 0 says nothing about window 1.
+
+- It is **stored on the board, not as a challenge of its own**, so it costs no deck slot. `retain`'s
+  cap decides which *subjects* a repo can afford; a retry is not another subject.
+- `verb`, `tier`, `subject` and `evidence` are the board's. Only the four fields above differ, and
+  `difficulty` differs because §8.4 is computed from the key.
+- The player is served window 0 until the board has named it, then window 1. **Which window is
+  served is a function of the save**, not of the atlas — see `servedBoard` in `src/player/progress.ts`.
+- Every invariant window 0 must satisfy, this must too: `candidates ∩ dependents(subject, ∞) = truth`,
+  the witness alignment, the proper-subset rule, and the authoritative guardrail-4 check on its own
+  candidate set. The validator runs the same function over both.
+
+**Absent is the common case on three verbs of four**, and that is a fact about repositories rather
+than a policy: a key that *is* its subject's whole population has no second window and never will.
+Measured at `e0bb4bf`, the arithmetic ceiling — a population at least twice the key — is 56–95% for
+Blast Radius, 41–64% for Companion, 24–56% for Archaeology and **4–20% for Placement**, whose subject
+is a commit and whose file list is usually about the size of the key it is sampled into.
+
 ### 3.7 `report`
 
 What the indexer dropped, and why. `truncations` is `{what, kept, dropped}` sorted by `what`;
@@ -620,15 +649,28 @@ field says why; the map, regions, history and layout are all present and valid a
 
 ## 4. Compatibility
 
-`version` is `11`. **A change to any shape above bumps it**, and ships either a migration or an
+`version` is `12`. **A change to any shape above bumps it**, and ships either a migration or an
 explicit "reindex required" error (guardrail 5). The validator already produces the latter: loading
 an older atlas into a newer build fails with
 
 ```
-atlas.version: this build reads atlas v11, got v10 — reindex required
+atlas.version: this build reads atlas v12, got v11 — reindex required
 ```
 
 The player must never guess at a shape.
+
+**v11 → v12 adds one optional field, `challenges[].retry`.** A v11 atlas is a valid v12 atlas with
+no retries, so a migration is *possible* here in a way it has not been since v8 — and it is refused
+for the same reason as every bump since ADR-0010: the missing information is a second window the
+generator has to compute from a graph the player may not touch, and `npm run index` is cheaper than a
+migration kept correct forever. The consequence of getting it wrong is not cosmetic either: a v11
+atlas read as v12 ships **no re-earnable board at all**, and the console would then tell every failing
+player that a later pass is merely revealed — true of that atlas and false of the product.
+
+Cost, measured through the real serialiser at `e0bb4bf`: **+3.6% to +5.8%** across ark, hono, kysely
+and graphql-js (ark 449.7 → 479.0 KiB). The budget is unmoved — 1,681 B/file against a 2,621 ceiling.
+Saves are untouched: `SAVE_VERSION` stays at 2, because the ledger's shape did not change, only what
+is derived from it.
 
 **v10 → v11 is one new `Lang` member and no new field.** `Lang` gains `py`, so an atlas written by
 this build can carry a value a v10 validator refuses — which is the whole of the incompatibility and
