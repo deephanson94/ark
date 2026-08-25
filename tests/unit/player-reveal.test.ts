@@ -117,7 +117,7 @@ describe('what a below-the-bar answer costs', () => {
   });
 
   it('says what is lost rather than that nothing is', () => {
-    const said = belowBarNote(0.5).toLowerCase();
+    const said = belowBarNote(0.5, false).toLowerCase();
     // The exact claim the mechanic above refutes.
     expect(said).not.toContain('nothing is lost');
     // And it names the register a later pass actually earns, which is the whole
@@ -125,5 +125,24 @@ describe('what a below-the-bar answer costs', () => {
     expect(said).toContain('revealed');
     expect(said).toContain('proved');
     expect(said).toContain('50%');
+  });
+
+  it('promises a re-earn only where the board can actually offer one', () => {
+    // **Two mechanics, two sentences, and each must be true of its own case**
+    // (ADR-0053). This is the assertion the previous version could not make:
+    // it held one sentence to a shape while the product had grown a second
+    // behaviour the sentence was false about.
+    const canRetry = belowBarNote(0.5, true).toLowerCase();
+    expect(canRetry).toContain('different set of files');
+    expect(canRetry).toContain('proved');
+    // It must **not** tell a player with a second window that a later pass is
+    // merely revealed — that is the false half, and it is what the single
+    // sentence said to everyone.
+    expect(canRetry).not.toContain('revealed rather than proved');
+
+    // And the converse: a board with no second window must not promise one.
+    const cannot = belowBarNote(0.5, false).toLowerCase();
+    expect(cannot).not.toContain('different set of files');
+    expect(cannot).toContain('no second question');
   });
 });

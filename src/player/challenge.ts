@@ -412,8 +412,8 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       ...(register === 'shown'
         ? [
             el('p', 'console-register', [
-              'Recorded as shown rather than proved — this board had already ' +
-                'explained itself. The first answer is the one that counts as knowledge.',
+              'Recorded as shown rather than proved — this board had already named ' +
+                'these answers to you. Proof is what you were not told.',
             ]),
           ]
         : []),
@@ -427,7 +427,9 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // answer, which guardrail 6 forbids.
       ...(register === null
         ? [
-            el('p', 'console-register', [belowBarNote(PASS_THRESHOLD)]),
+            el('p', 'console-register', [
+              belowBarNote(PASS_THRESHOLD, challenge.retry !== undefined),
+            ]),
           ]
         : []),
       el('div', 'console-footer', [el('div', 'console-tally', []), done]),

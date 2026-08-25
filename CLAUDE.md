@@ -1148,6 +1148,33 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the direction of the city. Two errors, one instrument, both invisible to the eye and both caught by
   one adversarial assertion.
 
+- **A fix for a laundering sequence can rebuild it one step further out, in the code that fixes it.**
+  ADR-0047 records a certificate of the members a board has named, and it *replaced* the entry on each
+  grading — right when a board has one question, and a hole the moment it has two. Fail window 0, be
+  served window 1, fail that too: the certificate now names only window 1, so **window 0 comes back
+  looking un-named and ready to be retyped for `proved`**. That is ADR-0047 §2.1, reconstructed out of
+  the machinery built to close it, and nothing in the suite could see it because every existing test
+  had one window to work with. The fix is a union taken **inside the board's own member universe**,
+  which preserves the re-roll behaviour rather than arguing with it. **When you give an existing record
+  a second thing to remember, replay every sequence the record was written to refuse.**
+- **The instrument that can see the defect is the one to extend, not the one that is convenient.**
+  Adding a second choice set to each board left three checks reading `challenge.candidates`: the atlas
+  invariant, the generator's authoritative guardrail-4 pass, and `check:keys`. Two of them are
+  atlas-derived and **structurally cannot see a missing edge** — ADR-0024 §6.1's whole point — so
+  covering the retry windows with those alone would have been covering them with the checks that
+  cannot fail. `check:keys` reads the repository's **source**; it iterates choice sets now, 70 of them
+  where it used to see 40. The generator's check was the sharper miss: it reads `entry.candidateRefs`,
+  which is window 0 and only window 0, so half of every retriable board would have been the one choice
+  set in the atlas that no authoritative check had ever looked at.
+- **A selector that matches nothing reports the feature as broken.** The re-earn e2e invented
+  `.note-claim` and a `j` keypress where four other steps in the same file use `.hud-notes` and
+  `.field-note-claim`; an empty list then failed with *"no field note for src/indexer/elevation.ts"*,
+  which reads exactly like the re-earn having failed to write one. The same run had already cost a
+  30-second timeout on `.console-panel`, because the guide's action is **two beats** on a node
+  subject — it walks you there first — and the idiom for that was sitting in the select-all step
+  twelve hundred lines up. Both are the same rule: **before writing a new e2e step, grep the file for
+  how the existing ones do it**, because a step that is wrong about the harness and a step that is
+  wrong about the product produce the same red.
 - **Two heuristics scored separately do not price their conjunction, and four repos will tell you they
   do.** `gate.ts` has scored Placement against `churn` and `recency` since ADR-0018 — each alone. The
   conjunction is not dominated by either: a date filter returning **more** rows than the key needs can
@@ -1261,6 +1288,8 @@ npm run budget             # print measured budgets, fail over ceiling
 npm run probe:cold         # ADR-0052 — what a player scores reading only the two columns a
                            #   Placement row prints. Read the `best` column, not the mean: a bar is
                            #   crossed by one board, and ark re-rolls its deck on every commit.
+npm run probe:retry        # ADR-0053 — the *ceiling* on re-earnable boards, per verb: for how many
+                           #   does a whole disjoint second window of the population exist at all?
 npm run check:keys         # ADR-0042 §13 — reads the repo's SOURCE and asks whether any board marks
                            #   a real dependent as a wrong answer. The only check here that can see a
                            #   *missing* edge; gates itself on a plant and fails if the detector is inert.

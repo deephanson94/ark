@@ -93,6 +93,17 @@ export interface GenerationReport {
    */
   readonly reasked: number;
   /**
+   * How many shipped boards carry a **second window** — a disjoint answer key
+   * about the same subject, which is the only honest way to re-earn a board the
+   * player has already been told the answer to (ADR-0053).
+   *
+   * Reported rather than assumed, because the ceiling is a property of the
+   * repository and not of the design: a board whose key *is* its subject's whole
+   * certain cone has no second window and never will. Read it against
+   * `generated` — the share, not the count, is the thing that transfers.
+   */
+  readonly retriable: number;
+  /**
    * Nodes that no challenge can ever promote to `understood` — they are neither
    * a subject nor a member of any answer key, so their fog can never lift.
    *
@@ -248,7 +259,7 @@ function dedupe(
   eligible: ReadonlySet<NodeRef>,
   tainted: ReadonlySet<NodeRef>,
   note: (reason: SkipReason) => void,
-): { kept: Built[]; reasked: number } {
+): { kept: Built[]; reasked: number; issued: ReadonlySet<string> } {
   const groups = new Map<string, Pending[]>();
   for (const entry of pending) {
     const key = keyOf(entry.built.challenge.truth);
@@ -296,7 +307,7 @@ function dedupe(
       kept.push(rebuilt);
     }
   }
-  return { kept, reasked };
+  return { kept, reasked, issued };
 }
 
 /**
@@ -332,6 +343,51 @@ function reask(
     // It is here because `assemble` returns a union and the case must be
     // handled, not because it is a rescue path — there are no tests around it.
     if (typeof outcome === 'string') continue;
+    if (issued.has(keyOf(outcome.challenge.truth))) continue;
+    return outcome;
+  }
+  return null;
+}
+
+/**
+ * The board's **second window**, for a player who has already been told its
+ * answer (ADR-0053).
+ *
+ * The same search `reask` runs, aimed at a different question. `reask` asks
+ * *"give this subject a key nobody else has issued"*; this asks *"give this
+ * subject a key **it** has not issued"* — so the disjointness is against the
+ * board's own truth rather than against the deck, and the window it lands on may
+ * be window 0 when the board itself was re-asked into window 2.
+ *
+ * The deck rule still applies on top: a retry key that another subject's board
+ * already asks is ADR-0012's collision with an extra step, so `issued` is
+ * consulted and the winner reserved.
+ *
+ * Returns `null` where the cone has no whole disjoint window. That is a fact
+ * about the repository — a key that *is* its subject's entire certain cone can
+ * never be re-earned, and the panel says so rather than pretending.
+ */
+function secondWindow(
+  entry: Pending,
+  built: Built,
+  assemble: Assemble,
+  eligible: ReadonlySet<NodeRef>,
+  tainted: ReadonlySet<NodeRef>,
+  issued: ReadonlySet<string>,
+): Built | null {
+  const { ranked, size, subject, reached, clean } = entry;
+  const windows = Math.floor(ranked.length / size);
+  if (windows < 2) return null;
+  const already = new Set(built.challenge.truth);
+  const pool = nonDependents(eligible, reached, tainted, subject);
+  for (let window = 0; window < windows; window++) {
+    const truthRefs = ranked.slice(window * size, window * size + size);
+    const outcome = assemble(subject, reached, clean, pool, truthRefs);
+    if (typeof outcome === 'string') continue;
+    // The clause the whole mechanism rests on, checked on ids because that is
+    // what the validator and the save compare. A single shared member would make
+    // the retry ask about something the failing grade already printed by name.
+    if (outcome.challenge.truth.some((id) => already.has(id))) continue;
     if (issued.has(keyOf(outcome.challenge.truth))) continue;
     return outcome;
   }
@@ -703,7 +759,7 @@ export function generateWithReport(
   }
 
 
-  const { kept: built, reasked } = dedupe(pending, assemble, eligible, tainted, note);
+  const { kept: built, reasked, issued } = dedupe(pending, assemble, eligible, tainted, note);
 
   const limit = options.maxChallenges ?? maxChallengesFor(atlas.nodes.length);
   // Elevation, so the cap spends its slots on load-bearing files. `capped`
@@ -736,6 +792,46 @@ export function generateWithReport(
     return verdict.ok;
   });
 
+  // **The second window, computed only for boards that ship** (ADR-0053).
+  //
+  // After the cap on purpose: the cap drops most of what `dedupe` kept — 95 of
+  // 149 on hono — and a retry for a board nobody will see costs an `assemble`
+  // per window and reserves a key that would then push a real board into
+  // `duplicateKey`. The same reasoning the guardrail-4 check below is placed by.
+  const bySubject = new Map(pending.map((entry) => [entry.subject, entry]));
+  const reserved = new Set(issued);
+  let retriable = 0;
+  const withRetry = kept.map((entry) => {
+    const source = bySubject.get(entry.subject);
+    if (source === undefined) return entry;
+    const second = secondWindow(source, entry, assemble, eligible, tainted, reserved);
+    if (second === null) return entry;
+    // **The authoritative guardrail-4 check, on the retry's own candidates.**
+    // The check above runs on `entry.candidateRefs`, which is window 0 and only
+    // window 0 — so without this line a second window would be the one choice
+    // set in the atlas that no authoritative check had ever seen, and the
+    // guardrail whose failure mode is a wrong answer key would hold on half of
+    // each board. `assemble` draws from the same untainted pool, so this is
+    // expected to pass; the sentence above says why "expected" is not enough.
+    if (!isChallengeable(graph, entry.subject, second.candidateRefs, Number.POSITIVE_INFINITY).ok) {
+      return entry;
+    }
+    reserved.add(keyOf(second.challenge.truth));
+    retriable += 1;
+    return {
+      ...entry,
+      challenge: {
+        ...entry.challenge,
+        retry: {
+          candidates: second.challenge.candidates,
+          truth: second.challenge.truth,
+          witness: second.challenge.witness,
+          difficulty: second.challenge.difficulty,
+        },
+      },
+    };
+  });
+
   const totals = new Map<StrategyId, number>();
   for (const entry of kept) {
     for (const [strategy, count] of mixOf(entry.mix)) {
@@ -753,13 +849,14 @@ export function generateWithReport(
   }
 
   return {
-    challenges: kept
+    challenges: withRetry
       .map((entry) => entry.challenge)
       .sort((a, b) => byteCompare(a.id, b.id)),
     report: {
       subjectsConsidered: considered,
       generated: kept.length,
       reasked,
+      retriable,
       unprovableNodes: atlas.nodes.length - provable.size,
       skipped: [...skipped].sort(([a], [b]) => byteCompare(a, b)),
       distractorMix: [...totals].sort(([a], [b]) => byteCompare(a, b)),

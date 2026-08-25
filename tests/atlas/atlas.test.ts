@@ -468,6 +468,38 @@ describe('challenges', () => {
     }
   });
 
+  it('holds the same invariant for every second window, and keeps them disjoint', () => {
+    // **A retry window is a board the player answers** (ADR-0053), so every rule
+    // window 0 is held to applies to it — and the check above does not see it,
+    // because it reads `challenge.candidates`. Without this, half of each
+    // retriable board would be the one choice set in the atlas that no
+    // recomputed-from-source check had ever looked at.
+    const graph = buildGraph(atlas);
+    const withRetry = atlas.challenges.filter(
+      (c) => c.verb === 'blastRadius' && c.retry !== undefined,
+    );
+    // **The plant.** A repository whose cones are all smaller than twice their
+    // keys ships no second window at all, and then the loop below proves
+    // nothing — the clean zero this repo keeps having to distrust.
+    expect(withRetry.length, 'no board ships a second window — this check is inert').toBeGreaterThan(
+      10,
+    );
+    for (const challenge of withRetry) {
+      const retry = challenge.retry;
+      if (retry === undefined) continue;
+      const reached = dependents(graph, refOf(graph, challenge.subject), Number.POSITIVE_INFINITY);
+      const reachedIds = new Set([...reached.keys()].map((ref) => nodeAt(graph, ref).id));
+      const intersection = retry.candidates.filter((id) => reachedIds.has(id));
+      expect(intersection, `${challenge.id} retry`).toEqual([...retry.truth]);
+      // The clause the mechanism rests on. A failing grade prints every member
+      // of `truth` by name, so a shared member would make the retry ask about
+      // something the player has already been told.
+      const shared = retry.truth.filter((id) => challenge.truth.includes(id));
+      expect(shared, `${challenge.id} retry overlaps its own key`).toEqual([]);
+      expect(retry.truth.length).toBe(challenge.truth.length);
+    }
+  });
+
   it('holds the companion invariant against a freshly recomputed matrix', () => {
     // The M4 equivalent, and it is the same shape on purpose:
     // candidates ∩ companions(subject) = truth. Recomputed from the atlas, not

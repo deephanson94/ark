@@ -152,8 +152,33 @@ export function scanBoards(root: string, atlas: Atlas, swap: boolean): ScanResul
   let boards = 0;
   let slots = 0;
 
+  // **One entry per *choice set*, not per challenge.** A board with a second
+  // window (ADR-0053) puts two choice sets in front of the player, and this is
+  // the only instrument here that reads the repository's **source** — the one
+  // that can see a *missing* edge, which no atlas-derived check can. Iterating
+  // challenges would have left every retry window uncovered by the check that
+  // matters most, on the argument that it was covered by the check that cannot
+  // see the defect.
+  const sets: { id: string; subject: string; candidates: readonly string[]; truth: readonly string[] }[] = [];
   for (const challenge of atlas.challenges) {
     if (challenge.verb !== 'blastRadius') continue;
+    sets.push({
+      id: challenge.id,
+      subject: challenge.subject,
+      candidates: challenge.candidates,
+      truth: challenge.truth,
+    });
+    if (challenge.retry !== undefined) {
+      sets.push({
+        id: `${challenge.id} (retry)`,
+        subject: challenge.subject,
+        candidates: challenge.retry.candidates,
+        truth: challenge.retry.truth,
+      });
+    }
+  }
+
+  for (const challenge of sets) {
     const subjectPath = pathById.get(challenge.subject);
     if (subjectPath === undefined) continue;
     const truth = new Set(challenge.truth);

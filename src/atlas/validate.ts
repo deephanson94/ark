@@ -33,6 +33,7 @@ import type {
   Region,
   RegionKind,
   RepoMeta,
+  RetryWindow,
   SkipCount,
   Truncation,
   UnreadableCount,
@@ -460,44 +461,27 @@ function validateEvidence(value: unknown, at: string): Evidence {
   };
 }
 
-function validateChallenge(
-  value: unknown,
+/**
+ * A board's choice set: candidates, the answer key inside them, and the witness
+ * aligned to them.
+ *
+ * **One function because there are now two of these per board.** A retry window
+ * (ADR-0053) is a second, disjoint question about the same subject, with its own
+ * candidates, key and witness — and every rule below applies to it identically.
+ * Written inline twice, the retry's witness alignment would have gone unchecked,
+ * which the comment inside this function says is the one check that exists
+ * nowhere else.
+ */
+function validateChoiceSet(
+  r: Record<string, unknown>,
   at: string,
-  ids: ReadonlySet<string>,
-  commits: ReadonlySet<string>,
-): Challenge {
-  const r = asRecord(value, at);
-  const id = asString(r['id'], `${at}.id`);
-  if (id.length === 0) fail(`${at}.id`, 'must not be empty');
-
-  // A subject **and now every member** is a place or an event (ADR-0018,
-  // ADR-0019), told apart by its own prefix, and each arm is checked against the
-  // section that has to contain it. Accepting "either a node or a commit"
-  // without looking at the prefix would let a typo'd node id pass as a missing
-  // commit and vice versa — a dangling reference is exactly what this validator
-  // exists to refuse (Appendix A: "an atlas with a dangling edge must throw, not
-  // degrade").
-  const subject = asString(r['subject'], `${at}.subject`);
-  const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
-  const roles = ROLE_KINDS[evidence.kind];
-
-  const resolve = (id: string, where: string, expected: 'node' | 'commit'): void => {
-    const actual = isCommitId(id) ? 'commit' : 'node';
-    if (actual !== expected) {
-      fail(where, `${evidence.kind} evidence wants a ${expected} here, got ${JSON.stringify(id)}`);
-    }
-    if (expected === 'commit') {
-      if (!commits.has(id)) fail(where, `${id} is not a retained commit in this atlas`);
-    } else if (!ids.has(id)) {
-      fail(where, `${id} is not a node in this atlas`);
-    }
-  };
-
-  resolve(subject, `${at}.subject`, roles.subject);
-
+  subject: string,
+  member: 'node' | 'commit',
+  resolve: (id: string, where: string, expected: 'node' | 'commit') => void,
+): { candidates: string[]; truth: string[]; witness: string } {
   const candidates = asSortedStrings(r['candidates'], `${at}.candidates`);
   if (candidates.length === 0) fail(`${at}.candidates`, 'must not be empty');
-  for (const candidate of candidates) resolve(candidate, `${at}.candidates`, roles.member);
+  for (const candidate of candidates) resolve(candidate, `${at}.candidates`, member);
   if (candidates.includes(subject)) {
     fail(`${at}.candidates`, 'must not contain the subject of the challenge');
   }
@@ -545,6 +529,45 @@ function validateChallenge(
       fail(`${at}.witness`, `${JSON.stringify(token)} is not a strategy id`);
     }
   }
+  return { candidates, truth, witness };
+}
+
+function validateChallenge(
+  value: unknown,
+  at: string,
+  ids: ReadonlySet<string>,
+  commits: ReadonlySet<string>,
+): Challenge {
+  const r = asRecord(value, at);
+  const id = asString(r['id'], `${at}.id`);
+  if (id.length === 0) fail(`${at}.id`, 'must not be empty');
+
+  // A subject **and now every member** is a place or an event (ADR-0018,
+  // ADR-0019), told apart by its own prefix, and each arm is checked against the
+  // section that has to contain it. Accepting "either a node or a commit"
+  // without looking at the prefix would let a typo'd node id pass as a missing
+  // commit and vice versa — a dangling reference is exactly what this validator
+  // exists to refuse (Appendix A: "an atlas with a dangling edge must throw, not
+  // degrade").
+  const subject = asString(r['subject'], `${at}.subject`);
+  const evidence = validateEvidence(r['evidence'], `${at}.evidence`);
+  const roles = ROLE_KINDS[evidence.kind];
+
+  const resolve = (id: string, where: string, expected: 'node' | 'commit'): void => {
+    const actual = isCommitId(id) ? 'commit' : 'node';
+    if (actual !== expected) {
+      fail(where, `${evidence.kind} evidence wants a ${expected} here, got ${JSON.stringify(id)}`);
+    }
+    if (expected === 'commit') {
+      if (!commits.has(id)) fail(where, `${id} is not a retained commit in this atlas`);
+    } else if (!ids.has(id)) {
+      fail(where, `${id} is not a node in this atlas`);
+    }
+  };
+
+  resolve(subject, `${at}.subject`, roles.subject);
+
+  const { candidates, truth, witness } = validateChoiceSet(r, at, subject, roles.member, resolve);
 
   const difficulty = asFinite(r['difficulty'], `${at}.difficulty`);
   if (difficulty < 0 || difficulty > 1) {
@@ -571,6 +594,36 @@ function validateChallenge(
     );
   }
 
+  // **The second window** (ADR-0053). Optional — a subject whose population
+  // cannot supply a whole disjoint window has none, and that is a fact about the
+  // repository rather than a policy — but where present it is a board the player
+  // will answer, so it is held to every rule the first one is.
+  let retry: RetryWindow | undefined;
+  if (r['retry'] !== undefined) {
+    const w = asRecord(r['retry'], `${at}.retry`);
+    const set = validateChoiceSet(w, `${at}.retry`, subject, roles.member, resolve);
+    // **The clause the whole mechanism rests on.** A failing submission names
+    // every member of `truth` on screen, so a retry sharing one would be asking
+    // about something the player has already been told — which is precisely
+    // what ADR-0047 decision 2 refuses to call proof. Nothing downstream
+    // re-derives this, and a retry that overlapped would validate, render and
+    // grade perfectly while quietly certifying a fact the board handed over.
+    const first = new Set(truth);
+    for (const member of set.truth) {
+      if (first.has(member)) {
+        fail(
+          `${at}.retry.truth`,
+          `${member} is also in the board's own answer key — a retry window must be disjoint`,
+        );
+      }
+    }
+    const retryDifficulty = asFinite(w['difficulty'], `${at}.retry.difficulty`);
+    if (retryDifficulty < 0 || retryDifficulty > 1) {
+      fail(`${at}.retry.difficulty`, `expected 0..1, got ${retryDifficulty}`);
+    }
+    retry = { ...set, difficulty: retryDifficulty };
+  }
+
   return {
     id,
     verb: asMember(r['verb'], `${at}.verb`, VERB_IDS),
@@ -581,6 +634,7 @@ function validateChallenge(
     truth,
     witness,
     evidence,
+    ...(retry === undefined ? {} : { retry }),
   };
 }
 

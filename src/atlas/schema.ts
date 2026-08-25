@@ -15,7 +15,7 @@
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const ATLAS_VERSION = 11;
+export const ATLAS_VERSION = 12;
 
 /**
  * A stable node identity: `n:` + 12 hex chars derived from the node's *origin
@@ -538,6 +538,55 @@ export interface Challenge {
    */
   readonly witness: string;
   readonly evidence: Evidence;
+  /**
+   * **A second, disjoint question about the same subject** — what a player is
+   * asked after this board has already told them its answer.
+   *
+   * `Grade.missed` is `truth \\ picked` and NORTH-STAR §8.1 requires an honest
+   * grade, so **every failing submission names the whole key on screen**, by
+   * name, in the notes list. Guardrail 6 then makes retries free and unlimited.
+   * Within one board there is therefore no state after a failed answer in which
+   * the player does not know the answer, and a second pass on the same key
+   * certifies nothing — which is what ADR-0047 decision 2 concluded when it made
+   * proof a property of the first submission.
+   *
+   * The only honest re-earn is a **different sample of the same subject**, and
+   * that is this field. `truth` here shares no member with the board's own
+   * `truth`, so knowing window 0 says nothing about window 1 (ADR-0053).
+   *
+   * Absent where the subject's population cannot supply a whole second window —
+   * a key that *is* its whole cone can never be re-earned, and that is a fact
+   * about the repository rather than a policy. It is `undefined` rather than an
+   * empty object so the two are distinguishable at a glance.
+   */
+  readonly retry?: RetryWindow;
+}
+
+/**
+ * A board's second window: the same subject, a disjoint answer key.
+ *
+ * Everything a served board needs and nothing it shares with window 0. `verb`,
+ * `tier`, `subject` and `evidence.kind` are the board's; `difficulty` is its own
+ * because §8.4 is computed from the key and a later window of the same cone is
+ * a different question.
+ *
+ * It is **stored on the board rather than as a challenge of its own** so it
+ * costs no deck slot: `retain`'s cap decides which *subjects* a repo can afford
+ * to ask about, and a retry is not another subject.
+ */
+export interface RetryWindow {
+  /** Sorted; never contains the board's subject. Same shape rule as `candidates`. */
+  readonly candidates: readonly AtlasId[];
+  /**
+   * The correct subset — non-empty, sorted, a subset of this window's
+   * `candidates`, and **disjoint from the board's own `truth`**. That last
+   * clause is the whole point and the validator checks it.
+   */
+  readonly truth: readonly AtlasId[];
+  /** One token per candidate of *this* window, same format as `Challenge.witness`. */
+  readonly witness: string;
+  /** Computed for this window's own key. NORTH-STAR §8.4. */
+  readonly difficulty: number;
 }
 
 /** What the indexer dropped to stay inside a budget. Never silent (CLAUDE.md). */

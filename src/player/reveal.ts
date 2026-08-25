@@ -67,11 +67,26 @@ export function groupAvoided(notes: readonly RevealNote[]): AvoidedGroup[] {
  * Here rather than in `challenge.ts` because that file is a DOM builder with no
  * unit tests, and this is a claim that has to be **true**, not merely rendered.
  */
-export function belowBarNote(passMark: number): string {
-  return (
+export function belowBarNote(passMark: number, reEarnable: boolean): string {
+  const opening =
     `Below the pass mark of ${Math.round(passMark * 100)}%, so nothing reaches your field notes ` +
-    'yet and the question stays on the map. Come back whenever you like — a later pass is ' +
-    'recorded as revealed rather than proved, because the first answer is the one that can ' +
-    'prove a board.'
-  );
+    'yet and the question stays on the map. ';
+  // **Two sentences because there are two mechanics, and only one of them was
+  // ever true of every board** (ADR-0053). The grade above has just printed
+  // every member you missed, by name — so passing *this* key afterwards proves
+  // nothing, and it says so. Where the subject has enough dependents for a
+  // second, disjoint question, coming back gets that one instead, and passing it
+  // is proof in full.
+  //
+  // The flag comes from the board rather than from a guess here: whether a
+  // subject can supply a whole second window is a fact about the repository, and
+  // this file has no way to know it. A single sentence covering both would have
+  // to be the weaker one, which is how the sentence it replaced came to promise
+  // less than the product does.
+  return reEarnable
+    ? `${opening}Come back whenever you like — this board will ask about a different set of ` +
+        'files next time, since it has just named these. Pass that one and it counts as proved.'
+    : `${opening}Come back whenever you like — a later pass is recorded as revealed rather than ` +
+        'proved, because this board has just named its whole answer and has no second question to ' +
+        'ask.';
 }

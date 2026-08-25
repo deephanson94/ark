@@ -24,7 +24,7 @@ import type { ConsoleMessage, Locator, Page } from 'playwright';
 import { build, preview } from 'vite';
 
 import type { Atlas } from '../src/atlas/index.js';
-import { buildGraph, commitIdFor, serializeAtlas } from '../src/atlas/index.js';
+import { buildGraph, commitIdFor, isNodeId, serializeAtlas } from '../src/atlas/index.js';
 import { buildAtlas, indexOptions } from '../src/indexer/build.js';
 import { VERBS, commitLabel } from '../src/verbs/index.js';
 import { storageKeyFor } from '../src/player/save.js';
@@ -175,6 +175,24 @@ async function submitBoard(page: Page, what: string): Promise<void> {
     );
   }
   await submit.click();
+}
+
+/**
+ * Open the board the guide is offering.
+ *
+ * **The guide's action is two beats.** On a node subject the first click walks
+ * you there and the panel comes up after; clicking once and waiting for
+ * `.console-panel` times out against a board that is working perfectly, and the
+ * failure reads as the feature being broken rather than as the step being
+ * impatient.
+ */
+async function askViaGuide(page: Page): Promise<void> {
+  await page.locator('.guide-action').click();
+  await page.waitForTimeout(400);
+  if (!(await page.locator('.console-panel').isVisible())) {
+    await page.keyboard.press('Enter');
+  }
+  await page.waitForSelector('.console-panel', { state: 'visible', timeout: 5000 });
 }
 
 async function indexForPlayer(): Promise<Atlas> {
@@ -3306,6 +3324,180 @@ async function main(): Promise<number> {
       } finally {
         for (const error of exploitErrors) failures.push({ what: 'console', detail: error });
         await exploitContext.close();
+      }
+    }
+
+    // ---- a failed board is re-earnable, on a question it did not answer --
+    //
+    // ADR-0053, and the owner's decision of 2026-08-25. The rule it replaces was
+    // not a preference: a failing grade prints every missed member **by name**,
+    // so passing the same key afterwards certifies a fact the board handed over.
+    // The re-earn is therefore a second, disjoint window — and the only way to
+    // know it works is to fail a board in a browser, come back, and check that
+    // the rows changed.
+    //
+    // Driven through the real console rather than through `applyGrade`: the unit
+    // suite proves the ledger, and what it cannot prove is that `main.ts` serves
+    // the window the ledger is expecting.
+    {
+      const retriable = atlas.challenges.find(
+        (entry) => entry.retry !== undefined && isNodeId(entry.subject),
+      );
+      if (retriable === undefined) {
+        failures.push({
+          what: 're-earn',
+          detail: 'the atlas ships no board with a second window — this step cannot run',
+        });
+      } else {
+        const retry = retriable.retry;
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const page = await context.newPage();
+        const errors: string[] = [];
+        page.on('pageerror', (error: Error) => errors.push(String(error)));
+        page.on('console', (message: ConsoleMessage) => {
+          if (message.type() === 'error') errors.push(message.text());
+        });
+        try {
+          // Seed every *other* board as passed so the guide points here — the
+          // same trick the Placement step uses, and the reason neither has to
+          // predict what the shell would otherwise serve.
+          const seeded = JSON.stringify({
+            version: 1,
+            surveyed: [],
+            passes: atlas.challenges
+              .filter((entry) => entry.id !== retriable.id)
+              .map((entry) => ({ verb: entry.verb, subject: entry.subject, proved: entry.truth })),
+          });
+          await page.addInitScript(
+            ([storageKey, value]) => window.localStorage.setItem(String(storageKey), String(value)),
+            [storageKeyFor(atlas.repo), seeded],
+          );
+          await page.goto(url, { waitUntil: 'networkidle' });
+          await page.waitForSelector('canvas.map', { timeout: 15_000 });
+          // **Two beats, not one.** The guide's action walks you to the node
+          // first and asks second, so a single click leaves the panel hidden —
+          // which is how this step first failed, with a timeout that reads like
+          // the board being broken. The select-all step already carries this
+          // idiom; it lives in one helper now rather than in two.
+          await askViaGuide(page);
+
+          const rowsOf = async (): Promise<string[]> =>
+            (await page.locator('.choice-button .choice-path').allInnerTexts()).map(rendered);
+          const firstRows = await rowsOf();
+          // Fail it outright: tick one wrong answer and submit. The grade then
+          // prints every member of the key, which is the premise.
+          const wrong = retriable.candidates.find((id) => !retriable.truth.includes(id));
+          const wrongLabel = rendered(labelById.get(wrong ?? '') ?? '');
+          for (const button of await page.locator('.choice-button').all()) {
+            if ((await rowLabel(button)) === wrongLabel) await button.click();
+          }
+          await submitBoard(page, 're-earn: the failing answer');
+          await page.waitForSelector('.console-score', { timeout: 5000 });
+          const below = rendered(await page.locator('.console-register').innerText());
+          // The sentence has to be the **re-earnable** one. A board that can
+          // offer a second window must not tell the player a later pass is
+          // merely revealed — that was true of every board before this and is
+          // now true of only some.
+          if (!below.toLowerCase().includes('different set of files')) {
+            failures.push({
+              what: 're-earn',
+              detail: `a board with a second window promised no re-earn: "${below}"`,
+            });
+          }
+          await page.screenshot({ path: join(SHOT_DIR, 're-earn-failed.png') });
+          await submitBoard(page, 're-earn: back to the map');
+          await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+
+          // Come back to the same board. The rows must have changed.
+          await askViaGuide(page);
+          const secondRows = await rowsOf();
+          const wantedRetry = new Set(
+            (retry?.truth ?? []).map((id) => rendered(labelById.get(id) ?? '')),
+          );
+          const shared = secondRows.filter((row) => firstRows.includes(row));
+          process.stdout.write(
+            `e2e: re-earn → window 0 ${firstRows.length} rows, window 1 ${secondRows.length}, ` +
+              `${shared.length} in common\n`,
+          );
+          const firstKey = new Set(
+            retriable.truth.map((id) => rendered(labelById.get(id) ?? '')),
+          );
+          // Sharing *rows* is fine and expected — the two windows draw
+          // distractors from one pool. Sharing an **answer** is the defect, and
+          // it is the thing the whole mechanism rests on.
+          for (const answer of wantedRetry) {
+            if (firstKey.has(answer)) {
+              failures.push({
+                what: 're-earn',
+                detail: `the second window's key repeats "${answer}" from the first`,
+              });
+            }
+          }
+          if (secondRows.every((row) => firstRows.includes(row))) {
+            failures.push({
+              what: 're-earn',
+              detail: 'the board came back with an identical choice set',
+            });
+          }
+
+          // Answer the window it never named, and this must be **proof**.
+          let ticked = 0;
+          for (const button of await page.locator('.choice-button').all()) {
+            if (wantedRetry.has(await rowLabel(button))) {
+              await button.click();
+              ticked += 1;
+            }
+          }
+          if (ticked !== wantedRetry.size) {
+            failures.push({
+              what: 're-earn',
+              detail: `${ticked} of ${wantedRetry.size} second-window answers were on the board`,
+            });
+          }
+          await submitBoard(page, 're-earn: the earned answer');
+          await page.waitForSelector('.console-score', { timeout: 5000 });
+          const score = rendered(await page.locator('.console-score').innerText());
+          const panel = rendered(await page.locator('.console-panel').innerText());
+          if (!score.includes('100%')) {
+            failures.push({ what: 're-earn', detail: `the second window's own key scored "${score}"` });
+          }
+          // The register line only renders for a *shown* pass. Its absence is
+          // the assertion: this pass proved something.
+          if (panel.includes('Recorded as shown rather than proved')) {
+            failures.push({
+              what: 're-earn',
+              detail: 'a pass on a window the board never named was recorded as shown',
+            });
+          }
+          await page.screenshot({ path: join(SHOT_DIR, 're-earn-proved.png') });
+          await submitBoard(page, 're-earn: closing');
+          await page.waitForSelector('.console-scrim', { state: 'hidden', timeout: 5000 });
+
+          // And the field note claims proof, which is where NORTH-STAR §9 lives.
+          //
+          // `.hud-notes` and `.field-note-claim`, which is what the four other
+          // steps in this file use. The first draft invented `.note-claim` and a
+          // `j` keypress: a selector matching nothing yields an empty list, so
+          // the step reported *"no field note for src/indexer/elevation.ts"* —
+          // which reads exactly like the re-earn having failed to write one.
+          await page.locator('.hud-notes').click();
+          await page.waitForSelector('.notes-panel', { timeout: 5000 });
+          const subjectPath = rendered(labelById.get(retriable.subject) ?? '');
+          const claims = await page.locator('.field-note-claim').allInnerTexts();
+          const note = claims.map(rendered).find((claim) => claimAbout(claim).includes(subjectPath));
+          if (note === undefined) {
+            failures.push({ what: 're-earn', detail: `no field note for ${subjectPath}` });
+          } else if (!note.includes('You proved')) {
+            failures.push({
+              what: 're-earn',
+              detail: `a re-earned board's note does not claim proof: "${note}"`,
+            });
+          }
+          process.stdout.write(`e2e: re-earn note → ${note ?? '(none)'}\n`);
+        } finally {
+          for (const error of errors) failures.push({ what: 'console', detail: error });
+          await context.close();
+        }
       }
     }
 

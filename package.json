@@ -35,7 +35,8 @@
     "play": "tsx src/indexer/cli.ts play",
     "check:keys": "tsx scripts/check-keys.ts",
     "probe:prefix": "tsx scripts/probe-prefix.ts",
-    "probe:cold": "tsx scripts/probe-cold.ts"
+    "probe:cold": "tsx scripts/probe-cold.ts",
+    "probe:retry": "tsx scripts/probe-retry.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

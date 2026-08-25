@@ -5403,3 +5403,64 @@ widest commits beats band A on **0 / 2 / 2 / 0 / 2 / 1** boards across the six r
 filters to commits an earlier reveal has already priced, and a printed column is unfiltered. Then the
 owner's open question from last time: whether a failed board should be re-earnable at all (ADR-0047's
 proved/shown rule).
+
+---
+
+## A failed board is re-earnable, on a question it did not answer for you
+
+The owner decided the outcome (2026-08-25); the mechanism was not free to choose. **A failing
+submission names the whole answer key on screen, by name** — `Grade.missed` is `truth \ picked`,
+NORTH-STAR §8.1 requires an honest grade, and the console renders one `missed` row per member. So
+within one board there is no state after a failed answer in which the player does not know the
+answer, and letting a later pass mint `proved` on the same key restores ADR-0047 §2.1's laundering
+sequence in full. Three variants die to that one sentence, including the "hold the reveal until I
+ask" pacing control ADR-0047's own corollary forbids.
+
+The honest re-earn is a **second, disjoint window**: `Challenge.retry`, the same subject, an answer
+key sharing no member with the board's. Knowing window 0 tells you nothing about window 1. The
+machinery already existed — ADR-0012's `reask` re-asks a *colliding* subject with a later window of
+its own ranking; `secondWindow` runs the same search aimed at *give this subject a key **it** has not
+issued*, with the deck's uniqueness rule still applying on top. It is stored **on the board** so it
+costs no deck slot, and computed **after the cap**, which drops 95 of hono's 149.
+
+**The ledger change is one expression, and it is a generalisation rather than an exception.**
+ADR-0047 made proof a property of the first submission; its *reason* was about members all along — a
+later pass certifies nothing **because the board already named them**. So the rule is now `proved`
+unless a claimed member was already named. It reproduces every case the old rule decided (first pass
+proves; retyped key is `shown`; the sweep is `shown`, because its first submission records a
+certificate naming that window's whole key) and adds the one it could not express. **ADR-0047's two
+farm suites pass unchanged**, which is the control.
+
+The first draft had a hole one step further out: the certificate *replaced* on each grading, so
+failing both windows left a record naming only the second and window 0 came back looking un-named,
+ready to be retyped for proof — §2.1 rebuilt out of the fix for it. It accumulates now, inside the
+board's own member universe, which keeps ADR-0047 decision 3b's re-roll behaviour intact rather than
+arguing with it.
+
+**Blast Radius only, and that is named as a partial delivery.** 75 / 50 / 89 / 88% of its boards ship
+a second window on ark, hono, kysely and graphql-js, against arithmetic ceilings of 78 / 56 / 95 /
+88% — so the gate and the distractor build cost 3–6 points and supply is the constraint. The other
+three verbs are unwired and their ceilings are lower for reasons no design changes: Companion 41–64%,
+Archaeology 24–56%, **Placement 4–20%**, because its subject is a commit and a commit's file list is
+usually about the size of the key sampled out of it.
+
+Three things beyond the verb. `belowBarNote` told every failing player that a later pass is *revealed
+rather than proved* — now **false on 75% of this repo's Blast Radius boards** — so there are two
+sentences, each asserted **true** of its own case rather than merely rendered. The generator's
+authoritative guardrail-4 check now runs on the retry's own candidates: it reads `entry.candidateRefs`,
+which is window 0 and only window 0, so without that line half of each retriable board would be the
+one choice set in the atlas no authoritative check had seen. And `check:keys` iterates **choice sets**
+rather than challenges — it is the only instrument here that reads the repository's *source*, so it
+is the only one that can see a **missing** edge, and covering retries with the atlas-derived checks
+alone would have been covering them with the checks that structurally cannot see the defect.
+
+`ATLAS_VERSION` 11 → 12 (+3.6–5.8%, budget unmoved at 1,681 B/file against 2,621); `SAVE_VERSION`
+stays at 2, because the ledger's shape did not change, only what is derived from it. Four mutants,
+each killed by exactly the assertion aimed at it. The e2e plays the whole loop in a browser and reads
+back *"You proved 6 files that depend on src/indexer/elevation.ts"*.
+
+**Next**: **wire the other three verbs**, cheapest first by supply — Companion (41–64%), then
+Archaeology (24–56%), then Placement, which may not be worth it at 4–20%. Then **Archaeology's
+candidate rows**, which still carry no structural fact: its obvious one, the commit's diff width,
+beats band A on 0 / 2 / 2 / 0 / 2 / 1 boards across six repos and so needs a gate heuristic before it
+can be shown, exactly as `datedChurn` did.

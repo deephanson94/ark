@@ -48,7 +48,7 @@ import type { Orbit } from './orbit.js';
 import { DEFAULT_ORBIT, pickColumn, tip } from './orbit.js';
 import type { Progress } from './progress.js';
 import { PASS_THRESHOLD, VERBS, channelOf } from '../verbs/index.js';
-import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, recordSurvey, subjectsPassed, verbOfKey } from './progress.js';
+import { answerKey, answeredKeys, applyGrade, deriveFog, gradedKeys, livenessOf, namedMembers, recordSurvey, servedBoard, subjectsPassed, verbOfKey } from './progress.js';
 import { browserStore, loadProgress, saveProgress, storageKeyFor } from './save.js';
 import type { Tally } from './tally.js';
 import { EMPTY_TALLY, noteGrade, parseTally, serializeTally, summarise, tallyKeyFor } from './tally.js';
@@ -734,6 +734,25 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
    * everything is answered keeps the inspector able to say what the node was
    * asked about.
    */
+  /**
+   * The board, in the window this player should be asked (ADR-0053).
+   *
+   * **One place, and it has to be one place.** Every reader downstream — the
+   * console, the map's candidate markers, the reveal, the grade, the field note
+   * — takes `candidates`, `truth` and `witness` off the challenge it is handed,
+   * so a second site choosing a window would be a second answer to *which
+   * question is this*, which is how ADR-0014's leaks all began. Both functions
+   * that hand a board out go through here, and `suggested` is whatever
+   * `challengeFor` returned.
+   */
+  const inWindow = (challenge: Challenge | null): Challenge | null =>
+    challenge === null
+      ? null
+      : servedBoard(
+          challenge,
+          namedMembers(progress, liveness, answerKey(challenge.verb, challenge.subject)),
+        );
+
   const challengeFor = (node: SceneNode | null): Challenge | null => {
     if (node === null) return null;
     // **The guide's own suggestion wins on the node it sent you to**, and this is
@@ -758,7 +777,9 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
     }
     const bucket = challengesById.get(node.id);
     if (bucket === undefined || bucket.length === 0) return null;
-    return bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null;
+    return inWindow(
+      bucket.find((c) => !selector.answered.has(answerKey(c.verb, c.subject))) ?? bucket[0] ?? null,
+    );
   };
 
   /**
@@ -780,7 +801,7 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
         !isNodeId(challenge.subject) &&
         !selector.answered.has(answerKey(challenge.verb, challenge.subject)),
     );
-    return [...open].sort(challengeOrder)[0] ?? null;
+    return inWindow([...open].sort(challengeOrder)[0] ?? null);
   };
 
   const describe = (node: SceneNode | null): void => {
@@ -1465,7 +1486,12 @@ function start(scene: Scene, root: HTMLElement, arm: Arm | null): void {
   }
 
   function refreshGuide(openQuestions: number): void {
-    const upcoming = nextUp();
+    // **Windowed here too, and this is the third hand-out rather than a fourth
+    // rule.** `challengeFor` returns `suggested` unchanged when the guide is
+    // pointing at the node you clicked, so a suggestion that skipped `inWindow`
+    // would reach the console as window 0 through a path the other two close —
+    // one board served in two windows depending on how you opened it.
+    const upcoming = inWindow(nextUp());
     suggested = upcoming;
     const upcomingRef = upcoming === null ? undefined : scene.graph.refById.get(upcoming.subject);
     // **What the guide is offering, as the selector's own key.** The e2e used to
