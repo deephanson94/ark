@@ -3340,9 +3340,29 @@ async function main(): Promise<number> {
     // suite proves the ledger, and what it cannot prove is that `main.ts` serves
     // the window the ledger is expecting.
     {
-      const retriable = atlas.challenges.find(
+      // **Say which verb this played, and count the ones it did not.**
+      // `challenges` is sorted by id, so `archaeology` < `blastRadius` <
+      // `companion` and this always lands on the same verb for a given deck —
+      // and the log line read identically whichever it was, so a deck change
+      // that moved it would leave the other verb's generator path silently
+      // untested with nothing on screen to say so. The player side is
+      // verb-blind (`servedBoard`), but the *generators* are not: each verb
+      // computes its own second window, and Companion's is a different function
+      // in a different file from Blast Radius's.
+      const retriableAll = atlas.challenges.filter(
         (entry) => entry.retry !== undefined && isNodeId(entry.subject),
       );
+      const byVerb = new Map<string, number>();
+      for (const entry of retriableAll) {
+        byVerb.set(entry.verb, (byVerb.get(entry.verb) ?? 0) + 1);
+      }
+      process.stdout.write(
+        `e2e: second windows shipped → ${[...byVerb]
+          .sort()
+          .map(([verb, n]) => `${verb} ${n}`)
+          .join(', ')}\n`,
+      );
+      const retriable = retriableAll[0];
       if (retriable === undefined) {
         failures.push({
           what: 're-earn',
@@ -3416,8 +3436,8 @@ async function main(): Promise<number> {
           );
           const shared = secondRows.filter((row) => firstRows.includes(row));
           process.stdout.write(
-            `e2e: re-earn → window 0 ${firstRows.length} rows, window 1 ${secondRows.length}, ` +
-              `${shared.length} in common\n`,
+            `e2e: re-earn (${retriable.verb}) → window 0 ${firstRows.length} rows, ` +
+              `window 1 ${secondRows.length}, ${shared.length} in common\n`,
           );
           const firstKey = new Set(
             retriable.truth.map((id) => rendered(labelById.get(id) ?? '')),
