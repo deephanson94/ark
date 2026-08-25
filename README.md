@@ -192,9 +192,9 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   other row reads zero — 12 of 12 verb × repo across ark, hono, kysely and graphql-js.
 - **Two columns and no reasoning still reach a bare pass on a quarter to a half of Placement's boards.**
   Reading each candidate's churn and last-seen — which its rows now print, [ADR-0052](./docs/decisions/0052-a-row-may-carry-what-its-own-gate-already-prices.md)
-  — and nothing else scores a mean 0.282 / 0.172 / 0.176 / 0.159 / 0.265 / 0.387 on ark, hono, kysely,
-  graphql-js, django and svelte, and reaches the 0.5 pass mark on **28% / 24% / 19% / 16% / 39% / 56%**
-  of boards (`npx tsx scripts/probe-cold.ts`, measured at `9d2a2a8`). It beats band A on **zero** boards
+  — and nothing else scores a mean 0.346 / 0.171 / 0.176 / 0.159 / 0.265 / 0.387 on ark, hono, kysely,
+  graphql-js, django and svelte, and reaches the 0.5 pass mark on **35% / 24% / 19% / 16% / 39% / 56%**
+  of boards (`npm run probe:cold`, on a clean clone of `3d08b01`). It beats band A on **zero** boards
   everywhere, which the gate guarantees rather than luck. So this is a grade-C floor bought with no
   reasoning about coupling, and the gate's bar is band A on purpose ([ADR-0010](./docs/decisions/0010-terrain-islands-and-the-ctrl-f-gate.md)):
   *"the files in this folder are coupled" is cheap but true*. It is a gap and not a defect, the honest
@@ -205,12 +205,14 @@ Kept deliberately, because a checklist item nobody can satisfy gets ticked from 
   complaint [ADR-0052](./docs/decisions/0052-a-row-may-carry-what-its-own-gate-already-prices.md)
   answers for Placement is intact for the verb three round-7 testers named alongside it. The obvious
   fact to add is the commit's **diff width**, and it is **measured rather than assumed**: ticking the
-  k widest commits on the board beats band A on **1 / 2 / 2 / 0 / 2 / 1** boards across ark, hono,
-  kysely, graphql-js, django and svelte, **several at 1.000** (`npm run probe:cold`). So it needs a
-  gate heuristic before it can be shown, exactly as `datedChurn` did — and unlike that one, **this
-  guess beats a board on the bootstrap repo**, so ark would have caught it. `broadKnown` does not
-  cover it: that heuristic filters to commits an *earlier reveal has already priced*
-  (`subject.widthKnown`), and the guess a printed column would enable is unfiltered.
+  k widest commits on the board beats band A on **0 / 2 / 2 / 0 / 2 / 1** boards across ark, hono,
+  kysely, graphql-js, django and svelte, **several at 1.000** (`npm run probe:cold`, on a clean clone
+  of `3d08b01`). So it needs a gate heuristic before it can be shown, exactly as `datedChurn` did.
+  `broadKnown` does not cover it: that heuristic filters to commits an *earlier reveal has already
+  priced* (`subject.widthKnown`), and the guess a printed column would enable is unfiltered. **ark's
+  cell read 1 an hour earlier**, on the working tree, while the five external columns reproduced to
+  the digit — ark indexes itself, so a figure taken before the commit that carries it is measuring a
+  different repository, and a single-board margin here is one commit of noise rather than a finding.
 - **The first ten minutes score 7.4 visual and 6.8 "would you keep playing", against a goal of 8.**
   Ten personas from different technical backgrounds, one fixed build each round, each told only what
   a new player is told, scoring off screenshots they looked at. Seven rounds:

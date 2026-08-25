@@ -136,20 +136,43 @@ width** — is measured here rather than left to the next session to assume:
 
 | repo | Archaeology boards | widest-k mean | reaches pass | beats A | best |
 |---|---|---|---|---|---|
-| ark | 40 | 0.255 | 30% | **1** | 1.000 |
+| ark | 40 | 0.225 | 25% | 0 | 0.667 |
 | hono | 54 | 0.218 | 20% | **2** | 1.000 |
 | kysely | 75 | 0.272 | 29% | **2** | 1.000 |
 | graphql-js | 69 | 0.193 | 17% | 0 | 0.750 |
 | django | 83 | 0.222 | 31% | **2** | 1.000 |
 | svelte | 71 | 0.233 | 34% | **1** | 1.000 |
 
+Measured on a clean clone of `3d08b01`. The five external columns are frozen
+repositories and the ark row is not — see §7.
+
 So it is **not free**, and it needs a gate heuristic first exactly as this
-decision's column did. Two differences worth carrying forward. This guess beats
-a board on **ark**, so unlike `datedChurn` the bootstrap repo would have caught
-it. And `broadKnown` does **not** already cover it: that heuristic filters to
-commits an earlier reveal has priced (`subject.widthKnown`), and the guess a
-printed column enables is unfiltered — a heuristic whose name suggests it covers
-a class, covering a subset of it, which is this repo's oldest recurring shape.
+decision's column did. And `broadKnown` does **not** already cover it: that
+heuristic filters to commits an earlier reveal has priced (`subject.widthKnown`),
+and the guess a printed column enables is unfiltered — a heuristic whose name
+suggests it covers a class, covering a subset of it, which is this repo's oldest
+recurring shape.
+
+## 7. The ark row moved between the draft and the commit
+
+The table above first read **1 board beaten, best 1.000** for ark, and this
+section closed on it: *"unlike `datedChurn`, this guess beats a board on the
+bootstrap repo, so ark would have caught it."* Re-measured on a clean clone of
+the commit that carries this document, ark is **0, best 0.667** — and the five
+external columns reproduce **to the digit**.
+
+Nothing about Archaeology changed. Ark indexes itself, so committing an ADR, a
+test file and a probe re-rolled its own commit list and therefore its own deck.
+That is this repo's landmine about *the act of recording a measurement on a
+self-indexing repo changing the thing measured*, arriving inside the document
+that had applied its sibling rule correctly six paragraphs earlier — and the
+exactness of the five frozen columns is the only reason the cause was findable,
+which is exactly how that landmine says it presents.
+
+The conclusion survives on four non-zero external repos. The sentence built on
+the ark cell does not, and it was the sentence this section was proudest of. Two
+things follow. **Quote the external columns**, which are frozen and reproduce.
+And **a single-board margin on ark is one commit of noise**, not a finding.
 
 ## 6. How it is checked
 

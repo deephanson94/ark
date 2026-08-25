@@ -5388,7 +5388,9 @@ And the Placement note assertion sits on the step **guaranteed** to serve a Plac
 the step whose verb moves with every commit — on the run that caught this, that arm never executed.
 
 Stated rather than buried: reading both columns and nothing else still reaches a bare pass on
-**28% / 24% / 19% / 16% / 39% / 56%** of boards across the six repos. That is a grade-C floor bought
+**35% / 24% / 19% / 16% / 39% / 56%** of boards across the six repos (clean clone of `3d08b01`).
+*Every ark figure in this entry was re-measured there after committing, and the ark ones had all
+moved — the five external columns reproduced to the digit. See ADR-0052 §7.* That is a grade-C floor bought
 with no reasoning about coupling. The gate's bar is band A on purpose (ADR-0010), the honest
 comparison is against the **zero** the same player scored yesterday, and moving the bar governs every
 verb — an owner's decision.
@@ -5396,9 +5398,8 @@ verb — an owner's decision.
 **Next**: **Archaeology's half of the same finding**, which is untouched — and the obvious fix is
 already measured, because the lesson above is cheap to apply twice. Its candidates are commits
 printing a date and a message; the fact they lack is the commit's **diff width**. Ticking the k
-widest commits beats band A on **1 / 2 / 2 / 0 / 2 / 1** boards across the six repos, several at
-1.000, so it needs a gate heuristic before it can be shown — and unlike `datedChurn`, this one beats
-a board on **ark**, so the bootstrap repo would have caught it. `broadKnown` does not cover it: it
+widest commits beats band A on **0 / 2 / 2 / 0 / 2 / 1** boards across the six repos, several at
+1.000, so it needs a gate heuristic before it can be shown. `broadKnown` does not cover it: it
 filters to commits an earlier reveal has already priced, and a printed column is unfiltered. Then the
 owner's open question from last time: whether a failed board should be re-earnable at all (ADR-0047's
 proved/shown rule).
