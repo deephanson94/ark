@@ -263,7 +263,10 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
       // the gate's own showcase case was the exploit — pick one file correctly,
       // take precision 1.0, get the whole annotated key and the drawn cone
       // without passing, reopen and type it back. What is defended instead is
-      // the ledger: `applyGrade` mints proof only on a board's first submission.
+      // the ledger: `applyGrade` mints proof only for members the board has not
+      // already named (ADR-0053, which restates ADR-0047 decision 2's own reason
+      // and generalises it — this comment said "only on a board's first
+      // submission", which was the same rule while a board had one window).
       const reveal = verb.reveal(scene.atlas, scene.graph, challenge, grade);
       const register = handlers.onGraded(challenge, grade, reveal);
       renderResult(challenge, grade, reveal, register);
