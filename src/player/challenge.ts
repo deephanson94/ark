@@ -184,8 +184,14 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     // the ordering a list of events is read in, and it is not a giveaway kept
     // by accident: every row shows its date whatever the order, so the "tick the
     // oldest K" guess exists either way and `oldestK` scores and refuses it.
+    // **The verb decides whether a row carries a fact, and which.** The console
+    // stays verb-blind: it asks, renders what comes back, and knows nothing
+    // about churn or dates. Placement is the only verb that answers today,
+    // because its gate is the only one that already scores those numbers.
+    const noteFor = (id: AtlasId): string | null =>
+      VERBS[challenge.verb as keyof typeof VERBS]?.candidateNote?.(id, words) ?? null;
     const rows = [...challenge.candidates]
-      .map((id) => ({ id, label: labelOf(id) }))
+      .map((id) => ({ id, label: labelOf(id), note: noteFor(id) }))
       .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
     const submit = el('button', 'console-submit', ['Submit']);
@@ -216,7 +222,13 @@ export function createConsole(scene: Scene, handlers: ConsoleHandlers): Console 
     for (const row of rows) {
       const box = el('span', 'choice-box');
       const item = el('li', 'choice');
-      const button = el('button', 'choice-button', [box, el('span', 'choice-path', [row.label])]);
+      const button = el('button', 'choice-button', [
+        box,
+        el('span', 'choice-text', [
+          el('span', 'choice-path', [row.label]),
+          ...(row.note === null ? [] : [el('span', 'choice-note', [row.note])]),
+        ]),
+      ]);
       button.type = 'button';
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {

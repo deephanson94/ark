@@ -109,6 +109,33 @@ export const placement: Verb = {
   grade(challenge: Challenge, answer: SetAnswer) {
     return gradeSet(challenge, answer, PHRASING);
   },
+  /**
+   * Each candidate's own history, which this verb's gate already assumes the
+   * player can read.
+   *
+   * Three round-7 cold testers reported this board as word-matching rather than
+   * reasoning — one scored **0%** and said *"I had no basis for that at all"* —
+   * and the structural cause is that `placement` declares `channel: 'nothing'`,
+   * so the map says nothing about the question while it is open. Meanwhile
+   * `COMMIT_HEURISTICS` scores `churn` and `recency`, so **every shipped board
+   * is already proof against a player who can read these two numbers**; they
+   * were simply unreadable, living in an inspector the open board's hover
+   * redirect makes unreachable.
+   *
+   * Measured before shipping (`scripts/probe-cold.ts`): reading both numbers and
+   * nothing else scores a mean **0.282 / 0.172 / 0.154** on ark, hono and
+   * kysely, against a 0.5 pass mark — and beats band A on **zero** boards on all
+   * three, which is what the gate guarantees rather than a coincidence. It
+   * reaches a bare pass on 16–33%, which is a grade C floor for a player who
+   * reads twenty rows of evidence and compares them; today the same player has
+   * nothing and scores zero.
+   */
+  candidateNote: (id, words) => {
+    const history = words.history(id);
+    if (history === null) return null;
+    const commits = `${history.churn} commit${history.churn === 1 ? '' : 's'}`;
+    return history.lastSeen === null ? commits : `${commits} · last ${history.lastSeen}`;
+  },
   prompt: promptFor,
   reveal: revealOf,
   /**

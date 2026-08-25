@@ -20,7 +20,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import type { ConsoleMessage, Page } from 'playwright';
+import type { ConsoleMessage, Locator, Page } from 'playwright';
 import { build, preview } from 'vite';
 
 import type { Atlas } from '../src/atlas/index.js';
@@ -65,6 +65,22 @@ interface Failure {
  */
 function rendered(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A choice row's **member label**, which is no longer the row's whole text.
+ *
+ * A row renders `.choice-path` — the member's label — and, where the verb
+ * supplies one, `.choice-note` beside it. `innerText` on the button returns
+ * both, so every `wanted.has(await button.innerText())` in this file silently
+ * stopped matching the moment Placement began annotating its candidates: six
+ * sites, one of which ticked nothing and then hung thirty seconds on a
+ * correctly-disabled Submit. That is this file's own landmine — *rendered text
+ * is not the string the code put there* — arriving from a new direction, so the
+ * rule lives once now rather than six times.
+ */
+async function rowLabel(button: Locator): Promise<string> {
+  return rendered(await button.locator('.choice-path').innerText());
 }
 
 /**
@@ -539,6 +555,28 @@ async function main(): Promise<number> {
       if (!question.includes(expected)) {
         failures.push({ what: 'prompt', detail: `unexpected wording: "${question}"` });
       }
+      const choicesExpected = await page.locator('.choice-button').count();
+      // **A Placement row carries its own history, and no other verb's does.**
+      // Three round-7 cold testers reported this board as word-matching rather
+      // than reasoning — one scored 0% — because `placement` declares
+      // `channel: 'nothing'` while its gate already scores `churn` and
+      // `recency`. Showing them is free against that gate; showing them on a
+      // verb whose gate does not score them would open a channel nothing
+      // refuses, so the *absence* is asserted too.
+      const rowNotes = await page.locator('.choice-note').count();
+      process.stdout.write(`e2e: candidate notes → ${rowNotes} on a ${title} board\n`);
+      if (title === 'placement' && rowNotes !== choicesExpected) {
+        failures.push({
+          what: 'prompt',
+          detail: `a placement board showed ${rowNotes} candidate notes over ${choicesExpected} rows`,
+        });
+      }
+      if (title !== 'placement' && rowNotes !== 0) {
+        failures.push({
+          what: 'prompt',
+          detail: `a ${title} board annotated ${rowNotes} rows, and its gate does not score that`,
+        });
+      }
       const choices = await page.locator('.choice-button').count();
       if (choices < 4) {
         failures.push({ what: 'challenge', detail: `only ${choices} choices offered` });
@@ -706,7 +744,7 @@ async function main(): Promise<number> {
         let clicked = 0;
         for (let i = 0; i < choices; i++) {
           const button = page.locator('.choice-button').nth(i);
-          if (!wanted.has(rendered(await button.innerText()))) continue;
+          if (!wanted.has(await rowLabel(button))) continue;
           await button.click();
           clicked++;
         }
@@ -1155,7 +1193,7 @@ async function main(): Promise<number> {
         const options = await page.locator('.choice-button').count();
         for (let i = 0; i < options; i++) {
           const button = page.locator('.choice-button').nth(i);
-          if (wanted.has((await button.innerText()).trim())) await button.click();
+          if (wanted.has(await rowLabel(button))) await button.click();
         }
         await submitBoard(page, 'companion board');
         await page.waitForSelector('.console-score', { timeout: 5000 });
@@ -1388,7 +1426,7 @@ async function main(): Promise<number> {
           let picked = false;
           for (let i = 0; i < count; i++) {
             const button = page.locator('.choice-button').nth(i);
-            const label = rendered(await button.innerText());
+            const label = await rowLabel(button);
             if (label === spokenLabel) {
               await button.click();
               picked = true;
@@ -2841,10 +2879,25 @@ async function main(): Promise<number> {
         } else {
           const wanted = new Set(played.truth.map((id) => pathById.get(id) ?? ''));
           const options = await seededPage.locator('.choice-button').count();
+          // **The positive arm of the candidate-note check, on the one step
+          // that is guaranteed to be Placement.** The general board step above
+          // asserts it too, but which verb *that* step plays moves with every
+          // commit — a `title === 'placement'` arm there is a prediction about
+          // a deck nobody controls, and on the run that caught this it never
+          // executed. Here the guide is seeded to a Placement board, so the arm
+          // runs every time.
+          const seededNotes = await seededPage.locator('.choice-note').count();
+          process.stdout.write(`e2e: placement notes → ${seededNotes} over ${options} rows\n`);
+          if (seededNotes !== options) {
+            failures.push({
+              what: 'placement',
+              detail: `${seededNotes} candidate notes over ${options} rows`,
+            });
+          }
           let clicked = 0;
           for (let i = 0; i < options; i++) {
             const button = seededPage.locator('.choice-button').nth(i);
-            if (!wanted.has(rendered(await button.innerText()))) continue;
+            if (!wanted.has(await rowLabel(button))) continue;
             await button.click();
             clicked++;
           }
@@ -3128,7 +3181,7 @@ async function main(): Promise<number> {
           await exploitPage.keyboard.press('Enter');
         }
         await exploitPage.waitForSelector('.choice-button', { timeout: 5000 });
-        const rows = await exploitPage.locator('.choice-button').allInnerTexts();
+        const rows = await exploitPage.locator('.choice-button .choice-path').allInnerTexts();
         for (const button of await exploitPage.locator('.choice-button').all()) await button.click();
         await submitBoard(exploitPage, 'select-all exploit');
         await exploitPage.waitForSelector('.console-score', { timeout: 5000 });
@@ -3182,7 +3235,7 @@ async function main(): Promise<number> {
         // Tick exactly the rows the reveal named as answers — `.note-missed`
         // and `.note-correct` are the truth set, `.note-spurious` is not.
         for (const button of await exploitPage.locator('.choice-button').all()) {
-          if (key.has((await button.innerText()).trim())) await button.click();
+          if (key.has(await rowLabel(button))) await button.click();
         }
         await submitBoard(exploitPage, 'select-all farm');
         await exploitPage.waitForSelector('.console-score', { timeout: 5000 });

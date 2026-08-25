@@ -18,7 +18,7 @@ import {
   readWitness,
   validateAtlas,
 } from '../../src/atlas/index.js';
-import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet } from '../../src/verbs/index.js';
+import { DEFAULT_GENERATE_OPTIONS, PASS_THRESHOLD, VERBS, channelOf, scoreSet, wordsFor } from '../../src/verbs/index.js';
 import { spread } from '../../src/verbs/sample.js';
 import { commitSupply } from '../../src/verbs/commits.js';
 import { generateWithReport, placement } from '../../src/verbs/placement/index.js';
@@ -398,7 +398,7 @@ describe('pillar 3: the Ctrl+F gate reads the commit message', () => {
     expect(new Map(report.skipped).get('ctrlF')).toBe(1);
   });
 
-  it('scores exactly the four guesses this board invites, and no others', () => {
+  it('scores exactly the five guesses this board invites, and no others', () => {
     const { report } = generateWithReport(fixture([PLAIN]), OPTIONS);
     // `directory` is absent because a commit has no directory — a heuristic a
     // board cannot invite would delete questions for a strategy nobody could use.
@@ -407,8 +407,14 @@ describe('pillar 3: the Ctrl+F gate reads the commit message', () => {
     // being about the subject: a commit has no directory, but its *candidates*
     // do, and the guess is anchored on nothing at all. hono shipped 7 Placement
     // boards whose key was exactly one `src/middleware/*` folder.
+    //
+    // `datedChurn` is the conjunction of the two below it, which scoring them
+    // separately does not bound. It arrived with the candidate-note row: those
+    // two numbers were always priced here and were not on screen, and making
+    // them readable is what made the guess available. See `gate.ts`.
     expect(report.heuristicMean.map(([id]) => id).sort()).toEqual([
       'churn',
+      'datedChurn',
       'name',
       'partition',
       'recency',
@@ -658,6 +664,49 @@ describe('a commit subject is a place the map does not have', () => {
       expect(note.note).not.toContain(' hops');
       expect(note.note).not.toContain(' → ');
     }
+  });
+
+
+  it('puts each candidate’s own history on its row, which its gate already assumes', () => {
+    // Three round-7 cold testers reported this board as word-matching rather
+    // than reasoning — one scored 0% and said "I had no basis for that at all"
+    // — because `placement` declares `channel: 'nothing'`, so the map says
+    // nothing while the board is open. Its gate meanwhile scores `churn` and
+    // `recency`, so every shipped board is already proof against a player who
+    // can read those two numbers; they were simply unreadable.
+    const atlas = fixture([PLAIN]);
+    const challenge = only(atlas);
+    const words = wordsFor(buildGraph(atlas));
+    const notes = challenge.candidates.map((id) => placement.candidateNote?.(id, words) ?? null);
+    expect(notes.every((note) => note !== null)).toBe(true);
+    // This fixture's nodes carry no `lastSeen`, so the note is the count alone —
+    // which is the right fallback and not the interesting case, so both forms
+    // are pinned rather than only the one this atlas happens to produce.
+    expect(notes[0]).toMatch(/^\d+ commits?( · last \d{4}-\d{2}-\d{2})?$/);
+    const dated = placement.candidateNote?.('n:x', {
+      ...plainWords,
+      history: () => ({ churn: 14, lastSeen: '2026-08-21' }),
+    });
+    expect(dated).toBe('14 commits · last 2026-08-21');
+    const once = placement.candidateNote?.('n:x', {
+      ...plainWords,
+      history: () => ({ churn: 1, lastSeen: null }),
+    });
+    expect(once).toBe('1 commit');
+    // A commit id has no history, so a verb asking gets nothing rather than a
+    // wrong-looking string.
+    expect(placement.candidateNote?.('c:abc', plainWords)).toBeNull();
+  });
+
+  it('is the only verb that annotates a row, because the others’ gates do not score it', () => {
+    // **The seam.** Blast Radius's gate is `directory`, `name`, `partition` — it
+    // scores neither churn nor recency, so the same annotation there would open
+    // a channel nothing refuses. A console deciding this for itself would be
+    // choosing what a verb gives away.
+    expect(VERBS.blastRadius.candidateNote).toBeUndefined();
+    expect(VERBS.companion.candidateNote).toBeUndefined();
+    expect(VERBS.archaeology.candidateNote).toBeUndefined();
+    expect(VERBS.placement.candidateNote).toBeDefined();
   });
 
   it('names only files its own answer key holds', () => {

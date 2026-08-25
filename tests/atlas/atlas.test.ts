@@ -1390,6 +1390,78 @@ describe('a board cannot be answered by sorting the paths (pillar 3)', () => {
   });
 });
 
+/**
+ * **A Placement row prints its own churn and last-seen, so the two-column guess
+ * must not win** — NORTH-STAR pillar 3, one step past the prefix check above.
+ *
+ * `gate.ts` has scored `churn` and `recency` since ADR-0018, but each *alone*:
+ * the conjunction is not bounded by either, because a date filter returning more
+ * rows than the key needs can be truncated by churn, raising precision without
+ * costing recall. That was priced and unavailable while both numbers lived in an
+ * inspector an open board makes unreachable. Printing them on the row made it
+ * available, and the measurement that followed is why this test exists: three
+ * repos said the channel was free (ark, hono, kysely — 0 boards) and the fourth
+ * and fifth said it hands out an exact key (django 2, svelte 2, at 1.000).
+ *
+ * Here rather than in a unit fixture for the same reason as the prefix check: a
+ * fixture's dates are too regular to produce the population, which is this
+ * repo's own landmine about a suite running twelve assertions over one board.
+ */
+describe('a board cannot be answered by reading churn and last-seen (pillar 3)', () => {
+  it('has no Placement board where the two columns together beat band A', () => {
+    const nodeById = new Map(atlas.nodes.map((node) => [node.id, node]));
+    const commitById = new Map(
+      atlas.history.commits.map((commit) => [commitIdFor(commit.sha), commit] as const),
+    );
+    let checked = 0;
+    let offered = 0;
+    const beaten: string[] = [];
+    for (const challenge of atlas.challenges) {
+      if (challenge.verb !== 'placement') continue;
+      const truth = challenge.truth.filter(isNodeId);
+      const commit = commitById.get(challenge.subject as never);
+      if (truth.length === 0 || commit === undefined) continue;
+      checked += 1;
+      const files = challenge.candidates.filter(isNodeId);
+      const byChurn = [...files].sort(
+        (a, b) =>
+          (nodeById.get(b)?.churn ?? 0) - (nodeById.get(a)?.churn ?? 0) || (a < b ? -1 : 1),
+      );
+      const dated = files.filter((id) => nodeById.get(id)?.lastSeen === commit.date);
+      if (dated.length > 0) offered += 1;
+      // Both readings a person makes with two columns, exactly as `gate.ts`
+      // scores them: of those dated right the busiest, and of the busiest those
+      // dated right. Re-derived rather than imported — a check that calls the
+      // function under test cannot catch a bug in it — which is why the whole
+      // rule is carried, including the second reading. Scoring only the first
+      // would have left svelte's churn-then-date board open.
+      const datedThenBusiest = [...dated]
+        .sort(
+          (a, b) =>
+            (nodeById.get(b)?.churn ?? 0) - (nodeById.get(a)?.churn ?? 0) || (a < b ? -1 : 1),
+        )
+        .slice(0, truth.length);
+      const busiestThenDated = byChurn
+        .slice(0, truth.length)
+        .filter((id) => nodeById.get(id)?.lastSeen === commit.date);
+      const best = Math.max(
+        datedThenBusiest.length === 0 ? 0 : scoreSet(datedThenBusiest, truth).score,
+        busiestThenDated.length === 0 ? 0 : scoreSet(busiestThenDated, truth).score,
+      );
+      if (best >= 0.78) beaten.push(`${challenge.id} (${best.toFixed(3)})`);
+    }
+    expect(checked).toBeGreaterThan(20);
+    // **The plant.** If no board offers a candidate dated on the commit's own
+    // day, the date half of the guess never fires and a clean zero would be an
+    // instrument measuring nothing — the failure mode this repo keeps paying
+    // for, and the one that always reads as good news.
+    expect(offered, 'no board offers a date-matched candidate — this check is inert').toBeGreaterThan(
+      5,
+    );
+    expect(beaten).toEqual([]);
+  });
+});
+
 describe('every wrong answer is accounted for (ADR-0050)', () => {
   it('gives each candidate a row, and no unpicked row a strategy', () => {
     const graph = buildGraph(atlas);

@@ -5343,3 +5343,62 @@ the failing answer's certificate was thrown away, `first` stayed true, and the s
 **Next**: the design question underneath, which is the owner's — whether a failed board should be
 re-earnable at all (ADR-0047's proved/shown rule). Round 7's other open finding is unchanged: three
 testers report Archaeology and Placement as word-matching rather than structural.
+
+---
+
+## A Placement row carries what its own gate already prices — and the conjunction nobody priced
+
+Three round-7 testers read Placement as word-matching rather than structural; one scored **0%** and
+said *"I had no basis for that at all"*. The cause was in the code, not the wording: `placement`
+declares `channel: 'nothing'`, so the map is scenery while its board is open — a refusal nobody ever
+decided, unlike Companion's, which ADR-0016 argues for. Meanwhile `gate.ts` has scored Placement
+against `churn` and `recency` since ADR-0018, so **every shipped board was already proof against a
+player who could read those two numbers**, and the player could not: they live in an inspector an
+open board makes unreachable.
+
+So `Verb.candidateNote?()` — optional, per verb, Placement the only implementer — puts
+`12 commits · last 2026-08-21` on each row. `Words.history()` supplies the fact and the verb writes
+the string, because a console that decided this would be choosing what a verb gives away (ADR-0027).
+Blast Radius's gate prices neither column, so the **absence** is asserted too.
+
+**Then measuring it changed the shape of the change.** The two heuristics were scored *each alone*
+and the conjunction is not bounded by either — a date filter returning more rows than the key needs
+can be truncated by churn, raising precision without costing recall. On ark, hono, kysely and
+graphql-js that guess beats band A on **0 boards**. On django it beats it on **2** and on svelte on
+**2**, both at a flat **1.000**: an exact answer key from reading two columns. Four repos said the
+channel was free and the fifth and sixth said it hands out the answer, which is this repo's rule
+about measuring on a second repo arriving for the fourth time — and the four that read zero include
+the bootstrap repo, the one a session looks at hardest.
+
+`datedChurn` therefore joins `COMMIT_HEURISTICS`. It has **two readings** and each is the only one
+that fires somewhere (django's two are date-then-churn, svelte has one churn-then-date at 0.800), so
+both are scored and the better taken — compared with `scoreSet` rather than a hit count, because the
+second reading is a *subset* of the first and on equal hits is strictly more precise. Afterwards:
+**0 boards beaten on all six repos**, best 0.750 against the 0.78 bar. Cost: one board on django
+(273 → 272), one on svelte (235 → 234), none on the four cap-limited repos.
+
+Mutation-tested — deleting the second reading kills exactly the second fixture; removing the
+heuristic from the set kills all three. The atlas-level check is a **canary** and says so: ark ships
+no board it would catch even with the gate removed, which is why the unit fixtures exist.
+
+Also fixed on the way: six sites in `scripts/e2e.ts` read a choice row's whole `innerText` as its
+member label, so the first note broke them all — one ticked nothing and then hung thirty seconds on
+a correctly-disabled Submit, which reads as the feature being broken. One `rowLabel()` helper now.
+And the Placement note assertion sits on the step **guaranteed** to serve a Placement board, not on
+the step whose verb moves with every commit — on the run that caught this, that arm never executed.
+
+Stated rather than buried: reading both columns and nothing else still reaches a bare pass on
+**28% / 24% / 19% / 16% / 39% / 56%** of boards across the six repos. That is a grade-C floor bought
+with no reasoning about coupling. The gate's bar is band A on purpose (ADR-0010), the honest
+comparison is against the **zero** the same player scored yesterday, and moving the bar governs every
+verb — an owner's decision.
+
+**Next**: **Archaeology's half of the same finding**, which is untouched — and the obvious fix is
+already measured, because the lesson above is cheap to apply twice. Its candidates are commits
+printing a date and a message; the fact they lack is the commit's **diff width**. Ticking the k
+widest commits beats band A on **1 / 2 / 2 / 0 / 2 / 1** boards across the six repos, several at
+1.000, so it needs a gate heuristic before it can be shown — and unlike `datedChurn`, this one beats
+a board on **ark**, so the bootstrap repo would have caught it. `broadKnown` does not cover it: it
+filters to commits an earlier reveal has already priced, and a printed column is unfiltered. Then the
+owner's open question from last time: whether a failed board should be re-earnable at all (ADR-0047's
+proved/shown rule).
