@@ -520,6 +520,32 @@ describe('challenges', () => {
     }
   });
 
+  it('holds the companion invariant for every second window too', () => {
+    // **The fourth member of a family gets the check the first three had**, and
+    // this repo has a landmine about adding one and discovering the others were
+    // never checked. A retry window (ADR-0053) is a board the player answers, so
+    // `candidates ∩ companions(subject) = truth` applies to it exactly as it
+    // does to window 0 — and the check above reads `challenge.candidates`, which
+    // is window 0 and only window 0.
+    const graph = buildGraph(atlas);
+    const index = indexCoChange(atlas);
+    const withRetry = atlas.challenges.filter(
+      (c) => c.verb === 'companion' && c.retry !== undefined,
+    );
+    // The plant: a repo whose subjects all have fewer than twice their key in
+    // partners ships none, and then this proves nothing.
+    expect(withRetry.length, 'no companion board ships a second window').toBeGreaterThan(3);
+    for (const challenge of withRetry) {
+      const retry = challenge.retry;
+      if (retry === undefined) continue;
+      const row = index.rows.get(refOf(graph, challenge.subject)) ?? new Map<number, number>();
+      const inMatrix = retry.candidates.filter((id) => row.has(refOf(graph, id)));
+      expect(inMatrix, `${challenge.id} retry`).toEqual([...retry.truth]);
+      const shared = retry.truth.filter((id) => challenge.truth.includes(id));
+      expect(shared, `${challenge.id} retry overlaps its own key`).toEqual([]);
+    }
+  });
+
   it('never asks about a file whose rename lineage was contested', () => {
     // Guardrail 4 on the git side: co-change counts credited to a file two live
     // paths both claimed may belong to the other one.

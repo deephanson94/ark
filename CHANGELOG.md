@@ -5437,12 +5437,28 @@ ready to be retyped for proof — §2.1 rebuilt out of the fix for it. It accumu
 board's own member universe, which keeps ADR-0047 decision 3b's re-roll behaviour intact rather than
 arguing with it.
 
-**Blast Radius only, and that is named as a partial delivery.** 75 / 50 / 89 / 88% of its boards ship
-a second window on ark, hono, kysely and graphql-js, against arithmetic ceilings of 78 / 56 / 95 /
-88% — so the gate and the distractor build cost 3–6 points and supply is the constraint. The other
-three verbs are unwired and their ceilings are lower for reasons no design changes: Companion 41–64%,
-Archaeology 24–56%, **Placement 4–20%**, because its subject is a commit and a commit's file list is
-usually about the size of the key sampled out of it.
+**Two verbs of four, and that is named as a partial delivery.** Blast Radius ships a second window on
+75 / 50 / 89 / 88% of its boards and Companion on 33 / 31 / 59 / 57%, against arithmetic ceilings of
+78 / 56 / 95 / 88% and 45 / 41 / 64 / 62%. Archaeology (24–56%) and Placement (**4–20%**, because its
+subject is a commit and a commit's file list is usually about the size of the key sampled out of it)
+are unwired, and their ceilings are lower for reasons no design changes.
+
+**Companion's first implementation re-rolled half the deck** and that is the finding worth carrying.
+It claims each pair it asks about — *a fact is issued once*, ADR-0012 one level down — so claiming a
+retry's pairs inside the build loop shrank `available` for every later subject: **20 of ark's 40
+Companion boards moved onto different subjects** and 12 more were re-keyed, with every affected
+player's saved progress decaying alongside. A deck change nobody asked for, arriving as a side effect
+of a feature about failed boards. The fix was already in `blastRadius/generate.ts` — compute the
+window after the cap — and the acceptance test is byte-identity rather than a count: every board on
+all four repos is identical in id, verb, truth, candidates, witness and difficulty with and without
+retries.
+
+**Two guards look redundant and only one is.** Deleting either of `secondWindow`'s two rejections
+leaves `npm run index` passing, because both reject window 0 — this repo's *two rules that constrain
+the same search hide each other's tests* landmine, walked into during review. Instrumented rather than
+inferred, both fire heavily (31/27/71/61 and 6/9/152/66). Companion's slice past `size` was the
+genuinely dead one: **0 refs removed that the claim filter had kept**, on four repos, so it is gone
+and `validate.ts` is the guarantee.
 
 Three things beyond the verb. `belowBarNote` told every failing player that a later pass is *revealed
 rather than proved* — now **false on 75% of this repo's Blast Radius boards** — so there are two
@@ -5459,8 +5475,8 @@ stays at 2, because the ledger's shape did not change, only what is derived from
 each killed by exactly the assertion aimed at it. The e2e plays the whole loop in a browser and reads
 back *"You proved 6 files that depend on src/indexer/elevation.ts"*.
 
-**Next**: **wire the other three verbs**, cheapest first by supply — Companion (41–64%), then
-Archaeology (24–56%), then Placement, which may not be worth it at 4–20%. Then **Archaeology's
+**Next**: **Archaeology's second window** (ceiling 24–56%) if it is worth the seam; Placement almost
+certainly is not, at 4–20%. Then **Archaeology's
 candidate rows**, which still carry no structural fact: its obvious one, the commit's diff width,
 beats band A on 0 / 2 / 2 / 0 / 2 / 1 boards across six repos and so needs a gate heuristic before it
 can be shown, exactly as `datedChurn` did.

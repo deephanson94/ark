@@ -200,6 +200,23 @@ export function generateWithReport(
   const built: Built[] = [];
   /** Unordered co-change pairs already inside some board's answer key. */
   const claimed = new Set<string>();
+  /**
+   * What the second-window pass needs, per subject (ADR-0053).
+   *
+   * Kept rather than recomputed because `available`, `pool` and `size` are all
+   * loop-local and each depends on the state of `claimed` **at the moment that
+   * subject was built** — recomputing them afterwards would be a different
+   * question wearing the same name.
+   */
+  const pendingRetry = new Map<
+    NodeRef,
+    {
+      readonly available: readonly NodeRef[];
+      readonly pool: ReadonlySet<NodeRef>;
+      readonly size: number;
+      readonly assemble: (truthRefs: readonly NodeRef[], record: boolean) => Built | SkipReason;
+    }
+  >();
   let considered = 0;
 
   // Guardrail 4, at the whole-repo level: if the walk stopped short of the
@@ -272,93 +289,133 @@ export function generateWithReport(
       continue;
     }
 
+    /**
+     * Build this subject's board from a given slice of its ranked partners.
+     *
+     * Extracted from the loop body when ADR-0053 needed a **second** window: a
+     * board that has named its whole key cannot re-prove it, so the re-earn is a
+     * disjoint slice of the same ranking. Blast Radius already had this seam
+     * (`assemble`); this verb built its board inline, which is why the seam had
+     * to be cut before the window could be asked for.
+     *
+     * `record` keeps the report honest — see inside.
+     */
+    const assemble = (truthRefs: readonly NodeRef[], record: boolean): Built | SkipReason => {
+      // The measured bar: the weakest coupling that made the key. Never below
+      // `index.floor`, because `rankCompanions` only offers partners that clear
+      // it — which is what lets every absent candidate be a certified exclusion.
+      // There is deliberately **no second check** here: a re-test of a condition
+      // the ranking already enforces would be a branch that can never be taken.
+      let minCount = Number.POSITIVE_INFINITY;
+      for (const ref of truthRefs) minCount = Math.min(minCount, row.get(ref) ?? 0);
+
+      const want = Math.min(pool.size, options.candidateCount - size);
+      const distractors = selectDistractors({ graph, corpus, subject, pool }, want);
+      const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];
+
+      const verdict = gradeHeuristics(
+        graph,
+        pathSubject(graph, subject),
+        candidateRefs,
+        truthRefs,
+        HISTORY_HEURISTICS,
+      );
+      // **Only the board's own window is counted.** `report.heuristicMean` is a
+      // statistic about the questions the deck asks; folding a retry's scores in
+      // would move a published number by adding rows nobody is served until they
+      // fail, which is a different population wearing the same name.
+      if (record) {
+        for (const [heuristic, score] of verdict.scores) {
+          const entry = heuristicTotals.get(heuristic) ?? { sum: 0, n: 0 };
+          entry.sum += score;
+          entry.n++;
+          heuristicTotals.set(heuristic, entry);
+        }
+      }
+      if (!verdict.passed) return 'ctrlF';
+
+      const truth = truthRefs.map(idOf).sort(byteCompare);
+      const candidates = candidateRefs.map(idOf).sort(byteCompare);
+      // Encoded here, beside the sort that fixes the alignment it depends on. A
+      // second place that built a witness would be a second place it could be
+      // built against an unsorted candidate list, which validates and lies.
+      const witness = encodeWitness(
+        candidates,
+        new Map(distractors.map((choice) => [idOf(choice.ref), choice.strategy])),
+      );
+
+      // §8.4's naive guess, and it is the one the map actually hands over: the
+      // inspector prints every node's commit count, so "the busy files are the
+      // coupled files" is free to any player. `gate.ts` scores the same guess and
+      // refuses the board if it earns an A, which is the three-way alignment
+      // ADR-0008 built for Blast Radius — map giveaway, naive guess, gate.
+      const naive = [...candidateRefs]
+        .sort((a, b) => nodeAt(graph, b).churn - nodeAt(graph, a).churn || byteCompare(idOf(a), idOf(b)))
+        .slice(0, size)
+        .map(idOf);
+
+      // `reach`: how much of this key the import graph cannot see. A companion
+      // the subject imports is half-guessable from the map; one with no edge in
+      // either direction is the "secretly one module wearing two hats" case
+      // NORTH-STAR §2 names, and it is what makes a question hard.
+      const neighbours = new Set<NodeRef>();
+      for (const edge of graph.out[subject] ?? []) neighbours.add(edge.to);
+      for (const edge of graph.in[subject] ?? []) neighbours.add(edge.from);
+      const hidden = truthRefs.filter((ref) => !neighbours.has(ref)).length;
+
+
+      return {
+        subject,
+        mix: distractors,
+        challenge: {
+          id: `companion-${nodeAt(graph, subject).id.slice(2)}`,
+          verb: 'companion',
+          tier: TIER,
+          difficulty: difficultyOf({
+            breadth: ranked.length,
+            maxBreadth,
+            reach: hidden / size,
+            surprise: surpriseOf(truth, naive),
+          }),
+          subject: idOf(subject),
+          candidates,
+          truth,
+          witness,
+          evidence: {
+            kind: 'coChange',
+            minCount,
+            wideLimit: index.wideLimit,
+            atMost: index.floor - 1,
+          },
+        },
+      };
+    };
+
     const truthRefs = available.slice(0, size);
-    // The measured bar: the weakest coupling that made the key. Never below
-    // `index.floor`, because `rankCompanions` only offers partners that clear
-    // it — which is what lets every absent candidate be a certified exclusion.
-    // There is deliberately **no second check** here: a re-test of a condition
-    // the ranking already enforces would be a branch that can never be taken.
-    let minCount = Number.POSITIVE_INFINITY;
-    for (const ref of truthRefs) minCount = Math.min(minCount, row.get(ref) ?? 0);
-
-    const want = Math.min(pool.size, options.candidateCount - size);
-    const distractors = selectDistractors({ graph, corpus, subject, pool }, want);
-    const candidateRefs = [...truthRefs, ...distractors.map((choice) => choice.ref)];
-
-    const verdict = gradeHeuristics(
-      graph,
-      pathSubject(graph, subject),
-      candidateRefs,
-      truthRefs,
-      HISTORY_HEURISTICS,
-    );
-    for (const [heuristic, score] of verdict.scores) {
-      const entry = heuristicTotals.get(heuristic) ?? { sum: 0, n: 0 };
-      entry.sum += score;
-      entry.n++;
-      heuristicTotals.set(heuristic, entry);
-    }
-    if (!verdict.passed) {
-      note('ctrlF');
+    const outcome = assemble(truthRefs, true);
+    if (typeof outcome === 'string') {
+      note(outcome);
       continue;
     }
-
-    const truth = truthRefs.map(idOf).sort(byteCompare);
-    const candidates = candidateRefs.map(idOf).sort(byteCompare);
-    // Encoded here, beside the sort that fixes the alignment it depends on. A
-    // second place that built a witness would be a second place it could be
-    // built against an unsorted candidate list, which validates and lies.
-    const witness = encodeWitness(
-      candidates,
-      new Map(distractors.map((choice) => [idOf(choice.ref), choice.strategy])),
-    );
-
-    // §8.4's naive guess, and it is the one the map actually hands over: the
-    // inspector prints every node's commit count, so "the busy files are the
-    // coupled files" is free to any player. `gate.ts` scores the same guess and
-    // refuses the board if it earns an A, which is the three-way alignment
-    // ADR-0008 built for Blast Radius — map giveaway, naive guess, gate.
-    const naive = [...candidateRefs]
-      .sort((a, b) => nodeAt(graph, b).churn - nodeAt(graph, a).churn || byteCompare(idOf(a), idOf(b)))
-      .slice(0, size)
-      .map(idOf);
-
-    // `reach`: how much of this key the import graph cannot see. A companion
-    // the subject imports is half-guessable from the map; one with no edge in
-    // either direction is the "secretly one module wearing two hats" case
-    // NORTH-STAR §2 names, and it is what makes a question hard.
-    const neighbours = new Set<NodeRef>();
-    for (const edge of graph.out[subject] ?? []) neighbours.add(edge.to);
-    for (const edge of graph.in[subject] ?? []) neighbours.add(edge.from);
-    const hidden = truthRefs.filter((ref) => !neighbours.has(ref)).length;
-
     for (const ref of truthRefs) claimed.add(pairKey(idOf(subject), idOf(ref)));
 
-    built.push({
-      subject,
-      mix: distractors,
-      challenge: {
-        id: `companion-${nodeAt(graph, subject).id.slice(2)}`,
-        verb: 'companion',
-        tier: TIER,
-        difficulty: difficultyOf({
-          breadth: ranked.length,
-          maxBreadth,
-          reach: hidden / size,
-          surprise: surpriseOf(truth, naive),
-        }),
-        subject: idOf(subject),
-        candidates,
-        truth,
-        witness,
-        evidence: {
-          kind: 'coChange',
-          minCount,
-          wideLimit: index.wideLimit,
-          atMost: index.floor - 1,
-        },
-      },
-    });
+    // **The second window** (ADR-0053). `available` has already removed every
+    // pair another board claims, and the slices are adjacent, so the two keys
+    // are disjoint by construction — this verb needs no overlap check because
+    // the ranking supplies one.
+    //
+    // Its pairs are claimed too: a fact is issued once (the rule three
+    // paragraphs up, applied one level down), and a retry the player will be
+    // graded on is a question like any other.
+    // Its window is **not** computed here — see the second pass below. Claiming
+    // a retry's pairs inside this loop shrinks `available` for every later
+    // subject, which moved **20 of ark's 40 Companion boards onto different
+    // subjects** and re-keyed 12 more. A re-earn that silently re-rolls half the
+    // deck is a much worse trade than the duplicate it was avoiding, and the
+    // shape of the fix was already in `blastRadius/generate.ts`: compute the
+    // second window after the deck is settled.
+    pendingRetry.set(subject, { available, pool, size, assemble });
+    built.push(outcome);
   }
 
   // ADR-0012 is a **within-verb** property — `docs/atlas-format.md` §3.6 says
@@ -383,6 +440,53 @@ export function generateWithReport(
   const kept = retain(distinct, limit, (entry) => elevationOf(entry, graph));
   for (let i = kept.length; i < distinct.length; i++) note('capped');
 
+  // **The second window, after the deck is settled** (ADR-0053).
+  //
+  // Here rather than inside the build loop for a measured reason: claiming a
+  // retry's pairs shrinks `available` for every subject built afterwards, and
+  // that re-rolled **20 of ark's 40 Companion boards onto different subjects**
+  // while re-keying 12 more — a deck change nobody asked for, arriving as a side
+  // effect of a feature about failed boards. Running after `retain` also means a
+  // board the cap dropped never spends a claim, which is the same reasoning
+  // `blastRadius/generate.ts` places its own pass by.
+  //
+  // The claim itself stays: a **fact** is issued once (the rule the build loop
+  // states above, one level down from ADR-0012), and a retry is a question the
+  // player will be graded on like any other. What changed is only *when* the
+  // claim is made, so it can no longer perturb the choice of subjects.
+  const withRetry = kept.map((entry) => {
+    const source = pendingRetry.get(entry.subject);
+    if (source === undefined) return entry;
+    // **One rule, and it is the claim.** By this pass every board's own key has
+    // been claimed, so filtering out claimed pairs already removes window 0's
+    // partners — the disjointness this window needs falls out of the rule that
+    // was there for something else. A first version also sliced past `size`
+    // "to be sure": instrumented over four repos it removed **0** refs the
+    // filter had kept, which is a term asserting a behaviour the code does not
+    // need. The guarantee is not left to inference either — `validate.ts`
+    // refuses a retry sharing a member with its board, and deleting both this
+    // filter and that slice fails `npm run index` outright.
+    const retryRefs = source.available
+      .filter((ref) => !claimed.has(pairKey(idOf(entry.subject), idOf(ref))))
+      .slice(0, source.size);
+    if (retryRefs.length !== source.size) return entry;
+    const second = source.assemble(retryRefs, false);
+    if (typeof second === 'string') return entry;
+    for (const ref of retryRefs) claimed.add(pairKey(idOf(entry.subject), idOf(ref)));
+    return {
+      ...entry,
+      challenge: {
+        ...entry.challenge,
+        retry: {
+          candidates: second.challenge.candidates,
+          truth: second.challenge.truth,
+          witness: second.challenge.witness,
+          difficulty: second.challenge.difficulty,
+        },
+      },
+    };
+  });
+
   const totals = new Map<StrategyId, number>();
   for (const entry of kept) {
     for (const [strategy, count] of mixOf(entry.mix)) {
@@ -403,7 +507,7 @@ export function generateWithReport(
   }
 
   return {
-    challenges: kept.map((entry) => entry.challenge).sort((a, b) => byteCompare(a.id, b.id)),
+    challenges: withRetry.map((entry) => entry.challenge).sort((a, b) => byteCompare(a.id, b.id)),
     report: {
       subjectsConsidered: considered,
       generated: kept.length,

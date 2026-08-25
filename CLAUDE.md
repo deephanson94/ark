@@ -1148,6 +1148,18 @@ Seeded with the ones we can predict. **Append every time one bites you.**
   the direction of the city. Two errors, one instrument, both invisible to the eye and both caught by
   one adversarial assertion.
 
+- **A generator that claims what it asks about will re-roll the deck when you give it more to ask.**
+  Companion claims each pair it uses (*a fact is issued once*), so claiming a **retry's** pairs inside
+  the build loop shrank `available` for every subject built afterwards: **20 of ark's 40 Companion
+  boards moved onto different subjects** and 12 more were re-keyed — half the deck, and every affected
+  player's saved progress decaying with it, as a side effect of a feature about *failed* boards.
+  Nothing was red; the counts were identical (`generated` 40 → 40) and only a diff of the artifact
+  showed it. The fix was already in the sibling verb, which computes its windows **after the cap** for
+  an unrelated reason. Two rules follow. **When you add a second thing for a claiming generator to
+  claim, diff the boards, not the counts** — byte-identity is the acceptance test a frozen deck
+  demands, exactly as ADR-0038 found for a frozen layout. And **look at how the other verb does it
+  before inventing a placement for the new pass**; the reason it is where it is may be different from
+  yours and still be the reason you need.
 - **A fix for a laundering sequence can rebuild it one step further out, in the code that fixes it.**
   ADR-0047 records a certificate of the members a board has named, and it *replaced* the entry on each
   grading — right when a board has one question, and a hole the moment it has two. Fail window 0, be

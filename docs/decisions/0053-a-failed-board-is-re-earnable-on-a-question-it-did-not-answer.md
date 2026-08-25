@@ -120,30 +120,68 @@ was opened. Every leak in ADR-0014 was a rule that lived twice.
 
 ## 6. What it costs and what it reaches
 
-**Yield, through the shipped generator** (`report.retriable`) against the arithmetic ceiling
-(`npm run probe:retry`):
+**Yield, through the shipped generator**, against the arithmetic ceiling (`npm run probe:retry`):
 
-| repo | Blast Radius boards | ship a second window | ceiling |
+| repo | Blast Radius | ceiling | Companion | ceiling |
+|---|---|---|---|---|
+| ark | **30/40 (75%)** | 78% | **13/40 (33%)** | 45% |
+| hono | **27/54 (50%)** | 56% | **17/54 (31%)** | 41% |
+| kysely | **67/75 (89%)** | 95% | **44/75 (59%)** | 64% |
+| graphql-js | **61/69 (88%)** | 88% | **39/69 (57%)** | 62% |
+
+Supply is the constraint, as it was for ADR-0012: the gate and the distractor build cost 3–6 points
+on Blast Radius and 5–12 on Companion, where the pair-claiming rule takes the rest.
+
+**Atlas cost**: +3.6% to +5.8% for Blast Radius alone; ark 449.7 → 492.1 KiB with both verbs. Budget
+unmoved at 1,681 B/file against a 2,621 ceiling. Index time unmoved. Determinism byte-identical.
+
+### 6.1 The deck must not move, and the first Companion implementation moved half of it
+
+Companion claims each pair it asks about — *a fact is issued once*, ADR-0012 one level down. Claiming
+a **retry's** pairs inside the build loop shrinks `available` for every subject built afterwards, and
+that is not a small perturbation:
+
+| repo | Companion boards | on different subjects | re-keyed |
 |---|---|---|---|
-| ark | 40 | **30 (75%)** | 78% |
-| hono | 54 | **27 (50%)** | 56% |
-| kysely | 75 | **67 (89%)** | 95% |
-| graphql-js | 69 | **61 (88%)** | 88% |
+| ark | 40 | **20** | 12 |
+| hono | 54 | **18** | 9 |
+| kysely | 75 | **31** | 14 |
+| graphql-js | 69 | **25** | 12 |
 
-So the gate and the distractor build cost 3–6 points; supply is the constraint, as it was for
-ADR-0012.
+Half the deck, re-rolled as a side effect of a feature about failed boards — and every affected
+player's saved Companion progress partially decaying with it. The fix was already in
+`blastRadius/generate.ts`, which computes its windows **after the cap** for a different reason (not
+spending work on boards the cap drops). Moved to a second pass, the claim can no longer perturb the
+choice of subjects.
 
-**Atlas cost**: +3.6% to +5.8% (ark 449.7 → 479.0 KiB). Budget unmoved at 1,681 B/file against a
-2,621 ceiling. Index time unmoved. Determinism byte-identical.
+**The acceptance test is byte-identity, not a count.** Every board on all four repos — id, verb,
+truth, candidates, witness, difficulty — is identical with and without retries. Nothing about the
+deck changed; the retries are additive. This repo has a landmine about a change reporting `changed`
+on a verb that could not have changed, and the only way to answer it is to diff the artifact.
+
+### 6.2 Two guards look redundant; one is and one is not
+
+`secondWindow` rejects a window whose key overlaps the board's *and* one whose key is already issued.
+Deleting either leaves `npm run index` passing, because both reject window 0 — this repo's *two rules
+that constrain the same search hide each other's tests* landmine, walked into during review.
+Instrumented rather than inferred, both are live: the overlap guard fires **31 / 27 / 71 / 61** times
+and the issued guard **6 / 9 / 152 / 66**, so each catches windows the other does not.
+
+Companion's first version had a genuinely dead term — slicing past `size` *and* filtering out claimed
+pairs. By the second pass every board's own key is claimed, so the filter already removes window 0's
+partners: instrumented, the slice removed **0** refs the filter had kept, on all four repos. It is
+gone, and disjointness now falls out of the claim, with `validate.ts` refusing an overlapping retry
+as the guarantee rather than inference — deleting both makes `npm run index` fail outright.
 
 ## 7. What this does not do, said plainly
 
-**Only Blast Radius ships a second window.** The other three verbs' ceilings are Companion 41–64%,
-Archaeology 24–56% and **Placement 4–20%** — that last because its subject is a commit and a commit's
-file list is usually about the size of the key sampled from it. Those verbs are unwired, their boards
-carry no `retry`, and they behave exactly as they did before this document. That is a **partial
-delivery and it is named as one**; this repository has a rule about a decision being recorded as a
-delivery, and the next edit of the README's Verbs table must not turn this row green for four verbs.
+**Two verbs of four ship a second window.** Archaeology's ceiling is 24–56% and **Placement's is
+4–20%** — that last because its subject is a commit and a commit's file list is usually about the
+size of the key sampled from it, so most Placement boards can never be re-earned by any design. Both
+are unwired, their boards carry no `retry`, and they behave exactly as they did before this document.
+That is a **partial delivery and it is named as one**; this repository has a rule about a decision
+being recorded as a delivery, and the next edit of the README's Verbs table must not turn this row
+green for four verbs.
 
 **It does not make the farm pointless**, and ADR-0047 §6 already conceded that it cannot be. A player
 who sweeps the second window still retires the board and still lights `surveyed`. What they do not
@@ -178,9 +216,11 @@ recurring defect.
   that never proves anything. Four mutants, each killed by exactly the assertion aimed at it:
   the old attempt-number rule, the non-accumulating certificate, the unfiltered union, and a
   `servedBoard` that never swaps.
-- **`tests/atlas/atlas.test.ts`** — the ADR-0008 invariant recomputed from the graph for every retry
-  window, plus disjointness and equal key size, with a plant (*some board must ship one*) so a clean
-  zero cannot mean the check never ran.
+- **`tests/atlas/atlas.test.ts`** — the ADR-0008 invariant recomputed from the graph for every Blast
+  Radius retry window and the co-change invariant recomputed from the matrix for every Companion one,
+  plus disjointness and equal key size, each with a plant (*some board must ship one*) so a clean zero
+  cannot mean the check never ran. **Both, because the family rule is the point**: this repo has a
+  landmine about adding the fourth of something and discovering the first three never had it.
 - **`npm run check:keys`** — extended to iterate **choice sets** rather than challenges. This is the
   only instrument that reads the repository's *source*, so it is the only one that can see a
   **missing** edge; leaving retry windows out of it would have been covering them with the checks
